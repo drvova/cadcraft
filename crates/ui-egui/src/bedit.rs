@@ -130,7 +130,7 @@ fn preview(app: &mut CadApp, name: &str) -> Option<Arc<DisplayList>> {
 }
 
 /// Draw `list` fitted into `rect`, or `note` when there is nothing to draw.
-fn draw_preview(ui: &mut egui::Ui, list: Option<&DisplayList>, note: &str) {
+fn draw_preview(ui: &mut egui::Ui, list: Option<&DisplayList>, note: &str, tex: &mut crate::canvas::ImageTextures) {
     let t = Tokens::get();
     let (rect, _) = ui.allocate_exact_size(vec2(220.0, 170.0), egui::Sense::hover());
     let p = ui.painter_at(rect);
@@ -143,7 +143,7 @@ fn draw_preview(ui: &mut egui::Ui, list: Option<&DisplayList>, note: &str) {
             let (w, h) = (b.width().max(1e-9), b.height().max(1e-9));
             let scale = (f64::from(inner.width()) / w).min(f64::from(inner.height()) / h);
             let xf = Xf { rect, center: Vec2::new((b.min.x + b.max.x) / 2.0, (b.min.y + b.max.y) / 2.0), scale };
-            crate::canvas::draw_list(&p, &xf, l, Rgb(t.canvas.r(), t.canvas.g(), t.canvas.b()), false);
+            crate::canvas::draw_list(&p, &xf, l, Rgb(t.canvas.r(), t.canvas.g(), t.canvas.b()), false, tex);
         }
         None => {
             p.text(rect.center(), egui::Align2::CENTER_CENTER, note, crate::theme::small(), t.text_dim);
@@ -209,7 +209,7 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                     } else {
                         String::new()
                     };
-                    draw_preview(ui, list.as_deref(), &note);
+                    draw_preview(ui, list.as_deref(), &note, &mut app.canvas.images);
                     ui.add_space(4.0);
                     ui.label(RichText::new(crate::tl!("Description")).color(t.text_dim));
                     let text = if description.is_empty() { "—".to_string() } else { description.clone() };

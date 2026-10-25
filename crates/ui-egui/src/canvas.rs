@@ -83,6 +83,8 @@ pub struct CanvasState {
     vp: VpContent,
     /// Indices of infinite-line primitives in `list` (drawn on the CPU in GPU mode).
     infinite: Vec<usize>,
+    /// Textures of the drawing's raster images, kept between frames (see [`ImageTextures`]).
+    pub images: ImageTextures,
     /// Milliseconds spent converting the display list to vertex data (last rebuild).
     pub mesh_ms: f64,
     pub rect: Option<Rect>,
@@ -531,10 +533,13 @@ fn ensure_vp_content(app: &mut CadApp, xf_paper: &Xf, ctx: &egui::Context) -> Op
 /// Draw the active viewport's contents (see [`VpContent`]) as [`ensure_vp_content`] set out;
 /// `p` clips them to the viewport's rectangle, and a clipped viewport's outline is masked with
 /// the stencil buffer first.
-fn draw_vp_content(c: &mut VpContent, gpu: bool, p: &egui::Painter, f: &VpFrame, xf_paper: &Xf, bg: Rgb, lwdisplay: bool) {
+fn draw_vp_content(c: &mut VpContent, gpu: bool, p: &egui::Painter, f: &VpFrame, xf_paper: &Xf, bg: Rgb, lwdisplay: bool, tex: &mut ImageTextures) {
     let xf = &f.xf;
+    // Raster images are textured meshes either way: they sit under the drawing, inside the
+    // viewport's own clip.
+    draw_images(p, xf, &c.list, tex);
     if !gpu {
-        draw_list(p, xf, &c.list, bg, lwdisplay);
+        draw_list(p, xf, &c.list, bg, lwdisplay, tex);
         return;
     }
     let mut stencil = crate::gpu::Stencil::Off;
@@ -778,12 +783,83 @@ fn clip_infinite(xf: &Xf, base: Vec2, dir: Vec2, ray: bool) -> Option<[Pos2; 2]>
     Some([xf.to_screen(a), xf.to_screen(b)])
 }
 
+/// The textures of the drawing's raster images, keyed by the address of the decoded pixels: the
+/// decode cache hands the same `Arc` back for the same file, so a rebuild of the display list
+/// reuses the texture instead of uploading it again.
+#[derive(Default)]
+pub struct ImageTextures {
+    map: std::collections::HashMap<usize, egui::TextureHandle>,
+}
+
+impl ImageTextures {
+    /// The texture of `data`, uploading it on first use.
+    fn get(&mut self, ctx: &egui::Context, data: &std::sync::Arc<cadcraft_render::ImageData>) -> egui::TextureId {
+        let key = std::sync::Arc::as_ptr(data) as usize;
+        if let Some(t) = self.map.get(&key) {
+            return t.id();
+        }
+        // A drawing with many images should not grow the texture list without bound.
+        if self.map.len() >= MAX_IMAGE_TEXTURES {
+            self.map.clear();
+        }
+        let image = egui::ColorImage::from_rgba_unmultiplied([data.width as usize, data.height as usize], &data.rgba);
+        let t = ctx.load_texture(format!("cc-image-{key:x}"), image, egui::TextureOptions::LINEAR);
+        let id = t.id();
+        self.map.insert(key, t);
+        id
+    }
+}
+
+/// Most image textures kept at once (a hostile drawing can hold thousands of images).
+const MAX_IMAGE_TEXTURES: usize = 64;
+
+/// Draw the raster images of a display list: each image's pixels as a textured mesh over its
+/// visible region (its clip boundary, when it has one), faded by its opacity.
+pub(crate) fn draw_images(p: &egui::Painter, xf: &Xf, list: &DisplayList, tex: &mut ImageTextures) {
+    for prim in &list.prims {
+        if prim.kind != Kind::Image {
+            continue;
+        }
+        let Some(ip) = list.image(prim.start) else { continue };
+        let Some(data) = &ip.pixels else { continue };
+        if ip.size.x <= 0.0 || ip.size.y <= 0.0 {
+            continue;
+        }
+        let id = tex.get(p.ctx(), data);
+        let alpha = prim.alpha();
+        let mut mesh = egui::Mesh { texture_id: id, ..Default::default() };
+        for t in ip.triangles() {
+            let mut verts = Vec::with_capacity(3);
+            for q in t {
+                let Some(uv) = ip.uv(list, q) else { break };
+                verts.push(egui::epaint::Vertex {
+                    pos: xf.to_screen(q),
+                    uv: egui::pos2((uv.x / ip.size.x) as f32, (uv.y / ip.size.y) as f32),
+                    color: Color32::from_white_alpha(alpha),
+                });
+            }
+            if let [a, b, c] = verts.as_slice() {
+                let i = mesh.vertices.len() as u32;
+                mesh.vertices.extend_from_slice(&[*a, *b, *c]);
+                mesh.add_triangle(i, i + 1, i + 2);
+            }
+        }
+        if !mesh.is_empty() {
+            p.add(Shape::mesh(mesh));
+        }
+    }
+}
+
 /// Draw a display list.
-pub(crate) fn draw_list(p: &egui::Painter, xf: &Xf, list: &DisplayList, bg: Rgb, lwdisplay: bool) {
+pub(crate) fn draw_list(p: &egui::Painter, xf: &Xf, list: &DisplayList, bg: Rgb, lwdisplay: bool, tex: &mut ImageTextures) {
+    draw_images(p, xf, list, tex);
     let vis = xf.world_bounds();
     let mut shapes: Vec<Shape> = Vec::with_capacity(list.prims.len());
     let px = 1.0 / xf.scale;
     for prim in &list.prims {
+        if prim.kind == Kind::Image {
+            continue;
+        }
         let col = prim_color32(prim, bg);
         let pts = list.points(prim);
         match prim.kind {
@@ -838,6 +914,8 @@ pub(crate) fn draw_list(p: &egui::Painter, xf: &Xf, list: &DisplayList, bg: Rgb,
                     shapes.push(Shape::line_segment(seg, Stroke::new(1.0, col)));
                 }
             }
+            // Drawn as textured meshes by `draw_images`, before the linework.
+            Kind::Image => {}
         }
     }
     p.extend(shapes);
@@ -1075,6 +1153,13 @@ pub(crate) fn draw_highlight(p: &egui::Painter, xf: &Xf, list: &DisplayList, pri
                 for outline in list.fill_outlines(prim) {
                     line(outline.iter().map(|q| xf.to_screen(*q)).collect(), &mut shapes);
                 }
+            }
+            Kind::Image => {
+                let mut pts: Vec<Pos2> = pts.iter().map(|q| xf.to_screen(*q)).collect();
+                if let Some(f) = pts.first().copied() {
+                    pts.push(f);
+                }
+                line(pts, &mut shapes);
             }
         }
     }
@@ -1826,13 +1911,17 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
     if let Some(f) = ensure_vp_content(app, &xf_paper, ui.ctx()) {
         let gpu = app.canvas.gpu.is_some();
         let clipped = painter.with_clip_rect(f.on_screen.intersect(rect));
-        draw_vp_content(&mut app.canvas.vp, gpu, &clipped, &f, &xf_paper, bg, app.session.settings.lwdisplay);
+        draw_vp_content(&mut app.canvas.vp, gpu, &clipped, &f, &xf_paper, bg, app.session.settings.lwdisplay, &mut app.canvas.images);
         masked = gpu && f.outline.is_some();
+    }
+    // Raster images sit under the drawing, on both paths.
+    if let Some(list) = &app.canvas.list {
+        draw_images(&painter, &xf_paper, list, &mut app.canvas.images);
     }
     if app.canvas.gpu.is_some() {
         draw_list_gpu(&mut app.canvas, &painter, &xf_paper, bg, app.session.settings.lwdisplay);
     } else if let Some(list) = &app.canvas.list {
-        draw_list(&painter, &xf_paper, list, bg, app.session.settings.lwdisplay);
+        draw_list(&painter, &xf_paper, list, bg, app.session.settings.lwdisplay, &mut app.canvas.images);
     }
     if let Some(vp) = &active_vp {
         // The active viewport: a heavy border, highlights in model units clipped to it.
@@ -1983,7 +2072,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
             let transparency = app.session.settings.transparency_display;
             draw_drag_gpu(&mut app.canvas, &painter, &xf, &st.doc, &drag, (&app.session.clipboard, serial), bg, transparency);
             let list = rebuilt_preview(&st.doc, extra.iter(), scale);
-            draw_list(&painter, &xf, &list, bg, false);
+            draw_list(&painter, &xf, &list, bg, false, &mut app.canvas.images);
         }
     } else if let (Some(c), true) = (app.canvas.cursor, app.session.prompting()) {
         let ents = app.session.preview(c);
@@ -1991,7 +2080,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
             && let Ok(st) = app.session.state()
         {
             let list = rebuilt_preview(&st.doc, ents.iter(), scale);
-            draw_list(&painter, &xf, &list, bg, false);
+            draw_list(&painter, &xf, &list, bg, false, &mut app.canvas.images);
         }
     }
     // Pending selection window.
@@ -2101,7 +2190,7 @@ fn tile_xf(r: Rect, tile: &cadcraft_engine::ModelTile) -> Xf {
 
 /// The tiles other than the current one (each with its own view, clipped to it), then the
 /// tile borders: thin, and heavy around the current tile.
-fn draw_tiles(app: &CadApp, ui: &egui::Ui, tiles: &[(Rect, cadcraft_engine::ModelTile)]) {
+fn draw_tiles(app: &mut CadApp, ui: &egui::Ui, tiles: &[(Rect, cadcraft_engine::ModelTile)]) {
     let t = Tokens::get();
     let bg = Rgb(t.canvas.r(), t.canvas.g(), t.canvas.b());
     for (r, tile) in tiles.iter().filter(|(r, tile)| !tile.active && r.width() >= 1.0 && r.height() >= 1.0) {
@@ -2110,7 +2199,7 @@ fn draw_tiles(app: &CadApp, ui: &egui::Ui, tiles: &[(Rect, cadcraft_engine::Mode
         p.rect_filled(*r, 0.0, t.canvas);
         draw_grid(app, &p, &xf);
         if let Some(list) = &app.canvas.list {
-            draw_list(&p, &xf, list, bg, app.session.settings.lwdisplay);
+            draw_list(&p, &xf, list, bg, app.session.settings.lwdisplay, &mut app.canvas.images);
         }
         viewport_label(&p, *r);
     }

@@ -135,8 +135,17 @@ mod tests {
         assert_eq!(day(11_016), "2000-02-29");
         assert_eq!(day(20_736), "2026-10-10");
         assert_eq!(date(std::time::UNIX_EPOCH - std::time::Duration::from_secs(86_400)), "1970-01-01");
-        // Past chrono's range keeps the proleptic Gregorian date, not the epoch (old `civil_from_days`).
-        assert_eq!(day(115_740_740), "318857-05-20");
+        // Past chrono's range keeps the proleptic Gregorian date, not the epoch (old
+        // `civil_from_days`). Windows' SystemTime cannot hold these instants (FILETIME runs out in
+        // the year 30828), so the far days go straight to the day count the calendar reads.
+        let far_day = |d: u64| {
+            let (y, m, dd) = civil_from_days(d);
+            format!("{y:04}-{m:02}-{dd:02}")
+        };
+        assert_eq!(far_day(115_740_740), "318857-05-20");
+        if let Some(far) = std::time::UNIX_EPOCH.checked_add(std::time::Duration::from_secs(115_740_740 * 86_400)) {
+            assert_eq!(date(far), "318857-05-20", "the same date through SystemTime where it exists");
+        }
         // Windows' SystemTime can't hold u64::MAX / 2 seconds, so it is only checked where it exists.
         if let Some(far) = std::time::UNIX_EPOCH.checked_add(std::time::Duration::from_secs(u64::MAX / 2)) {
             assert_eq!(date(far), "292277026596-12-04");

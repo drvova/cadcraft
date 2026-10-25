@@ -259,3 +259,66 @@ fn a_lazy_bridge_starts_without_the_app_and_says_how_to_open_it() {
     assert_ne!(r["result"]["isError"], json!(true), "{r}");
     app.join().unwrap();
 }
+
+/// Guards the image pipeline end to end through MCP only: attach a picture, trace it into
+/// geometry sized to a measurement, and have `describe_drawing` report both.
+#[test]
+fn agent_attaches_a_picture_traces_it_and_describes_the_result() {
+    // A real PNG written to a temporary file: a black square on white, 32×32.
+    let path = std::env::temp_dir().join("cadcraft-mcp-trace.png");
+    let mut pm = tiny_skia::Pixmap::new(32, 32).unwrap();
+    for y in 0..32u32 {
+        for x in 0..32u32 {
+            let c = if (8..24).contains(&x) && (8..24).contains(&y) { [0, 0, 0, 255] } else { [255, 255, 255, 255] };
+            pm.pixels_mut()[(y * 32 + x) as usize] = tiny_skia::ColorU8::from_rgba(c[0], c[1], c[2], c[3]).premultiply();
+        }
+    }
+    pm.save_png(&path).unwrap();
+    let ps = path.to_string_lossy().to_string();
+
+    let mut s = Server::new(Box::new(Headless::default()));
+    // Attach the picture, 64 units wide.
+    let img = tool(&mut s, "attach_image", json!({"path": ps, "width": 64.0, "at": [100, 100]}));
+    assert_eq!(img["pixels"], json!([32, 32]), "{img}");
+    assert_eq!(img["unitsPerPixel"], json!(2.0), "{img}");
+    let h = img["handle"].as_str().unwrap().to_string();
+
+    // Trace the placed image and size the traced outline to 20 units wide in the same call.
+    let tr = tool(&mut s, "trace_image", json!({"handle": h, "width": 20.0}));
+    assert_eq!(tr["contours"], json!(1), "{tr}");
+    let b = tr["bounds"].as_array().unwrap();
+    let width = b[1][0].as_f64().unwrap() - b[0][0].as_f64().unwrap();
+    assert!((width - 20.0).abs() < 1e-6, "sized to 20 wide: {tr}");
+
+    // The report sees the picture and the traced polylines, and says so in plain words.
+    let d = tool(&mut s, "describe_drawing", json!({}));
+    assert_eq!(d["images"]["count"], json!(1), "{d}");
+    assert_eq!(d["counts"]["Polyline"], json!(1), "{d}");
+    let msg = d["message"].as_str().unwrap();
+    assert!(msg.contains("raster reference"), "{msg}");
+    let notes = d["notes"].as_array().unwrap();
+    assert!(notes.iter().any(|n| n.as_str().unwrap().contains("IMAGETRACE")), "{notes:?}");
+
+    // Rendering the drawing includes the picture: the PNG is returned as an image.
+    let png = tool(&mut s, "render", json!({"width": 320, "height": 320}));
+    assert_eq!(png["type"], "image", "{png}");
+    let _ = std::fs::remove_file(&path);
+}
+
+/// `describe_drawing` scopes: the whole active space by default, a selection by handle, and a
+/// window in drawing units; a hostile argument is a tool error, not a crash.
+#[test]
+fn describe_drawing_scopes_and_refuses_bad_arguments() {
+    let mut s = Server::new(Box::new(Headless::default()));
+    tool(&mut s, "command_line", json!({"text": "rectang 0,0 10,5"}));
+    tool(&mut s, "command_line", json!({"text": "line 100,0 110,0"}));
+    let d = tool(&mut s, "describe_drawing", json!({}));
+    assert_eq!(d["total"], json!(2), "{d}");
+    assert_eq!(d["geometry"]["closed"]["count"], json!(1), "{d}");
+    let d = tool(&mut s, "describe_drawing", json!({"window": [[-1, -1], [20, 20]]}));
+    assert_eq!(d["total"], json!(1), "only the rectangle is in the window: {d}");
+    let e = call(&mut s, 77, "tools/call", json!({"name": "describe_drawing", "arguments": {"limit": "many"}}));
+    assert_eq!(e["error"]["code"], json!(-32602), "a string `limit` is invalid params: {e}");
+    let r = call(&mut s, 78, "tools/call", json!({"name": "trace_image", "arguments": {"path": "Z:/not/here.png"}}));
+    assert_eq!(r["result"]["isError"], json!(true), "{r}");
+}

@@ -49,6 +49,9 @@ Example client configuration (Claude Code / Claude Desktop):
 | `query_entities {type?, layer?, selected?, window?, crossing?, limit?, offset?}` | Filtered entities with handles and geometry. `selected: true` restricts results to the current selection in the active space; an empty selection returns no entities. Omitted/false queries all entities in that space. Filters combine before paging. `window` `[[x0,y0],[x1,y1]]` finds objects whose geometry is inside it or crosses it (`crossing: false`: entirely inside). `count` is every match, `returned` the page (`offset`, `limit`, default 500). |
 | `render {width?, height?, fit?, window?}` | A PNG image of the drawing, or of just the area `window` `[[x0,y0],[x1,y1]]` (one sheet or room of a large drawing; 1600 px wide with the window's shape unless sized). |
 | `find_text {contains?, layer?, window?, limit?, offset?}` | The readable texts — TEXT, MTEXT without formatting codes, block attributes, multileaders — with text, insertion point, height, rotation, style, layer and handle; filtered by content (any case), layer and a window around the insertion points. Read-only (the `texts` command). |
+| `attach_image {path? \| data?, name?, at?, width?, height?, rotation?, layer?, clip?, brightness?, contrast?, fade?}` | Place a raster image (PNG or JPEG) as an IMAGE reference: `path` (a file the CADCraft process reads) or `data` (base64, for uploads). `at` is the lower-left corner; `width`/`height` in drawing units size it (one of them keeps the picture's shape; default 1 unit per pixel); `clip` (pixels from the top-left) crops it; `brightness`/`contrast`/`fade` (0–100) dim it. Returns the handle, the pixel size, the placed size and unitsPerPixel. |
+| `trace_image {path? \| data? \| handle?, at?, scale?, width?, height?, mode?, threshold?, blur?, simplify?, downsample?, minArea?, holes?, closed?, layer?}` | Vectorize a picture into editable polylines: threshold (`mode: dark`\|`light`\|`alpha`, `threshold` defaults to Otsu), trace each region's outline with marching squares, simplify (Douglas–Peucker) and add one polyline per contour. A `handle` of a placed image keeps that image's placement and scale. `width`/`height` size the traced result to a measurement in the same call. Returns contours, points, the polyline handles, bounds, the threshold and what was skipped. |
+| `describe_drawing {handles? \| space? \| window?, detail?, limit?, loops?, maxPairs?}` | The in-depth measured report of a drawing or selection: counts by type, extents/size/centre with units, per-layer usage, total drawn length and length per type, closed shapes with enclosed area, open contours, texts with contents, block references, raster references with pixel sizes, degenerate objects, optional gap/junction analysis of loose LINE/ARC chains (`loops: true`), per-object detail (`detail: true`), `notes` and a plain-language `message`. |
 | `new_drawing {metric?}`, `open {path}`, `save {path?}`, `cancel` | Files and Escape. `save` to a `.svg`, `.png` or `.pdf` path exports: the drawing keeps its name and unsaved changes. |
 | `screenshot`, `ui_inspect`, `ui_click {x, y}` | Only when connected to the app. |
 
@@ -66,6 +69,14 @@ point, an unknown command) returns a result with `isError: true` and the message
 3. `command_line {"text": "dimlinear 0,0 100,0 50,-8"}`
 4. `inspect_drawing {}` — verify counts and geometry.
 5. `render {}` — look at it.
+
+Turning a picture into geometry — a photo or scan of a part, resized in one call:
+
+1. `attach_image {"path": "wing.png", "width": 120}` — place it 120 units wide.
+2. `trace_image {"handle": "<the image's handle>", "width": 60}` — trace its shapes and scale
+   the result to 60 units wide.
+3. `describe_drawing {"loops": true}` — what came out: contours, lengths, closed areas, gaps.
+4. `render {}` — compare the trace with the picture.
 
 The end-to-end test in `crates/mcp/src/tests.rs` runs a session like this and checks the result
 only through MCP.

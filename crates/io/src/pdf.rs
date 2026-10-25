@@ -830,6 +830,9 @@ fn marks(s: &mut Surface<'_>, p: &SheetPage, groups: &Groups, fonts: &mut fonts:
         let w = f64::from(prim.lw) * PT_PER_MM;
         let w = if w.is_finite() && w > 0.0 { w.min(100.0) } else { 0.0 };
         match prim.kind {
+            // A raster image's pixels are not embedded in PDF plots yet; its frame (a Polyline
+            // primitive) is plotted, so the image's place in the drawing still shows.
+            Kind::Image => {}
             Kind::Polyline | Kind::Infinite { .. } => {
                 let pts: Vec<Vec2> = match prim.kind {
                     Kind::Infinite { ray } => match (raw.first(), raw.get(1)) {

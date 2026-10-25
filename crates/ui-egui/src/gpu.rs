@@ -234,6 +234,9 @@ pub fn build_mesh(list: &DisplayList, origin: Vec2, bg: Rgb, lwdisplay: bool) ->
             }
             // Drawn on the CPU each frame (clipped to the view).
             Kind::Infinite { .. } => {}
+            // Raster images are textured meshes, drawn by `canvas::draw_images` under the
+            // drawing on both the CPU and the GPU path.
+            Kind::Image => {}
         }
     }
     m
@@ -279,6 +282,18 @@ pub fn build_highlight_mesh(list: &DisplayList, prims: &[usize], origin: Vec2, c
                             push_instance(&mut m.quads, rel(*a, origin), rel(*b, origin), color, width, run as f32);
                             run += a.dist(*b);
                         }
+                    }
+                }
+            }
+            // The image's quad, outlined (its pixels stay under the highlight).
+            Kind::Image => {
+                let mut closed: Vec<Vec2> = pts.to_vec();
+                if let Some(f) = pts.first().copied() {
+                    closed.push(f);
+                }
+                for s in closed.windows(2) {
+                    if let [a, b] = s {
+                        push_instance(&mut m.quads, rel(*a, origin), rel(*b, origin), color, width, 0.0);
                     }
                 }
             }

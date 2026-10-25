@@ -999,3 +999,134 @@ fn wide_polyline_centre_line_is_drawn_on_screen_only() {
         assert_eq!(lines(&see_through), 0, "{lt}: a transparent band gets no hairline");
     }
 }
+
+/// An image entity covering 0,0 → 10,10 (its lower-left corner at the origin), with the U and V
+/// vectors of one pixel set for a `w`×`h` image, so one drawing unit is one pixel.
+fn image_doc(path: &str, w: u32, h: u32) -> Drawing {
+    let mut d = Drawing::new_imperial();
+    d.add(
+        &Space::Model,
+        Common::default(),
+        EntityKind::Image(cadcraft_doc::Image {
+            insert: Vec3::ZERO,
+            u: Vec3::new(1.0, 0.0, 0.0),
+            v: Vec3::new(0.0, 1.0, 0.0),
+            size: Vec2::new(f64::from(w), f64::from(h)),
+            path: path.to_string(),
+            ..Default::default()
+        }),
+    )
+    .unwrap();
+    d
+}
+
+/// A solid-colour PNG at `path`; returns the path as a string.
+fn solid_png(name: &str, w: u32, h: u32, rgba: [u8; 4]) -> String {
+    let path = std::env::temp_dir().join(format!("cadcraft-render-{}-{name}", std::process::id()));
+    let img = image::RgbaImage::from_pixel(w, h, image::Rgba(rgba));
+    img.save_with_format(&path, image::ImageFormat::Png).unwrap();
+    path.to_string_lossy().to_string()
+}
+
+/// The rendered pixel at a world point as 8-bit channels (0, 0, 0, 0 when off the image).
+fn pixel_at(pm: &tiny_skia::Pixmap, view: &View, at: Vec2) -> (u8, u8, u8) {
+    let (x, y) = view.to_screen(at);
+    let (x, y) = (x.round().max(0.0) as u32, y.round().max(0.0) as u32);
+    match pm.pixel(x, y) {
+        Some(p) => (p.red(), p.green(), p.blue()),
+        None => (0, 0, 0),
+    }
+}
+
+#[test]
+fn raster_draws_an_image_between_its_corners() {
+    let path = solid_png("solid.png", 8, 8, [10, 200, 40, 255]);
+    let d = image_doc(&path, 8, 8);
+    let l = build(&d, &Space::Model, &Options::default());
+    assert_eq!(l.images.len(), 1, "the image is in the list");
+    assert!(l.images[0].pixels.is_some(), "the file decoded");
+    // A view a little wider than the image, so the area outside it is visible too.
+    let v = View::fit(&Bounds2::new(Vec2::new(-2.0, -2.0), Vec2::new(10.0, 10.0)), 400, 400, 0.0);
+    let pm = render(&l, &v, &RasterOptions::default()).unwrap();
+    // Inside the quad: the image's green. Outside it: the background.
+    let inside = pixel_at(&pm, &v, Vec2::new(5.0, 5.0));
+    assert!(inside.1 > 150 && inside.0 < 100, "image pixels drew: {inside:?}");
+    let outside = pixel_at(&pm, &v, Vec2::new(-1.0, -1.0));
+    assert_eq!(outside, (33, 40, 48), "outside stays the background: {outside:?}");
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn a_clip_boundary_trims_the_pixels() {
+    let path = solid_png("clipped.png", 10, 10, [10, 200, 40, 255]);
+    let mut d = image_doc(&path, 10, 10);
+    // Clip to the left half of the image: pixel coordinates (origin top-left, y down).
+    let h = d.model.iter().next().map(|e| e.handle).unwrap();
+    d.modify_entity(h, |e| {
+        if let EntityKind::Image(i) = &mut e.kind {
+            i.clip = vec![Vec2::new(0.0, 0.0), Vec2::new(5.0, 10.0)];
+            i.clipping = true;
+        }
+    })
+    .unwrap();
+    let l = build(&d, &Space::Model, &Options::default());
+    assert!(!l.images[0].region_is_quad(&l), "the region is the clip boundary");
+    let v = View::fit(&l.bounds, 400, 400, 0.0);
+    let pm = render(&l, &v, &RasterOptions::default()).unwrap();
+    let left = pixel_at(&pm, &v, Vec2::new(2.5, 5.0));
+    let right = pixel_at(&pm, &v, Vec2::new(7.5, 5.0));
+    assert!(left.1 > 150, "the clipped-in half drew: {left:?}");
+    assert_eq!(right, (33, 40, 48), "the clipped-out half shows the background: {right:?}");
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn a_missing_image_file_draws_its_frame_only() {
+    let d = image_doc("Z:/definitely/not/here.png", 4, 4);
+    let l = build(&d, &Space::Model, &Options::default());
+    assert_eq!(l.images.len(), 1);
+    assert!(l.images[0].pixels.is_none());
+    // The frame is still drawn (a polyline primitive), so the image's place shows.
+    assert!(l.prims.iter().any(|p| p.kind == Kind::Polyline));
+    let v = View::fit(&l.bounds, 200, 200, 0.0);
+    assert!(render(&l, &v, &RasterOptions::default()).is_some());
+}
+
+#[test]
+fn image_frame_follows_imageframe() {
+    let path = solid_png("frames.png", 4, 4, [200, 200, 200, 255]);
+    let mut d = image_doc(&path, 4, 4);
+    let frames = |d: &Drawing| build(d, &Space::Model, &Options::default()).prims.iter().filter(|p| p.kind == Kind::Polyline).count();
+    assert_eq!(frames(&d), 1, "shown by default");
+    d.header.set_i64("IMAGEFRAME", 0);
+    assert_eq!(frames(&d), 0, "0 hides the frame");
+    d.header.set_i64("IMAGEFRAME", 2);
+    assert_eq!(frames(&d), 1, "2 shows it on screen");
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn a_hidden_image_draws_nothing() {
+    let path = solid_png("hidden.png", 4, 4, [10, 200, 40, 255]);
+    let mut d = image_doc(&path, 4, 4);
+    let h = d.model.iter().next().map(|e| e.handle).unwrap();
+    d.modify_entity(h, |e| {
+        if let EntityKind::Image(i) = &mut e.kind {
+            i.display = 0;
+        }
+    })
+    .unwrap();
+    let l = build(&d, &Space::Model, &Options::default());
+    assert!(l.images.is_empty() && l.prims.is_empty(), "display flag 1 off: no pixels and no frame");
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn image_uv_maps_a_world_point_to_its_pixel() {
+    let d = image_doc("unused.png", 8, 4);
+    let l = build(&d, &Space::Model, &Options::default());
+    let ip = &l.images[0];
+    // The lower-left corner is the image's bottom-left pixel, the upper-left its top-left.
+    assert_eq!(ip.uv(&l, Vec2::ZERO), Some(Vec2::new(0.0, 4.0)));
+    assert_eq!(ip.uv(&l, Vec2::new(8.0, 4.0)), Some(Vec2::new(8.0, 0.0)));
+}

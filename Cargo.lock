@@ -645,6 +645,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+ "tiny-skia",
 ]
 
 [[package]]
@@ -677,6 +678,7 @@ dependencies = [
  "cadcraft-geom",
  "cadcraft-render",
  "craft-pdf",
+ "image",
  "miniz_oxide 0.9.1",
  "quick-xml 0.42.0",
  "serde",
@@ -695,6 +697,7 @@ dependencies = [
  "getrandom 0.4.3",
  "log",
  "serde_json",
+ "tiny-skia",
 ]
 
 [[package]]
@@ -705,6 +708,7 @@ dependencies = [
  "cadcraft-doc",
  "cadcraft-fonts",
  "cadcraft-geom",
+ "image",
  "lyon_tessellation",
  "rayon",
  "serde_json",
@@ -731,6 +735,7 @@ dependencies = [
  "naga",
  "serde",
  "serde_json",
+ "tiny-skia",
  "toml",
  "web-time",
 ]

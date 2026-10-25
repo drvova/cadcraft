@@ -39,7 +39,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("scale", "Scale", run_scale)
             .menu(&["Modify", "Scale"])
             .alias(&["sc"])
-            .params("{handles?, base: [x,y], factor, copy?: bool}")
+            .params("{handles?, base?: [x,y] (default: the selection's own lower-left corner when sizing by width/height), factor? | width? and/or height?: size the selection to a measurement, copy?: bool}")
             .interactive(|_| Ok(Box::new(SelectThen::new(Op::Scale)))),
         CommandSpec::new("mirror", "Mirror", run_mirror)
             .menu(&["Modify", "Mirror"])
@@ -181,13 +181,51 @@ fn run_rotate(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn run_scale(s: &mut Session, p: &Value) -> Result<Value> {
     let hs = targets(s, p)?;
-    let base = point_req("scale", p, "base")?;
-    let f = f64_req("scale", p, "factor")?;
-    if f <= 0.0 {
-        return Err(bad("scale", "factor must be positive"));
-    }
-    let r = transform_entities(s, &hs, &Mat3::scale_about(base, f), bool_or(p, "copy", false))?;
-    Ok(json!({ "handles": r.iter().map(|h| h.hex()).collect::<Vec<_>>() }))
+    // SCALE sizes the selection to a measurement when `width`/`height` is given (a drawn part
+    // gets the exact size wanted), or by a bare `factor` as in AutoCAD.
+    let wants_size = ["width", "height"].iter().any(|k| p.get(*k).is_some_and(|v| !v.is_null()));
+    let bounds = selection_bounds(s, &hs);
+    let base = match (point_param(p, "base"), wants_size) {
+        (Some(b), _) => b,
+        (None, true) => bounds.min,
+        (None, false) => return Err(bad("scale", "`base` ([x, y]) is required")),
+    };
+    let m = if wants_size {
+        if p.get("factor").is_some_and(|v| !v.is_null()) {
+            return Err(bad("scale", "give `factor` or `width`/`height`, not both"));
+        }
+        if bounds.is_empty() {
+            return Err(bad("scale", "nothing to measure: the selection has no extents"));
+        }
+        let fx = size_param("scale", p, "width", false)?.map(|w| w / bounds.width().max(1e-12));
+        let fy = size_param("scale", p, "height", false)?.map(|h| h / bounds.height().max(1e-12));
+        let fx = fx.unwrap_or_else(|| fy.unwrap_or(1.0));
+        let fy = fy.unwrap_or(fx);
+        if !(fx.is_finite() && fy.is_finite() && fx > 0.0 && fy > 0.0) {
+            return Err(bad("scale", "`width`/`height` must be positive"));
+        }
+        Mat3::translate(base).then_before(Mat3::scale(fx, fy)).then_before(Mat3::translate(-base))
+    } else {
+        let f = f64_req("scale", p, "factor")?;
+        if f <= 0.0 {
+            return Err(bad("scale", "factor must be positive"));
+        }
+        Mat3::scale_about(base, f)
+    };
+    let r = transform_entities(s, &hs, &m, bool_or(p, "copy", false))?;
+    let size = selection_bounds(s, &hs);
+    Ok(json!({
+        "handles": r.iter().map(|h| h.hex()).collect::<Vec<_>>(),
+        "bounds": [[size.min.x, size.min.y], [size.max.x, size.max.y]],
+        "width": size.width(),
+        "height": size.height(),
+    }))
+}
+
+/// The extents of a set of objects (empty when none of them can be measured).
+fn selection_bounds(s: &Session, hs: &[Handle]) -> cadcraft_geom::Bounds2 {
+    let Ok(d) = s.doc() else { return cadcraft_geom::Bounds2::EMPTY };
+    hs.iter().filter_map(|h| d.entity(*h)).fold(cadcraft_geom::Bounds2::EMPTY, |a, e| a.union(&cadcraft_doc::entity_bounds(d, e, 0)))
 }
 
 fn run_mirror(s: &mut Session, p: &Value) -> Result<Value> {

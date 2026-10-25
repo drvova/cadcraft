@@ -4,7 +4,7 @@ use cadcraft_color::Rgb;
 use cadcraft_geom::{Bounds2, Vec2};
 use tiny_skia::{FillRule, LineCap, LineJoin, Paint, PathBuilder, Pixmap, Stroke, Transform};
 
-use crate::{DisplayList, Kind};
+use crate::{DisplayList, ImagePrim, Kind};
 
 /// A 2D view: world point at the image centre and pixels per drawing unit.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -86,6 +86,27 @@ pub fn render(list: &DisplayList, view: &View, o: &RasterOptions) -> Option<Pixm
         paint.anti_alias = o.antialias;
         let pts = list.points(p);
         match p.kind {
+            Kind::Image => {
+                // The pixels draw in place of the quad; the quad is still drawn (as a mask) when
+                // there are none, so a missing file leaves a visible, selectable rectangle.
+                let Some(ip) = list.image(p.start) else { continue };
+                draw_image(&mut pm, view, ip, list, p.transparency);
+                if ip.pixels.is_none() {
+                    let mut pb = PathBuilder::new();
+                    for (i, q) in pts.iter().enumerate() {
+                        let (x, y) = view.to_screen(*q);
+                        if i == 0 {
+                            pb.move_to(x, y);
+                        } else {
+                            pb.line_to(x, y);
+                        }
+                    }
+                    pb.close();
+                    if let Some(path) = pb.finish() {
+                        pm.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+                    }
+                }
+            }
             Kind::Polyline => {
                 let bb = Bounds2::from_points(pts.iter().copied());
                 if !bb.intersects(&vis) {
@@ -158,4 +179,62 @@ pub fn render(list: &DisplayList, view: &View, o: &RasterOptions) -> Option<Pixm
 /// Render and encode as PNG.
 pub fn render_png(list: &DisplayList, view: &View, o: &RasterOptions) -> Option<Vec<u8>> {
     render(list, view, o)?.encode_png().ok()
+}
+
+/// The world → destination transform of a view, as a `tiny-skia` transform.
+fn view_transform(view: &View) -> Transform {
+    let s = view.scale as f32;
+    Transform::from_row(s, 0.0, 0.0, -s, view.width as f32 / 2.0 - view.center.x as f32 * s, view.height as f32 / 2.0 + view.center.y as f32 * s)
+}
+
+/// Draw one image primitive: its pixels, mapped onto the quad (its own lower-left corner, U and
+/// V vectors), trimmed to its visible region and faded by its opacity. A file whose pixels could
+/// not be read draws nothing here (the caller draws the bare quad instead).
+fn draw_image(pm: &mut Pixmap, view: &View, ip: &ImagePrim, list: &DisplayList, transparency: u8) {
+    let Some(data) = &ip.pixels else { return };
+    let Some([lower_left, lower_right, _, upper_left]) = ip.corners(list) else { return };
+    if ip.size.x <= 0.0 || ip.size.y <= 0.0 {
+        return;
+    }
+    let Some(pixmap) = tiny_skia::PixmapRef::from_bytes(data.premultiplied(), data.width, data.height) else { return };
+    // Image pixels (x right, y down) → world: `lower_left + ex × px + ey × (height − py)`, with
+    // `ex`/`ey` one pixel's U and V vectors. The image's row 0 is its top, at the quad's
+    // upper-left corner.
+    let ex = (lower_right - lower_left) / ip.size.x;
+    let ey = (upper_left - lower_left) / ip.size.y;
+    let image_xf = Transform::from_row(ex.x as f32, ex.y as f32, -ey.x as f32, -ey.y as f32, upper_left.x as f32, upper_left.y as f32);
+    let xf = view_transform(view).pre_concat(image_xf);
+    // The visible region trims the pixels, unless it is the whole quad: built into a mask in
+    // destination pixels.
+    let mask = region_mask(view, ip, list);
+    let opacity = f32::from(ip.opacity) / 255.0 * (f32::from(crate::alpha(transparency)) / 255.0);
+    let paint = tiny_skia::PixmapPaint {
+        opacity: opacity.clamp(0.0, 1.0),
+        blend_mode: tiny_skia::BlendMode::SourceOver,
+        quality: tiny_skia::FilterQuality::Bilinear,
+    };
+    pm.draw_pixmap(0, 0, pixmap, &paint, xf, mask.as_ref());
+}
+
+/// A destination-space mask of an image's visible region, or `None` when the region is the whole
+/// quad (no mask needed).
+fn region_mask(view: &View, ip: &ImagePrim, list: &DisplayList) -> Option<tiny_skia::Mask> {
+    if ip.region_is_quad(list) || ip.region.len() < 3 {
+        return None;
+    }
+    let mut mask = tiny_skia::Mask::new(view.width, view.height)?;
+    let mut pb = PathBuilder::new();
+    for t in ip.triangles() {
+        for (i, q) in t.iter().enumerate() {
+            let (x, y) = view.to_screen(*q);
+            if i == 0 {
+                pb.move_to(x, y);
+            } else {
+                pb.line_to(x, y);
+            }
+        }
+        pb.close();
+    }
+    mask.fill_path(&pb.finish()?, FillRule::Winding, true, Transform::identity());
+    Some(mask)
 }

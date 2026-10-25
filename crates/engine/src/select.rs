@@ -105,6 +105,17 @@ pub fn entity_distance(d: &Drawing, e: &Entity, p: Vec2, tol: f64) -> f64 {
     if matches!(e.kind, EntityKind::Solid(_)) && e.kind.prims().iter().any(|prim| matches!(prim, Prim::Fill(poly) if point_in_polygon(poly, p))) {
         best = 0.0;
     }
+    // A raster image is hit anywhere inside its own quad (AutoCAD selects a picture by clicking
+    // it), not only along its frame — and the quad, not the axis-aligned box around it, so a
+    // rotated picture does not swallow clicks beside it.
+    if let EntityKind::Image(i) = &e.kind {
+        let u = i.u * i.size.x;
+        let v = i.v * i.size.y;
+        let quad = [i.insert.xy(), (i.insert + u).xy(), (i.insert + u + v).xy(), (i.insert + v).xy()];
+        if point_in_polygon(&quad, p) {
+            best = 0.0;
+        }
+    }
     best
 }
 

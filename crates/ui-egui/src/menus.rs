@@ -179,6 +179,24 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
             app.cmdline(&path);
             Ok(Value::Null)
         }
+        // IMAGEATTACH / IMAGETRACE from the menu or typed: pick the picture, then place (or
+        // trace) it. JSON calls carry `path` or `data` and never open a dialog.
+        "imageattach" | "imagetrace"
+            if params.is_null() || (params.get("path").is_none() && params.get("data").is_none() && params.get("handle").is_none()) =>
+        {
+            if app.services.no_file_system {
+                let hint =
+                    "IMAGEATTACH: there is no file system here; drop a PNG or JPEG on the window, or attach it by path through the control channel";
+                app.session.echo(hint.to_string());
+                app.set_status(hint);
+                return Some(Ok(Value::Null));
+            }
+            let Some(pick) = app.services.pick_image.as_ref() else {
+                return Some(Err(format!("{id}: no file dialog here; give `path`")));
+            };
+            let Some(path) = pick() else { return Some(Ok(Value::Null)) };
+            return Some(app.run(id, json!({ "path": path })));
+        }
         // Pick a template (.dwt or .dxf) and start a new drawing from it.
         "ui.newtemplate" => {
             if let Some(p) = app.services.pick_open.as_ref().and_then(|f| f()) {
@@ -819,6 +837,49 @@ mod shortcut_label_tests {
         assert_eq!(shortcut_label("Shift+F3", true), "⇧F3");
         assert_eq!(shortcut_label("F1", false), "F1");
         assert_eq!(shortcut_label("F1", true), "F1");
+    }
+}
+
+#[cfg(test)]
+mod image_picker_tests {
+    use cadcraft_engine::Session;
+    use serde_json::{Value, json};
+
+    use crate::{CadApp, Services};
+
+    /// A 16×16 PNG: a black square from (4, 4) to (12, 12) on white.
+    const SQUARE: &str = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAG0lEQVR4nGP4TyJgGOQaGHCAUQ301UAMGIQaAMSCPd+1UKgQAAAAAElFTkSuQmCC";
+
+    #[test]
+    fn imageattach_and_imagetrace_ask_for_a_picture_json_never_does() {
+        let path = std::env::temp_dir().join("cadcraft-ui-image-picker.png");
+        std::fs::write(&path, cadcraft_engine::cmd::file::base64_decode(SQUARE).unwrap()).unwrap();
+        let ps = path.to_string_lossy().to_string();
+        let asked = std::rc::Rc::new(std::cell::RefCell::new(0usize));
+        let log = asked.clone();
+        let answer = ps.clone();
+        let services = Services {
+            pick_image: Some(Box::new(move || {
+                *log.borrow_mut() += 1;
+                Some(answer.clone())
+            })),
+            ..Services::default()
+        };
+        let mut app = CadApp::new(Session::new(), services);
+        // From the menu (no parameters) the picture is picked, then placed.
+        let r = app.run("imageattach", Value::Null).unwrap();
+        assert_eq!(*asked.borrow(), 1, "the menu asks for a file");
+        assert!(r["handle"].is_string(), "{r}");
+        // Typed, IMAGETRACE picks its own picture and traces it.
+        app.cmdline("IMAGETRACE");
+        assert_eq!(*asked.borrow(), 2, "the typed name asks for a file too");
+        assert!(app.session.doc().unwrap().entity_count() >= 2, "a traced polyline was added");
+        // A JSON call carries `path` (or `data`) and never opens a dialog.
+        let r = app.run("imageattach", json!({"path": ps, "width": 4.0})).unwrap();
+        assert_eq!(*asked.borrow(), 2, "JSON calls never open a file dialog");
+        assert_eq!(r["width"], json!(4.0));
+        // A cancelled picker changes nothing.
+        let _ = std::fs::remove_file(&path);
     }
 }
 

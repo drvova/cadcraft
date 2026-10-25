@@ -30,3 +30,5 @@ libc = "0.2"
 [dev-dependencies]
 # Real DXF files for the external reference tests (io is a lower layer).
 cadcraft-io = { workspace = true }
+# Image fixtures for the raster-image tests (a PNG encoded from a pixmap).
+tiny-skia = { workspace = true }

@@ -20,6 +20,7 @@ pub mod pen;
 mod plotstyle;
 mod point;
 pub mod raster;
+pub mod raster_image;
 mod text;
 mod tolerance;
 pub mod units;
@@ -34,6 +35,7 @@ pub use dim::{ArrowGeom, Arrowhead, DimGeometry, DimText, LineRole, arrowhead, d
 pub use fill::triangulate_evenodd;
 pub use hatch::{fill_loops as hatch_fill_loops, pattern_swatch};
 pub use paper::{PAPER_SIZES, PaperSize, Sheet, paper_size, sheet};
+pub use raster_image::ImageData;
 pub use tolerance::{gdt_points, tolerance_in};
 
 /// Handle carried by model-space geometry drawn inside a paper-space viewport (it belongs to no
@@ -54,6 +56,10 @@ pub enum Kind {
     /// (paper white when plotting, the canvas colour on screen) so they hide what was drawn
     /// before them.
     Mask,
+    /// A raster image: the quad `verts[start..start+4]` in the order origin, +U, +U+V, +V, with
+    /// the pixels at `DisplayList::images[start]` and the entity's opacity in `lw` as 0..=255
+    /// (255 opaque). Drawn under the drawing; the frame is a separate [`Kind::Polyline`].
+    Image,
     /// A single point marker at `verts[start]`.
     Point,
     /// An infinite line or ray: `verts[start]` = base, `verts[start+1]` = unit direction.
@@ -82,6 +88,9 @@ pub struct DisplayList {
     pub prims: Vec<DPrim>,
     pub verts: Vec<Vec2>,
     pub tris: Vec<Vec2>,
+    /// Decoded pixels of the raster images drawn by [`Kind::Image`] primitives, one entry per
+    /// image, sorted by [`ImagePrim::start`] (see [`DisplayList::image`]).
+    pub images: Vec<ImagePrim>,
     /// Plots ([`build_plot`]): for each primitive, the index in [`Drawing::layers`] of the layer
     /// it is drawn on (block contents on layer 0: the block reference's; [`NO_LAYER`] when the
     /// layer isn't in the table), for PDF layers. Empty for other lists.
@@ -98,6 +107,79 @@ pub struct DisplayList {
     /// Plot style end, join and fill style per primitive (parallel to `prims`; missing entries
     /// are "use object"), turned into geometry by [`pen::apply`].
     pub pens: Vec<Pen>,
+}
+
+/// One raster image in a [`DisplayList`]: its quad, decoded pixels and visible region.
+///
+/// The quad's four corners are [`DisplayList::verts`]`[start..start + 4]`, in the order the
+/// lower-left corner, the lower-right, the upper-right and the upper-left of the image, so the
+/// image's pixel `(0, 0)` (its top-left) sits at the fourth corner and U runs along the first
+/// edge. The map from image pixels `(px, py)` (x right, y down) to world is
+/// `lower_left + u × px + v × (height − py)`, and [`ImagePrim::uv`] inverts it.
+#[derive(Clone, Debug)]
+pub struct ImagePrim {
+    /// Index in [`DisplayList::verts`] of the quad's lower-left corner (the primitive's `start`).
+    pub start: u32,
+    /// The decoded pixels; `None` when the file could not be read or decoded, and only the
+    /// frame (and the clip boundary) is drawn.
+    pub pixels: Option<std::sync::Arc<ImageData>>,
+    /// The visible region in world coordinates, as a triangle list (three vertices each): the
+    /// quad itself, trimmed by the image's clip boundary and by a clipped viewport. Always
+    /// non-empty.
+    pub region: Vec<Vec2>,
+    /// Opacity 0..=255 (255 opaque): the image's fade.
+    pub opacity: u8,
+    /// The image's size in pixels, for [`ImagePrim::uv`].
+    pub size: Vec2,
+}
+
+impl ImagePrim {
+    /// The quad's four corners: lower-left, lower-right, upper-right, upper-left.
+    pub fn corners(&self, list: &DisplayList) -> Option<[Vec2; 4]> {
+        let s = self.start as usize;
+        let v = list.verts.get(s..s + 4)?;
+        Some([v[0], v[1], v[2], v[3]])
+    }
+
+    /// The visible region's triangles.
+    pub fn triangles(&self) -> impl Iterator<Item = [Vec2; 3]> + '_ {
+        self.region.as_chunks::<3>().0.iter().map(|t| [t[0], t[1], t[2]])
+    }
+
+    /// Whether the visible region is exactly the whole quad (so no mask or clip path is needed).
+    pub fn region_is_quad(&self, list: &DisplayList) -> bool {
+        let Some(q) = self.corners(list) else { return false };
+        self.region.len() == 6
+            && self.region.first() == Some(&q[0])
+            && self.region.get(1) == Some(&q[1])
+            && self.region.get(2) == Some(&q[2])
+            && self.region.get(3) == Some(&q[0])
+            && self.region.get(4) == Some(&q[2])
+            && self.region.get(5) == Some(&q[3])
+    }
+
+    /// The image's pixel coordinates of a world point, unclamped (u, v with v down, as in the
+    /// DXF clip boundary).
+    pub fn uv(&self, list: &DisplayList, p: Vec2) -> Option<Vec2> {
+        let [o, pu, _, pv] = self.corners(list)?;
+        let u = pu - o;
+        let v = pv - o;
+        let d = u.x * v.y - u.y * v.x;
+        if d.abs() < 1e-12 || self.size.x <= 0.0 || self.size.y <= 0.0 {
+            return None;
+        }
+        let w = p - o;
+        let a = (w.x * v.y - w.y * v.x) / d;
+        let b = (u.x * w.y - u.y * w.x) / d;
+        Some(Vec2::new(a * self.size.x, (1.0 - b) * self.size.y))
+    }
+}
+
+impl DisplayList {
+    /// The image drawn by the [`Kind::Image`] primitive starting at vertex `start`, if any.
+    pub fn image(&self, start: u32) -> Option<&ImagePrim> {
+        self.images.binary_search_by_key(&start, |i| i.start).ok().and_then(|i| self.images.get(i))
+    }
 }
 
 /// A glyph of plotted text: the font glyph and, in world coordinates, where it sits. It is
@@ -396,6 +478,35 @@ impl Builder<'_> {
             kind: Kind::Tris,
             start,
             len: tris.len() as u32,
+        });
+    }
+    /// A raster image: the quad `corners` (lower-left, lower-right, upper-right, upper-left in
+    /// world coordinates), its decoded pixels, its visible region (a triangle list in world
+    /// coordinates, empty = the whole quad) and its opacity 0..=255. The plot style table does
+    /// not touch an image.
+    fn image(&mut self, ctx: &Ctx, corners: [Vec2; 4], pixels: Option<std::sync::Arc<ImageData>>, region: Vec<Vec2>, size: Vec2, opacity: u8) {
+        let start = self.list.verts.len() as u32;
+        for p in corners {
+            let q = ctx.xf.apply(p);
+            self.list.bounds.add(q);
+            self.list.verts.push(q);
+        }
+        // The region travels with the quad: both are held in the list's own coordinates.
+        let region: Vec<Vec2> = if region.is_empty() {
+            [corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]].iter().map(|p| ctx.xf.apply(*p)).collect()
+        } else {
+            region.iter().map(|p| ctx.xf.apply(*p)).collect()
+        };
+        self.list.images.push(ImagePrim { start, pixels, region, opacity, size });
+        self.list.prims.push(DPrim {
+            handle: ctx.top,
+            color: Rgb(255, 255, 255),
+            aci7: false,
+            lw: 0.0,
+            transparency: self.transparency,
+            kind: Kind::Image,
+            start,
+            len: 4,
         });
     }
     /// Shaped text: strokes as polylines; TrueType glyphs filled (TEXTFILL) or outlined.
@@ -845,6 +956,26 @@ fn append_clipped(dst: &mut DisplayList, src: &DisplayList, clip: &Clip) {
                 let t = c.clip_triangles(pts);
                 push_raw(dst, p, p.kind, &t);
             }
+            (Kind::Image, _) => {
+                // An image inside a clipped viewport: the quad is kept whole (the pixels map by
+                // it) and the region is trimmed to the viewport, so the pixels stop at its edge.
+                let Some(ip) = src.image(p.start) else { continue };
+                let region = match clip {
+                    Clip::Rect(rect) => clip::clip_triangles(&ip.region, rect),
+                    Clip::Poly(c) => c.clip_triangles(&ip.region),
+                };
+                if region.is_empty() {
+                    continue;
+                }
+                let Some(quad) = src.verts.get(p.start as usize..p.start as usize + 4) else { continue };
+                let start = dst.verts.len() as u32;
+                dst.verts.extend_from_slice(quad);
+                dst.images.push(ImagePrim { start, pixels: ip.pixels.clone(), region, opacity: ip.opacity, size: ip.size });
+                dst.prims.push(DPrim { kind: Kind::Image, start, len: 4, ..*p });
+                for q in quad {
+                    dst.bounds.add(*q);
+                }
+            }
             (Kind::Point, _) => {
                 let inside = |q: Vec2| match clip {
                     Clip::Rect(rect) => rect.contains(q),
@@ -928,6 +1059,36 @@ pub fn build_entities<'a, I: IntoIterator<Item = &'a Entity>>(d: &Drawing, ents:
 fn entity_layer(ctx: &Ctx, e: &Entity) -> u32 {
     let name = if e.common.layer == "0" { ctx.block_layer.as_deref().unwrap_or("0") } else { e.common.layer.as_str() };
     ctx.d.layers.iter().position(|l| l.name.eq_ignore_ascii_case(name)).and_then(|i| u32::try_from(i).ok()).unwrap_or(NO_LAYER)
+}
+
+/// Most clip boundary points drawn for one image (a hostile drawing can hold many more).
+const MAX_IMAGE_CLIP: usize = 10_000;
+
+/// An image's clip boundary in world coordinates, from its pixel-coordinate boundary (origin at
+/// the image's top-left corner, y down; the DXF convention). Empty when the image is not
+/// clipped, so the whole quad is drawn.
+fn image_clip(i: &cadcraft_doc::Image, o: Vec2, u: Vec2, v: Vec2) -> Vec<Vec2> {
+    if !i.clipping || i.clip.len() < 2 {
+        return Vec::new();
+    }
+    // A rectangular boundary (DXF type 1) is two opposite corners: expand it to the rectangle's
+    // four corners in order.
+    let corners: Vec<Vec2> = if i.clip.len() == 2 {
+        let (a, b) = (i.clip[0], i.clip[1]);
+        let (x0, x1) = (a.x.min(b.x), a.x.max(b.x));
+        let (y0, y1) = (a.y.min(b.y), a.y.max(b.y));
+        vec![Vec2::new(x0, y0), Vec2::new(x1, y0), Vec2::new(x1, y1), Vec2::new(x0, y1)]
+    } else {
+        i.clip.clone()
+    };
+    corners.iter().take(MAX_IMAGE_CLIP).map(|c| o + u * c.x + v * (i.size.y - c.y)).filter(|p| p.is_finite()).collect()
+}
+
+/// An image's opacity as 0..=255, from its fade (0..=100; 100 = invisible). The entity's own
+/// transparency arrives separately as the primitive's transparency.
+fn image_opacity(i: &cadcraft_doc::Image) -> u8 {
+    let fade = u32::from(i.fade.min(100));
+    u8::try_from((255 * (100 - fade) + 50) / 100).unwrap_or(u8::MAX)
 }
 
 /// After a viewport is appended to a plot: the layers its contents carry in their handles
@@ -1251,12 +1412,39 @@ fn entity_parts(b: &mut Builder, ctx: &Ctx, e: &Entity) {
             }
         }
         EntityKind::Image(i) => {
+            // The image's own frame: the quad (lower-left, lower-right, upper-right, upper-left)
+            // and, when the image is clipped, the clip boundary, in world coordinates.
             let o = i.insert.xy();
             let u = i.u.xy() * i.size.x;
             let v = i.v.xy() * i.size.y;
-            b.polyline(ctx, rgb, lw, &[o, o + u, o + u + v, o + v, o]);
-            b.polyline(ctx, rgb, lw, &[o, o + u + v]);
-            b.polyline(ctx, rgb, lw, &[o + u, o + v]);
+            let quad = [o, o + u, o + u + v, o + v];
+            // The clip boundary is in the image's pixel coordinates (origin top-left, y down),
+            // so it maps through the *per-pixel* U and V vectors.
+            let clip = image_clip(i, o, i.u.xy(), i.v.xy());
+            // Display flag 1: the image is shown at all. A hidden image draws nothing, as in
+            // AutoCAD.
+            if i.display & 1 != 0 {
+                let pixels = crate::raster_image::load_adjusted(&i.path, i.brightness, i.contrast);
+                let opacity = image_opacity(i);
+                // The visible region: the clip boundary when the image has one (triangulated;
+                // a boundary may be any simple polygon), else the whole quad.
+                let region = if clip.len() >= 3 { fill::triangulate_evenodd(std::slice::from_ref(&clip)) } else { Vec::new() };
+                b.image(ctx, quad, pixels, region, i.size, opacity);
+                // The frame, per IMAGEFRAME: 0 = none, 1 = shown and plotted, 2 = shown but not
+                // plotted. A clipped image frames its clip boundary instead of the full quad.
+                let frame = match ctx.d.header.i64("IMAGEFRAME", 1) {
+                    0 => false,
+                    2 => !b.plotting,
+                    _ => true,
+                };
+                if frame {
+                    let mut pts: Vec<Vec2> = if clip.len() >= 2 { clip } else { quad.to_vec() };
+                    if let Some(f) = pts.first().copied() {
+                        pts.push(f);
+                    }
+                    b.polyline(ctx, rgb, lw, &pts);
+                }
+            }
         }
         EntityKind::Table(t) => table(b, ctx, t, rgb, lw),
         EntityKind::Tolerance(t) => tolerance::draw(b, ctx, e, t, lw, tol),

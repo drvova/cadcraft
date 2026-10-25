@@ -110,6 +110,9 @@ impl Header {
         h.set_f64("CELTSCALE", 1.0);
         h.set_f64("LTSCALE", 1.0);
         h.set_i64("PSLTSCALE", 1);
+        // IMAGEFRAME: 0 hides raster images' frames, 1 shows and plots them, 2 shows them on
+        // screen only (AutoCAD's default).
+        h.set_i64("IMAGEFRAME", 1);
         h.set_str("TEXTSTYLE", "Standard");
         h.set_str("DIMSTYLE", "Standard");
         h.set_str("CMLEADERSTYLE", "Standard");
