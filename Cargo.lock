@@ -581,6 +581,7 @@ dependencies = [
 name = "cadcraft-ai"
 version = "0.13.0"
 dependencies = [
+ "base64 0.22.1",
  "log",
  "serde",
  "serde_json",

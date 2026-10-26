@@ -41,8 +41,18 @@ enum Progress {
     Text(String),
     /// The conversation as the model sees it, at a structural step.
     Step(Vec<Message>),
+    /// The reader's steer joined the conversation at a tool call.
+    Steered(Vec<Message>),
     /// The turn is over; `note` is what the pane says about it.
     Done { transcript: Vec<Message>, note: Option<String> },
+}
+
+/// A picture the reader attached: the file, its name, and its thumbnail once it has been loaded.
+#[derive(Clone)]
+pub struct Attachment {
+    pub path: String,
+    pub name: String,
+    thumb: Option<egui::TextureHandle>,
 }
 
 /// The pane's state.
@@ -71,6 +81,16 @@ pub struct Assistant {
     expanded: std::collections::HashSet<String>,
     /// Renders the transcript has loaded, by path, so a redraw never re-reads a file.
     textures: std::collections::HashMap<String, (egui::TextureHandle, [usize; 2])>,
+    /// Pictures the reader attached to the next message.
+    pub attachments: Vec<Attachment>,
+    /// What the reader typed while a turn ran, waiting for it to finish (Enter).
+    queued: Vec<String>,
+    /// The running turn's steering handle: Ctrl+Enter writes into it and the model reads it at its
+    /// next tool call.
+    steer: cadcraft_ai::agent::Steer,
+    /// The drawing's undo depth before each request, by the index of the user message that asked
+    /// for it. Restoring a row reverts the drawing to that point; the conversation stays.
+    checkpoints: std::collections::HashMap<usize, usize>,
     events: Option<Receiver<Progress>>,
     /// Tool calls the worker wants the interface to run.
     jobs: Option<Receiver<ControlRequest>>,
@@ -97,6 +117,10 @@ impl Default for Assistant {
             follow: true,
             expanded: std::collections::HashSet::new(),
             textures: std::collections::HashMap::new(),
+            attachments: Vec::new(),
+            queued: Vec::new(),
+            steer: cadcraft_ai::agent::Steer::default(),
+            checkpoints: std::collections::HashMap::new(),
             events: None,
             jobs: Some(jobs),
             jobs_tx,
@@ -110,8 +134,15 @@ impl Assistant {
     /// Start a turn: hand the model's brief and the conversation to a worker thread and return at
     /// once, so the interface keeps painting while the answer streams in.
     pub fn send(&mut self, briefing: cadcraft_ai::agent::Briefing, ctx: &egui::Context) {
-        let text = self.input.trim().to_string();
-        if text.is_empty() || self.running {
+        self.send_text(briefing, ctx, None, None);
+    }
+
+    /// Send what the composer holds (or `text`, for a queued message). `checkpoint` is the
+    /// drawing's undo depth before this request, recorded so the row can be restored to.
+    pub fn send_text(&mut self, briefing: cadcraft_ai::agent::Briefing, ctx: &egui::Context, text: Option<String>, checkpoint: Option<usize>) {
+        let text = text.unwrap_or_else(|| self.input.trim().to_string());
+        let attachments: Vec<String> = self.attachments.iter().map(|a| a.path.clone()).collect();
+        if (text.is_empty() && attachments.is_empty()) || self.running {
             return;
         }
         if let Err(e) = self.provider.ready() {
@@ -119,16 +150,28 @@ impl Assistant {
             self.settings_open = true;
             return;
         }
+        // A picture on its own is a message: the model is told what to do with it.
+        let text = if text.is_empty() { tl!("Look at the attached picture.").to_string() } else { text };
         self.input.clear();
         self.note = None;
         self.steps = 0;
-        self.messages.push(Message::user(text));
+        if let Some(depth) = checkpoint {
+            self.checkpoints.insert(self.messages.len(), depth);
+        }
+        if attachments.is_empty() {
+            self.messages.push(Message::user(text));
+        } else {
+            self.messages.push(Message::user_with_images(text, attachments.clone()));
+        }
+        self.attachments.clear();
         let (tx, rx) = channel();
         self.events = Some(rx);
         self.running = true;
         self.follow = true;
         self.cancel = Arc::new(AtomicBool::new(false));
+        self.steer = cadcraft_ai::agent::Steer::default();
         let cancel = Arc::clone(&self.cancel);
+        let steer = self.steer.clone();
         let provider = self.provider.clone();
         let mut conversation = self.messages.clone();
         let jobs = self.jobs_tx.clone();
@@ -139,6 +182,7 @@ impl Assistant {
                 let progress = match event {
                     Event::Text(t) => Progress::Text(t),
                     Event::Call { .. } | Event::Result { .. } => Progress::Step(transcript.to_vec()),
+                    Event::Steered(_) => Progress::Steered(transcript.to_vec()),
                     Event::Done { reason } => Progress::Done {
                         transcript: transcript.to_vec(),
                         note: if reason == "stopped" { Some(tl!("Stopped.").to_string()) } else { None },
@@ -147,7 +191,7 @@ impl Assistant {
                 };
                 let _ = tx.send(progress);
             };
-            cadcraft_ai::agent::run_turn(&provider, &briefing, &mut conversation, &cancel, &executor, &mut on);
+            cadcraft_ai::agent::run_turn(&provider, &briefing, &mut conversation, &cancel, &steer, &executor, &mut on);
         });
         if let Err(e) = spawned {
             self.running = false;
@@ -175,11 +219,19 @@ impl Assistant {
                     self.messages = transcript;
                     self.steps += 1;
                 }
+                Progress::Steered(transcript) => {
+                    self.messages = transcript;
+                }
                 Progress::Done { transcript, note } => {
                     self.live.clear();
                     self.messages = transcript;
                     self.running = false;
                     self.note = note;
+                    // A steer the turn ended before reading waits its turn, in order, ahead of
+                    // anything queued after it.
+                    for text in self.steer.take().into_iter().rev() {
+                        self.queued.insert(0, text);
+                    }
                     done = true;
                 }
             }
@@ -241,6 +293,45 @@ impl Assistant {
         self.steps = 0;
         self.expanded.clear();
         self.textures.clear();
+        self.checkpoints.clear();
+    }
+
+    /// Attach a picture to the next message (the paperclip, a paste, or a drop).
+    pub fn attach(&mut self, path: String) {
+        if path.trim().is_empty() || self.attachments.iter().any(|a| a.path == path) {
+            return;
+        }
+        let name = std::path::Path::new(&path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.clone());
+        self.attachments.push(Attachment { path, name, thumb: None });
+    }
+
+    /// Say something while the turn runs: `now` steers the model at its next tool call, otherwise
+    /// it waits for the turn to finish and goes next. False when there was nothing to take.
+    pub fn interject(&mut self, text: String, now: bool) -> bool {
+        if text.trim().is_empty() {
+            return false;
+        }
+        if now {
+            self.steer.push(text);
+        } else {
+            self.queued.push(text);
+        }
+        true
+    }
+
+    /// What is waiting for the current turn to end.
+    pub fn queued(&self) -> &[String] {
+        &self.queued
+    }
+
+    /// Take the composer's message (text and attachment paths) the way `send_text` would, for a
+    /// test that wants to check the hand-over without a provider.
+    pub fn take_message_for_test(&mut self) -> (String, Vec<String>) {
+        let text = self.input.trim().to_string();
+        let images: Vec<String> = self.attachments.iter().map(|a| a.path.clone()).collect();
+        self.input.clear();
+        self.attachments.clear();
+        (text, images)
     }
 
     /// The conversation as text, for Copy and for the command line.
@@ -361,6 +452,14 @@ pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
         ui.ctx().request_repaint();
     }
 
+    // A picture pasted into the pane (Ctrl+V) attaches to the next message, the way a drop does.
+    #[cfg(not(target_arch = "wasm32"))]
+    for image in paste_images(ui.ctx()) {
+        match save_pasted_image(&image) {
+            Ok(path) => app.assistant.attach(path),
+            Err(e) => app.assistant.note = Some(e),
+        }
+    }
     let mut actions = Actions::default();
     let mut example = None;
     ui.vertical(|ui| {
@@ -376,7 +475,7 @@ pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
             .id_salt("assistant-transcript")
             .auto_shrink([false, false])
             .max_height(list)
-            .show(ui, |ui| transcript(app, ui, &t))
+            .show(ui, |ui| transcript(app, ui, &t, &mut actions))
             .inner;
         ui.separator();
         composer(app, ui, &t, &mut actions);
@@ -386,6 +485,42 @@ pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
     }
     let ctx = ui.ctx().clone();
     apply(app, &ctx, actions);
+}
+
+/// Pictures pasted into the window since the last frame (`Event::PasteImage`), taken out of the
+/// event queue so nothing else has to deal with them. Native only: the browser build has no pane.
+#[cfg(not(target_arch = "wasm32"))]
+fn paste_images(ctx: &egui::Context) -> Vec<egui::ColorImage> {
+    let mut out = Vec::new();
+    ctx.input_mut(|i| {
+        i.raw.events.retain(|e| match e {
+            egui::Event::PasteImage(img) => {
+                out.push((**img).clone());
+                false
+            }
+            _ => true,
+        });
+    });
+    out
+}
+
+/// Write a pasted picture to a PNG in the temporary directory and return its path, so it is a file
+/// like any other attachment (the model sees it, and the code can trace it).
+#[cfg(not(target_arch = "wasm32"))]
+fn save_pasted_image(image: &egui::ColorImage) -> Result<String, String> {
+    let (w, h) = (image.size[0], image.size[1]);
+    let mut buf = image::RgbaImage::new(w as u32, h as u32);
+    for (i, px) in image.pixels.iter().enumerate() {
+        let [r, g, b, a] = px.to_srgba_unmultiplied();
+        let x = (i % w) as u32;
+        let y = (i / w) as u32;
+        buf.put_pixel(x, y, image::Rgba([r, g, b, a]));
+    }
+    let dir = std::env::temp_dir();
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+    let path = dir.join(format!("cadcraft-paste-{stamp}.png"));
+    buf.save(&path).map_err(|e| format!("{} {e}", tl!("The picture could not be saved:")))?;
+    Ok(path.to_string_lossy().to_string())
 }
 
 /// Room the composer and its margins need at the bottom of the pane.
@@ -476,10 +611,19 @@ fn settings(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens) {
 #[derive(Default)]
 struct Actions {
     send: bool,
+    /// Send now while the turn runs: the model reads it at its next tool call.
+    steer_now: bool,
     stop: bool,
     clear: bool,
     settings: bool,
     preset: Option<&'static str>,
+    /// A picture to attach (the paperclip), or one to drop from the message.
+    attach: Option<String>,
+    detach: Option<usize>,
+    /// A queued message the reader dropped.
+    unqueue: Option<usize>,
+    /// Restore the drawing to a checkpoint: the undo depth recorded before that request.
+    restore: Option<usize>,
 }
 
 /// The pane's header: which conversation this is (the dock tab already says "Assistant"), and the
@@ -519,28 +663,38 @@ fn conversation_title(messages: &[Message]) -> String {
 }
 
 /// The conversation: the transcript as the model sees it, plus the answer arriving now.
-fn transcript(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens) -> Option<String> {
+fn transcript(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &mut Actions) -> Option<String> {
     if app.assistant.messages.is_empty() && app.assistant.live.is_empty() {
         return empty_state(ui, t);
     }
     // The rows the pane draws, as owned pairs: drawing updates `app` (opened rows, loaded
     // textures), so the transcript is read out first and nothing is borrowed across the loop.
     enum Row {
-        /// A turn's words, and whose they are (the reader's prompt, or the model's answer).
+        /// A turn's words, whose they are (the reader's prompt, or the model's answer), and which
+        /// message they came from — a checkpoint is keyed by that index.
         Said {
             text: String,
             mine: bool,
+            at: usize,
         },
         Ran(cadcraft_ai::ToolCall, Option<Message>),
     }
     let results = results_by_call(&app.assistant.messages);
     let mut rows: Vec<Row> = Vec::new();
-    for message in &app.assistant.messages {
+    for (at, message) in app.assistant.messages.iter().enumerate() {
         match message.role {
-            Role::User => rows.push(Row::Said { text: message.text().to_string(), mine: true }),
+            Role::User => {
+                let mut text = message.text().to_string();
+                // The reader sees what they attached, on their own row.
+                for path in &message.images {
+                    let name = std::path::Path::new(path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.clone());
+                    text.push_str(&format!("\n[{} {name}]", tl!("picture")));
+                }
+                rows.push(Row::Said { text, mine: true, at });
+            }
             Role::Assistant => {
                 if !message.text().trim().is_empty() {
-                    rows.push(Row::Said { text: message.text().to_string(), mine: false });
+                    rows.push(Row::Said { text: message.text().to_string(), mine: false, at });
                 }
                 for call in &message.tool_calls {
                     rows.push(Row::Ran(call.clone(), results.get(call.id.as_str()).map(|m| (*m).clone())));
@@ -552,8 +706,14 @@ fn transcript(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens) -> Option<
     let live = app.assistant.live.clone();
     for row in &rows {
         match row {
-            Row::Said { text, mine: true } => user_turn(ui, t, text),
-            Row::Said { text, mine: false } => assistant_text(ui, t, text),
+            Row::Said { text, mine: true, at } => {
+                // The checkpoint of this row: the drawing's undo depth before it was asked for.
+                let checkpoint = app.assistant.checkpoints.get(at).copied();
+                if user_turn(ui, t, text, checkpoint.is_some()) {
+                    actions.restore = checkpoint;
+                }
+            }
+            Row::Said { text, mine: false, .. } => assistant_text(ui, t, text),
             Row::Ran(call, result) => activity(app, ui, t, call, result.as_ref()),
         }
     }
@@ -599,14 +759,39 @@ fn empty_state(ui: &mut egui::Ui, t: &Tokens) -> Option<String> {
     clicked
 }
 
-/// One user turn: a quiet inset block, the way a prompt reads in Cursor's composer.
-fn user_turn(ui: &mut egui::Ui, t: &Tokens, text: &str) {
+/// One user turn: a quiet inset block, the way a prompt reads in Cursor's composer. When the row
+/// has a checkpoint, a restore control appears while the pointer is over it: clicking reverts the
+/// drawing to the state before that request (the conversation stays). Returns whether it was
+/// clicked.
+fn user_turn(ui: &mut egui::Ui, t: &Tokens, text: &str, restorable: bool) -> bool {
     ui.add_space(6.0);
-    egui::Frame::new().fill(t.control).corner_radius(6.0).inner_margin(egui::Margin::symmetric(10, 7)).show(ui, |ui| {
+    let mut slot = None;
+    let inner = egui::Frame::new().fill(t.control).corner_radius(6.0).inner_margin(egui::Margin::symmetric(10, 7)).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        prose(ui, t.text, text);
+        if restorable {
+            ui.horizontal(|ui| {
+                prose(ui, t.text, text);
+                // The space is reserved either way, so the text does not move when the control
+                // appears.
+                let (rect, _) = ui.allocate_exact_size(vec2(18.0, 18.0), egui::Sense::hover());
+                slot = Some(rect);
+            });
+        } else {
+            prose(ui, t.text, text);
+        }
     });
+    let mut clicked = false;
+    if let Some(rect) = slot
+        && inner.response.hovered()
+    {
+        let resp = ui.interact(rect, ui.scope_id().with(("assistant-restore", rect.top() as i32)), egui::Sense::click());
+        crate::icons::paint(ui.painter(), rect, crate::icons::Icon::Undo, !resp.hovered());
+        if resp.on_hover_text(tl!("Restore the drawing to before this request")).clicked() {
+            clicked = true;
+        }
+    }
     ui.add_space(4.0);
+    clicked
 }
 
 /// The model's words: plain on the surface, no bubble, comfortable measure.
@@ -754,29 +939,95 @@ fn results_by_call(messages: &[Message]) -> std::collections::HashMap<&str, &Mes
     messages.iter().filter(|m| m.role == Role::Tool).filter_map(|m| m.tool_call_id.as_deref().map(|id| (id, m))).collect()
 }
 
-/// The composer: a bordered box with the field, the model on the left and the action on the right.
+/// The composer: a bordered box holding the attachments, the field, and a bottom row with the
+/// model, how full the context is, and the action — the shape Cursor's input has.
 fn composer(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &mut Actions) {
     let running = app.assistant.running();
+    let queued = app.assistant.queued.clone();
+    let names: Vec<String> = app.assistant.attachments.iter().map(|a| a.name.clone()).collect();
+    let mut attachments: Vec<(usize, String, Option<egui::TextureHandle>)> = Vec::with_capacity(names.len());
+    for (i, name) in names.into_iter().enumerate() {
+        let thumb = app.assistant.attachments.get(i).cloned();
+        let thumb = match thumb {
+            Some(a) => thumb_for(app, ui.ctx(), &a),
+            None => None,
+        };
+        attachments.push((i, name, thumb));
+    }
+    // What the reader queued while the turn runs, in order, each droppable.
+    for (i, text) in queued.iter().enumerate() {
+        ui.horizontal(|ui| {
+            ui.add_space(2.0);
+            ui.label(RichText::new(tl!("queued")).color(t.text_faint).small());
+            let line = text.lines().next().unwrap_or("").trim();
+            let line = if line.chars().count() > 64 { format!("{}…", line.chars().take(63).collect::<String>()) } else { line.to_string() };
+            ui.label(RichText::new(line).color(t.text_dim).small());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.add(egui::Button::new(RichText::new("×").color(t.text_faint).small()).frame(false)).clicked() {
+                    actions.unqueue = Some(i);
+                }
+            });
+        });
+    }
     egui::Frame::new().fill(t.field).stroke(egui::Stroke::new(1.0, t.border)).corner_radius(8.0).inner_margin(egui::Margin::symmetric(10, 8)).show(
         ui,
         |ui| {
             ui.set_width(ui.available_width());
-            let hint = tl!("Ask for a change to this drawing…");
+            if !attachments.is_empty() {
+                ui.horizontal_wrapped(|ui| {
+                    for (i, name, thumb) in &attachments {
+                        egui::Frame::new().fill(t.control).corner_radius(4.0).inner_margin(egui::Margin::symmetric(6, 4)).show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                match thumb {
+                                    Some(tex) => {
+                                        let side = 34.0;
+                                        let size = tex.size_vec2();
+                                        let scale = (side / size.x).min(side / size.y).min(1.0);
+                                        ui.add(egui::Image::new(tex).fit_to_exact_size(size * scale));
+                                    }
+                                    None => {
+                                        ui.label(RichText::new(tl!("picture")).color(t.text_faint).small());
+                                    }
+                                }
+                                ui.label(RichText::new(name).color(t.text_dim).small());
+                                if ui.add(egui::Button::new(RichText::new("×").color(t.text_faint).small()).frame(false)).clicked() {
+                                    actions.detach = Some(*i);
+                                }
+                            });
+                        });
+                    }
+                });
+                ui.add_space(4.0);
+            }
+            let hint = if running { tl!("Ask for a change while it works — Enter queues it") } else { tl!("Ask for a change to this drawing…") };
             let edit = egui::TextEdit::multiline(&mut app.assistant.input)
                 .desired_rows(2)
                 .desired_width(f32::INFINITY)
                 .frame(egui::Frame::NONE)
                 .hint_text(hint);
             let response = ui.add(edit);
-            let enter = ui.input(|i| i.key_pressed(egui::Key::Enter) && (i.modifiers.command || i.modifiers.ctrl));
-            if response.has_focus() && enter {
-                actions.send = true;
+            let (enter, enter_now) = ui.input(|i| {
+                let pressed = i.key_pressed(egui::Key::Enter);
+                (pressed && !i.modifiers.command && !i.modifiers.ctrl, pressed && (i.modifiers.command || i.modifiers.ctrl))
+            });
+            if response.has_focus() {
+                if enter_now {
+                    actions.send = true;
+                    actions.steer_now = running;
+                } else if enter {
+                    actions.send = true;
+                }
             }
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                // The model, on the left, the way Cursor shows it: a quiet chip, not a dialog.
+                // The paperclip: a picture joins the next message.
+                if crate::icons::button(ui, crate::icons::Icon::Attach, 16.0, tl!("Attach a picture"), false).clicked()
+                    && let Some(pick) = app.services.pick_image.as_ref()
+                {
+                    actions.attach = pick();
+                }
                 let label = if app.assistant.provider.model.trim().is_empty() { tl!("No model") } else { app.assistant.provider.model.as_str() };
-                egui::ComboBox::from_id_salt("assistant-model-chip").selected_text(RichText::new(label).small()).width(190.0).show_ui(ui, |ui| {
+                egui::ComboBox::from_id_salt("assistant-model-chip").selected_text(RichText::new(label).small()).width(170.0).show_ui(ui, |ui| {
                     for p in client::PRESETS {
                         let hit = app.assistant.preset == p.id;
                         let text = if p.model.is_empty() { p.label.to_string() } else { format!("{} · {}", p.label, p.model) };
@@ -790,16 +1041,26 @@ fn composer(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &mu
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if running {
-                        if ui.add(egui::Button::new(RichText::new(tl!("Stop")).color(t.text)).min_size(vec2(64.0, 24.0))).clicked() {
+                        let now = egui::Button::new(RichText::new(tl!("Send now")).color(t.text)).min_size(vec2(74.0, 24.0));
+                        if ui.add(now).on_hover_text(tl!("The model reads it at its next tool call")).clicked() {
+                            actions.send = true;
+                            actions.steer_now = true;
+                        }
+                        let queue = egui::Button::new(RichText::new(tl!("Queue")).color(t.canvas)).fill(t.accent).min_size(vec2(64.0, 24.0));
+                        if ui.add_enabled(!app.assistant.input.trim().is_empty(), queue).clicked() {
+                            actions.send = true;
+                        }
+                        if ui.add(egui::Button::new(RichText::new(tl!("Stop")).color(t.text_dim)).min_size(vec2(52.0, 24.0))).clicked() {
                             actions.stop = true;
                         }
                     } else {
-                        let ready = !app.assistant.input.trim().is_empty();
+                        let ready = !app.assistant.input.trim().is_empty() || !app.assistant.attachments.is_empty();
                         let send = egui::Button::new(RichText::new(tl!("Send")).color(t.canvas)).fill(t.accent).min_size(vec2(64.0, 24.0));
                         if ui.add_enabled(ready, send).clicked() {
                             actions.send = true;
                         }
                     }
+                    context_meter(ui, t, &app.assistant.messages);
                 });
             });
         },
@@ -808,6 +1069,50 @@ fn composer(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &mu
         ui.add_space(2.0);
         ui.label(RichText::new(note).color(t.compare_other).small());
     }
+}
+
+/// How full the context is: the characters the conversation will send, of the budget the request
+/// keeps. Hovering breaks it down. The transcript is what costs; the drawing itself is read
+/// through code, so it never sits in the window.
+fn context_meter(ui: &mut egui::Ui, t: &Tokens, messages: &[Message]) {
+    let (total, tool) = context_usage(messages);
+    let budget = cadcraft_ai::chat::MAX_REQUEST_CHARS;
+    let share = total as f64 / budget as f64;
+    let colour = if share > 0.8 {
+        t.compare_other
+    } else if share > 0.5 {
+        t.text_dim
+    } else {
+        t.text_faint
+    };
+    let label = format!("{:.1}k/{}k", total as f64 / 1000.0, budget / 1000);
+    ui.label(RichText::new(label).color(colour).small()).on_hover_text(crate::tf!(
+        "context: {used} of {budget} characters — tool results {tool}. Older turns are dropped when it is full.",
+        used = total,
+        budget = budget,
+        tool = tool
+    ));
+}
+
+/// The context the conversation will send: all of it, and how much of that is tool results.
+fn context_usage(messages: &[Message]) -> (usize, usize) {
+    let total: usize = messages.iter().map(|m| m.text().chars().count()).sum();
+    let tool: usize = messages.iter().filter(|m| m.role == Role::Tool).map(|m| m.text().chars().count()).sum();
+    (total, tool)
+}
+
+/// A thumbnail for one attachment, loaded once and kept.
+fn thumb_for(app: &mut crate::CadApp, ctx: &egui::Context, a: &Attachment) -> Option<egui::TextureHandle> {
+    if a.thumb.is_some() {
+        return app.assistant.attachments.iter().find(|x| x.path == a.path).and_then(|x| x.thumb.clone());
+    }
+    let img = image::open(&a.path).ok()?.to_rgba8();
+    let size = [img.width() as usize, img.height() as usize];
+    let tex = ctx.load_texture(&a.path, egui::ColorImage::from_rgba_unmultiplied(size, img.as_raw()), egui::TextureOptions::LINEAR);
+    if let Some(slot) = app.assistant.attachments.iter_mut().find(|x| x.path == a.path) {
+        slot.thumb = Some(tex.clone());
+    }
+    Some(tex)
 }
 
 /// Apply what the pane asked for this frame.
@@ -829,12 +1134,51 @@ fn apply(app: &mut crate::CadApp, ctx: &egui::Context, actions: Actions) {
             app.assistant.provider.model = p.model.to_string();
         }
     }
+    if let Some(path) = actions.attach {
+        app.assistant.attach(path);
+    }
+    if let Some(i) = actions.detach
+        && i < app.assistant.attachments.len()
+    {
+        app.assistant.attachments.remove(i);
+    }
+    if let Some(i) = actions.unqueue
+        && i < app.assistant.queued.len()
+    {
+        app.assistant.queued.remove(i);
+    }
+    if let Some(depth) = actions.restore {
+        // The drawing goes back; the conversation stays (Cursor's rule for its own checkpoints).
+        match app.session.undo_to(depth) {
+            Ok(0) => app.assistant.note = Some(tl!("The drawing is already at that point.").to_string()),
+            Ok(n) => app.assistant.note = Some(crate::tf!("Drawing restored to before that request ({n} step(s) undone).", n = n)),
+            Err(e) => app.assistant.note = Some(format!("{e}")),
+        }
+    }
     if actions.stop {
         app.assistant.stop();
     }
     if actions.send {
+        let text = app.assistant.input.trim().to_string();
         let briefing = briefing(app);
-        app.assistant.send(briefing, ctx);
+        if app.assistant.running() {
+            // While a turn runs: Enter (or Queue) waits for it, Send now steers it.
+            if app.assistant.interject(text, actions.steer_now) {
+                app.assistant.input.clear();
+            }
+        } else {
+            let depth = app.session.state().ok().map(|s| s.undo.len());
+            app.assistant.send_text(briefing, ctx, None, depth);
+        }
+    }
+    // A queued message goes as soon as the turn before it is over.
+    if !app.assistant.running()
+        && let Some(next) = app.assistant.queued.first().cloned()
+    {
+        app.assistant.queued.remove(0);
+        let briefing = briefing(app);
+        let depth = app.session.state().ok().map(|s| s.undo.len());
+        app.assistant.send_text(briefing, ctx, Some(next), depth);
     }
 }
 
@@ -873,6 +1217,18 @@ fn command(app: &mut crate::CadApp, params: &Value) -> Result<Value, String> {
     }
     if let Some(ask) = params.get("ask").and_then(Value::as_str) {
         app.assistant_pending.ask = Some(ask.to_string());
+    }
+    // Pictures for that ask: `attach` takes one path or a list, and implies asking.
+    let attach: Vec<String> = match params.get("attach") {
+        Some(Value::String(s)) => vec![s.clone()],
+        Some(Value::Array(a)) => a.iter().filter_map(Value::as_str).map(str::to_string).collect(),
+        _ => Vec::new(),
+    };
+    if !attach.is_empty() {
+        app.assistant_pending.attach = attach;
+        if app.assistant_pending.ask.is_none() {
+            app.assistant_pending.ask = Some(String::new());
+        }
     }
     Ok(serde_json::json!({
         "assistant": true,
@@ -913,6 +1269,8 @@ pub fn open(app: &mut crate::CadApp) -> Result<Value, String> {
 #[derive(Default)]
 pub struct Pending {
     pub ask: Option<String>,
+    /// Pictures to attach to the ask, from the command's `attach` parameter (a path or a list).
+    pub attach: Vec<String>,
     pub stop: bool,
     pub clear: bool,
 }
@@ -926,10 +1284,14 @@ fn apply_pending(app: &mut crate::CadApp, ctx: &egui::Context) {
     if pending.stop {
         app.assistant.stop();
     }
+    for path in pending.attach {
+        app.assistant.attach(path);
+    }
     if let Some(ask) = pending.ask {
         app.assistant.input = ask;
         let briefing = briefing(app);
-        app.assistant.send(briefing, ctx);
+        let depth = app.session.state().ok().map(|s| s.undo.len());
+        app.assistant.send_text(briefing, ctx, None, depth);
     }
 }
 
@@ -958,6 +1320,50 @@ mod tests {
         assert!(text.contains("kept: C:WING"), "{text}");
         assert!(text.contains("rendered /tmp/a.png"), "{text}");
         assert_eq!(report.images, vec!["/tmp/a.png".to_string()]);
+    }
+
+    #[test]
+    fn a_picture_attaches_once_and_carries_its_name() {
+        let mut a = Assistant::default();
+        a.attach("D:/ref/wing.png".into());
+        a.attach("D:/ref/wing.png".into());
+        assert_eq!(a.attachments.len(), 1, "the same file is not attached twice");
+        assert_eq!(a.attachments[0].name, "wing.png");
+        a.attach("  ".into());
+        assert_eq!(a.attachments.len(), 1, "an empty path attaches nothing");
+    }
+
+    #[test]
+    fn a_message_said_while_the_turn_runs_waits_or_steers() {
+        let mut a = Assistant::default();
+        assert!(a.interject("also fillet the corners".into(), false));
+        assert_eq!(a.queued(), &["also fillet the corners".to_string()]);
+        assert!(a.steer.is_empty(), "queueing does not steer");
+        assert!(a.interject("wait, use layer Walls".into(), true));
+        assert_eq!(a.steer.take(), vec!["wait, use layer Walls".to_string()]);
+        assert!(a.steer.is_empty(), "steering takes the message out");
+        assert_eq!(a.queued().len(), 1, "the queued one is untouched");
+        assert!(!a.interject("   ".into(), false), "nothing to take");
+    }
+
+    #[test]
+    fn the_context_meter_counts_the_conversation_and_the_tool_results() {
+        let messages = vec![
+            Message::user("draw a wing"),
+            Message::assistant_calls(vec![call("c1", "run", json!({"code": "(cmd \"describe\")"}))], None),
+            Message::tool_result(&call("c1", "run", json!({})), &json!({"value": "((COUNTS (POLYLINE . 3)))"})),
+        ];
+        let (total, tool) = context_usage(&messages);
+        assert!(total > tool && tool > 0, "total {total}, tool {tool}");
+        assert_eq!(tool, messages[2].text().chars().count());
+    }
+
+    #[test]
+    fn clearing_forgets_the_checkpoints_too() {
+        let mut a = Assistant::default();
+        a.checkpoints.insert(0, 4);
+        a.clear();
+        assert!(a.checkpoints.is_empty(), "a new conversation has no restore points");
     }
 
     #[test]

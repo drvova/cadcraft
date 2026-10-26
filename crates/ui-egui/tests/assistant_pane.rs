@@ -99,6 +99,48 @@ fn a_run_that_fails_comes_back_as_a_report_not_a_panic() {
 }
 
 #[test]
+fn the_assistant_command_can_carry_pictures() {
+    // The same door a script or an MCP client uses: `attach` takes one path or a list, and the
+    // pictures join the ask. No provider is set here, so the send is refused with a note — but the
+    // attachments are handed over first, which is the part this pins.
+    let mut h = harness();
+    let r = h.state_mut().run("assistant", json!({"attach": ["D:/ref/a.png", "D:/ref/b.png"]})).unwrap();
+    assert_eq!(r["assistant"], true);
+    h.run_steps(3);
+    assert!(h.state().assistant.note.is_some(), "no provider: the pane says so");
+    assert_eq!(h.state().assistant.attachments.len(), 2, "a refused send keeps the pictures attached");
+    assert!(h.state().assistant.messages.is_empty(), "nothing was sent without a provider");
+}
+
+#[test]
+fn a_request_records_a_checkpoint_and_undo_to_restores_the_drawing() {
+    // The pane records the drawing's undo depth before each request, and `undoto` is the restore
+    // the row's control runs. Here the checkpoint is taken, work happens, and the drawing goes
+    // back to it while the conversation stays — Cursor's rule for its own checkpoints.
+    let mut h = harness();
+    let before = h.state().session.state().unwrap().undo.len();
+    h.state_mut().run("line", json!({"points": [[0, 0], [10, 0]]})).unwrap();
+    h.state_mut().run("circle", json!({"center": [5, 5], "radius": 2})).unwrap();
+    assert_eq!(h.state().session.state().unwrap().undo.len(), before + 2);
+    let r = h.state_mut().run("undoto", json!({"depth": before})).unwrap();
+    assert_eq!(r["undone"], 2);
+    let state = h.state().session.state().unwrap();
+    assert_eq!(state.doc.space(&state.space).map_or(0, |s| s.len()), 0, "the drawing is back");
+}
+
+#[test]
+fn a_picture_attached_in_the_pane_travels_with_the_message() {
+    // The pane holds paths; the model's message is built from them. This is the seam the trace
+    // and the vision part both hang off, so it is pinned without a model.
+    let mut h = harness();
+    h.state_mut().assistant.attach("D:/ref/wing.png".into());
+    let (text, images) = h.state_mut().assistant.take_message_for_test();
+    assert!(text.is_empty());
+    assert_eq!(images, vec!["D:/ref/wing.png".to_string()]);
+    assert!(h.state().assistant.attachments.is_empty(), "attaching hands the pictures over once");
+}
+
+#[test]
 fn the_report_the_model_reads_keeps_its_fields() {
     // The bridge must not pre-render the report into a string: the model reads the value, what
     // was kept and the pictures. This failed live once (the bridge returned `report.text()`), so

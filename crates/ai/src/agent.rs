@@ -28,6 +28,9 @@ pub enum Event {
     Call { name: String, summary: String },
     /// A tool call finished; `note` is a short line for the chip.
     Result { name: String, ok: bool, note: String },
+    /// The reader steered the turn: their message joined the conversation before this round's
+    /// request. `transcript` is the conversation with it in.
+    Steered(String),
     /// The turn ended normally.
     Done { reason: String },
     /// The turn could not finish.
@@ -43,6 +46,31 @@ pub trait ToolExecutor: Send + Sync {
 /// How many tool rounds one turn may take before the model is told it must answer. A model that
 /// keeps calling tools without ever answering is looping, not working.
 pub const MAX_ROUNDS: usize = 12;
+
+/// What the reader says while a turn is running, delivered at the model's next tool call rather
+/// than cutting the work off mid-action (the pane's Ctrl+Enter; Cursor calls it steering). Shared
+/// between the pane and the worker thread.
+#[derive(Clone, Default)]
+pub struct Steer(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
+
+impl Steer {
+    /// Add a message to deliver at the next tool call.
+    pub fn push(&self, text: String) {
+        if let Ok(mut q) = self.0.lock() {
+            q.push(text);
+        }
+    }
+
+    /// Take everything waiting, in the order it was written.
+    pub fn take(&self) -> Vec<String> {
+        self.0.lock().map(|mut q| std::mem::take(&mut *q)).unwrap_or_default()
+    }
+
+    /// Whether anything is waiting.
+    pub fn is_empty(&self) -> bool {
+        self.0.lock().map(|q| q.is_empty()).unwrap_or(true)
+    }
+}
 
 /// The state of the application the assistant is told about, fresh at the start of every turn.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -83,18 +111,30 @@ pub fn system_prompt(b: &Briefing) -> String {
         s.push_str(&format!("- Extents: ({x0:.3}, {y0:.3}) to ({x1:.3}, {y1:.3})\n"));
     }
     s.push_str(
-        "\nHow to work:\n\
-         1. Look before you act. `inspect_drawing`, `query_entities`, `describe_drawing` and `find_text` \
-         tell you what is really there; `list_commands` gives the exact command ids and their parameters. \
-         Never guess a command id, a parameter name or an object handle.\n\
-         2. Act with `execute` (a command id plus JSON parameters — precise, no prompts). Use `command_line` \
-         when a command is interactive (it takes the same input a person would type) or when you are following \
-         a sequence of prompts.\n\
-         3. Verify. After changing the drawing, check what you produced (`describe_drawing`, `query_entities`) \
-         rather than assuming it worked. Tool results are the truth; if one reports an error, read it and fix \
-         the call instead of repeating it.\n\
-         4. Work in the user's terms. If they ask for something a drafting command does (a fillet, a hatch, a \
-         dimension), use it rather than approximating with primitives.\n\n",
+        "\nHow you work — one tool, and a language inside the drawing:\n\
+         You have exactly one tool, `run`, which executes AutoLISP inside the open drawing. Empty code\n\
+         returns the manual: read it once, at the start. Everything else is a function in that\n\
+         namespace, so the whole application is reachable from code.\n\
+         1. Discover before you act. `(commands)` lists every command with its id, label, aliases and\n\
+         parameters; `(commands \"circ\")` filters; `(describe \"id\")` gives one command's real\n\
+         parameters. Never guess a command id or a parameter name.\n\
+         2. Act precisely with `(cmd \"id\" params)` — an alist of parameters:\n\
+         `(cmd \"line\" '((POINTS . ((0 0) (10 0)))))`, `(cmd \"circle\" '((CENTER . (0 0)) (RADIUS . 5)))`.\n\
+         Use `(cmdline \"line\" \"0,0\" \"10,0\")` when a command asks questions the way a person\n\
+         answers them.\n\
+         3. Verify with measurements. `(cmd \"describe\")` is the measured report of the drawing —\n\
+         counts, extents, lengths, areas, layers; `(inspect)` is the state (layers, styles, blocks,\n\
+         selection, undo). A result is the truth; an assumption is not. After a change, look again.\n\
+         4. Build your own tooling. `(defun NAME …)` and `(setq NAME literal)` are KEPT and reloaded\n\
+         in your next session — `(kept)` lists them, `(forget \"NAME\")` removes one. Write a helper\n\
+         once, reuse it always.\n\
+         5. Show your work when a picture helps: `(render)` draws the drawing to a PNG and returns\n\
+         its path.\n\
+         6. Pictures the reader attaches are in the message and you can see them. Their files are on\n\
+         disk, so you can also measure them: `(cmd \"imagetrace\" '((PATH . \"…\") (WIDTH . 30)))`\n\
+         turns one into editable polylines at that measurement, and\n\
+         `(cmd \"imageattach\" '((PATH . \"…\") (WIDTH . 30)))` places it as a reference. Trace it,\n\
+         then fix up and size the geometry — that is how a photograph becomes a part.\n\n",
     );
     s.push_str(
         "How to report what you did:\n\
@@ -124,6 +164,7 @@ pub fn run_turn(
     briefing: &Briefing,
     conversation: &mut Vec<Message>,
     cancel: &AtomicBool,
+    steer: &Steer,
     executor: &dyn ToolExecutor,
     on: &mut dyn FnMut(Event, &[Message]),
 ) {
@@ -133,6 +174,12 @@ pub fn run_turn(
         if cancel.load(Ordering::Relaxed) {
             on(Event::Done { reason: "stopped".into() }, conversation);
             return;
+        }
+        // What the reader said while this turn ran joins the conversation here — at the tool
+        // call, before the next request, so work in flight is not cut off.
+        for text in steer.take() {
+            conversation.push(Message::user(text.clone()));
+            on(Event::Steered(text), conversation);
         }
         let mut sent = Vec::with_capacity(conversation.len() + 1);
         sent.push(Message::system(system.clone()));
@@ -264,8 +311,18 @@ mod tests {
         assert!(p.contains("2 selected"));
         assert!(p.contains("(0.000, 0.000) to (10.000, 5.000)"));
         // The method is the point of the prompt: look, act, verify, and report measurements.
-        assert!(p.contains("Look before you act"));
+        assert!(p.contains("Discover before you act"));
         assert!(p.contains("Never guess a command id"));
+        // The prompt teaches the surface that exists: one tool, and the namespace inside it.
+        assert!(p.contains("You have exactly one tool, `run`"));
+        assert!(p.contains("(commands)"), "discovery is by (commands)");
+        assert!(p.contains(r#"(cmd "circle""#), "acting is by (cmd …)");
+        assert!(p.contains("(cmd \"describe\")"), "verifying is by the measured report");
+        assert!(p.contains("(defun NAME …)"), "helpers persist");
+        assert!(p.contains("imagetrace"), "attached pictures can be traced");
+        for dead in ["`execute`", "`query_entities`", "`inspect_drawing`", "`list_commands`", "`command_line`"] {
+            assert!(!p.contains(dead), "the prompt must not name a tool that no longer exists: {dead}");
+        }
         assert!(p.contains("Verify"));
         assert!(p.contains("the numbers that came out of it"), "a report of a drawing is measurements");
         assert!(p.contains("Silence about a surprise"));
@@ -317,7 +374,7 @@ mod tests {
         let mut seen = Vec::new();
         let mut conversation = vec![Message::user("draw a circle")];
         let provider = Provider { base_url: "http://127.0.0.1:9/v1".into(), model: "m".into(), ..Provider::default() };
-        run_turn(&provider, &Briefing::default(), &mut conversation, &cancel, &fake, &mut |e, _| seen.push(e));
+        run_turn(&provider, &Briefing::default(), &mut conversation, &cancel, &Steer::default(), &fake, &mut |e, _| seen.push(e));
         assert_eq!(seen, vec![Event::Done { reason: "stopped".into() }]);
         assert!(fake.calls.lock().unwrap().is_empty());
     }

@@ -104,6 +104,11 @@ pub struct Message {
     /// A tool call that failed, or was refused: shown in red in the pane.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub error: bool,
+    /// Pictures the reader attached to this message, as file paths. They travel to the model as
+    /// image content parts (the OpenAI vision shape) and stay paths here, so the transcript costs
+    /// bytes, not megabytes — and the code can read the file itself to trace it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<String>,
 }
 
 impl Message {
@@ -112,6 +117,10 @@ impl Message {
     }
     pub fn user(text: impl Into<String>) -> Message {
         Message { role: Role::User, content: Some(text.into()), ..Message::empty() }
+    }
+    /// A message with pictures attached: the model sees them, and the code can read the files.
+    pub fn user_with_images(text: impl Into<String>, images: Vec<String>) -> Message {
+        Message { role: Role::User, content: Some(text.into()), images, ..Message::empty() }
     }
     pub fn assistant(text: impl Into<String>) -> Message {
         Message { role: Role::Assistant, content: Some(text.into()), ..Message::empty() }
@@ -142,7 +151,7 @@ impl Message {
         }
     }
     fn empty() -> Message {
-        Message { role: Role::User, content: None, tool_calls: Vec::new(), tool_call_id: None, tool_name: None, error: false }
+        Message { role: Role::User, content: None, tool_calls: Vec::new(), tool_call_id: None, tool_name: None, error: false, images: Vec::new() }
     }
     /// The text a tool result carries, or `""`.
     pub fn text(&self) -> &str {
@@ -170,6 +179,34 @@ fn tool_text(value: &Value) -> String {
     format!("{head}\n… truncated: {} characters total. Narrow the request (a filter, a window, a limit) to see the rest.", s.chars().count())
 }
 
+/// The most bytes of one attached picture that travel to the model.
+pub const MAX_ATTACHED_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
+
+/// One attached picture as an OpenAI `image_url` content part, reading the file into a data URL.
+/// `None` when the file cannot be read (or when there is no file system, as in the browser build).
+#[cfg(not(target_arch = "wasm32"))]
+fn image_part(path: &str) -> Option<Value> {
+    use base64::Engine as _;
+    let meta = std::fs::metadata(path).ok()?;
+    if !meta.is_file() || meta.len() > MAX_ATTACHED_IMAGE_BYTES {
+        return None;
+    }
+    let bytes = std::fs::read(path).ok()?;
+    let mime = match path.rsplit('.').next().unwrap_or_default().to_ascii_lowercase().as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        _ => "image/png",
+    };
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Some(json!({"type": "image_url", "image_url": {"url": format!("data:{mime};base64,{encoded}")}}))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn image_part(_path: &str) -> Option<Value> {
+    None
+}
+
 /// The messages in the wire shape: `{role, content, tool_calls?, tool_call_id?}`.
 pub fn wire(messages: &[Message]) -> Vec<Value> {
     messages
@@ -186,7 +223,23 @@ pub fn wire(messages: &[Message]) -> Vec<Value> {
                 }),
             );
             if let Some(c) = &m.content {
-                o.insert("content".into(), json!(c));
+                // A message with pictures carries the OpenAI vision shape: text plus one image
+                // part per attachment. A picture whose file cannot be read is left out (the text
+                // still names it, so the model can say it could not look).
+                let parts: Vec<Value> = m.images.iter().filter_map(|path| image_part(path)).collect();
+                if parts.is_empty() {
+                    o.insert("content".into(), json!(c));
+                } else {
+                    // The text part names each file, because the path is what the code needs to
+                    // trace or attach it — seeing the picture is not enough to measure it.
+                    let mut text = c.clone();
+                    for path in &m.images {
+                        text.push_str(&format!("\n\n[attached picture: {path}]"));
+                    }
+                    let mut all = vec![json!({"type": "text", "text": text})];
+                    all.extend(parts);
+                    o.insert("content".into(), Value::Array(all));
+                }
             } else if m.role == Role::Assistant && !m.tool_calls.is_empty() {
                 // OpenAI requires content to be null (not missing) on a tool-call turn.
                 o.insert("content".into(), Value::Null);

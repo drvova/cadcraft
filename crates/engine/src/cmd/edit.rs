@@ -19,6 +19,10 @@ pub fn specs() -> Vec<CommandSpec> {
             )
             .noundo()
             .interactive(|_| Ok(Box::new(UndoM::default()))),
+        // The checkpoint restore: undo the drawing back to a stack depth recorded earlier (the
+        // assistant pane records one per request). No menu entry — it is not a drafting command,
+        // it is how a marked point in the history is returned to.
+        CommandSpec::new("undoto", "Undo To", run_undoto).params("{depth: n} → {undone, depth}").noundo(),
         CommandSpec::new("redo", "Redo", run_redo).menu(&["Edit", "Redo"]).key("Cmd+Shift+Z").params("{count?: n}").noundo(),
         CommandSpec::new("mredo", "Redo", run_mredo).params("{count?: n} | {all: true}").noundo().interactive(|_| Ok(Box::new(MredoM))),
         CommandSpec::new("cutclip", "Cut", run_cut)
@@ -233,6 +237,28 @@ fn undo_back(s: &mut Session, confirm: bool) -> Result<Value> {
 
 fn run_u(s: &mut Session, _p: &Value) -> Result<Value> {
     run_undo(s, &json!({}))
+}
+
+/// UNDOTO: undo back to a depth recorded earlier (a checkpoint).
+fn run_undoto(s: &mut Session, p: &Value) -> Result<Value> {
+    let depth = p.get("depth").and_then(Value::as_u64).ok_or_else(|| bad("undoto", "`depth` is required (a number)"))?;
+    let depth = usize::try_from(depth).map_err(|_| bad("undoto", "`depth` is out of range"))?;
+    let now = s.state()?.undo.len();
+    if depth > now {
+        return Err(bad("undoto", format!("depth {depth} is ahead of the history ({now} steps); the checkpoint is gone")));
+    }
+    let undone = s.undo_to(depth)?;
+    let mut r = undo_state(
+        s,
+        match undone {
+            0 => "Already at the checkpoint".to_string(),
+            1 => "Undone to the checkpoint (1 step)".to_string(),
+            n => format!("Undone to the checkpoint ({n} steps)"),
+        },
+    )?;
+    r["undone"] = json!(undone);
+    r["depth"] = json!(depth);
+    Ok(r)
 }
 
 /// What the UNDO prompt machine asks.

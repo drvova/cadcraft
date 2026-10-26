@@ -23,6 +23,7 @@ them.
 |---|---|
 | `{}` | show the pane |
 | `{"ask": "…"}` | show the pane and ask the model |
+| `{"attach": "path.png"}` | attach a picture to the ask (`attach` takes one path or a list; with no `ask`, the model is told to look at it) |
 | `{"stop": true}` | stop the turn running now |
 | `{"clear": true}` | forget the conversation |
 | `{"open": false}` | do the above without opening the pane |
@@ -35,7 +36,23 @@ in a quiet inset block, the model's words without a bubble), and each tool call 
 dim line — what ran, and the first line of what came back — that opens on a click to show the code
 and the whole result. A picture the code rendered stands inline as an artifact card: the render
 itself, with its size and path under it. The composer is a bordered box at the bottom with the
-model on the left and Send on the right (⌘/Ctrl+Enter sends).
+model on the left, how full the context is, and Send on the right (⌘/Ctrl+Enter sends).
+
+**While a turn runs** the composer keeps taking input: Enter (or Queue) holds the message until the
+turn ends and sends it next; ⌘/Ctrl+Enter (or Send now) delivers it to the model at its next tool
+call, so a correction lands without cutting the work off mid-action. Queued messages are listed
+above the box and can be dropped before they go.
+
+**Checkpoints.** The pane records the drawing's undo depth before each request. Hover a request of
+your own and a restore control appears: it reverts the drawing to the state before that request —
+the conversation stays, so you can keep talking about what happened. (Cursor's rule for its own
+checkpoints; the undo history is the same one ⌘Z walks.)
+
+**Pictures.** Attach one with the paperclip, paste it into the pane (⌘/Ctrl+V), or drop it on the
+window while the pane is open. The model sees the picture *and* its path, so it can measure it:
+`(cmd "imagetrace" '((PATH . "…") (WIDTH . 30)))` turns it into editable polylines at that size and
+`(cmd "imageattach" …)` places it as a reference. A photograph of a part becomes geometry you can
+dimension — that is the point of attaching it.
 
 ## Set the provider
 

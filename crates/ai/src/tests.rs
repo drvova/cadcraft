@@ -142,8 +142,52 @@ fn turn(server: &Fake, executor: &Recorder, question: &str) -> (Vec<Event>, Vec<
     let cancel = AtomicBool::new(false);
     let mut conversation = vec![Message::user(question)];
     let mut events = Vec::new();
-    agent::run_turn(&server.provider(), &agent::Briefing::default(), &mut conversation, &cancel, executor, &mut |e, _| events.push(e));
+    agent::run_turn(&server.provider(), &agent::Briefing::default(), &mut conversation, &cancel, &agent::Steer::default(), executor, &mut |e, _| {
+        events.push(e)
+    });
     (events, conversation)
+}
+
+/// An executor that steers the turn while its first tool call runs — what the pane's Ctrl+Enter
+/// does from the interface thread.
+struct Steering {
+    steer: agent::Steer,
+    calls: Mutex<usize>,
+}
+
+impl ToolExecutor for Steering {
+    fn call(&self, _name: &str, _args: &Value) -> Result<Value, String> {
+        let mut n = self.calls.lock().unwrap();
+        *n += 1;
+        if *n == 1 {
+            self.steer.push("also fillet the corners".into());
+        }
+        Ok(json!({"value": "ok"}))
+    }
+}
+
+#[test]
+fn a_steer_message_joins_the_conversation_at_the_next_tool_call() {
+    let server = Fake::start(vec![
+        sse(&[&run_call("call_1", r#"(cmd "circle")"#), r#"{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}"#]),
+        sse(&[r#"{"choices":[{"delta":{"content":"Filleted too."},"finish_reason":"stop"}]}"#]),
+    ]);
+    let executor = Steering { steer: agent::Steer::default(), calls: Mutex::new(0) };
+    let cancel = AtomicBool::new(false);
+    let mut conversation = vec![Message::user("draw a circle")];
+    let mut events = Vec::new();
+    agent::run_turn(&server.provider(), &agent::Briefing::default(), &mut conversation, &cancel, &executor.steer, &executor, &mut |e, _| {
+        events.push(e)
+    });
+    assert!(events.contains(&Event::Steered("also fillet the corners".into())), "{events:?}");
+    // The second request carries it as a user message, after the first tool result.
+    let requests = server.requests();
+    assert_eq!(requests.len(), 2, "one request per round");
+    let sent = requests[1]["messages"].as_array().expect("messages");
+    let steered = sent.iter().find(|m| m["role"] == "user" && m["content"] == "also fillet the corners");
+    assert!(steered.is_some(), "the steer is in the second request: {sent:?}");
+    // And it is in the conversation the turn ends with, so the pane shows it where it happened.
+    assert!(conversation.iter().any(|m| m.role == crate::chat::Role::User && m.text() == "also fillet the corners"));
 }
 
 #[test]

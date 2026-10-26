@@ -114,6 +114,31 @@ fn undo_during_a_command_without_undo_keyword_ends_it_and_undoes() {
 }
 
 #[test]
+fn undoto_returns_the_drawing_to_a_recorded_checkpoint() {
+    let mut s = Session::new();
+    s.execute("line", &json!({"points": [[0, 0], [10, 0]]})).unwrap();
+    let mark = s.state().unwrap().undo.len();
+    s.execute("line", &json!({"points": [[0, 10], [10, 10]]})).unwrap();
+    s.execute("circle", &json!({"center": [5, 5], "radius": 2})).unwrap();
+    assert_eq!(kinds(&s), vec!["Line", "Line", "Circle"]);
+    let r = s.execute("undoto", &json!({"depth": mark})).unwrap();
+    assert_eq!(r["undone"], json!(2));
+    assert_eq!(kinds(&s), vec!["Line"], "the checkpoint's own step stays");
+    // Redo still works from there, and the checkpoint can be reached again after more work.
+    s.execute("undo", &json!({})).unwrap();
+    assert_eq!(kinds(&s), Vec::<&str>::new());
+    s.execute("redo", &json!({})).unwrap();
+    assert_eq!(kinds(&s), vec!["Line"]);
+    // A depth the history no longer holds is refused, not clamped silently.
+    let gone = s.state().unwrap().undo.len() + 3;
+    let e = s.execute("undoto", &json!({"depth": gone})).unwrap_err().to_string();
+    assert!(e.contains("ahead of the history"), "{e}");
+    // Already there: no steps, no error.
+    let r = s.execute("undoto", &json!({"depth": mark})).unwrap();
+    assert_eq!(r["undone"], json!(0));
+}
+
+#[test]
 fn polar_and_direct_distance() {
     let mut s = Session::new();
     s.cmdline("line 1,1").unwrap();

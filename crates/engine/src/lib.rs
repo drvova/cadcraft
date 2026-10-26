@@ -1686,6 +1686,27 @@ impl Session {
         st.revision += 1;
         Ok(Some(snap.label))
     }
+    /// Undo back to a recorded stack depth — the checkpoint the assistant pane keeps per turn
+    /// (`UNDOTO`). Each step pops one entry, so this ends within the stack's depth. Returns how
+    /// many steps were undone.
+    pub fn undo_to(&mut self, depth: usize) -> Result<usize> {
+        {
+            let st = self.state_mut()?;
+            st.end_undo_group();
+            let now = st.undo.len();
+            st.undo_ctl.marks.retain(|m| *m <= now);
+        }
+        let mut undone = 0;
+        // Each step pops one entry, so this ends within the stack's depth.
+        while self.state()?.undo.len() > depth {
+            match self.undo()? {
+                Some(_) => undone += 1,
+                None => break,
+            }
+        }
+        Ok(undone)
+    }
+
     pub fn redo(&mut self) -> Result<Option<String>> {
         let st = self.state_mut()?;
         let Some(snap) = st.redo.pop() else { return Ok(None) };

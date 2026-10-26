@@ -745,6 +745,14 @@ impl CadApp {
         self.ui_input(ctx);
     }
 
+    /// Whether a dropped path is a picture the assistant can look at (rather than a drawing to
+    /// open). The extension is the whole test: the file is decoded later, by whoever reads it.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn is_picture(path: &str) -> bool {
+        let ext = std::path::Path::new(path).extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+        matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp")
+    }
+
     /// Input-derived work, once per layout frame.
     fn ui_input(&mut self, ctx: &egui::Context) {
         menus::shortcuts(self, ctx);
@@ -753,9 +761,18 @@ impl CadApp {
             let dropped = ctx.input_mut(|input| std::mem::take(&mut input.raw.dropped_files));
             for file in dropped {
                 let path = file.path().to_string_lossy().to_string();
-                if !path.is_empty() {
-                    self.open_path(&path);
+                if path.is_empty() {
+                    continue;
                 }
+                // A picture dropped on the window joins the assistant's next message when the
+                // pane is open (it is a reference to look at, not a drawing to open); anything
+                // else is a file to open.
+                let pane_open = self.ui.docking.layout.contains(&docking::Panel::Assistant);
+                if pane_open && Self::is_picture(&path) {
+                    self.assistant.attach(path);
+                    continue;
+                }
+                self.open_path(&path);
             }
         }
         if !self.synthetic.is_empty() {
