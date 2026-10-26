@@ -23,8 +23,8 @@ About 57,000 lines of Rust in 12 library crates, 3 apps and `xtask` (counted 202
 | L3 | `dwg` | 149 | DWG through a DXF bridge: the `acadrust` crate (MPL-2.0, unmodified) converts DWG ⇄ DXF bytes; nothing else sees its types. Native only |
 | L4 | `engine` | 25,090 | `Session`, the command registry (`cmd/*`), command-line parser and prompt machines, object snaps and polar/ortho (`snap.rs`), selection (`select.rs`), grips (`grips.rs`), associativity (`assoc.rs`), system variables, units, undo, R-tree spatial index (`spatial.rs`) |
 | L5 | `ui-egui` | 9,849 | The swappable egui front end: GPU canvas (`gpu.rs`, wgpu), menus and shortcuts (`menus.rs`), command line, palettes, Layer Properties Manager and other dialogs, ViewCube, icons drawn in code, themes, the interface string catalog (`i18n/`, English, Ukrainian and German), JSON control channel (`control.rs`) |
-| L5 | `ai` | ~1,900 | The agent-facing tool catalog (`surface.rs`, the one list the MCP server and the in-app assistant both publish), the conversation and its OpenAI wire form (`chat.rs`), the streamed transport (`client.rs`), the turn loop (`agent.rs`) |
-| L5 | `mcp` | ~380 | MCP server (JSON-RPC 2.0 over stdio) on a headless session or bridged to a running app |
+| L5 | `ai` | ~1,900 | The one tool (`code.rs`: `run`, which executes AutoLISP in the drawing), the conversation and its OpenAI wire form (`chat.rs`), the streamed transport (`client.rs`), the turn loop (`agent.rs`) |
+| L5 | `mcp` | ~380 | MCP server (JSON-RPC 2.0 over stdio, one `run` tool) on a headless session or bridged to a running app |
 | app | `cadcraft` | 1,102 | Desktop app (eframe/wgpu; DirectX 12 by default on Windows) |
 | app | `cadcraft-cli` | 823 | `info`, `convert`, `run` (scripts), `commands`, `sample`, `mcp` |
 | app | `cadcraft-web` | 88 | WASM build of the same UI (no DWG) |
@@ -74,11 +74,12 @@ name. Detail and gaps: [file-format-parity.md](file-format-parity.md).
 
 - **Control channel:** `cadcraft --control PORT` accepts JSON lines (`cmdline.input`,
   `engine.execute`, `ui.screenshot`, `ui.render` …); see [control-protocol.md](control-protocol.md).
-- **MCP:** `cadcraft-cli mcp` (headless) or `--connect HOST:PORT` (drive the running app); see
-  [mcp.md](mcp.md).
+- **MCP:** `cadcraft-cli mcp` (headless) or `--connect HOST:PORT` (drive the running app); the
+  same one tool; see [mcp.md](mcp.md).
 - **The assistant:** Window ▸ Assistant (⌘7) opens the pane; the model's tool calls come back
   through the control dispatcher on the interface thread, so it can do exactly what an MCP client
-  can do and nothing more; see [assistant.md](assistant.md).
+  can do and nothing more — one tool, `run`, which executes AutoLISP in the drawing
+  ([assistant.md](assistant.md)).
 - **CLI:** `cadcraft-cli run --script … --export out.png` for headless batch work. A reader that
   closes stdout early (`… | head`) drops the rest of the output but keeps the work — later
   commands, `--save`, `--export` — and the exit status still reports failures; another stdout

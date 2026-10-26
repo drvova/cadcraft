@@ -5,6 +5,7 @@
 //! (`getpoint`, `pause`) and carry on later, so the interface keeps drawing while a routine
 //! waits. Each drawing has its own symbols, as in AutoCAD. A run is one undo step.
 
+pub mod agent;
 pub mod builtins;
 mod drawing;
 pub mod eval;
@@ -64,6 +65,10 @@ pub struct Env {
     /// The command history's length after LISP last printed a line: when something else wrote since
     /// (a prompt, a command's echo), a leading newline only ends that line.
     pub printed_at: Option<usize>,
+    /// Named strings passed beside the code by the assistant's `run` (`(value "name")`).
+    pub values: HashMap<String, String>,
+    /// PNGs drawn during this run by `(render …)`, for the caller to show the model.
+    pub images: Vec<String>,
 }
 
 impl Default for Env {
@@ -80,8 +85,11 @@ impl Default for Env {
             tblnext: HashMap::new(),
             pending_block: None,
             printed_at: None,
+            values: HashMap::new(),
+            images: Vec::new(),
         };
         builtins::install(&mut e);
+        agent::install(&mut e);
         e
     }
 }
@@ -117,6 +125,10 @@ pub struct LispState {
     support_dir: Option<std::path::PathBuf>,
     /// Drawings that had their startup files.
     autoloaded: std::collections::HashSet<u64>,
+    /// Drawings whose kept definitions have been loaded.
+    definitions_loaded: std::collections::HashSet<u64>,
+    /// A definition failed to load: name and why (reported once, on the command line).
+    definitions_broken: Vec<(String, String)>,
     /// `acad.lsp` was loaded this session.
     acad_loaded: bool,
     /// Memory caps (lowered by tests).
@@ -212,6 +224,57 @@ impl Session {
         self.lisp.envs.get(&uid).map(|e| e.get(name)).unwrap_or_default()
     }
 
+    /// Load the assistant's kept definitions into the active drawing's namespace, once per
+    /// drawing. A broken definition is reported on the command line and the rest still load, so
+    /// a bad file can never stop a session from starting.
+    pub fn lisp_load_definitions(&mut self) {
+        let Ok(uid) = self.state().map(|s| s.uid) else { return };
+        if !self.lisp.definitions_loaded.insert(uid) {
+            return;
+        }
+        if self.lisp.active {
+            return;
+        }
+        let (loaded, broken) = agent::load(self);
+        for (name, why) in broken {
+            self.echo(format!("; {name}: {why}"));
+            self.lisp.definitions_broken.push((name, why));
+        }
+        if !loaded.is_empty() {
+            log::debug!("assistant definitions loaded: {}", loaded.join(", "));
+        }
+    }
+
+    /// The definitions that failed to load, taken (reported once).
+    pub fn lisp_take_broken_definitions(&mut self) -> Vec<(String, String)> {
+        std::mem::take(&mut self.lisp.definitions_broken)
+    }
+
+    /// Hand a run its named values (the tool's `values` map) and clear the previous run's images.
+    pub fn lisp_begin_run(&mut self, values: std::collections::HashMap<String, String>) {
+        let uid = self.state().map(|s| s.uid).unwrap_or(0);
+        // The drawing may not have an environment yet (the first run in a fresh session): make
+        // one, so the values are there when the code asks for them.
+        let env = self.lisp.envs.entry(uid).or_default();
+        env.values = values;
+        env.images.clear();
+    }
+
+    /// The PNGs a run drew with `(render …)`.
+    pub fn lisp_take_images(&mut self) -> Vec<String> {
+        let uid = self.state().map(|s| s.uid).unwrap_or(0);
+        self.lisp.envs.get_mut(&uid).map(|e| std::mem::take(&mut e.images)).unwrap_or_default()
+    }
+
+    /// Put a built-in function back into a drawing's namespace. A definition must not silently
+    /// replace the language: a run that wrote over one is repaired and told so
+    /// ([`crate::lisp::agent::shadows_builtin`]).
+    pub fn lisp_restore_builtin(&mut self, name: &str) {
+        let uid = self.state().map(|s| s.uid).unwrap_or(0);
+        let env = self.lisp.envs.entry(uid).or_default();
+        crate::lisp::builtins::restore(&mut env.globals, name);
+    }
+
     /// Evaluate LISP source (a command-line expression or a file's contents). `print`: show the
     /// value on the command line. `blocking`: run to the end, answering `get…` calls from
     /// `inputs` (nil when they run out), as programmatic calls must; otherwise the routine may
@@ -282,8 +345,10 @@ impl Session {
     }
 
     fn lisp_tick_unguarded(&mut self) {
-        // A drawing seen for the first time gets its startup files.
+        // A drawing seen for the first time gets its startup files and the assistant's kept
+        // definitions.
         self.lisp_autoload();
+        self.lisp_load_definitions();
         if self.lisp.run.as_ref().is_some_and(|r| matches!(r.waiting, Some(Need::Yield))) {
             if let Some(r) = self.lisp.run.as_mut() {
                 r.waiting = None;

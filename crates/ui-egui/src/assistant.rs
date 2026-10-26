@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use cadcraft_ai::chat::{Message, Role};
 use cadcraft_ai::client::{self, Provider};
-use cadcraft_ai::surface;
+use cadcraft_ai::code;
 use cadcraft_ai::{Event, ToolExecutor};
 use egui::{Align, Color32, RichText, vec2};
 use serde_json::Value;
@@ -125,7 +125,6 @@ impl Assistant {
         let cancel = Arc::clone(&self.cancel);
         let provider = self.provider.clone();
         let mut conversation = self.messages.clone();
-        let tools = surface::core_tools();
         let jobs = self.jobs_tx.clone();
         let ctx = ctx.clone();
         let spawned = std::thread::Builder::new().name("cadcraft-assistant".into()).spawn(move || {
@@ -142,7 +141,7 @@ impl Assistant {
                 };
                 let _ = tx.send(progress);
             };
-            cadcraft_ai::agent::run_turn(&provider, &briefing, &mut conversation, &tools, &cancel, &executor, &mut on);
+            cadcraft_ai::agent::run_turn(&provider, &briefing, &mut conversation, &cancel, &executor, &mut on);
         });
         if let Err(e) = spawned {
             self.running = false;
@@ -192,7 +191,7 @@ impl Assistant {
     /// The provider settings, for the profile.    /// Ask the interface thread to run one control call, exactly as the worker's bridge does, and
     /// return the handle to wait on. The pane's side of the bridge, and how a test drives it
     /// without a model.
-    pub fn tool_call(&self, method: &str, params: Value) -> crate::control::PendingReply {
+    pub fn control_call(&self, method: &str, params: Value) -> crate::control::PendingReply {
         let (req, pending) = ControlRequest::new(method, params);
         let _ = self.jobs_tx.send(req);
         pending
@@ -288,12 +287,21 @@ struct Bridge {
 }
 
 impl ToolExecutor for Bridge {
+    /// One call of the one tool: `engine.execute` of the `run` command, queued to the interface
+    /// thread. The **raw** result comes back — the loop renders the report the model reads, so a
+    /// picture, a kept definition or a failure is never flattened into a string on the way.
     fn call(&self, name: &str, args: &Value) -> Result<Value, String> {
-        let mut harness = Harness { jobs: &self.jobs, ctx: &self.ctx };
-        match surface::dispatch(&mut harness, name, args) {
-            None => Err(format!("unknown tool `{name}`")),
-            Some(r) => r,
+        if name != code::TOOL {
+            return Err(format!("`{name}` is not a tool here; there is one tool, `{}`", code::TOOL));
         }
+        let args = code::check_args(args)?;
+        let mut harness = Harness { jobs: &self.jobs, ctx: &self.ctx };
+        // The same control call the surface makes: `engine.execute` of the `run` command.
+        code::Harness::call(
+            &mut harness,
+            code::METHOD,
+            serde_json::json!({"command": code::COMMAND, "params": {"code": args.code, "values": args.values}}),
+        )
     }
 }
 
@@ -303,7 +311,7 @@ struct Harness<'a> {
     ctx: &'a egui::Context,
 }
 
-impl surface::Harness for Harness<'_> {
+impl code::Harness for Harness<'_> {
     fn call(&mut self, method: &str, params: Value) -> Result<Value, String> {
         let (req, pending) = ControlRequest::new(method, params);
         self.jobs.send(req).map_err(|_| tl!("The assistant is no longer connected to CADCraft.").to_string())?;
@@ -445,9 +453,9 @@ fn transcript(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens) {
         ui.label(RichText::new(tl!("Ask for a change to this drawing — the assistant works in it directly.")).color(t.text_dim));
         ui.add_space(4.0);
         ui.label(
-            RichText::new(tl!("For example: \"measure the shape of every closed outline on the current layer and tell me what it is\", \
-                 \"offset this outline 2 mm outward and fillet the corners\", \"draw a 6.5 mm round brilliant at the origin \
-                 and list its carat weight\", or \"read the drawing and tell me what is wrong with it\"."))
+            RichText::new(tl!("The assistant writes AutoLISP in the open drawing: (cmd \"circle\" '((CENTER . (0 0)) (RADIUS . 5))) draws, \
+                 (commands) lists what the application offers, (render) shows it a picture. Helpers it writes are kept for \
+                 the next session. Ask in your own words, or paste the code you want run."))
             .color(t.text_faint)
             .small(),
         );
@@ -663,6 +671,23 @@ mod tests {
 
     fn call(id: &str, name: &str, args: Value) -> ToolCall {
         ToolCall { id: id.into(), name: name.into(), arguments: args }
+    }
+
+    #[test]
+    fn the_bridge_hands_back_the_raw_result_so_the_report_is_whole() {
+        // The worker's bridge must not pre-render the report: `run_one` builds it from the raw
+        // command result, and a string would lose the value, the kept names and the pictures.
+        let report = code::Report::of(&serde_json::json!({
+            "value": "((COUNT . 3))",
+            "output": ["drew 3"],
+            "kept": ["C:WING"],
+            "images": ["/tmp/a.png"]
+        }));
+        let text = report.text();
+        assert!(text.contains("=> ((COUNT . 3))"), "{text}");
+        assert!(text.contains("kept: C:WING"), "{text}");
+        assert!(text.contains("rendered /tmp/a.png"), "{text}");
+        assert_eq!(report.images, vec!["/tmp/a.png".to_string()]);
     }
 
     #[test]

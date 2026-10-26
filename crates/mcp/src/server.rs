@@ -1,4 +1,8 @@
-//! JSON-RPC 2.0 framing and the MCP lifecycle / tools / resources methods.
+//! JSON-RPC 2.0 framing and the MCP lifecycle / tools methods.
+//!
+//! There is one tool ([`crate::tools`]) and no resources: a read-only resource is a second,
+//! parallel interface to the same capabilities, and the drawing is read from code like everything
+//! else (`(cmd "describe")`, `(cmd "entities" …)`).
 
 use std::io::{BufRead, Write};
 
@@ -15,10 +19,16 @@ const INVALID_REQUEST: i64 = -32600;
 const METHOD_NOT_FOUND: i64 = -32601;
 const INVALID_PARAMS: i64 = -32602;
 
+/// What the server tells a client at `initialize`. It says the shape of the one tool and how to
+/// start, and states the deployment fact: running code is what this server does.
 const INSTRUCTIONS: &str = "CADCraft is a 2D/3D CAD drafting app (an AutoCAD clone). Coordinates are drawing units, \
-y up. Fastest path: command_line with AutoCAD syntax, e.g. `line 0,0 10,0 10,5 c`, `circle 5,2.5 1`, \
-`rectang 0,0 4,3`, `offset 1` then pick, `zoom e`. Or execute with JSON (list_commands shows ids and params). \
-Verify with inspect_drawing / query_entities and look with render.";
+y up. The server has ONE tool, `run`, which executes AutoLISP inside the open drawing: call it with empty code \
+for the manual, then `(commands)` for the catalog, `(describe \"id\")` for one command's parameters, \
+`(cmd \"circle\" '((CENTER . (0 0)) (RADIUS . 5)))` to draw, `(cmdline \"line\" \"0,0\" \"10,0\")` to type at the \
+command line like a person, `(cmd \"describe\")` to read the drawing back, `(render)` to see it. Definitions \
+you write with `(defun NAME …)` are kept and reloaded next session. The tool RUNS CODE with the authority of \
+the process: there is no code-free mode and no disable switch — run the server sandboxed when the model \
+driving it is not trusted with the user's files.";
 
 pub struct Server {
     backend: Box<dyn Backend>,
@@ -103,7 +113,7 @@ impl Server {
                 let version = if SUPPORTED.contains(&asked) { asked } else { PROTOCOL_VERSION };
                 Ok(json!({
                     "protocolVersion": version,
-                    "capabilities": {"tools": {"listChanged": false}, "resources": {"listChanged": false}},
+                    "capabilities": {"tools": {"listChanged": false}},
                     "serverInfo": {"name": "cadcraft", "title": "CADCraft", "version": env!("CARGO_PKG_VERSION")},
                     "instructions": format!("{INSTRUCTIONS} Backend: {}.", self.backend.describe()),
                 }))
@@ -114,20 +124,6 @@ impl Server {
                 let name = params.get("name").and_then(Value::as_str).ok_or((INVALID_PARAMS, "missing tool `name`".to_string()))?;
                 let args = params.get("arguments").unwrap_or(&Value::Null);
                 call_tool(self.backend.as_mut(), name, args).map_err(|m| (INVALID_PARAMS, m))
-            }
-            "resources/list" => Ok(json!({"resources": [
-                {"uri": "cadcraft://drawing", "name": "Active drawing", "mimeType": "application/json"},
-                {"uri": "cadcraft://commands", "name": "Command catalog", "mimeType": "application/json"},
-            ]})),
-            "resources/read" => {
-                let uri = params.get("uri").and_then(Value::as_str).unwrap_or("");
-                let v = match uri {
-                    "cadcraft://drawing" => self.backend.call("drawing.inspect", json!({})),
-                    "cadcraft://commands" => self.backend.call("engine.commands", json!({})),
-                    _ => return Err((-32002, format!("unknown resource `{uri}`"))),
-                }
-                .map_err(|e| (-32603, e))?;
-                Ok(json!({"contents": [{"uri": uri, "mimeType": "application/json", "text": v.to_string()}]}))
             }
             _ => Err((METHOD_NOT_FOUND, format!("method `{method}` not found"))),
         }

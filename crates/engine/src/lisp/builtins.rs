@@ -1582,6 +1582,30 @@ fn test_panic(_a: &[Value]) -> R {
     panic!("test panic")
 }
 
+/// Whether a name is one of the language's built-in functions (a definition must not silently
+/// shadow one).
+pub fn is_builtin(name: &str) -> bool {
+    BUILTINS.iter().any(|b| b.name.eq_ignore_ascii_case(name))
+}
+
+/// Put a built-in back after something shadowed it. `T`, `PI` and `PAUSE` count as built-ins too,
+/// so a definition cannot take them away either.
+pub fn restore(globals: &mut std::collections::HashMap<Sym, Value>, name: &str) {
+    if let Some(b) = BUILTINS.iter().find(|b| b.name.eq_ignore_ascii_case(name)) {
+        globals.insert(Sym::new(b.name), Value::Subr(b));
+        return;
+    }
+    let constant = match name.to_ascii_uppercase().as_str() {
+        "T" => Some(Value::t()),
+        "PI" => Some(Value::Real(std::f64::consts::PI)),
+        "PAUSE" => Some(Value::str("\\")),
+        _ => None,
+    };
+    if let Some(v) = constant {
+        globals.insert(Sym::new(name), v);
+    }
+}
+
 /// A real as `princ` shows it (for messages).
 pub fn real(r: f64) -> String {
     real_text(r)

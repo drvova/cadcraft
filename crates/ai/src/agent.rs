@@ -13,11 +13,11 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::chat::{self, MAX_REQUEST_CHARS, Message};
 use crate::client::{self, Provider};
-use crate::surface::{self, Tool};
+use crate::code;
 
 /// What the pane shows as a turn runs.
 #[derive(Clone, Debug, PartialEq)]
@@ -123,13 +123,12 @@ pub fn run_turn(
     provider: &Provider,
     briefing: &Briefing,
     conversation: &mut Vec<Message>,
-    tools: &[Tool],
     cancel: &AtomicBool,
     executor: &dyn ToolExecutor,
     on: &mut dyn FnMut(Event, &[Message]),
 ) {
     let system = system_prompt(briefing);
-    let definitions = surface::chat_definitions(tools);
+    let definitions = crate::surface::chat_tools();
     for _round in 0..MAX_ROUNDS {
         if cancel.load(Ordering::Relaxed) {
             on(Event::Done { reason: "stopped".into() }, conversation);
@@ -162,7 +161,7 @@ pub fn run_turn(
                 return;
             }
             on(Event::Call { name: call.name.clone(), summary: call.summary() }, conversation);
-            let outcome = run_one(executor, tools, call);
+            let outcome = run_one(executor, call);
             match outcome {
                 Ok(value) => {
                     let note = note_of(&value);
@@ -184,17 +183,21 @@ pub fn run_turn(
     );
 }
 
-/// Run one tool call, refusing what this host cannot do and what the model malformed.
-fn run_one(executor: &dyn ToolExecutor, tools: &[Tool], call: &crate::chat::ToolCall) -> Result<Value, String> {
-    if !matches!(call.arguments, Value::Object(_)) {
-        let raw = call.arguments.as_str().unwrap_or_default();
-        return Err(format!("the arguments were not a JSON object: {raw}"));
+/// Run one tool call. There is one tool: `run`, whose arguments are checked before anything
+/// happens, and whose result the model reads as the report text — measurements, what was kept,
+/// what failed — not as JSON. A model that calls something else is told so in one line: the list
+/// is one long.
+pub(crate) fn run_one(executor: &dyn ToolExecutor, call: &crate::chat::ToolCall) -> Result<Value, String> {
+    if call.name != code::TOOL {
+        return Err(format!(
+            "`{}` is not a tool here; there is one tool, `{}`, which runs AutoLISP in the drawing (call it with empty code for the manual).",
+            call.name,
+            code::TOOL
+        ));
     }
-    if !tools.iter().any(|t| t.name == call.name) {
-        let names: Vec<&str> = tools.iter().map(|t| t.name).collect();
-        return Err(format!("`{}` is not a tool here. Available: {}", call.name, names.join(", ")));
-    }
-    executor.call(&call.name, &call.arguments)
+    let args = code::check_args(&call.arguments)?;
+    let result = executor.call(code::TOOL, &json!({"code": args.code, "values": args.values}))?;
+    Ok(json!(code::Report::of(&result).text()))
 }
 
 /// A short line for a tool chip: what the result says in its own words when it says anything.
@@ -280,21 +283,31 @@ mod tests {
     #[test]
     fn a_call_whose_arguments_are_not_an_object_is_refused_before_it_runs() {
         let fake = Fake { calls: Mutex::new(Vec::new()), answer: Ok(json!({})) };
-        let call = crate::chat::ToolCall { id: "1".into(), name: "execute".into(), arguments: Value::String("{oops".into()) };
-        let err = run_one(&fake, &surface::core_tools(), &call).unwrap_err();
-        assert!(err.contains("not a JSON object"), "{err}");
-        assert!(err.contains("{oops"));
+        let call = crate::chat::ToolCall { id: "1".into(), name: "run".into(), arguments: Value::String("{oops".into()) };
+        let err = run_one(&fake, &call).unwrap_err();
+        assert!(err.contains("takes an object"), "{err}");
         assert!(fake.calls.lock().unwrap().is_empty(), "nothing ran");
     }
 
     #[test]
-    fn a_call_to_a_tool_this_host_does_not_have_is_refused_and_lists_the_rest() {
+    fn a_call_to_a_tool_this_host_does_not_have_is_refused_in_one_line() {
         let fake = Fake { calls: Mutex::new(Vec::new()), answer: Ok(json!({})) };
         let call = crate::chat::ToolCall { id: "1".into(), name: "screenshot".into(), arguments: json!({}) };
-        let err = run_one(&fake, &surface::core_tools(), &call).unwrap_err();
-        assert!(err.contains("is not a tool here"), "{err}");
-        assert!(err.contains("execute"), "the list is offered: {err}");
+        let err = run_one(&fake, &call).unwrap_err();
+        assert!(err.contains("`screenshot` is not a tool here"), "{err}");
+        assert!(err.contains("there is one tool, `run`"), "the one tool is named: {err}");
         assert!(fake.calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn the_model_reads_the_report_text_not_json() {
+        let fake = Fake { calls: Mutex::new(Vec::new()), answer: Ok(json!({"value": "((COUNT . 3))", "output": ["drew 3"], "kept": ["C:WING"]})) };
+        let call = crate::chat::ToolCall { id: "1".into(), name: "run".into(), arguments: json!({"code": r#"(cmd "line")"#}) };
+        let v = run_one(&fake, &call).unwrap();
+        let text = v.as_str().expect("a string, not a JSON object");
+        assert!(text.contains("drew 3"), "{text}");
+        assert!(text.contains("=> ((COUNT . 3))"), "{text}");
+        assert!(text.contains("kept: C:WING"), "{text}");
     }
 
     #[test]
@@ -304,7 +317,7 @@ mod tests {
         let mut seen = Vec::new();
         let mut conversation = vec![Message::user("draw a circle")];
         let provider = Provider { base_url: "http://127.0.0.1:9/v1".into(), model: "m".into(), ..Provider::default() };
-        run_turn(&provider, &Briefing::default(), &mut conversation, &surface::core_tools(), &cancel, &fake, &mut |e, _| seen.push(e));
+        run_turn(&provider, &Briefing::default(), &mut conversation, &cancel, &fake, &mut |e, _| seen.push(e));
         assert_eq!(seen, vec![Event::Done { reason: "stopped".into() }]);
         assert!(fake.calls.lock().unwrap().is_empty());
     }

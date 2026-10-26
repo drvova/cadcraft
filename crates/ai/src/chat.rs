@@ -30,7 +30,33 @@ pub struct ToolCall {
 
 impl ToolCall {
     /// A one-line description of the call, for the pane's chip.
+    ///
+    /// The one tool takes code, and code is what a person wants to read: a `run` call shows the
+    /// AutoLISP it ran, one line per line, rather than an escaped JSON string. Any other call (a
+    /// host with more tools, a test) falls back to `name(key: value, …)`.
     pub fn summary(&self) -> String {
+        if let Value::Object(m) = &self.arguments
+            && let Some(Value::String(code)) = m.get("code")
+            && m.len() <= 2
+            && (m.len() == 1 || m.contains_key("values"))
+        {
+            let code = code.trim();
+            if code.is_empty() {
+                return "run (the manual)".to_string();
+            }
+            let mut lines = code.lines();
+            let first = lines.next().unwrap_or_default();
+            let rest = lines.count();
+            let head = if first.chars().count() > 120 { format!("{}…", first.chars().take(119).collect::<String>()) } else { first.to_string() };
+            let values = match m.get("values").and_then(Value::as_object).filter(|v| !v.is_empty()) {
+                Some(v) => {
+                    let names: Vec<&str> = v.keys().map(String::as_str).collect();
+                    format!(" [+{}]", names.join(", "))
+                }
+                None => String::new(),
+            };
+            return if rest == 0 { format!("{head}{values}") } else { format!("{head}  (+{rest} more lines){values}") };
+        }
         match &self.arguments {
             Value::Object(m) if m.is_empty() => self.name.clone(),
             Value::Object(m) => {

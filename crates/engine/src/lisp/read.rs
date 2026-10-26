@@ -22,6 +22,22 @@ pub fn read_all(src: &str) -> Result<Vec<Value>, LispError> {
     Ok(out)
 }
 
+/// Every top-level form in `src` with the exact source text it came from. The assistant's
+/// definitions are kept this way: one unit per name, written back verbatim, so what is saved is
+/// what the model wrote.
+pub fn read_all_with_source(src: &str) -> Result<Vec<(Value, String)>, LispError> {
+    let mut r = Reader { chars: src.chars().collect(), pos: 0 };
+    let mut out = Vec::new();
+    loop {
+        r.skip_space();
+        let start = r.pos;
+        let Some(v) = r.datum()? else { break };
+        let text: String = r.chars[start..r.pos].iter().collect();
+        out.push((v, text));
+    }
+    Ok(out)
+}
+
 /// The first form in `src` (`read`), nil when there is none.
 pub fn read_one(src: &str) -> Result<Value, LispError> {
     let mut r = Reader { chars: src.chars().collect(), pos: 0 };

@@ -101,3 +101,21 @@ fails drops the one it began.
 The AutoLISP conformance corpus (#648) lives in its own repository. Point `CADCRAFT_LISP_CORPUS`
 at it and run `cargo test -p cadcraft-engine --test it lisp_corpus::`; without the variable the test
 says it was skipped.
+
+## The assistant's namespace
+
+Every drawing's environment also carries the functions a model drives CADCraft with — `(commands)`,
+`(cmd "id" params)`, `(cmdline …)`, `(inspect)`, `(describe …)`, `(render …)`, `(value "name")`,
+`(kept)`, `(forget "name")` and `(man)`. They are ordinary AutoLISP functions, so a routine a
+person writes can use them too:
+
+```lisp
+(defun c:HOLES (n r / i)
+  (setq i 0)
+  (repeat n
+    (cmd "circle" (list (cons 'CENTER (list (* i 20) 0)) (cons 'RADIUS r)))
+    (setq i (1+ i))))
+```
+
+`(cmd …)` is the same call a script, the CLI and MCP make; `(render …)` draws a PNG. Definitions a
+model writes are kept across sessions (see [assistant.md](assistant.md#kept-definitions-the-model-builds-its-own-tooling)).

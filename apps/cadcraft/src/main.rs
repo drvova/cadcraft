@@ -183,28 +183,11 @@ fn filters_for_save(name: &str) -> [(&'static str, &'static str); 6] {
     filters
 }
 
-/// The per-user settings directory (it holds `logs/` and `autosave/`): `CADCRAFT_CONFIG_DIR` if set, else
-/// `$XDG_CONFIG_HOME/cadcraft` or `~/.config/cadcraft` on Linux and the BSDs,
-/// `~/Library/Application Support/CADCraft` on macOS, `%APPDATA%\CADCraft` on Windows.
+/// The per-user settings directory (it holds `logs/`, `autosave/` and the assistant's kept
+/// definitions): the engine's [`cadcraft_engine::paths::config_dir`], so the app, the CLI and the
+/// MCP server always mean the same directory.
 fn config_dir() -> Option<std::path::PathBuf> {
-    config_dir_from(|k| std::env::var_os(k))
-}
-
-/// [`config_dir`] with the environment passed in (`var` looks a variable up). An empty variable
-/// counts as unset, so a blank value never means the working directory.
-fn config_dir_from(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Option<std::path::PathBuf> {
-    let set = |k: &str| var(k).filter(|v| !v.is_empty()).map(std::path::PathBuf::from);
-    if let Some(dir) = set("CADCRAFT_CONFIG_DIR") {
-        return Some(dir);
-    }
-    if cfg!(target_os = "macos") {
-        set("HOME").map(|h| h.join("Library/Application Support/CADCraft"))
-    } else if cfg!(windows) {
-        set("APPDATA").map(|a| a.join("CADCraft"))
-    } else {
-        // The XDG spec ignores a relative XDG_CONFIG_HOME.
-        set("XDG_CONFIG_HOME").filter(|p| p.is_absolute()).or_else(|| set("HOME").map(|h| h.join(".config"))).map(|c| c.join("cadcraft"))
-    }
+    cadcraft_engine::paths::config_dir()
 }
 
 const APP_ID: &str = "ai.storyteller.cadcraft";
@@ -410,14 +393,7 @@ fn main() -> eframe::Result {
 
 #[cfg(test)]
 mod tests {
-    use super::{config_dir_from, control_flag, control_port_from, filters_for_save, follow_desktop};
-    use std::ffi::OsString;
-    use std::path::PathBuf;
-
-    fn env<'a>(vars: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<OsString> + 'a {
-        move |k| vars.iter().find(|(n, _)| *n == k).map(|(_, v)| OsString::from(v))
-    }
-
+    use super::{control_flag, control_port_from, filters_for_save, follow_desktop};
     #[test]
     fn save_dialog_offers_dwg_with_the_drawing_format_first() {
         let first = |name: &str| filters_for_save(name)[0].1;
@@ -452,39 +428,6 @@ mod tests {
         // A port given on the command line still wins over the variable.
         assert_eq!(control_flag(Some(47321), Some("7979".into())), Some(7979));
         assert_eq!(control_flag(Some(47321), Some("abc".into())), None);
-    }
-
-    #[test]
-    fn the_override_variable_wins_and_empty_values_are_unset() {
-        let vars = [("CADCRAFT_CONFIG_DIR", "/tmp/cc"), ("HOME", "/home/u"), ("XDG_CONFIG_HOME", "/x"), ("APPDATA", "C:\\a")];
-        assert_eq!(config_dir_from(env(&vars)), Some(PathBuf::from("/tmp/cc")));
-        let empty = [("CADCRAFT_CONFIG_DIR", ""), ("HOME", ""), ("XDG_CONFIG_HOME", ""), ("APPDATA", "")];
-        assert_eq!(config_dir_from(env(&empty)), None, "no usable variable means no directory, not the working directory");
-        assert_eq!(config_dir_from(env(&[])), None);
-    }
-
-    #[cfg(all(unix, not(target_os = "macos")))]
-    #[test]
-    fn linux_and_bsd_follow_xdg_config_home() {
-        assert_eq!(config_dir_from(env(&[("XDG_CONFIG_HOME", "/x"), ("HOME", "/home/u")])), Some(PathBuf::from("/x/cadcraft")));
-        assert_eq!(config_dir_from(env(&[("HOME", "/home/u")])), Some(PathBuf::from("/home/u/.config/cadcraft")));
-        // The XDG spec says a relative XDG_CONFIG_HOME is ignored.
-        assert_eq!(config_dir_from(env(&[("XDG_CONFIG_HOME", "rel"), ("HOME", "/home/u")])), Some(PathBuf::from("/home/u/.config/cadcraft")));
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn macos_uses_application_support() {
-        assert_eq!(config_dir_from(env(&[("HOME", "/Users/u")])), Some(PathBuf::from("/Users/u/Library/Application Support/CADCraft")));
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn windows_uses_appdata() {
-        assert_eq!(
-            config_dir_from(env(&[("APPDATA", "C:\\Users\\u\\AppData\\Roaming")])),
-            Some(PathBuf::from("C:\\Users\\u\\AppData\\Roaming").join("CADCraft"))
-        );
     }
 
     /// View ▸ Theme ▸ System on Linux: winit reports no theme, so the desktop's answer stands in;

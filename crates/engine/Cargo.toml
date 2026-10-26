@@ -16,6 +16,10 @@ cadcraft-dxf = { workspace = true }
 cadcraft-constraints = { workspace = true }
 cadcraft-fonts = { workspace = true }
 cadcraft-render = { workspace = true }
+# PNG export for the assistant's (render …) — the same rasterizer the CLI and the export
+# commands use, so a model's picture and a user's export are the same pixels (io is L3, below the
+# engine).
+cadcraft-io = { workspace = true }
 craft-docpath = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -28,7 +32,5 @@ rstar = { version = "0.13", default-features = false }
 libc = "0.2"
 
 [dev-dependencies]
-# Real DXF files for the external reference tests (io is a lower layer).
-cadcraft-io = { workspace = true }
 # Image fixtures for the raster-image tests (a PNG encoded from a pixmap).
 tiny-skia = { workspace = true }

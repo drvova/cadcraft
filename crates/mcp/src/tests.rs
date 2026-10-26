@@ -1,4 +1,10 @@
-//! An agent completes realistic drafting tasks through MCP only, and verifies through MCP only.
+//! An agent completes realistic drafting tasks through MCP only, and verifies through MCP only —
+//! and it does all of it through the **one** tool, `run`, by writing AutoLISP.
+//!
+//! These are the capability flows the server had before the surface became one tool: drawing a
+//! plate with holes, querying entities by window, reading texts, tracing a picture, scoping a
+//! report. Every one of them is driven here through `run` and nothing else, so this file is also
+//! the proof that a capability is not lost by not being a tool.
 
 use serde_json::{Value, json};
 
@@ -12,259 +18,234 @@ fn call(s: &mut Server, id: u64, method: &str, params: Value) -> Value {
     serde_json::from_str(&r).unwrap()
 }
 
-/// Call an MCP tool and return its decoded result: JSON text is parsed, an image is passed
-/// through, and a tool error fails the test with the reported message.
-fn tool(s: &mut Server, name: &str, args: Value) -> Value {
-    let r = call(s, 99, "tools/call", json!({"name": name, "arguments": args}));
+/// The whole reply of one `run`, with the image blocks left in place.
+fn run_raw(s: &mut Server, code: &str) -> Value {
+    call(s, 99, "tools/call", json!({"name": "run", "arguments": {"code": code}}))
+}
+
+/// Run code and return the report text. A failing run fails the test with what it said.
+fn run(s: &mut Server, code: &str) -> String {
+    let r = run_raw(s, code);
     let c = &r["result"]["content"][0];
-    assert_ne!(r["result"]["isError"], json!(true), "{name} failed: {c}");
-    if c["type"] == "text" { serde_json::from_str(c["text"].as_str().unwrap()).unwrap_or(Value::Null) } else { c.clone() }
+    assert_ne!(r["result"]["isError"], json!(true), "{code} failed: {c}");
+    c["text"].as_str().unwrap_or_default().to_string()
+}
+
+/// Run code whose value is the answer, and return that value as text (`=> …` in the report).
+fn value(s: &mut Server, code: &str) -> String {
+    let text = run(s, code);
+    text.lines().find_map(|l| l.strip_prefix("=> ")).unwrap_or_else(|| panic!("no value in the report of {code}:\n{text}")).to_string()
+}
+
+/// Run code that draws: the report's own text, with a failed run failing the test.
+fn draw(s: &mut Server, code: &str) {
+    run(s, code);
 }
 
 /// The MCP handshake works: `initialize` names the server, the `initialized` notification is
-/// accepted, `tools/list` offers the command line, and an unknown method is -32601.
+/// accepted, and `tools/list` offers exactly one tool — `run`.
 #[test]
-fn lifecycle_and_tools() {
+fn lifecycle_and_one_tool() {
     let mut s = Server::new(Box::new(Headless::default()));
     let init = call(&mut s, 1, "initialize", json!({"protocolVersion": "2025-06-18"}));
     assert_eq!(init["result"]["serverInfo"]["name"], "cadcraft");
     assert!(s.handle_line(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#).is_none());
     assert!(s.is_initialized());
     let tools = call(&mut s, 2, "tools/list", json!({}));
-    assert!(tools["result"]["tools"].as_array().unwrap().iter().any(|t| t["name"] == "command_line"));
+    let names: Vec<&str> = tools["result"]["tools"].as_array().unwrap().iter().filter_map(|t| t["name"].as_str()).collect();
+    assert_eq!(names, vec!["run"], "one tool, unconditionally");
+    // Its description says how to start and states the deployment fact.
+    let desc = tools["result"]["tools"][0]["description"].as_str().unwrap();
+    assert!(desc.contains("empty `code`"), "{desc}");
+    assert!(desc.contains("RUNS CODE WITH THE AUTHORITY"), "{desc}");
+    assert!(desc.contains("no code-free mode and no disable switch"), "{desc}");
     let bad = call(&mut s, 3, "nope", json!({}));
     assert_eq!(bad["error"]["code"], -32601);
 }
 
-/// Guards that an agent can complete a drawing (plate, holes, layer, text) using only the MCP
-/// tools, and verify it only through MCP: counts, selection queries, undo and a PNG render.
+/// An empty call returns the manual: the namespace's vocabulary, and how to reach the
+/// application. This is where a model bootstraps.
+#[test]
+fn an_empty_call_returns_the_manual() {
+    let mut s = Server::new(Box::new(Headless::default()));
+    let manual = run(&mut s, "");
+    for word in ["(commands", "(cmd ", "(cmdline", "(inspect)", "(describe", "(render", "(value", "(kept)", "(forget", "(man)"] {
+        assert!(manual.contains(word), "the manual names {word}:\n{manual}");
+    }
+    assert!(manual.contains("AutoLISP"), "{manual}");
+    assert!(manual.contains("commands are available"), "{manual}");
+    // And nothing was drawn by asking for it.
+    assert_eq!(value(&mut s, "(cdr (assoc 'OBJECTS (describe)))"), "0");
+}
+
+/// Guards that an agent can complete a drawing (plate, holes, layer, text) with only `run`, and
+/// verify it only with `run`: counts, queries, undo and a PNG render.
 #[test]
 fn agent_draws_a_plate_with_holes() {
     let mut s = Server::new(Box::new(Headless::default()));
-    // Task 1: an outline via the command line, AutoCAD style.
-    tool(&mut s, "command_line", json!({"text": "rectang 0,0 100,60"}));
-    // Task 2: four holes with JSON.
+    // Task 1: an outline, typed at the command line like a person.
+    draw(&mut s, r#"(cmdline "rectang" "0,0" "100,60")"#);
+    // Task 2: four holes.
     for (x, y) in [(10, 10), (90, 10), (10, 50), (90, 50)] {
-        tool(&mut s, "execute", json!({"command": "circle", "params": {"center": [x, y], "radius": 4}}));
+        draw(&mut s, &format!(r#"(cmd "circle" '((CENTER . ({x} {y})) (RADIUS . 4)))"#));
     }
-    // Task 3: a layer and a centre line on it.
-    tool(&mut s, "execute", json!({"command": "layer.new", "params": {"name": "Center", "color": "red", "current": true}}));
-    tool(&mut s, "command_line", json!({"text": "line -5,30 105,30"}));
-    tool(&mut s, "command_line", json!({"text": ""}));
-    // Task 4: a script with text. TEXT keeps asking for further lines until an empty one, as in
-    // AutoCAD, so the script ends it with a blank line (= Enter).
-    let r = tool(&mut s, "script", json!({"text": "TEXT 0,-10 5 0 PLATE 100x60\n\n"}));
-    assert_eq!(r["state"]["running"], Value::Null, "TEXT must be finished: {r}");
-    // Verify only through MCP.
-    let d = tool(&mut s, "inspect_drawing", json!({}));
-    assert_eq!(d["counts"]["Circle"], 4);
-    assert_eq!(d["counts"]["Polyline"], 1);
-    assert_eq!(d["counts"]["Line"], 1);
-    assert_eq!(d["counts"]["Text"], 1);
-    let lines = tool(&mut s, "query_entities", json!({"type": "Line", "layer": "Center"}));
-    assert_eq!(lines["count"], 1);
-    // Task 5: undo the text, check, then render.
-    let u = tool(&mut s, "execute", json!({"command": "undo"}));
-    assert_eq!(u["undone"], json!(["Single Line Text"]), "{u}");
-    let d = tool(&mut s, "inspect_drawing", json!({"entities": false}));
-    assert!(d["counts"].get("Text").is_none());
-    assert_eq!(d["counts"]["Circle"], 4);
-    assert_eq!(d["counts"]["Polyline"], 1);
-    assert_eq!(d["counts"]["Line"], 1);
-    let lines = tool(&mut s, "query_entities", json!({"type": "Line", "layer": "Center"}));
-    assert_eq!(lines["count"], 1, "the centre line must survive undoing the text");
-    let img = tool(&mut s, "render", json!({"width": 320, "height": 200}));
-    assert_eq!(img["type"], "image");
-    assert!(img["data"].as_str().unwrap().len() > 100);
+    // Task 3: a layer, and a centre line on it.
+    draw(&mut s, r#"(cmd "layer.new" '((NAME . "Center") (COLOR . "red") (CURRENT . T)))"#);
+    draw(&mut s, r#"(cmdline "line" "-5,30" "105,30" "")"#);
+    // Task 4: text, typed the way AutoCAD asks for it.
+    draw(&mut s, r#"(cmdline "text" "0,-10" "5" "0" "PLATE 100x60" "")"#);
+    // Verify.
+    assert_eq!(value(&mut s, r#"(cdr (assoc 'COUNT (cmd "entities" '((TYPE . "Circle")))))"#), "4");
+    assert_eq!(value(&mut s, r#"(cdr (assoc 'COUNT (cmd "entities" '((TYPE . "Line")))))"#), "1");
+    assert_eq!(value(&mut s, r#"(cdr (assoc 'COUNT (cmd "entities" '((TYPE . "Text")))))"#), "1");
+    assert_eq!(value(&mut s, r#"(cdr (assoc 'COUNT (cmd "entities" '((TYPE . "Line") (LAYER . "Center")))))"#), "1");
+    // Task 5: undo the text, check, then render the drawing. A run is one undo step, so this
+    // takes back the run that drew the text — everything it did.
+    draw(&mut s, r#"(cmd "undo")"#);
+    assert_eq!(value(&mut s, r#"(cdr (assoc 'COUNT (cmd "entities" '((TYPE . "Text")))))"#), "0");
+    assert_eq!(
+        value(&mut s, r#"(cdr (assoc 'COUNT (cmd "entities" '((TYPE . "Line") (LAYER . "Center")))))"#),
+        "1",
+        "the centre line survives undoing the text"
+    );
+    let r = run_raw(&mut s, r#"(render "plate.png" 320 200)"#);
+    let content = r["result"]["content"].as_array().unwrap();
+    assert_eq!(content.len(), 2, "the report text and the picture: {r}");
+    assert_eq!(content[1]["type"], "image");
+    assert!(content[1]["data"].as_str().unwrap().len() > 100, "a real PNG came back");
+    let _ = std::fs::remove_file("plate.png");
 }
 
-/// Guards that bad input is reported, not fatal: a refused command and a screenshot without a
-/// UI are `isError` results, and malformed JSON is a parse error (-32700).
+/// A helper written in one call is usable in the next, and one kept in a session is there in the
+/// next session — the model builds its own tooling and keeps it.
 #[test]
-fn errors_are_tool_errors_not_crashes() {
+fn a_helper_written_once_is_reused_and_kept() {
     let mut s = Server::new(Box::new(Headless::default()));
-    let r = call(&mut s, 1, "tools/call", json!({"name": "execute", "arguments": {"command": "circle", "params": {"center": "x"}}}));
-    assert_eq!(r["result"]["isError"], true);
-    let r = call(&mut s, 2, "tools/call", json!({"name": "screenshot", "arguments": {}}));
-    assert_eq!(r["result"]["isError"], true);
-    assert!(s.handle_line("{not json").unwrap().contains("-32700"));
+    let r = run(
+        &mut s,
+        r#"(defun CADCRAFT-MCP-HOLE (x y r) (cmd "circle" (list (cons 'CENTER (list x y)) (cons 'RADIUS r))))
+           (CADCRAFT-MCP-HOLE 0 0 2)"#,
+    );
+    assert!(r.contains("kept: CADCRAFT-MCP-HOLE"), "{r}");
+    // The next call uses it without redefining anything.
+    draw(&mut s, "(CADCRAFT-MCP-HOLE 10 0 3)");
+    assert_eq!(value(&mut s, r#"(cdr (assoc 'COUNT (cmd "entities" '((TYPE . "Circle")))))"#), "2");
+    let radii = value(
+        &mut s,
+        r#"(mapcar '(lambda (e) (cdr (assoc 'RADIUS (cdr (assoc 'GEOMETRY e))))) (cdr (assoc 'ENTITIES (cmd "entities" '((TYPE . "Circle"))))))"#,
+    );
+    assert_eq!(radii, "(2.0 3.0)", "the helper drew the second circle at r=3: {radii}");
+    // A fresh session (a new server, as after a restart) loads the kept definition.
+    let mut fresh = Server::new(Box::new(Headless::default()));
+    assert!(run(&mut fresh, "(kept)").contains("CADCRAFT-MCP-HOLE"), "kept() lists it");
+    draw(&mut fresh, "(CADCRAFT-MCP-HOLE 5 5 1)");
+    assert_eq!(value(&mut fresh, r#"(cdr (assoc 'COUNT (cmd "entities" '((TYPE . "Circle")))))"#), "1", "the definition was there");
+    // `(forget …)` removes it, and the next session does not have it.
+    run(&mut s, r#"(forget "CADCRAFT-MCP-HOLE")"#);
+    let mut after = Server::new(Box::new(Headless::default()));
+    let r = run_raw(&mut after, "(CADCRAFT-MCP-HOLE 1 1 1)");
+    assert_eq!(r["result"]["isError"], json!(true), "the definition is gone: {r}");
 }
 
-/// Unknown tools and arguments that don't fit a tool's schema are invalid params (-32602), never
-/// guessed at; an empty batch is one Invalid Request.
+/// The command catalog and one command's parameters are readable from code, so a model never has
+/// to guess an id or a parameter name.
 #[test]
-fn bad_tool_calls_are_invalid_params() {
+fn commands_and_their_parameters_are_readable_from_code() {
     let mut s = Server::new(Box::new(Headless::default()));
-    tool(&mut s, "command_line", json!({"text": "circle 0,0 1"}));
-    let bad = [
-        json!({"name": "nope", "arguments": {}}),
-        json!({"name": "command_line", "arguments": {}}),
-        json!({"name": "command_line", "arguments": {"text": 5}}),
-        json!({"name": "command_line", "arguments": "circle 1,1 1"}),
-        json!({"name": "script", "arguments": {}}),
-        json!({"name": "query_entities", "arguments": {"window": [-5, -5, 5, 5]}}),
-        json!({"name": "query_entities", "arguments": {"window": [[-5, -5]]}}),
-        json!({"name": "query_entities", "arguments": {"window": {"min": [-5, -5], "max": [5, 5]}}}),
-        json!({"name": "query_entities", "arguments": {"type": 7}}),
-        json!({"name": "query_entities", "arguments": {"layer": ["0"]}}),
-        json!({"name": "query_entities", "arguments": {"offset": -1}}),
-        json!({"name": "query_entities", "arguments": {"selected": "true"}}),
-        json!({"name": "query_entities", "arguments": {"selected": 1}}),
-    ];
-    for (i, params) in bad.into_iter().enumerate() {
-        let r = call(&mut s, i as u64, "tools/call", params.clone());
-        assert_eq!(r["error"]["code"], -32602, "{params} -> {r}");
-    }
-    // Nothing was typed: the circle is still the only object and no command is running.
-    let d = tool(&mut s, "inspect_drawing", json!({"entities": false}));
-    assert_eq!(d["entityCount"], 1, "{d}");
-    assert_eq!(s.handle_line("[]").map(|r| serde_json::from_str::<Value>(&r).unwrap()["error"]["code"].clone()), Some(json!(-32600)));
+    let all = value(&mut s, "(length (commands))");
+    let n: f64 = all.parse().unwrap();
+    assert!(n > 100.0, "the catalog is listed: {all}");
+    // A filter matches ids, labels and aliases — not parameter docs.
+    let ids = value(&mut s, r#"(mapcar '(lambda (c) (cdr (assoc 'ID c))) (commands "circle"))"#);
+    assert!(ids.contains("\"circle\""), "{ids}");
+    let q = value(&mut s, r#"(mapcar '(lambda (c) (cdr (assoc 'ID c))) (commands "qselect"))"#);
+    assert!(!q.contains("circle"), "QSELECT only mentions circles in its docs: {q}");
+    // One command's parameters, by id.
+    let params = value(&mut s, r#"(cdr (assoc 'PARAMS (describe "circle")))"#);
+    assert!(params.contains("center") && params.contains("radius"), "{params}");
+    // A command that is not there is an error a model can read and correct.
+    let r = run_raw(&mut s, r#"(describe "not-a-command")"#);
+    let text = r["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("no command `not-a-command`"), "{text}");
 }
 
-/// `open` reads both DXF and DWG, so `tools/list` must advertise both (#1875).
+/// Entities are queried from code: by type, layer, selection and window, with paging, and a window
+/// matches geometry rather than bounding boxes.
 #[test]
-fn open_tool_description_names_dxf_and_dwg() {
-    let mut s = Server::new(Box::new(Headless::default()));
-    let tools = call(&mut s, 1, "tools/list", json!({}));
-    let open = tools["result"]["tools"].as_array().unwrap().iter().find(|t| t["name"] == "open").unwrap();
-    let desc = open["description"].as_str().unwrap();
-    assert!(desc.contains("DXF"), "`open` must still name DXF: {desc}");
-    assert!(desc.contains("DWG"), "`open` reads DWG too: {desc}");
-}
-
-/// Guards that `query_entities` advertises its `selected` filter and honours it (active-space
-/// selection only, both ways) without changing the drawing.
-#[test]
-fn query_entities_selection_filter_is_discoverable_and_forwarded() {
-    let mut s = Server::new(Box::new(Headless::default()));
-    let tools = call(&mut s, 1, "tools/list", json!({}));
-    let query = tools["result"]["tools"].as_array().unwrap().iter().find(|t| t["name"] == "query_entities").unwrap();
-    assert_eq!(query["inputSchema"]["properties"]["selected"]["type"], "boolean");
-    tool(&mut s, "execute", json!({"command": "circle", "params": {"center": [0, 0], "radius": 2}}));
-    tool(&mut s, "execute", json!({"command": "circle", "params": {"center": [10, 0], "radius": 2}}));
-    assert_eq!(tool(&mut s, "query_entities", json!({"selected": true}))["count"], 0);
-    tool(&mut s, "execute", json!({"command": "select", "params": {"window": [[-3, -3], [3, 3]]}}));
-    let before = tool(&mut s, "inspect_drawing", json!({}));
-    let selected = tool(&mut s, "query_entities", json!({"selected": true, "type": "Circle"}));
-    assert_eq!(selected["count"], 1);
-    assert_eq!(selected["entities"][0]["geometry"]["center"]["x"], 0.0);
-    assert_eq!(tool(&mut s, "query_entities", json!({"selected": false}))["count"], 2);
-    assert_eq!(tool(&mut s, "inspect_drawing", json!({})), before);
-}
-
-/// `count` is every match while `returned` is the page; a window matches geometry, not bounding boxes.
-#[test]
-fn query_entities_pages_and_windows_by_geometry() {
+fn entities_are_queried_from_code() {
     let mut s = Server::new(Box::new(Headless::default()));
     for c in ["circle 0,0 1", "circle 100,100 1", "circle 200,0 1"] {
-        tool(&mut s, "command_line", json!({"text": c}));
+        draw(&mut s, &format!(r#"(cmdline "{c}")"#));
     }
     // An arc whose bounding box covers the window but whose curve stays outside it.
-    tool(&mut s, "execute", json!({"command": "arc", "params": {"p1": [40, 0], "p2": [50, 10], "p3": [60, 0]}}));
-    let r = tool(&mut s, "query_entities", json!({"type": "Circle", "limit": 1, "offset": 1}));
-    assert_eq!((r["count"].clone(), r["returned"].clone()), (json!(3), json!(1)), "{r}");
-    assert_eq!(r["entities"][0]["geometry"]["center"]["x"], 100.0, "{r}");
-    let r = tool(&mut s, "query_entities", json!({"window": [[45, 1], [55, 5]]}));
-    assert_eq!(r["count"], 0, "the arc passes above this window: {r}");
-    let r = tool(&mut s, "query_entities", json!({"window": [[-5, -5], [55, 5]]}));
-    assert_eq!(r["count"], 2, "the circle at 0,0 and the arc crossing the window: {r}");
-    let r = tool(&mut s, "query_entities", json!({"window": [[-5, -5], [55, 5]], "crossing": false}));
-    assert_eq!(r["count"], 1, "only the circle is entirely inside: {r}");
-}
-
-/// Guards that the `list_commands` filter matches ids, labels and aliases but not parameter
-/// docs, so searching `circle` does not return QSELECT merely for mentioning circles.
-#[test]
-fn list_commands_filter_matches_names_not_docs() {
-    let mut s = Server::new(Box::new(Headless::default()));
-    let r = tool(&mut s, "list_commands", json!({"filter": "circle"}));
-    let ids: Vec<&str> = r.as_array().unwrap().iter().filter_map(|c| c["id"].as_str()).collect();
-    assert!(ids.contains(&"circle"), "{ids:?}");
-    assert!(!ids.contains(&"qselect"), "QSELECT only mentions circles in its docs: {ids:?}");
-    let r = tool(&mut s, "list_commands", json!({"filter": "pl"}));
-    assert!(r.as_array().unwrap().iter().any(|c| c["id"] == "pline"), "aliases and ids match");
-}
-
-/// Guards that `find_text` returns TEXT and MTEXT with their placement, strips MTEXT formatting,
-/// and filters by text, layer and window; a windowed render keeps that area's aspect ratio.
-#[test]
-fn find_text_reads_texts_and_render_shows_one_area() {
-    let mut s = Server::new(Box::new(Headless::default()));
-    call(&mut s, 1, "initialize", json!({"protocolVersion": "2025-06-18"}));
-    tool(&mut s, "execute", json!({"command": "layer.new", "params": {"name": "Texto"}}));
-    tool(&mut s, "execute", json!({"command": "text", "params": {"at": [1, 1], "height": 0.15, "text": "RECAMARA 1"}}));
-    tool(&mut s, "execute", json!({"command": "text", "params": {"at": [50, 1], "height": 0.15, "text": "COCINA"}}));
-    tool(
-        &mut s,
-        "execute",
-        json!({"command": "mtext", "params": {"at": [1, 5], "height": 0.2, "width": 5, "text": "{\\fArial|b1;PLANTA} BAJA\\PNIVEL 0.00"}}),
+    draw(&mut s, r#"(cmd "arc" '((P1 . (40 0)) (P2 . (50 10)) (P3 . (60 0))))"#);
+    let r = run(&mut s, r#"(cmd "entities" '((TYPE . "Circle") (LIMIT . 1) (OFFSET . 1)))"#);
+    assert!(r.contains("COUNT . 3"), "count is every match: {r}");
+    assert!(r.contains("RETURNED . 1"), "returned is the page: {r}");
+    assert!(r.contains("X . 100.0"), "the second circle is on the page: {r}");
+    assert_eq!(value(&mut s, r#"(cdr (assoc 'COUNT (cmd "entities" '((WINDOW . ((45 1) (55 5)))))))"#), "0", "the arc passes above this window");
+    assert_eq!(value(&mut s, r#"(cdr (assoc 'COUNT (cmd "entities" '((WINDOW . ((-5 -5) (55 5)))))))"#), "2");
+    assert_eq!(
+        value(&mut s, r#"(cdr (assoc 'COUNT (cmd "entities" '((WINDOW . ((-5 -5) (55 5))) (CROSSING . nil)))))"#),
+        "1",
+        "nil is false, so only the circle entirely inside is found"
     );
-    tool(&mut s, "execute", json!({"command": "rectang", "params": {"p1": [0, 0], "p2": [10, 5]}}));
+    // The selection filter: nothing selected, then the circle at the origin only.
+    assert_eq!(value(&mut s, r#"(cdr (assoc 'COUNT (cmd "entities" '((SELECTED . T)))))"#), "0");
+    draw(&mut s, r#"(cmd "select" '((WINDOW . ((-3 -3) (3 3)))))"#);
+    assert_eq!(value(&mut s, r#"(cdr (assoc 'COUNT (cmd "entities" '((SELECTED . T) (TYPE . "Circle")))))"#), "1");
+    assert_eq!(value(&mut s, r#"(cdr (assoc 'COUNT (cmd "entities" '((SELECTED . nil)))))"#), "4");
+}
 
-    let all = tool(&mut s, "find_text", json!({}));
-    assert_eq!(all["count"], 3);
-    let r = tool(&mut s, "find_text", json!({"contains": "recamara"}));
-    assert_eq!(r["count"], 1);
-    assert_eq!(r["texts"][0]["text"], "RECAMARA 1");
-    assert_eq!(r["texts"][0]["at"], json!([1.0, 1.0]));
-    assert_eq!(r["texts"][0]["height"], 0.15);
+/// Texts are read from code: TEXT and MTEXT with their placement, formatting stripped, filtered by
+/// content, layer and window.
+#[test]
+fn texts_are_read_from_code() {
+    let mut s = Server::new(Box::new(Headless::default()));
+    draw(&mut s, r#"(cmd "layer.new" '((NAME . "Texto")))"#);
+    draw(&mut s, r#"(cmd "text" '((AT . (1 1)) (HEIGHT . 0.15) (TEXT . "RECAMARA 1")))"#);
+    draw(&mut s, r#"(cmd "text" '((AT . (50 1)) (HEIGHT . 0.15) (TEXT . "COCINA")))"#);
+    draw(&mut s, r#"(cmd "mtext" '((AT . (1 5)) (HEIGHT . 0.2) (WIDTH . 5) (TEXT . "{\\fArial|b1;PLANTA} BAJA\\PNIVEL 0.00")))"#);
+    draw(&mut s, r#"(cmd "rectang" '((P1 . (0 0)) (P2 . (10 5))))"#);
+    assert_eq!(value(&mut s, r#"(cdr (assoc 'COUNT (cmd "texts")))"#), "3");
+    let r = run(&mut s, r#"(cmd "texts" '((CONTAINS . "recamara")))"#);
+    assert!(r.contains("RECAMARA 1"), "{r}");
+    assert!(r.contains("HEIGHT . 0.15"), "{r}");
     // Multiline text comes back readable, without its formatting codes.
-    let m = tool(&mut s, "find_text", json!({"contains": "planta"}));
-    let t = m["texts"][0]["text"].as_str().unwrap();
-    assert!(t.contains("PLANTA BAJA") && t.contains("NIVEL 0.00") && !t.contains('\\') && !t.contains('{'), "{t}");
-    // By area: only what is inside the window.
-    let w = tool(&mut s, "find_text", json!({"window": [[-1, -1], [20, 20]]}));
-    assert_eq!(w["count"], 2);
-    assert_eq!(tool(&mut s, "find_text", json!({"layer": "nope"}))["count"], 0);
-
-    // A render of one area takes the area's shape.
-    let r = call(&mut s, 9, "tools/call", json!({"name": "render", "arguments": {"window": [[0, 0], [10, 5]]}}));
-    let c = &r["result"]["content"][0];
-    assert_eq!(c["type"], "image", "{r}");
-    let png = cadcraft_engine::cmd::file::base64_decode(c["data"].as_str().unwrap()).unwrap();
-    let (w, h) = (u32::from_be_bytes(png[16..20].try_into().unwrap()), u32::from_be_bytes(png[20..24].try_into().unwrap()));
-    assert_eq!((w, h), (1600, 800));
+    let r = run(&mut s, r#"(cmd "texts" '((CONTAINS . "planta")))"#);
+    assert!(r.contains("PLANTA BAJA"), "{r}");
+    assert!(r.contains("NIVEL 0.00"), "{r}");
+    assert!(!r.contains("{\\\\f"), "the formatting codes are stripped: {r}");
+    assert_eq!(value(&mut s, r#"(cdr (assoc 'COUNT (cmd "texts" '((WINDOW . ((-1 -1) (20 20)))))))"#), "2");
+    assert_eq!(value(&mut s, r#"(cdr (assoc 'COUNT (cmd "texts" '((LAYER . "nope")))))"#), "0");
 }
 
-/// Guards a lazy Remote bridge: it serves tools without the app, reports how to start it
-/// (`--control`), and reaches the app once that app starts listening on the port.
+/// The measured report is reachable from code and scopes: the whole space, a window in drawing
+/// units; a hostile argument is a run error the model reads, not a crash.
 #[test]
-fn a_lazy_bridge_starts_without_the_app_and_says_how_to_open_it() {
-    // Nothing listens on a port that was just freed.
-    let addr = {
-        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        l.local_addr().unwrap().to_string()
-    };
-    let mut s = Server::new(Box::new(crate::Remote::lazy(&addr, false)));
-    let init = call(&mut s, 1, "initialize", json!({"protocolVersion": "2025-06-18"}));
-    assert_eq!(init["result"]["serverInfo"]["name"], "cadcraft");
-    let tools = call(&mut s, 2, "tools/list", json!({}));
-    assert!(tools["result"]["tools"].as_array().unwrap().iter().any(|t| t["name"] == "screenshot"));
-    let r = call(&mut s, 3, "tools/call", json!({"name": "command_line", "arguments": {"text": "line 0,0 1,1"}}));
-    assert_eq!(r["result"]["isError"], json!(true));
-    let msg = r["result"]["content"][0]["text"].as_str().unwrap();
-    assert!(msg.contains("not answering") && msg.contains("--control"), "{msg}");
-
-    // Once the app listens, the next call reaches it.
-    let listener = std::net::TcpListener::bind(&addr).unwrap();
-    let app = std::thread::spawn(move || {
-        use std::io::{BufRead, Write};
-        let (sock, _) = listener.accept().unwrap();
-        let mut line = String::new();
-        std::io::BufReader::new(sock.try_clone().unwrap()).read_line(&mut line).unwrap();
-        let id = serde_json::from_str::<Value>(&line).unwrap()["id"].clone();
-        writeln!(&sock, "{}", json!({"id": id, "ok": true, "result": {"prompt": "Command:"}})).unwrap();
-    });
-    let r = call(&mut s, 4, "tools/call", json!({"name": "command_line", "arguments": {"text": ""}}));
-    assert_ne!(r["result"]["isError"], json!(true), "{r}");
-    app.join().unwrap();
+fn the_report_is_reachable_from_code() {
+    let mut s = Server::new(Box::new(Headless::default()));
+    draw(&mut s, r#"(cmdline "rectang" "0,0" "10,5")"#);
+    draw(&mut s, r#"(cmdline "line" "100,0" "110,0")"#);
+    let r = run(&mut s, r#"(cmd "describe")"#);
+    assert!(r.contains("2 object"), "the report narrates: {r}");
+    assert!(r.contains("=>"), "{r}");
+    let r = run(&mut s, r#"(cmd "describe" '((WINDOW . ((-1 -1) (20 20)))))"#);
+    assert!(r.contains("1 object"), "only the rectangle is in the window: {r}");
+    let r = run_raw(&mut s, r#"(cmd "describe" '((LIMIT . "many")))"#);
+    let text = r["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("error:"), "a bad parameter is a readable error: {text}");
+    let r = run_raw(&mut s, r#"(cmd "imagetrace" '((PATH . "Z:/not/here.png")))"#);
+    assert_eq!(r["result"]["isError"], json!(true), "{r}");
 }
 
-/// Guards the image pipeline end to end through MCP only: attach a picture, trace it into
-/// geometry sized to a measurement, and have `describe_drawing` report both.
+/// The image pipeline end to end through `run`: attach a picture, trace it into geometry sized to
+/// a measurement, and have the report describe both.
+///
+/// The path goes in as a named value, not inside the code: a Windows path is full of backslashes
+/// and a LISP string would eat them.
 #[test]
-fn agent_attaches_a_picture_traces_it_and_describes_the_result() {
-    // A real PNG written to a temporary file: a black square on white, 32×32.
+fn a_picture_is_attached_traced_and_reported_from_code() {
     let path = std::env::temp_dir().join("cadcraft-mcp-trace.png");
     let mut pm = tiny_skia::Pixmap::new(32, 32).unwrap();
     for y in 0..32u32 {
@@ -277,48 +258,136 @@ fn agent_attaches_a_picture_traces_it_and_describes_the_result() {
     let ps = path.to_string_lossy().to_string();
 
     let mut s = Server::new(Box::new(Headless::default()));
-    // Attach the picture, 64 units wide.
-    let img = tool(&mut s, "attach_image", json!({"path": ps, "width": 64.0, "at": [100, 100]}));
-    assert_eq!(img["pixels"], json!([32, 32]), "{img}");
-    assert_eq!(img["unitsPerPixel"], json!(2.0), "{img}");
-    let h = img["handle"].as_str().unwrap().to_string();
+    // Attach the picture, 64 units wide at 100,100; the path arrives as a named value.
+    let attach = r#"(cdr (assoc 'HANDLE (cmd "imageattach" (list (cons 'PATH (value "path")) (cons 'WIDTH 64.0) (cons 'AT (list 100 100))))))"#;
+    let r = call(&mut s, 1, "tools/call", json!({"name": "run", "arguments": {"code": attach, "values": {"path": ps}}}));
+    let text = r["result"]["content"][0]["text"].as_str().unwrap().to_string();
+    assert_ne!(r["result"]["isError"], json!(true), "{text}");
+    let handle = text.lines().find_map(|l| l.strip_prefix("=> ")).expect("a handle").trim_matches('"').to_string();
+    assert!(!handle.is_empty(), "{text}");
 
     // Trace the placed image and size the traced outline to 20 units wide in the same call.
-    let tr = tool(&mut s, "trace_image", json!({"handle": h, "width": 20.0}));
-    assert_eq!(tr["contours"], json!(1), "{tr}");
-    let b = tr["bounds"].as_array().unwrap();
-    let width = b[1][0].as_f64().unwrap() - b[0][0].as_f64().unwrap();
-    assert!((width - 20.0).abs() < 1e-6, "sized to 20 wide: {tr}");
+    let trace = format!(r#"(cmd "imagetrace" '((HANDLE . "{handle}") (WIDTH . 20.0)))"#);
+    let r = run(&mut s, &trace);
+    assert!(r.contains("CONTOURS . 1"), "{r}");
 
-    // The report sees the picture and the traced polylines, and says so in plain words.
-    let d = tool(&mut s, "describe_drawing", json!({}));
-    assert_eq!(d["images"]["count"], json!(1), "{d}");
-    assert_eq!(d["counts"]["Polyline"], json!(1), "{d}");
-    let msg = d["message"].as_str().unwrap();
-    assert!(msg.contains("raster reference"), "{msg}");
-    let notes = d["notes"].as_array().unwrap();
-    assert!(notes.iter().any(|n| n.as_str().unwrap().contains("IMAGETRACE")), "{notes:?}");
-
-    // Rendering the drawing includes the picture: the PNG is returned as an image.
-    let png = tool(&mut s, "render", json!({"width": 320, "height": 320}));
-    assert_eq!(png["type"], "image", "{png}");
+    // The report sees the picture and the traced polylines.
+    let r = run(&mut s, r#"(cmd "describe")"#);
+    assert!(r.contains("IMAGES (COUNT . 1)"), "the report sees the picture: {r}");
+    assert!(r.contains("PIXELS 32 32"), "with its real pixel size: {r}");
+    assert!(r.contains("POLYLINE . 1"), "and the traced outline: {r}");
+    assert!(r.contains("CLOSED (AREA ."), "and what it encloses: {r}");
     let _ = std::fs::remove_file(&path);
 }
 
-/// `describe_drawing` scopes: the whole active space by default, a selection by handle, and a
-/// window in drawing units; a hostile argument is a tool error, not a crash.
+/// A lazy Remote bridge: it serves the one tool without the app, reports how to start it
+/// (`--control`), and reaches the app once that app starts listening on the port.
 #[test]
-fn describe_drawing_scopes_and_refuses_bad_arguments() {
+fn a_lazy_bridge_starts_without_the_app_and_says_how_to_open_it() {
+    // Nothing listens on a port that was just freed.
+    let addr = {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        l.local_addr().unwrap().to_string()
+    };
+    let mut s = Server::new(Box::new(crate::Remote::lazy(&addr, false)));
+    let init = call(&mut s, 1, "initialize", json!({"protocolVersion": "2025-06-18"}));
+    assert_eq!(init["result"]["serverInfo"]["name"], "cadcraft");
+    let tools = call(&mut s, 2, "tools/list", json!({}));
+    let names: Vec<&str> = tools["result"]["tools"].as_array().unwrap().iter().filter_map(|t| t["name"].as_str()).collect();
+    assert_eq!(names, vec!["run"], "a bridge to the app has the same one tool");
+    let r = call(&mut s, 3, "tools/call", json!({"name": "run", "arguments": {"code": "(cmd \"zoom\" '((MODE . \"extents\")))"}}));
+    assert_eq!(r["result"]["isError"], json!(true));
+    let msg = r["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(msg.contains("not answering") && msg.contains("--control"), "{msg}");
+
+    // Once the app listens, the next call reaches it.
+    let listener = std::net::TcpListener::bind(&addr).unwrap();
+    let app = std::thread::spawn(move || {
+        use std::io::{BufRead, Write};
+        let (sock, _) = listener.accept().unwrap();
+        let mut line = String::new();
+        std::io::BufReader::new(sock.try_clone().unwrap()).read_line(&mut line).unwrap();
+        let id = serde_json::from_str::<Value>(&line).unwrap()["id"].clone();
+        writeln!(&sock, "{}", json!({"id": id, "ok": true, "result": {"value": "nil", "output": []}})).unwrap();
+    });
+    let r = call(&mut s, 4, "tools/call", json!({"name": "run", "arguments": {"code": "42"}}));
+    assert_ne!(r["result"]["isError"], json!(true), "{r}");
+    app.join().unwrap();
+}
+
+/// Bad input is reported, not fatal: a run that fails is an `isError` result with the reason, an
+/// unknown tool is invalid params, and malformed JSON is a parse error (-32700).
+#[test]
+fn errors_are_tool_errors_not_crashes() {
     let mut s = Server::new(Box::new(Headless::default()));
-    tool(&mut s, "command_line", json!({"text": "rectang 0,0 10,5"}));
-    tool(&mut s, "command_line", json!({"text": "line 100,0 110,0"}));
-    let d = tool(&mut s, "describe_drawing", json!({}));
-    assert_eq!(d["total"], json!(2), "{d}");
-    assert_eq!(d["geometry"]["closed"]["count"], json!(1), "{d}");
-    let d = tool(&mut s, "describe_drawing", json!({"window": [[-1, -1], [20, 20]]}));
-    assert_eq!(d["total"], json!(1), "only the rectangle is in the window: {d}");
-    let e = call(&mut s, 77, "tools/call", json!({"name": "describe_drawing", "arguments": {"limit": "many"}}));
-    assert_eq!(e["error"]["code"], json!(-32602), "a string `limit` is invalid params: {e}");
-    let r = call(&mut s, 78, "tools/call", json!({"name": "trace_image", "arguments": {"path": "Z:/not/here.png"}}));
+    // A command that does not exist, and a hostile parameter.
+    let r = run_raw(&mut s, r#"(cmd "no-such-command")"#);
+    assert_eq!(r["result"]["isError"], json!(true));
+    let text = r["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("error:"), "{text}");
+    let r = run_raw(&mut s, r#"(cmd "circle" '((CENTER . ("x" "y")) (RADIUS . 5)))"#);
     assert_eq!(r["result"]["isError"], json!(true), "{r}");
+    // LISP's own errors read the way AutoLISP writes them.
+    let r = run_raw(&mut s, "(/ 1 0)");
+    let text = r["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("divide by zero"), "{text}");
+    // A run that printed before failing keeps what it printed.
+    let r = run_raw(&mut s, r#"(princ "halfway") (car 7)"#);
+    let text = r["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("halfway"), "{text}");
+    assert!(text.contains("bad argument type"), "{text}");
+    assert!(s.handle_line("{not json").unwrap().contains("-32700"));
+}
+
+/// Unknown tools and arguments that don't fit the tool's schema are invalid params (-32602),
+/// never guessed at; an empty batch is one Invalid Request.
+#[test]
+fn bad_tool_calls_are_invalid_params() {
+    let mut s = Server::new(Box::new(Headless::default()));
+    draw(&mut s, r#"(cmdline "circle" "0,0" "1")"#);
+    let bad = [
+        json!({"name": "nope", "arguments": {}}),
+        json!({"name": "command_line", "arguments": {"text": "circle 1,1 1"}}),
+        json!({"name": "execute", "arguments": {"command": "circle"}}),
+        json!({"name": "query_entities", "arguments": {"type": "Circle"}}),
+        json!({"name": "run", "arguments": {"code": 5}}),
+        json!({"name": "run", "arguments": "circle 1,1 1"}),
+        json!({"name": "run", "arguments": {"values": "text"}}),
+    ];
+    for (i, params) in bad.into_iter().enumerate() {
+        let r = call(&mut s, i as u64, "tools/call", params.clone());
+        assert_eq!(r["error"]["code"], -32602, "{params} -> {r}");
+    }
+    // Nothing was typed: the circle is still the only object and no command is running.
+    assert_eq!(value(&mut s, r#"(cdr (assoc 'ENTITYCOUNT (cmd "drawing.inspect")))"#), "1");
+    assert_eq!(s.handle_line("[]").map(|r| serde_json::from_str::<Value>(&r).unwrap()["error"]["code"].clone()), Some(json!(-32600)));
+}
+
+/// A definition that would replace a built-in is refused, and the language is left intact: the
+/// next call finds the built-in working.
+#[test]
+fn a_definition_cannot_replace_a_builtin() {
+    let mut s = Server::new(Box::new(Headless::default()));
+    let r = run(&mut s, "(defun CAR (x) 99)");
+    assert!(r.contains("refused: CAR"), "{r}");
+    assert_eq!(value(&mut s, r#"(car '(7 8))"#), "7", "the built-in still works");
+}
+
+/// `run` is an ordinary command, not a private path: it is in the command catalog, a script can
+/// call it, and the tool is a thin call of it.
+#[test]
+fn run_is_an_ordinary_command() {
+    let mut s = Server::new(Box::new(Headless::default()));
+    // It is in the catalog, with its parameters documented.
+    let ids = value(&mut s, r#"(mapcar '(lambda (c) (cdr (assoc 'ID c))) (commands "run"))"#);
+    assert!(ids.contains("\"run\""), "{ids}");
+    let params = value(&mut s, r#"(cdr (assoc 'PARAMS (describe "run")))"#);
+    assert!(params.contains("code"), "{params}");
+    // Calling it from code reaches the same command the tool calls (here: the manual, because
+    // the code is empty).
+    let nested = value(&mut s, r#"(cmd "run" '((CODE . "")))"#);
+    assert!(nested.contains("assistant namespace"), "run reaches run: {nested}");
+    // And the tool's own call is `engine.execute` of the command.
+    assert_eq!(cadcraft_ai::code::METHOD, "engine.execute");
+    assert_eq!(cadcraft_ai::code::COMMAND, "run");
 }

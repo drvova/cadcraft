@@ -1,5 +1,8 @@
 //! `cadcraft-cli mcp --connect` end to end: a missing address must fail startup instead of
 //! serving drawing edits from a headless session (#103); a real address still bridges.
+//!
+//! The server has one tool, `run`, which executes AutoLISP in the drawing — so the calls here are
+//! code, not verbs.
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
@@ -8,7 +11,7 @@ use std::process::{Command, Output, Stdio};
 use serde_json::{Value, json};
 
 const INIT: &str = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#;
-const CIRCLE: &str = r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"execute","arguments":{"command":"circle","params":{"center":[5,5],"radius":2}}}}"#;
+const CIRCLE: &str = r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run","arguments":{"code":"(cmd \"circle\" '((CENTER . (5 5)) (RADIUS . 2)))"}}}"#;
 
 fn mcp(args: &[&str], input: &str) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_cadcraft-cli"))
@@ -50,7 +53,9 @@ fn no_connect_still_serves_headless() {
     let instructions = r.iter().find(|v| v["id"] == 1).and_then(|v| v["result"]["instructions"].as_str()).unwrap_or_default();
     assert!(instructions.contains("Backend: headless"), "{instructions}");
     let circle = r.iter().find(|v| v["id"] == 2).map(|v| &v["result"]);
-    assert!(circle.is_some_and(|c| c.is_object() && c.get("isError").is_none()), "{r:?}");
+    assert!(circle.is_some_and(|c| c.is_object() && c.get("isError") != Some(&json!(true))), "{r:?}");
+    let text = circle.and_then(|c| c["content"][0]["text"].as_str()).unwrap_or_default();
+    assert!(text.contains("HANDLE"), "the circle was drawn: {text}");
 }
 
 #[test]
@@ -68,16 +73,21 @@ fn connect_with_address_routes_to_that_endpoint() {
         writeln!(w, "{reply}").expect("write reply");
         req
     });
-    let call = r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ui_inspect","arguments":{}}}"#;
+    // The bridge reaches the app through the control channel: the tool call is `engine.execute`
+    // of the `run` command, which is what the fake endpoint below answers.
+    let call = r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run","arguments":{"code":"42"}}}"#;
     let out = mcp(&["--connect", &addr], &format!("{INIT}\n{call}\n"));
     assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
     let req = server.join().expect("server thread");
-    assert_eq!(req["method"], "ui.inspect");
+    assert_eq!(req["method"], "engine.execute");
+    assert_eq!(req["params"]["command"], "run");
     let r = replies(&out);
     let instructions = r.iter().find(|v| v["id"] == 1).and_then(|v| v["result"]["instructions"].as_str()).unwrap_or_default();
     assert!(instructions.contains(&format!("connected to CADCraft at {addr}")), "{instructions}");
+    // The fake endpoint's reply is not a run result, so the report says so — the point here is
+    // that the call reached the endpoint at all (the `fixture` key proves which one).
     let text = r.iter().find(|v| v["id"] == 2).and_then(|v| v["result"]["content"][0]["text"].as_str()).unwrap_or_default();
-    assert!(text.contains("loopback"), "{r:?}");
+    assert!(!text.is_empty(), "{r:?}");
 }
 
 #[test]

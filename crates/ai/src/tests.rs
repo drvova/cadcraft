@@ -1,6 +1,10 @@
 //! The whole loop against a scripted provider: a real HTTP server on localhost that answers like
-//! an OpenAI-compatible endpoint. The request shape, the streamed answer, the tool round-trip and
-//! the transcript are all exercised for real — nothing is mocked away except the model itself.
+//! an OpenAI-compatible endpoint, and the one tool (`run`) driven through it.
+//!
+//! The request shape, the streamed answer, the tool round-trip, the transcript and the argument
+//! checking are all exercised for real — nothing is mocked away except the model itself and the
+//! application (which is a recorder here; `cadcraft-engine`'s own tests run the same code path
+//! against a real `Session`).
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -12,7 +16,7 @@ use serde_json::{Value, json};
 use crate::agent::{self, Event, ToolExecutor};
 use crate::chat::Message;
 use crate::client::Provider;
-use crate::surface;
+use crate::{code, surface};
 
 /// One scripted HTTP reply.
 struct Script {
@@ -36,6 +40,13 @@ fn sse(payloads: &[&str]) -> Script {
 /// A reply that is one JSON object, the way a provider that ignores `stream: true` answers.
 fn json_reply(status: u16, body: &str) -> Script {
     Script { status, content_type: "application/json", body: body.to_string() }
+}
+
+/// A tool call to `run` carrying `code`, as a streamed delta.
+fn run_call(id: &str, code: &str) -> String {
+    let args = json!({"code": code}).to_string();
+    let call = json!([{"index": 0, "id": id, "type": "function", "function": {"name": "run", "arguments": args}}]);
+    json!({"choices": [{"delta": {"tool_calls": call}, "finish_reason": null}]}).to_string()
 }
 
 /// A provider that answers with a scripted list of replies, one per request, and records what it
@@ -126,176 +137,174 @@ impl ToolExecutor for Recorder {
     }
 }
 
-#[test]
-fn a_turn_runs_the_model_s_tool_call_and_answers_with_its_text() {
-    let server = Fake::start(vec![
-        // First reply: the model asks to run a command.
-        sse(&[
-            r#"{"choices":[{"delta":{"content":"Drawing it."},"finish_reason":null}]}"#,
-            r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"execute","arguments":"{\"command\":\"circle\",\"params\":{\"center\":[0,0],\"radius\":5}}"}}]},"finish_reason":null}]}"#,
-            r#"{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}"#,
-        ]),
-        // Second reply: it has the result and answers in words.
-        sse(&[
-            r#"{"choices":[{"delta":{"content":"Drew a "},"finish_reason":null}]}"#,
-            r#"{"choices":[{"delta":{"content":"5 mm circle at the origin."},"finish_reason":"stop"}]}"#,
-        ]),
-    ]);
-    let executor = Recorder { calls: Mutex::new(Vec::new()), answer: Ok(json!({"handle": "10", "message": "Drew a circle."})) };
+/// Run one turn with a briefing and collect the events.
+fn turn(server: &Fake, executor: &Recorder, question: &str) -> (Vec<Event>, Vec<Message>) {
     let cancel = AtomicBool::new(false);
-    let mut conversation = vec![Message::user("draw a 5mm circle at 0,0")];
+    let mut conversation = vec![Message::user(question)];
     let mut events = Vec::new();
-    agent::run_turn(
-        &server.provider(),
-        &agent::Briefing {
-            app: "CADCraft test".into(),
-            drawing: "untitled".into(),
-            units: "millimetres".into(),
-            objects: 0,
-            selection: 0,
-            extents: None,
-        },
-        &mut conversation,
-        &surface::core_tools(),
-        &cancel,
-        &executor,
-        &mut |e, _| events.push(e),
-    );
-
-    // The pane saw the streamed text, the call, its result, and the end.
-    assert_eq!(
-        events,
-        vec![
-            Event::Text("Drawing it.".into()),
-            Event::Call { name: "execute".into(), summary: "execute(command: circle, params: {\"center\":[0,0],\"radius\":5})".into() },
-            Event::Result { name: "execute".into(), ok: true, note: "Drew a circle.".into() },
-            Event::Text("Drew a ".into()),
-            Event::Text("5 mm circle at the origin.".into()),
-            Event::Done { reason: "stop".into() },
-        ]
-    );
-
-    // The tool ran with the model's arguments, once.
-    let calls = executor.calls.lock().unwrap();
-    assert_eq!(calls.len(), 1);
-    assert_eq!(calls[0].0, "execute");
-    assert_eq!(calls[0].1, json!({"command": "circle", "params": {"center": [0, 0], "radius": 5}}));
-
-    // The transcript is what the next turn would send: user, the call, its result, the answer.
-    assert_eq!(conversation.len(), 4, "{conversation:#?}");
-    assert_eq!(conversation[0].role, crate::Role::User);
-    assert_eq!(conversation[1].tool_calls.len(), 1);
-    assert_eq!(conversation[2].role, crate::Role::Tool);
-    assert_eq!(conversation[2].tool_call_id.as_deref(), Some("call_1"));
-    assert!(conversation[2].text().contains("Drew a circle."));
-    assert_eq!(conversation[3].text(), "Drew a 5 mm circle at the origin.");
-
-    // Two requests, each carrying the system prompt, the tool catalog and the growing transcript.
-    let reqs = server.requests();
-    assert_eq!(reqs.len(), 2);
-    let first = &reqs[0];
-    assert_eq!(first["model"], "test-model");
-    assert_eq!(first["stream"], true);
-    assert!(first["messages"][0]["content"].as_str().unwrap().contains("CADCraft test"), "the briefing is in the system prompt");
-    assert!(first["messages"][0]["content"].as_str().unwrap().contains("millimetres"));
-    let names: Vec<&str> = first["tools"].as_array().unwrap().iter().filter_map(|t| t["function"]["name"].as_str()).collect();
-    assert!(names.contains(&"execute"), "{names:?}");
-    assert!(names.contains(&"describe_drawing"), "{names:?}");
-    assert!(!names.contains(&"screenshot"), "the composer's catalog has no window tools: {names:?}");
-    assert_eq!(first["tools"][0]["type"], "function", "the catalog is in the function-calling shape");
-    assert!(first["tools"][0]["function"]["parameters"]["properties"].is_object(), "{:?}", first["tools"][0]);
-    assert!(first["tools"][0]["function"]["description"].is_string());
-
-    let second = &reqs[1];
-    let msgs = second["messages"].as_array().unwrap();
-    assert_eq!(msgs.len(), 4, "system + user + assistant call + tool result");
-    assert_eq!(msgs[2]["role"], "assistant");
-    assert_eq!(msgs[2]["tool_calls"][0]["id"], "call_1");
-    assert_eq!(msgs[3]["role"], "tool");
-    assert_eq!(msgs[3]["tool_call_id"], "call_1");
-    assert!(msgs[3]["content"].as_str().unwrap().contains("Drew a circle."));
+    agent::run_turn(&server.provider(), &agent::Briefing::default(), &mut conversation, &cancel, executor, &mut |e, _| events.push(e));
+    (events, conversation)
 }
 
 #[test]
-fn a_failing_tool_is_reported_to_the_model_as_a_tool_error_and_the_turn_continues() {
+fn the_advertised_tool_set_is_exactly_run() {
+    // One tool, unconditionally — in both envelopes, with no per-model branch anywhere.
+    let names: Vec<String> = surface::tools().iter().filter_map(|t| t["name"].as_str().map(str::to_string)).collect();
+    assert_eq!(names, vec!["run"]);
+    let chat: Vec<String> = surface::chat_tools().iter().filter_map(|t| t["function"]["name"].as_str().map(str::to_string)).collect();
+    assert_eq!(chat, vec!["run"]);
+    // The schema is `code` + `values`: no action/verb selector, no typed catalog.
+    let schema = &surface::tools()[0]["inputSchema"];
+    let props = schema["properties"].as_object().expect("properties");
+    assert_eq!(props.len(), 2, "{schema}");
+    assert!(props.contains_key("code") && props.contains_key("values"));
+    assert!(!props.contains_key("action") && !props.contains_key("command") && !props.contains_key("method"));
+}
+
+#[test]
+fn an_empty_call_asks_for_the_manual() {
     let server = Fake::start(vec![
-        sse(&[
-            r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","type":"function","function":{"name":"execute","arguments":"{\"command\":\"nope\"}"}}]},"finish_reason":"tool_calls"}]}"#,
-        ]),
-        sse(&[r#"{"choices":[{"delta":{"content":"That command does not exist."},"finish_reason":"stop"}]}"#]),
+        sse(&[&run_call("call_1", ""), r#"{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}"#]),
+        sse(&[r#"{"choices":[{"delta":{"content":"Ready."},"finish_reason":"stop"}]}"#]),
+    ]);
+    // The executor answers an empty code call with the manual, exactly as the command does.
+    let executor = Recorder {
+        calls: Mutex::new(Vec::new()),
+        answer: Ok(json!({"manual": "CADCraft's assistant namespace — (cmd \"id\" params) runs a command …"})),
+    };
+    let (events, conversation) = turn(&server, &executor, "what can you do?");
+    // The model got the manual back as a tool result.
+    assert!(matches!(&events[1], Event::Result { name, ok: true, .. } if name == "run"), "{events:?}");
+    let result = conversation[2].text();
+    assert!(result.contains("assistant namespace"), "{result}");
+    // And the request carried the tool with the manual's promise in its description.
+    let tools = server.requests()[0]["tools"].as_array().unwrap().clone();
+    assert_eq!(tools.len(), 1);
+    assert_eq!(tools[0]["function"]["name"], "run");
+    assert!(tools[0]["function"]["description"].as_str().unwrap().contains("empty `code`"), "{tools:?}");
+    assert!(
+        tools[0]["function"]["description"].as_str().unwrap().contains("RUNS CODE WITH THE AUTHORITY"),
+        "the security fact is in the description the model reads"
+    );
+}
+
+#[test]
+fn a_run_carries_code_the_model_wrote_and_comes_back_with_its_report() {
+    let code_text = "(princ \"drew\") (cmd \"circle\" '((CENTER . (0 0)) (RADIUS . 5)))";
+    let server = Fake::start(vec![
+        sse(&[&run_call("call_1", code_text), r#"{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}"#]),
+        sse(&[r#"{"choices":[{"delta":{"content":"Drew a 5 unit circle."},"finish_reason":"stop"}]}"#]),
+    ]);
+    let executor = Recorder {
+        calls: Mutex::new(Vec::new()),
+        answer: Ok(json!({"value": "((HANDLE . \"100\"))", "output": ["drew"], "kept": ["C:WING"], "images": ["/tmp/a.png"]})),
+    };
+    let (events, conversation) = turn(&server, &executor, "draw a circle");
+    // The code arrived whole and unchanged.
+    let calls = executor.calls.lock().unwrap();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].0, "run");
+    assert_eq!(calls[0].1["code"], code_text);
+    assert_eq!(calls[0].1["values"], json!({}));
+    drop(calls);
+
+    // The model read a report that states the value, the output, what was kept and the picture.
+    let report = conversation[2].text();
+    assert!(report.contains("drew"), "{report}");
+    assert!(report.contains("((HANDLE . \"100\"))"), "{report}");
+    assert!(report.contains("kept: C:WING"), "{report}");
+    assert!(report.contains("rendered /tmp/a.png"), "{report}");
+    assert_eq!(conversation[3].text(), "Drew a 5 unit circle.");
+    assert_eq!(events.last(), Some(&Event::Done { reason: "stop".into() }));
+}
+
+#[test]
+fn a_failing_run_is_reported_to_the_model_and_the_turn_continues() {
+    let server = Fake::start(vec![
+        sse(&[&run_call("c1", "(cmd \"nope\")"), r#"{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}"#]),
+        sse(&[r#"{"choices":[{"delta":{"content":"There is no such command."},"finish_reason":"stop"}]}"#]),
     ]);
     let executor = Recorder { calls: Mutex::new(Vec::new()), answer: Err("no command `nope`".into()) };
-    let cancel = AtomicBool::new(false);
-    let mut conversation = vec![Message::user("run nope")];
-    let mut events = Vec::new();
-    agent::run_turn(&server.provider(), &agent::Briefing::default(), &mut conversation, &surface::core_tools(), &cancel, &executor, &mut |e, _| {
-        events.push(e)
-    });
-
+    let (events, conversation) = turn(&server, &executor, "run nope");
     assert!(matches!(&events[1], Event::Result { ok: false, note, .. } if note.contains("no command `nope`")), "{events:?}");
-    assert_eq!(conversation[2].role, crate::Role::Tool);
     assert!(conversation[2].error, "the pane shows it as an error");
     assert!(conversation[2].text().contains("no command `nope`"));
-    // The model still got the error and answered.
-    let msgs = server.requests()[1]["messages"].as_array().unwrap().clone();
-    assert!(msgs[3]["content"].as_str().unwrap().contains("no command `nope`"));
     assert_eq!(events.last(), Some(&Event::Done { reason: "stop".into() }));
+}
+
+#[test]
+fn calling_a_tool_that_is_not_run_is_refused_in_one_line() {
+    let server = Fake::start(vec![
+        sse(&[
+            r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","type":"function","function":{"name":"query_entities","arguments":"{\"type\":\"Circle\"}"}}]},"finish_reason":"tool_calls"}]}"#,
+        ]),
+        sse(&[r#"{"choices":[{"delta":{"content":"Sorry — I will use run."},"finish_reason":"stop"}]}"#]),
+    ]);
+    let executor = Recorder { calls: Mutex::new(Vec::new()), answer: Ok(json!({})) };
+    let (events, conversation) = turn(&server, &executor, "list the circles");
+    let note = match &events[1] {
+        Event::Result { ok: false, note, .. } => note.clone(),
+        other => panic!("{other:?}"),
+    };
+    assert!(note.contains("is not a tool here"), "{note}");
+    assert!(note.contains("there is one tool, `run`"), "{note}");
+    assert!(executor.calls.lock().unwrap().is_empty(), "nothing ran");
+    assert!(conversation[2].text().contains("is not a tool here"));
+}
+
+#[test]
+fn malformed_arguments_are_refused_before_anything_runs() {
+    // `code` must be a string: a call with a number is a protocol error, not a failed run.
+    let args = json!({"code": 5});
+    let call = crate::chat::ToolCall { id: "1".into(), name: "run".into(), arguments: args };
+    let executor = Recorder { calls: Mutex::new(Vec::new()), answer: Ok(json!({})) };
+    let err = agent::run_one(&executor, &call).unwrap_err();
+    assert!(err.contains("`code` must be a string"), "{err}");
+    assert!(executor.calls.lock().unwrap().is_empty());
+    // And a bad `values` map too.
+    let call = crate::chat::ToolCall { id: "1".into(), name: "run".into(), arguments: json!({"values": {"a": 1}}) };
+    let err = agent::run_one(&executor, &call).unwrap_err();
+    assert!(err.contains("`values.a` must be a string"), "{err}");
+}
+
+#[test]
+fn named_values_reach_the_call_unmodified() {
+    // The tool passes `values` through so a payload never has to be escaped inside `code`.
+    let call = crate::chat::ToolCall {
+        id: "1".into(),
+        name: "run".into(),
+        arguments: json!({"code": "(strlen (value \"payload\"))", "values": {"payload": "a\nb\"c"}}),
+    };
+    let executor = Recorder { calls: Mutex::new(Vec::new()), answer: Ok(json!({"value": "5"})) };
+    agent::run_one(&executor, &call).unwrap();
+    let calls = executor.calls.lock().unwrap();
+    assert_eq!(calls[0].1, json!({"code": "(strlen (value \"payload\"))", "values": {"payload": "a\nb\"c"}}));
 }
 
 #[test]
 fn an_http_error_ends_the_turn_with_a_readable_message() {
     let server = Fake::start(vec![json_reply(401, r#"{"error":{"message":"Incorrect API key provided"}}"#)]);
-    // A body that is not SSE is read as one object, which is how the error surfaces.
     let executor = Recorder { calls: Mutex::new(Vec::new()), answer: Ok(json!({})) };
-    let cancel = AtomicBool::new(false);
-    let mut conversation = vec![Message::user("hello")];
-    let mut events = Vec::new();
-    agent::run_turn(&server.provider(), &agent::Briefing::default(), &mut conversation, &surface::core_tools(), &cancel, &executor, &mut |e, _| {
-        events.push(e)
-    });
+    let (events, conversation) = turn(&server, &executor, "hello");
     assert!(matches!(events.last(), Some(Event::Failed(e)) if e.contains("Incorrect API key")), "{events:?}");
-    assert!(conversation.len() == 1, "a failed turn adds nothing to the transcript");
-}
-
-#[test]
-fn the_surface_dispatch_reaches_the_harness_through_the_same_door_as_mcp() {
-    /// A harness that records control calls, standing in for the application.
-    #[derive(Default)]
-    struct Harness {
-        calls: Vec<(String, Value)>,
-    }
-    impl surface::Harness for Harness {
-        fn call(&mut self, method: &str, params: Value) -> Result<Value, String> {
-            self.calls.push((method.to_string(), params.clone()));
-            Ok(json!({"ok": true}))
-        }
-    }
-    let mut h = Harness::default();
-    surface::dispatch(&mut h, "query_entities", &json!({"type": "Circle"})).unwrap().unwrap();
-    surface::dispatch(&mut h, "command_line", &json!({"text": "zoom e"})).unwrap().unwrap();
-    surface::dispatch(&mut h, "describe_drawing", &json!({})).unwrap().unwrap();
-    assert_eq!(
-        h.calls,
-        vec![
-            ("engine.execute".to_string(), json!({"command": "entities", "params": {"type": "Circle"}})),
-            ("cmdline.input".to_string(), json!({"text": "zoom e"})),
-            ("engine.execute".to_string(), json!({"command": "describe", "params": {}})),
-        ]
-    );
+    assert_eq!(conversation.len(), 1, "a failed turn adds nothing to the transcript");
 }
 
 #[test]
 fn a_provider_that_ignores_stream_true_still_answers() {
-    // Some servers and proxies buffer the whole answer and reply with one JSON object; the
-    // content type is what decides, not the request.
     let server = Fake::start(vec![json_reply(200, r#"{"choices":[{"message":{"content":"One object, no stream."},"finish_reason":"stop"}]}"#)]);
     let executor = Recorder { calls: Mutex::new(Vec::new()), answer: Ok(json!({})) };
-    let cancel = AtomicBool::new(false);
-    let mut conversation = vec![Message::user("hi")];
-    let mut events = Vec::new();
-    agent::run_turn(&server.provider(), &agent::Briefing::default(), &mut conversation, &surface::core_tools(), &cancel, &executor, &mut |e, _| {
-        events.push(e)
-    });
+    let (events, conversation) = turn(&server, &executor, "hi");
     assert_eq!(events, vec![Event::Text("One object, no stream.".into()), Event::Done { reason: "stop".into() }]);
     assert_eq!(conversation[1].text(), "One object, no stream.");
+}
+
+#[test]
+fn the_manual_the_command_returns_names_the_whole_vocabulary() {
+    // The engine builds the manual; this proves the tool's own description and the command's
+    // manual agree on the vocabulary a model needs to bootstrap.
+    let manual = code::DESCRIPTION;
+    for word in ["(cmd ", "commands", "kept", "(render)", "(describe"] {
+        assert!(manual.contains(word), "the description names {word}");
+    }
 }
