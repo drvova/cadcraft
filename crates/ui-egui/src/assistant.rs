@@ -67,6 +67,10 @@ pub struct Assistant {
     key_visible: bool,
     /// The transcript scrolled itself to the end after the last change.
     follow: bool,
+    /// Activity rows the reader opened (the full code and result); the rest stay one dim line.
+    expanded: std::collections::HashSet<String>,
+    /// Renders the transcript has loaded, by path, so a redraw never re-reads a file.
+    textures: std::collections::HashMap<String, (egui::TextureHandle, [usize; 2])>,
     events: Option<Receiver<Progress>>,
     /// Tool calls the worker wants the interface to run.
     jobs: Option<Receiver<ControlRequest>>,
@@ -91,6 +95,8 @@ impl Default for Assistant {
             settings_open: false,
             key_visible: false,
             follow: true,
+            expanded: std::collections::HashSet::new(),
+            textures: std::collections::HashMap::new(),
             events: None,
             jobs: Some(jobs),
             jobs_tx,
@@ -233,6 +239,8 @@ impl Assistant {
         self.live.clear();
         self.note = None;
         self.steps = 0;
+        self.expanded.clear();
+        self.textures.clear();
     }
 
     /// The conversation as text, for Copy and for the command line.
@@ -353,33 +361,43 @@ pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
         ui.ctx().request_repaint();
     }
 
-    let height = ui.available_height();
+    let mut actions = Actions::default();
+    let mut example = None;
     ui.vertical(|ui| {
-        settings(app, ui, &t);
+        header(app, ui, &t, &mut actions);
+        if app.assistant.settings_open {
+            ui.add_space(4.0);
+            settings(app, ui, &t);
+        }
+        ui.add_space(4.0);
         ui.separator();
-        let composer = 74.0;
-        let list = (height - composer - 12.0).max(80.0);
-        egui::ScrollArea::vertical()
+        let list = (ui.available_height() - COMPOSER_HEIGHT).max(80.0);
+        example = egui::ScrollArea::vertical()
             .id_salt("assistant-transcript")
             .auto_shrink([false, false])
             .max_height(list)
-            .show(ui, |ui| transcript(app, ui, &t));
+            .show(ui, |ui| transcript(app, ui, &t))
+            .inner;
         ui.separator();
-        composer_row(app, ui, &t);
+        composer(app, ui, &t, &mut actions);
     });
+    if let Some(example) = example {
+        app.assistant.input = example;
+    }
+    let ctx = ui.ctx().clone();
+    apply(app, &ctx, actions);
 }
 
-/// The settings fold: where the conversation is sent.
+/// Room the composer and its margins need at the bottom of the pane.
+const COMPOSER_HEIGHT: f32 = 96.0;
+
+/// The provider settings, shown under the header when the gear is on.
 fn settings(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens) {
     let running = app.assistant.running();
-    let header = match client::preset(&app.assistant.preset) {
-        Some(p) if app.assistant.preset != "custom" => format!("{} · {}", p.label, app.assistant.provider.model),
-        _ => app.assistant.provider.model.clone(),
-    };
-    egui::CollapsingHeader::new(RichText::new(crate::tf!("Assistant: {what}", what = header)).color(t.text))
-        .id_salt("assistant-settings")
-        .default_open(app.assistant.settings_open || app.assistant.provider.ready().is_err())
-        .show(ui, |ui| {
+    egui::Frame::new().fill(t.field).stroke(egui::Stroke::new(1.0, t.border)).corner_radius(6.0).inner_margin(egui::Margin::symmetric(10, 8)).show(
+        ui,
+        |ui| {
+            ui.set_width(ui.available_width());
             ui.add_enabled_ui(!running, |ui| {
                 egui::Grid::new("assistant-settings-grid").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
                     ui.label(RichText::new(tl!("Provider")).color(t.text_dim));
@@ -443,128 +461,380 @@ fn settings(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens) {
                 });
                 ui.label(RichText::new(tl!("The key is saved in this machine's CADCraft profile.")).color(t.text_faint).small());
             });
+        },
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Drawing. The grammar is Cursor's agent panel: quiet chrome, no chat bubbles, the conversation
+// as plain text on the surface, tool activity collapsed to one dim line that opens on a click,
+// and a bordered composer at the bottom with the model on the left and the action on the right.
+// ---------------------------------------------------------------------------------------------
+
+/// What the pane asked for this frame; applied after the layout closures end, so nothing is
+/// borrowed twice.
+#[derive(Default)]
+struct Actions {
+    send: bool,
+    stop: bool,
+    clear: bool,
+    settings: bool,
+    preset: Option<&'static str>,
+}
+
+/// The pane's header: which conversation this is (the dock tab already says "Assistant"), and the
+/// two quiet buttons — a new conversation and the provider settings.
+fn header(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &mut Actions) {
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(conversation_title(&app.assistant.messages)).color(t.text).strong());
+        if app.assistant.running() {
+            ui.add_space(4.0);
+            ui.spinner();
+            ui.label(RichText::new(crate::tf!("{n} step(s)", n = app.assistant.steps)).color(t.text_faint).small());
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if crate::icons::button(ui, crate::icons::Icon::Gear, 14.0, tl!("Provider settings"), app.assistant.settings_open).clicked() {
+                actions.settings = true;
+            }
+            if crate::icons::button(ui, crate::icons::Icon::Plus, 14.0, tl!("New conversation"), false).clicked() {
+                actions.clear = true;
+            }
         });
+    });
+}
+
+/// What this conversation is about: the reader's first words, one line, clipped. A conversation
+/// that has not started is a new one.
+fn conversation_title(messages: &[Message]) -> String {
+    let first = messages.iter().find(|m| m.role == Role::User).map(|m| m.text().trim().to_string()).unwrap_or_default();
+    let line = first.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
+    if line.is_empty() {
+        return tl!("New conversation").to_string();
+    }
+    let mut title: String = line.chars().take(48).collect();
+    if line.chars().count() > 48 {
+        title.push('…');
+    }
+    title
 }
 
 /// The conversation: the transcript as the model sees it, plus the answer arriving now.
-fn transcript(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens) {
+fn transcript(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens) -> Option<String> {
     if app.assistant.messages.is_empty() && app.assistant.live.is_empty() {
-        ui.add_space(6.0);
-        ui.label(RichText::new(tl!("Ask for a change to this drawing — the assistant works in it directly.")).color(t.text_dim));
-        ui.add_space(4.0);
-        ui.label(
-            RichText::new(tl!("The assistant writes AutoLISP in the open drawing: (cmd \"circle\" '((CENTER . (0 0)) (RADIUS . 5))) draws, \
-                 (commands) lists what the application offers, (render) shows it a picture. Helpers it writes are kept for \
-                 the next session. Ask in your own words, or paste the code you want run."))
-            .color(t.text_faint)
-            .small(),
-        );
-        return;
+        return empty_state(ui, t);
     }
-    let chips = chips(&app.assistant.messages);
-    for (i, message) in app.assistant.messages.iter().enumerate() {
+    // The rows the pane draws, as owned pairs: drawing updates `app` (opened rows, loaded
+    // textures), so the transcript is read out first and nothing is borrowed across the loop.
+    enum Row {
+        /// A turn's words, and whose they are (the reader's prompt, or the model's answer).
+        Said {
+            text: String,
+            mine: bool,
+        },
+        Ran(cadcraft_ai::ToolCall, Option<Message>),
+    }
+    let results = results_by_call(&app.assistant.messages);
+    let mut rows: Vec<Row> = Vec::new();
+    for message in &app.assistant.messages {
         match message.role {
-            Role::User => bubble(ui, t, tl!("You"), message.text(), t.accent, true),
+            Role::User => rows.push(Row::Said { text: message.text().to_string(), mine: true }),
             Role::Assistant => {
                 if !message.text().trim().is_empty() {
-                    bubble(ui, t, tl!("Assistant"), message.text(), t.text, false);
+                    rows.push(Row::Said { text: message.text().to_string(), mine: false });
                 }
                 for call in &message.tool_calls {
-                    chip(ui, t, chips.get(call.id.as_str()).copied(), call);
+                    rows.push(Row::Ran(call.clone(), results.get(call.id.as_str()).map(|m| (*m).clone())));
                 }
             }
-            Role::Tool => {}
-            Role::System => {}
+            Role::Tool | Role::System => {}
         }
-        let _ = i;
     }
-    if !app.assistant.live.is_empty() {
-        bubble(ui, t, tl!("Assistant"), &app.assistant.live, t.text, false);
+    let live = app.assistant.live.clone();
+    for row in &rows {
+        match row {
+            Row::Said { text, mine: true } => user_turn(ui, t, text),
+            Row::Said { text, mine: false } => assistant_text(ui, t, text),
+            Row::Ran(call, result) => activity(app, ui, t, call, result.as_ref()),
+        }
+    }
+    if !live.is_empty() {
+        assistant_text(ui, t, &live);
     }
     if app.assistant.running && app.assistant.live.is_empty() {
         ui.horizontal(|ui| {
-            ui.spinner();
-            ui.label(RichText::new(tl!("Working…")).color(t.text_dim));
+            ui.add_space(2.0);
+            ui.label(RichText::new(tl!("Thinking…")).color(t.text_faint).small());
         });
     }
     if app.assistant.follow {
         ui.scroll_to_cursor(Some(Align::BOTTOM));
         app.assistant.follow = false;
     }
+    None
+}
+
+/// Nothing said yet: what this is, and three things to try (clicking one fills the composer).
+fn empty_state(ui: &mut egui::Ui, t: &Tokens) -> Option<String> {
+    ui.add_space(8.0);
+    ui.label(RichText::new(tl!("Ask for a change to this drawing — the assistant works in it directly.")).color(t.text_dim));
+    ui.add_space(2.0);
+    ui.label(
+        RichText::new(tl!("It writes AutoLISP in the open drawing: (cmd \"circle\" '((CENTER . (0 0)) (RADIUS . 5))) draws, (commands) lists what the application offers, (render) shows it a picture. Helpers it writes are kept for the next session."))
+            .color(t.text_faint)
+            .small(),
+    );
+    ui.add_space(8.0);
+    let mut clicked = None;
+    for example in [
+        tl!("Measure this drawing and tell me what is wrong with it"),
+        tl!("Offset every closed outline 2 mm outward and fillet the corners"),
+        tl!("Trace the picture I attached and scale it to 30 mm"),
+    ] {
+        let response = ui.add(egui::Label::new(RichText::new(example).color(t.text_dim).small()).sense(egui::Sense::click()));
+        if response.clicked() {
+            clicked = Some(example.to_string());
+        }
+        ui.add_space(2.0);
+    }
+    clicked
+}
+
+/// One user turn: a quiet inset block, the way a prompt reads in Cursor's composer.
+fn user_turn(ui: &mut egui::Ui, t: &Tokens, text: &str) {
+    ui.add_space(6.0);
+    egui::Frame::new().fill(t.control).corner_radius(6.0).inner_margin(egui::Margin::symmetric(10, 7)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        prose(ui, t.text, text);
+    });
+    ui.add_space(4.0);
+}
+
+/// The model's words: plain on the surface, no bubble, comfortable measure.
+fn assistant_text(ui: &mut egui::Ui, t: &Tokens, text: &str) {
+    ui.add_space(4.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(2.0);
+        prose(ui, t.text, text);
+    });
+    ui.add_space(4.0);
+}
+
+/// Text with the pane's own measure and wrapping.
+fn prose(ui: &mut egui::Ui, colour: Color32, text: &str) {
+    let mut job = egui::text::LayoutJob::default();
+    job.wrap.max_width = ui.available_width() - 4.0;
+    job.append(text, 0.0, egui::TextFormat { font_id: crate::theme::body(), color: colour, ..Default::default() });
+    ui.label(job);
+}
+
+/// One tool call as Cursor shows work: a single dim line that opens on a click, with anything it
+/// produced — a rendered picture — standing inline as an artifact card.
+fn activity(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, call: &cadcraft_ai::ToolCall, result: Option<&Message>) {
+    let open = app.assistant.expanded.contains(&call.id);
+    let failed = result.is_some_and(|m| m.error);
+    let mark = match result {
+        None => tl!("…"),
+        Some(m) if m.error => tl!("!"),
+        Some(_) => tl!("✓"),
+    };
+    let (headline, rest) = activity_lines(call, result);
+    let mut toggle = false;
+    ui.horizontal(|ui| {
+        ui.add_space(2.0);
+        let (rect, arrow) = ui.allocate_exact_size(vec2(12.0, 12.0), egui::Sense::click());
+        let icon = if open { crate::icons::Icon::ChevronDown } else { crate::icons::Icon::ChevronRight };
+        crate::icons::paint(ui.painter(), rect, icon, false);
+        toggle |= arrow.clicked();
+        let colour = if failed { t.compare_other } else { t.text_dim };
+        let label =
+            ui.add(egui::Label::new(RichText::new(format!("{mark} {headline}")).color(colour).small()).truncate().sense(egui::Sense::click()));
+        toggle |= label.clicked();
+        if let Some(rest) = &rest {
+            let label = ui.add(egui::Label::new(RichText::new(rest).color(t.text_faint).small()).truncate().sense(egui::Sense::click()));
+            toggle |= label.clicked();
+        }
+    });
+    if toggle && open {
+        app.assistant.expanded.remove(&call.id);
+    } else if toggle {
+        app.assistant.expanded.insert(call.id.clone());
+    }
+    if open {
+        egui::Frame::new().fill(t.field).corner_radius(4.0).inner_margin(egui::Margin::symmetric(8, 6)).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            mono(ui, t.text, &call.code());
+            if let Some(m) = result {
+                ui.add_space(4.0);
+                mono(ui, if failed { t.compare_other } else { t.text_dim }, m.text().trim());
+            }
+        });
+    }
+    if let Some(m) = result {
+        for path in render_paths(m) {
+            render_card(app, ui, t, &path);
+        }
+    }
+    ui.add_space(2.0);
+}
+
+/// Monospaced text on the pane's surface, for code and the answers it printed.
+fn mono(ui: &mut egui::Ui, colour: Color32, text: &str) {
+    let mut job = egui::text::LayoutJob::default();
+    job.wrap.max_width = ui.available_width();
+    job.append(text, 0.0, egui::TextFormat { font_id: egui::FontId::monospace(11.0), color: colour, ..Default::default() });
+    ui.label(job);
+}
+
+/// The one-line form of a call and its result: the first line of the code, how many more lines,
+/// and the first line of what came back.
+fn activity_lines(call: &cadcraft_ai::ToolCall, result: Option<&Message>) -> (String, Option<String>) {
+    let code = call.code();
+    let mut lines = code.lines().filter(|l| !l.trim().is_empty());
+    let first = lines.next().unwrap_or_default().trim().to_string();
+    let more = lines.count();
+    let head = if more > 0 { format!("{first}  +{more}") } else { first };
+    let rest = result.and_then(|m| {
+        m.text().lines().find(|l| !l.trim().is_empty()).map(|l| {
+            let l = l.trim();
+            if l.chars().count() > 90 { format!("→ {}…", l.chars().take(89).collect::<String>()) } else { format!("→ {l}") }
+        })
+    });
+    (head, rest)
+}
+
+/// A render the code drew, as an artifact card: the picture itself, with its path underneath.
+fn render_card(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, path: &str) {
+    let Some((texture, size)) = texture_for(app, ui.ctx(), path) else { return };
+    ui.add_space(2.0);
+    egui::Frame::new().fill(t.field).stroke(egui::Stroke::new(1.0, t.border)).corner_radius(6.0).inner_margin(egui::Margin::symmetric(8, 6)).show(
+        ui,
+        |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(RichText::new(format!("{} · {}×{}", tl!("render"), size[0], size[1])).color(t.text_faint).small());
+            ui.add_space(4.0);
+            let max_w = ui.available_width() - 4.0;
+            let max_h = 320.0_f32;
+            let (w, h) = (size[0] as f32, size[1] as f32);
+            let scale = (max_w / w).min(max_h / h).min(1.0);
+            ui.add(egui::Image::new(&texture).fit_to_exact_size(vec2((w * scale).max(1.0), (h * scale).max(1.0))));
+            ui.add_space(2.0);
+            ui.label(RichText::new(path).color(t.text_faint).small());
+        },
+    );
+    ui.add_space(2.0);
+}
+
+/// Load a PNG the code rendered, once, and keep the texture for the rest of the session.
+fn texture_for(app: &mut crate::CadApp, ctx: &egui::Context, path: &str) -> Option<(egui::TextureHandle, [usize; 2])> {
+    if let Some(hit) = app.assistant.textures.get(path) {
+        return Some(hit.clone());
+    }
+    let img = image::open(path).ok()?.to_rgba8();
+    let size = [img.width() as usize, img.height() as usize];
+    let texture = ctx.load_texture(path, egui::ColorImage::from_rgba_unmultiplied(size, img.as_raw()), egui::TextureOptions::LINEAR);
+    app.assistant.textures.insert(path.to_string(), (texture.clone(), size));
+    Some((texture, size))
+}
+
+/// The PNG paths a tool result reports. The result the pane holds is the report **text** the model
+/// read, so its `rendered <path>` lines are the pictures to show.
+fn render_paths(message: &Message) -> Vec<String> {
+    message
+        .text()
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("rendered "))
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty())
+        .collect()
 }
 
 /// Each tool call with its result, looked up in the transcript by call id — the transcript is the
-/// only state, so a chip can never disagree with what the model actually received.
-fn chips(messages: &[Message]) -> std::collections::HashMap<&str, &Message> {
+/// only state, so a row can never disagree with what the model actually received.
+fn results_by_call(messages: &[Message]) -> std::collections::HashMap<&str, &Message> {
     messages.iter().filter(|m| m.role == Role::Tool).filter_map(|m| m.tool_call_id.as_deref().map(|id| (id, m))).collect()
 }
 
-/// One tool call: what it was asked to do and how it ended.
-fn chip(ui: &mut egui::Ui, t: &Tokens, result: Option<&Message>, call: &cadcraft_ai::ToolCall) {
-    let (mark, colour) = match result {
-        None => (tl!("…"), t.text_dim),
-        Some(m) if m.error => (tl!("!"), t.compare_other),
-        Some(_) => (tl!("✓"), t.toggle_on),
-    };
-    let summary = call.summary();
-    let line = format!("{mark} {summary}");
-    let text = RichText::new(line).color(colour).small();
-    match result {
-        Some(m) => {
-            ui.horizontal_wrapped(|ui| {
-                ui.add_space(6.0);
-                ui.label(text).on_hover_text(m.text());
-            });
-        }
-        None => {
+/// The composer: a bordered box with the field, the model on the left and the action on the right.
+fn composer(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &mut Actions) {
+    let running = app.assistant.running();
+    egui::Frame::new().fill(t.field).stroke(egui::Stroke::new(1.0, t.border)).corner_radius(8.0).inner_margin(egui::Margin::symmetric(10, 8)).show(
+        ui,
+        |ui| {
+            ui.set_width(ui.available_width());
+            let hint = tl!("Ask for a change to this drawing…");
+            let edit = egui::TextEdit::multiline(&mut app.assistant.input)
+                .desired_rows(2)
+                .desired_width(f32::INFINITY)
+                .frame(egui::Frame::NONE)
+                .hint_text(hint);
+            let response = ui.add(edit);
+            let enter = ui.input(|i| i.key_pressed(egui::Key::Enter) && (i.modifiers.command || i.modifiers.ctrl));
+            if response.has_focus() && enter {
+                actions.send = true;
+            }
+            ui.add_space(6.0);
             ui.horizontal(|ui| {
-                ui.add_space(6.0);
-                ui.label(text);
+                // The model, on the left, the way Cursor shows it: a quiet chip, not a dialog.
+                let label = if app.assistant.provider.model.trim().is_empty() { tl!("No model") } else { app.assistant.provider.model.as_str() };
+                egui::ComboBox::from_id_salt("assistant-model-chip").selected_text(RichText::new(label).small()).width(190.0).show_ui(ui, |ui| {
+                    for p in client::PRESETS {
+                        let hit = app.assistant.preset == p.id;
+                        let text = if p.model.is_empty() { p.label.to_string() } else { format!("{} · {}", p.label, p.model) };
+                        if ui.selectable_label(hit, RichText::new(text).small()).clicked() {
+                            actions.preset = Some(p.id);
+                        }
+                    }
+                });
+                if app.assistant.provider.ready().is_err() {
+                    ui.label(RichText::new(tl!("needs a provider")).color(t.compare_other).small());
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if running {
+                        if ui.add(egui::Button::new(RichText::new(tl!("Stop")).color(t.text)).min_size(vec2(64.0, 24.0))).clicked() {
+                            actions.stop = true;
+                        }
+                    } else {
+                        let ready = !app.assistant.input.trim().is_empty();
+                        let send = egui::Button::new(RichText::new(tl!("Send")).color(t.canvas)).fill(t.accent).min_size(vec2(64.0, 24.0));
+                        if ui.add_enabled(ready, send).clicked() {
+                            actions.send = true;
+                        }
+                    }
+                });
             });
-        }
+        },
+    );
+    if let Some(note) = app.assistant.note.clone() {
+        ui.add_space(2.0);
+        ui.label(RichText::new(note).color(t.compare_other).small());
     }
 }
 
-/// A message: who said it, and what.
-fn bubble(ui: &mut egui::Ui, t: &Tokens, who: &str, text: &str, colour: Color32, accent: bool) {
-    ui.add_space(2.0);
-    ui.label(RichText::new(who).color(if accent { t.accent } else { t.text_dim }).small().strong());
-    let mut job = egui::text::LayoutJob::default();
-    job.wrap.max_width = ui.available_width();
-    job.append(text, 0.0, egui::TextFormat { font_id: crate::theme::body(), color: colour, ..Default::default() });
-    ui.label(job);
-    ui.add_space(2.0);
-}
-
-/// The composer: the text box, Send and Stop, and the last note.
-fn composer_row(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens) {
-    let running = app.assistant.running();
-    let enter = ui.input(|i| i.modifiers.ctrl || i.modifiers.command);
-    ui.horizontal(|ui| {
-        let hint = if enter { tl!("Ctrl+Enter to send") } else { tl!("Enter to send, Shift+Enter for a new line") };
-        let edit = egui::TextEdit::multiline(&mut app.assistant.input).desired_rows(3).desired_width(ui.available_width() - 74.0).hint_text(hint);
-        let response = ui.add(edit);
-        let send = response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter) && !i.modifiers.shift);
-        let clicked = ui
-            .add_enabled(
-                !running && !app.assistant.input.trim().is_empty(),
-                egui::Button::new(RichText::new(tl!("Send")).color(t.text)).min_size(vec2(66.0, 26.0)),
-            )
-            .clicked();
-        if clicked || send {
-            let briefing = briefing(app);
-            let ctx = ui.ctx().clone();
-            app.assistant.send(briefing, &ctx);
+/// Apply what the pane asked for this frame.
+fn apply(app: &mut crate::CadApp, ctx: &egui::Context, actions: Actions) {
+    if actions.settings {
+        app.assistant.settings_open = !app.assistant.settings_open;
+    }
+    if actions.clear {
+        app.assistant.clear();
+    }
+    if let Some(id) = actions.preset
+        && let Some(p) = client::preset(id)
+    {
+        app.assistant.preset = p.id.to_string();
+        if !p.base_url.is_empty() {
+            app.assistant.provider.base_url = p.base_url.to_string();
         }
-        if running && ui.button(RichText::new(tl!("Stop")).color(t.text)).clicked() {
-            app.assistant.stop();
+        if !p.model.is_empty() {
+            app.assistant.provider.model = p.model.to_string();
         }
-        if !running && ui.button(RichText::new(tl!("Clear")).color(t.text_dim)).clicked() {
-            app.assistant.clear();
-        }
-    });
-    if let Some(note) = app.assistant.note.clone() {
-        ui.label(RichText::new(note).color(t.compare_other).small());
+    }
+    if actions.stop {
+        app.assistant.stop();
+    }
+    if actions.send {
+        let briefing = briefing(app);
+        app.assistant.send(briefing, ctx);
     }
 }
 
@@ -691,17 +961,50 @@ mod tests {
     }
 
     #[test]
-    fn a_chip_finds_its_result_by_call_id() {
+    fn the_header_names_the_conversation() {
+        assert_eq!(conversation_title(&[]), "New conversation");
+        let messages = vec![Message::user("draw a wing outline 60 wide\nand measure it"), Message::assistant("Done.")];
+        assert_eq!(conversation_title(&messages), "draw a wing outline 60 wide");
+        let long = vec![Message::user("x".repeat(80))];
+        let title = conversation_title(&long);
+        assert_eq!(title.chars().count(), 49, "clipped with an ellipsis: {title}");
+        assert!(title.ends_with('…'));
+    }
+
+    #[test]
+    fn an_activity_row_finds_its_result_by_call_id() {
         let messages = vec![
             Message::user("draw"),
-            Message::assistant_calls(vec![call("c1", "execute", json!({"command": "circle"}))], None),
-            Message::tool_result(&call("c1", "execute", json!({})), &json!({"message": "Drew a circle."})),
-            Message::assistant_calls(vec![call("c2", "inspect_drawing", json!({}))], None),
+            Message::assistant_calls(vec![call("c1", "run", json!({"code": "(cmd \"circle\")"}))], None),
+            Message::tool_result(&call("c1", "run", json!({})), &json!({"value": "((HANDLE . \"2F\"))"})),
+            Message::assistant_calls(vec![call("c2", "run", json!({"code": "(kept)"}))], None),
         ];
-        let chips = chips(&messages);
-        assert_eq!(chips.len(), 1);
-        assert!(chips["c1"].text().contains("Drew a circle."));
-        assert!(!chips.contains_key("c2"), "a call with no result yet shows as running");
+        let results = results_by_call(&messages);
+        assert_eq!(results.len(), 1);
+        assert!(results["c1"].text().contains("HANDLE"));
+        assert!(!results.contains_key("c2"), "a call with no result yet shows as running");
+    }
+
+    #[test]
+    fn an_activity_row_reads_as_the_code_and_its_first_answer() {
+        let call = call("c1", "run", json!({"code": "(defun wing (w)\n  (list w 2))\n(wing 60)"}));
+        let result = Message::tool_result(&call, &json!({"value": "60", "output": ["done"], "kept": ["WING"]}));
+        let (head, rest) = activity_lines(&call, Some(&result));
+        assert!(head.starts_with("(defun wing (w)"), "{head}");
+        assert!(head.ends_with("+2"), "more lines are counted: {head}");
+        assert!(rest.unwrap().starts_with("→ "), "the answer's first line follows the code");
+    }
+
+    #[test]
+    fn a_render_in_a_report_becomes_an_artifact_card() {
+        // The message holds the report text (what the model read), so the card's paths come from
+        // its `rendered` lines — exactly what a live run stores.
+        let report = cadcraft_ai::code::Report::of(&json!({"value": "nil", "images": ["C:/tmp/a.png", "C:/tmp/b.png"]})).text();
+        let message = Message::tool_result(&call("c1", "run", json!({"code": "(render)"})), &json!(report));
+        assert!(message.text().contains("rendered C:/tmp/a.png"), "{}", message.text());
+        let paths = render_paths(&message);
+        assert_eq!(paths.len(), 2, "{paths:?}");
+        assert_eq!(paths[0], "C:/tmp/a.png");
     }
 
     #[test]

@@ -27,13 +27,23 @@ them.
 | `{"clear": true}` | forget the conversation |
 | `{"open": false}` | do the above without opening the pane |
 
+## The pane
+
+The pane is laid out like an agent panel, not a chat: a header naming the conversation with the
+new-conversation and settings buttons, the transcript as plain text on the panel surface (a prompt
+in a quiet inset block, the model's words without a bubble), and each tool call collapsed to one
+dim line — what ran, and the first line of what came back — that opens on a click to show the code
+and the whole result. A picture the code rendered stands inline as an artifact card: the render
+itself, with its size and path under it. The composer is a bordered box at the bottom with the
+model on the left and Send on the right (⌘/Ctrl+Enter sends).
+
 ## Set the provider
 
 The assistant speaks the **OpenAI chat protocol**, which is what OpenAI, OpenRouter, Anthropic's
 compatibility endpoint, DeepSeek, Groq, Mistral, xAI, Together, Ollama, LM Studio, vLLM and
 llama.cpp all serve. A provider is three things: a base URL, a model name and a key.
 
-Set it in the pane's own settings (the fold at the top) or in the Options JSON form:
+Set it in the pane's settings (the gear in the header) or in the Options JSON form:
 
 ```json
 {"id": 1, "method": "engine.execute", "params": {"command": "options", "params": {
@@ -119,7 +129,8 @@ kept: WING-OUTLINE
 rendered C:\Users\you\AppData\Local\Temp\cadcraft-render-4821-0.png
 ```
 
-Pictures come back as image content blocks in MCP and as paths the pane shows in the transcript.
+Pictures come back as image content blocks in MCP and as artifact cards the pane draws inline in the
+transcript: the render itself, with its size and path under it.
 The brief tells the model to quote the numbers the tools returned and to name anything that came
 out different from what was asked: a drawing report is a report of measurements.
 

@@ -29,6 +29,11 @@ pub struct ToolCall {
 }
 
 impl ToolCall {
+    /// The code the call carries, when it carries code (the one tool does). Empty otherwise.
+    pub fn code(&self) -> String {
+        self.arguments.get("code").and_then(Value::as_str).unwrap_or_default().to_string()
+    }
+
     /// A one-line description of the call, for the pane's chip.
     ///
     /// The one tool takes code, and code is what a person wants to read: a `run` call shows the
