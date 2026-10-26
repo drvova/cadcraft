@@ -1,2 +1,7 @@
 [alias]
 xtask = "run --package xtask --"
+
+# Link with LLVM lld (ships with the Rust toolchain) instead of MSVC link.exe: on this
+# workspace it cuts the link step of the large GUI binaries by roughly half.
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld"

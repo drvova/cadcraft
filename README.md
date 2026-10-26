@@ -131,6 +131,10 @@ cd cadcraft
 cargo run --release -p cadcraft -- --sample       # opens the sample drawing
 ```
 
+On Windows x64 the repository links with the Rust toolchain's own LLVM linker
+(`rust-lld`, set in [`.cargo/config.toml`](.cargo/config.toml)): linking the GUI binary
+takes about 3 s instead of 23 s. Nothing to install — it ships with rustup.
+
 Then try typing at the command line:
 
 ```text
