@@ -95,12 +95,14 @@ pub fn clear_cache() {
 
 /// Load and decode the image at `path` exactly as the file is, through the cache. `None` for
 /// anything that cannot be read and decoded (the caller draws the frame only).
+#[must_use]
 pub fn load(path: &str) -> Option<Arc<ImageData>> {
     load_adjusted(path, 50, 50)
 }
 
 /// Like [`load`], with the image's brightness and contrast applied (0..=100 each, 50 = as the
 /// file is; the values an IMAGE entity carries).
+#[must_use]
 pub fn load_adjusted(path: &str, brightness: u8, contrast: u8) -> Option<Arc<ImageData>> {
     #[cfg(target_arch = "wasm32")]
     {
@@ -162,6 +164,7 @@ fn adjust_pixels(rgba: &mut [u8], brightness: u8, contrast: u8) {
 
 /// Decode bytes as PNG or JPEG under the same limits as [`load`], without the file cache: an
 /// image that arrived as base64 `data` rather than as a path.
+#[must_use]
 pub fn decode_bytes(bytes: &[u8]) -> Option<ImageData> {
     decode(bytes)
 }
@@ -194,11 +197,11 @@ fn decode(bytes: &[u8]) -> Option<ImageData> {
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
 
     /// A small PNG with a known pixel at (1, 0).
+    #[expect(clippy::unwrap_used, reason = "a fixture that cannot be written is a broken test")]
     fn write_png(path: &std::path::Path, w: u32, h: u32, fill: [u8; 4]) {
         let img = image::RgbaImage::from_pixel(w, h, image::Rgba(fill));
         img.save_with_format(path, image::ImageFormat::Png).unwrap();

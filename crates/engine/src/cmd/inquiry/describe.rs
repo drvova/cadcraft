@@ -14,8 +14,8 @@
 
 use std::collections::BTreeMap;
 
-use cadcraft_doc::{Entity, EntityKind, Handle, Space};
-use cadcraft_geom::{Bounds2, Vec2};
+use cadcraft_doc::{Drawing, Entity, EntityKind, Handle, Space};
+use cadcraft_geom::{Bounds2, Vec3};
 use serde_json::{Value, json};
 
 use super::super::*;
@@ -28,8 +28,21 @@ const DEFAULT_OBJECT_LIMIT: usize = 200;
 /// Texts and images detailed by default.
 const MAX_TEXT_DETAIL: usize = 20;
 const MAX_IMAGE_DETAIL: usize = 50;
+/// Degenerate objects named in the report; the count in `notes` is complete either way.
+const MAX_DEGENERATE_LISTED: usize = 20;
 /// Endpoint pairs the optional chain analysis (`loops: true`) may compare.
 const DEFAULT_PAIR_LIMIT: usize = 200_000;
+/// A length at or below this is nothing: no geometry to snap to, nothing to draw.
+const ZERO_LENGTH: f64 = 1e-9;
+/// Tessellation tolerance for measuring a spline's drawn length (fine enough that the
+/// measurement is within a hair of the curve).
+const LENGTH_TOL: f64 = 0.05;
+/// Names the narrative lists before it says "and N more".
+const NARRATIVE_KINDS: usize = 6;
+const NARRATIVE_LAYERS: usize = 6;
+const NARRATIVE_TEXTS: usize = 4;
+/// Characters of a text sample shown in the narrative.
+const NARRATIVE_SAMPLE_CHARS: usize = 40;
 
 pub const PARAMS: &str = "{handles? | handle? (default: the whole active space), space?: current (default)|model|all|<layout>, \
     window?: [[x0,y0],[x1,y1]], crossing?: bool (default true; false = entirely inside), detail?: bool (default false; \
@@ -37,6 +50,159 @@ pub const PARAMS: &str = "{handles? | handle? (default: the whole active space),
     and ARCs to find gaps and junctions), maxPairs?: n (default 200000), tolerance?: number} → \
     {schema: 1, scope, total, counts, extents, size, center, units, layers, geometry: {totalLength, lengths, closed, open}, \
     texts, blocks, images, dimensions, hatches, degenerate, gaps?, objects?, notes, message}";
+
+/// What one object contributed, for the per-object detail list.
+struct ObjectFacts {
+    bounds: Bounds2,
+    length: Option<f64>,
+    area: Option<f64>,
+    closed: Option<bool>,
+    vertices: Option<usize>,
+}
+
+/// The facts a scan accumulates; `describe` renders them as JSON and as prose.
+#[derive(Default)]
+struct Facts {
+    counts: BTreeMap<&'static str, usize>,
+    /// Layer name → (objects, the first object's colour name).
+    layers: BTreeMap<String, (usize, String)>,
+    lengths: BTreeMap<&'static str, f64>,
+    total_length: f64,
+    closed: usize,
+    closed_area: f64,
+    open_contours: usize,
+    open_length: f64,
+    vertices: usize,
+    extents: Bounds2,
+    texts: Vec<Value>,
+    text_count: usize,
+    blocks: BTreeMap<String, usize>,
+    images: Vec<Value>,
+    image_count: usize,
+    dimensions: usize,
+    hatches: usize,
+    degenerate: Vec<Value>,
+}
+
+impl Facts {
+    /// Fold one object into the report, returning what the per-object detail needs.
+    fn add(&mut self, d: &Drawing, e: &Entity) -> ObjectFacts {
+        let ty = e.kind.type_name();
+        *self.counts.entry(ty).or_default() += 1;
+        // `or_insert_with`: the colour is only looked up for a layer not seen before.
+        let layer = self.layers.entry(e.common.layer.clone()).or_insert_with(|| (0, e.common.color.name().to_string()));
+        layer.0 += 1;
+        let bounds = cadcraft_doc::entity_bounds(d, e, 0);
+        if !bounds.is_empty() {
+            self.extents = self.extents.union(&bounds);
+        }
+        let length = entity_length(&e.kind);
+        if let Some(l) = length {
+            *self.lengths.entry(ty).or_default() += l;
+            self.total_length += l;
+        }
+        let area = closed_shape(&e.kind).map(|(a, _per)| a);
+        let closed = match area {
+            Some(a) => {
+                self.closed += 1;
+                self.closed_area += a;
+                Some(true)
+            }
+            None if is_open_contour(&e.kind) => {
+                self.open_contours += 1;
+                self.open_length += length.unwrap_or(0.0);
+                Some(false)
+            }
+            None => None,
+        };
+        let vertices = poly_vertices(&e.kind);
+        if let Some(v) = vertices {
+            self.vertices += v;
+        }
+        match &e.kind {
+            EntityKind::Text(t) => self.text(e, "Text", t.value.trim(), t.insert, t.height),
+            EntityKind::MText(t) => self.text(e, "MText", cadcraft_fonts::plain_mtext(&t.contents).trim(), t.insert, t.height),
+            EntityKind::MLeader(m) => {
+                if let Some(t) = &m.text {
+                    self.text(e, "MLeader", cadcraft_fonts::plain_mtext(&t.contents).trim(), t.insert, t.height);
+                }
+            }
+            EntityKind::Insert(i) => {
+                *self.blocks.entry(i.block.clone()).or_default() += 1;
+                for a in i.attribs.iter().filter(|a| !a.invisible) {
+                    self.text(e, "Attribute", a.text.value.trim(), a.text.insert, a.text.height);
+                }
+            }
+            EntityKind::Dimension(_) => self.dimensions += 1,
+            EntityKind::Hatch(_) => self.hatches += 1,
+            EntityKind::Image(i) => {
+                self.image_count += 1;
+                if self.images.len() < MAX_IMAGE_DETAIL {
+                    self.images.push(image_json(e, i));
+                }
+            }
+            _ => {}
+        }
+        // Degenerate objects: nothing to snap to, nothing to draw.
+        if let Some(l) = length
+            && l <= ZERO_LENGTH
+            && !matches!(e.kind, EntityKind::Point(_) | EntityKind::Text(_) | EntityKind::MText(_) | EntityKind::AttDef(_))
+            && self.degenerate.len() < MAX_DEGENERATE_LISTED
+        {
+            self.degenerate.push(json!({ "handle": e.handle.hex(), "type": ty, "reason": "zero length" }));
+        }
+        ObjectFacts { bounds, length, area, closed, vertices }
+    }
+
+    /// Record one readable text (a block attribute carries its tag in `at`-independent detail).
+    fn text(&mut self, e: &Entity, ty: &str, value: &str, at: Vec3, height: f64) {
+        self.text_count += 1;
+        if self.texts.len() < MAX_TEXT_DETAIL {
+            self.texts.push(json!({ "handle": e.handle.hex(), "type": ty, "text": value, "at": [at.x, at.y], "height": height }));
+        }
+    }
+}
+
+/// One object's row in the detailed list.
+fn object_json(e: &Entity, f: &ObjectFacts) -> Value {
+    let mut o = json!({
+        "handle": e.handle.hex(), "type": e.kind.type_name(), "layer": e.common.layer, "color": e.common.color.name(),
+    });
+    if let Some(m) = o.as_object_mut() {
+        if let Some(l) = f.length {
+            m.insert("length".into(), json!(l));
+        }
+        if let Some(a) = f.area {
+            m.insert("area".into(), json!(a));
+        }
+        if let Some(c) = f.closed {
+            m.insert("closed".into(), json!(c));
+        }
+        if let Some(v) = f.vertices {
+            m.insert("vertices".into(), json!(v));
+        }
+        if !f.bounds.is_empty() {
+            m.insert("bounds".into(), json!([[f.bounds.min.x, f.bounds.min.y], [f.bounds.max.x, f.bounds.max.y]]));
+        }
+    }
+    o
+}
+
+/// One raster reference's detail: its pixels (when the file reads), placement and scale.
+fn image_json(e: &Entity, i: &cadcraft_doc::Image) -> Value {
+    let pixels = cadcraft_render::raster_image::load(&i.path).map(|px| [px.width, px.height]);
+    let uw = i.u.xy().len();
+    let vw = i.v.xy().len();
+    json!({
+        "handle": e.handle.hex(), "name": i.name, "path": i.path,
+        "pixels": pixels,
+        "size": [i.size.x * uw, i.size.y * vw],
+        "at": [i.insert.x, i.insert.y],
+        "rotation": i.u.xy().y.atan2(i.u.xy().x).to_degrees(),
+        "unitsPerPixel": [uw, vw],
+        "clipped": i.clipping, "fade": i.fade,
+    })
+}
 
 pub fn run(s: &mut Session, p: &Value) -> Result<Value> {
     let scope = Scope::parse(s, p)?;
@@ -129,155 +295,32 @@ pub fn run(s: &mut Session, p: &Value) -> Result<Value> {
         objects.retain(|e| crate::select::in_window(d, e, None, w, crossing, tol));
     }
 
-    let mut counts: BTreeMap<&'static str, usize> = BTreeMap::new();
-    let mut layers: BTreeMap<String, (usize, String)> = BTreeMap::new();
-    let mut lengths: BTreeMap<&'static str, f64> = BTreeMap::new();
-    let mut total_length = 0.0f64;
-    let mut closed_count = 0usize;
-    let mut closed_area = 0.0f64;
-    let mut open_contours = 0usize;
-    let mut open_length = 0.0f64;
-    let mut vertices = 0usize;
-    let mut extents = Bounds2::EMPTY;
-    let mut texts: Vec<Value> = Vec::new();
-    let mut text_count = 0usize;
-    let mut blocks: BTreeMap<String, usize> = BTreeMap::new();
-    let mut images: Vec<Value> = Vec::new();
-    let mut image_count = 0usize;
-    let mut dimensions = 0usize;
-    let mut hatches = 0usize;
-    let mut degenerate: Vec<Value> = Vec::new();
+    let mut facts = Facts::default();
     let mut per_object: Vec<Value> = Vec::new();
     let mut truncated = false;
-
     for e in &objects {
-        let ty = e.kind.type_name();
-        *counts.entry(ty).or_default() += 1;
-        let (n, color) = layers.entry(e.common.layer.clone()).or_insert((0, e.common.color.name().to_string()));
-        *n += 1;
-        let _ = color;
-        let b = cadcraft_doc::entity_bounds(d, e, 0);
-        if !b.is_empty() {
-            extents = extents.union(&b);
-        }
-        let len = entity_length(&e.kind);
-        if let Some(l) = len {
-            *lengths.entry(ty).or_default() += l;
-            total_length += l;
-        }
-        let mut closed = None;
-        let mut object_area = None;
-        if let Some((a, per)) = closed_shape(&e.kind) {
-            closed_count += 1;
-            closed_area += a;
-            closed = Some(true);
-            object_area = Some(a);
-            let _ = per;
-        } else if is_open_contour(&e.kind) {
-            open_contours += 1;
-            if let Some(l) = len {
-                open_length += l;
-            }
-            closed = Some(false);
-        }
-        if let Some(v) = poly_vertices(&e.kind) {
-            vertices += v;
-        }
-        match &e.kind {
-            EntityKind::Text(t) => {
-                text_count += 1;
-                if texts.len() < MAX_TEXT_DETAIL {
-                    texts.push(json!({ "handle": e.handle.hex(), "type": "Text", "text": t.value.trim(), "at": [t.insert.x, t.insert.y], "height": t.height }));
-                }
-            }
-            EntityKind::MText(t) => {
-                text_count += 1;
-                if texts.len() < MAX_TEXT_DETAIL {
-                    texts.push(json!({ "handle": e.handle.hex(), "type": "MText", "text": cadcraft_fonts::plain_mtext(&t.contents).trim(), "at": [t.insert.x, t.insert.y], "height": t.height }));
-                }
-            }
-            EntityKind::MLeader(m) => {
-                if let Some(t) = &m.text {
-                    text_count += 1;
-                    if texts.len() < MAX_TEXT_DETAIL {
-                        texts.push(json!({ "handle": e.handle.hex(), "type": "MLeader", "text": cadcraft_fonts::plain_mtext(&t.contents).trim(), "at": [t.insert.x, t.insert.y], "height": t.height }));
-                    }
-                }
-            }
-            EntityKind::Insert(i) => {
-                *blocks.entry(i.block.clone()).or_default() += 1;
-                for a in i.attribs.iter().filter(|a| !a.invisible) {
-                    text_count += 1;
-                    if texts.len() < MAX_TEXT_DETAIL {
-                        texts.push(json!({ "handle": e.handle.hex(), "type": "Attribute", "text": a.text.value.trim(), "at": [a.text.insert.x, a.text.insert.y], "height": a.text.height, "tag": a.tag }));
-                    }
-                }
-            }
-            EntityKind::Dimension(_) => dimensions += 1,
-            EntityKind::Hatch(_) => hatches += 1,
-            EntityKind::Image(i) => {
-                image_count += 1;
-                if images.len() < MAX_IMAGE_DETAIL {
-                    let pixels = cadcraft_render::raster_image::load(&i.path).map(|px| [px.width, px.height]);
-                    let uw = i.u.xy().len();
-                    let vw = i.v.xy().len();
-                    let rotation = i.u.xy().y.atan2(i.u.xy().x).to_degrees();
-                    images.push(json!({
-                        "handle": e.handle.hex(), "name": i.name, "path": i.path,
-                        "pixels": pixels,
-                        "size": [i.size.x * uw, i.size.y * vw],
-                        "at": [i.insert.x, i.insert.y], "rotation": rotation,
-                        "unitsPerPixel": [uw, vw],
-                        "clipped": i.clipping, "fade": i.fade,
-                    }));
-                }
-            }
-            _ => {}
-        }
-        // Degenerate objects: nothing to snap to, nothing to draw.
-        if let Some(l) = len
-            && l <= 1e-9
-            && !matches!(e.kind, EntityKind::Point(_) | EntityKind::Text(_) | EntityKind::MText(_) | EntityKind::AttDef(_))
-            && degenerate.len() < 20
-        {
-            degenerate.push(json!({ "handle": e.handle.hex(), "type": ty, "reason": "zero length" }));
-        }
+        let f = facts.add(d, e);
         if detail {
             if per_object.len() < limit {
-                let mut o = json!({
-                    "handle": e.handle.hex(), "type": ty, "layer": e.common.layer, "color": e.common.color.name(),
-                });
-                if let Some(m) = o.as_object_mut() {
-                    if let Some(l) = len {
-                        m.insert("length".into(), json!(l));
-                    }
-                    if let Some(a) = object_area {
-                        m.insert("area".into(), json!(a));
-                    }
-                    if let Some(c) = closed {
-                        m.insert("closed".into(), json!(c));
-                    }
-                    if let Some(v) = poly_vertices(&e.kind) {
-                        m.insert("vertices".into(), json!(v));
-                    }
-                    if !b.is_empty() {
-                        m.insert("bounds".into(), json!([[b.min.x, b.min.y], [b.max.x, b.max.y]]));
-                    }
-                }
-                per_object.push(o);
+                per_object.push(object_json(e, &f));
             } else {
                 truncated = true;
             }
         }
     }
 
-    let extents_json = if extents.is_empty() { Value::Null } else { json!([[extents.min.x, extents.min.y], [extents.max.x, extents.max.y]]) };
-    let size = if extents.is_empty() { None } else { Some((extents.width(), extents.height())) };
-    let center = if extents.is_empty() { None } else { Some(extents.center()) };
+    let extents_json = if facts.extents.is_empty() {
+        Value::Null
+    } else {
+        json!([[facts.extents.min.x, facts.extents.min.y], [facts.extents.max.x, facts.extents.max.y]])
+    };
+    let size = if facts.extents.is_empty() { None } else { Some((facts.extents.width(), facts.extents.height())) };
+    let center = if facts.extents.is_empty() { None } else { Some(facts.extents.center()) };
     let insunits = d.header.i64("INSUNITS", 1);
     let unit = unit_name(insunits);
 
-    let layer_list: Vec<Value> = layers
+    let layer_list: Vec<Value> = facts
+        .layers
         .iter()
         .map(|(name, (n, color))| {
             let l = d.layer(name);
@@ -292,26 +335,27 @@ pub fn run(s: &mut Session, p: &Value) -> Result<Value> {
         .collect();
 
     let mut notes: Vec<String> = Vec::new();
-    if open_contours > 0 {
+    if facts.open_contours > 0 {
         notes.push(format!(
-            "{open_contours} open contour(s) totalling {} — close them (PEDIT Close / JOIN) if they should bound an area",
-            fmt_d(s, open_length)
+            "{} open contour(s) totalling {} — close them (PEDIT Close / JOIN) if they should bound an area",
+            facts.open_contours,
+            fmt_d(s, facts.open_length)
         ));
     }
-    if closed_count > 0 {
-        notes.push(format!("{closed_count} closed shape(s) enclosing {}", fmt_d(s, closed_area)));
+    if facts.closed > 0 {
+        notes.push(format!("{} closed shape(s) enclosing {}", facts.closed, fmt_d(s, facts.closed_area)));
     } else if !objects.is_empty() {
         notes.push("no closed shape: nothing bounds an area yet (HATCH and AREA will find no region)".to_string());
     }
-    if !degenerate.is_empty() {
-        notes.push(format!("{} degenerate object(s) with no measurable length", degenerate.len()));
+    if !facts.degenerate.is_empty() {
+        notes.push(format!("{} degenerate object(s) with no measurable length", facts.degenerate.len()));
     }
-    if image_count > 0 {
-        notes.push(format!("{image_count} raster reference(s); IMAGETRACE turns one into geometry"));
+    if facts.image_count > 0 {
+        notes.push(format!("{} raster reference(s); IMAGETRACE turns one into geometry", facts.image_count));
     }
-    if !blocks.is_empty() {
-        let n: usize = blocks.values().sum();
-        notes.push(format!("{n} block reference(s) over {} definition(s)", blocks.len()));
+    if !facts.blocks.is_empty() {
+        let n: usize = facts.blocks.values().sum();
+        notes.push(format!("{n} block reference(s) over {} definition(s)", facts.blocks.len()));
     }
     if let Some(g) = gaps.as_object()
         && let Some(open) = g.get("openChains").and_then(Value::as_u64)
@@ -324,45 +368,31 @@ pub fn run(s: &mut Session, p: &Value) -> Result<Value> {
         notes.push(format!("the object list is cut at {limit}; raise `limit` or narrow the scope"));
     }
 
-    let message = narrative(
-        &spaces,
-        objects.len(),
-        &counts,
-        extents_json.as_array().map(|_| (extents.min, extents.max)),
-        unit,
-        total_length,
-        closed_count,
-        closed_area,
-        open_contours,
-        &layer_list,
-        text_count,
-        &texts,
-        image_count,
-    );
+    let message = narrative(&facts, &spaces, unit);
 
     let mut out = json!({
         "schema": 1,
         "scope": spaces.join(", "),
         "total": objects.len(),
-        "counts": counts,
+        "counts": facts.counts,
         "extents": extents_json,
         "size": size.map(|(w, h)| json!([w, h])),
         "center": center.map(|c| json!([c.x, c.y])),
         "units": { "insunits": insunits, "name": unit, "lunits": d.header.i64("LUNITS", 2), "luprec": d.header.i64("LUPREC", 4) },
         "layers": layer_list,
         "geometry": {
-            "totalLength": total_length,
-            "lengths": lengths,
-            "closed": { "count": closed_count, "area": closed_area },
-            "open": { "contours": open_contours, "length": open_length },
-            "vertices": vertices,
+            "totalLength": facts.total_length,
+            "lengths": facts.lengths,
+            "closed": { "count": facts.closed, "area": facts.closed_area },
+            "open": { "contours": facts.open_contours, "length": facts.open_length },
+            "vertices": facts.vertices,
         },
-        "texts": { "count": text_count, "returned": texts.len(), "items": texts },
-        "blocks": blocks.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<String, Value>>(),
-        "images": { "count": image_count, "returned": images.len(), "items": images },
-        "dimensions": dimensions,
-        "hatches": hatches,
-        "degenerate": degenerate,
+        "texts": { "count": facts.text_count, "returned": facts.texts.len(), "items": facts.texts },
+        "blocks": facts.blocks.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<String, Value>>(),
+        "images": { "count": facts.image_count, "returned": facts.images.len(), "items": facts.images },
+        "dimensions": facts.dimensions,
+        "hatches": facts.hatches,
+        "degenerate": facts.degenerate,
         "gaps": gaps,
         "notes": notes,
         "message": message,
@@ -431,7 +461,7 @@ fn entity_length(kind: &EntityKind) -> Option<f64> {
             Some(t)
         }
         EntityKind::Spline(s) => {
-            let pts = s.tessellate(0.05);
+            let pts = s.tessellate(LENGTH_TOL);
             Some(pts.windows(2).filter_map(|w| w.first().zip(w.get(1)).map(|(a, b)| a.dist(*b))).sum())
         }
         EntityKind::Ellipse(e) => {
@@ -529,41 +559,31 @@ fn unit_name(insunits: i64) -> &'static str {
     }
 }
 
-/// The plain-language report: what is here, how big it is, how it measures, and what stands out.
-#[allow(clippy::too_many_arguments)]
-fn narrative(
-    spaces: &[String],
-    total: usize,
-    counts: &BTreeMap<&'static str, usize>,
-    extents: Option<(Vec2, Vec2)>,
-    unit: &str,
-    total_length: f64,
-    closed_count: usize,
-    closed_area: f64,
-    open_contours: usize,
-    layers: &[Value],
-    text_count: usize,
-    texts: &[Value],
-    image_count: usize,
-) -> String {
+/// The plain-language report: what is here, how big it is, how it measures, what stands out.
+fn narrative(facts: &Facts, spaces: &[String], unit: &str) -> String {
+    use std::fmt::Write as _;
+
     let mut out = String::new();
     let scope = spaces.join(", ");
+    let total: usize = facts.counts.values().sum();
     if total == 0 {
         return format!("{scope} is empty: nothing to describe.");
     }
-    out.push_str(&format!("{scope} holds {total} object(s)"));
-    let mut top: Vec<(&&str, &usize)> = counts.iter().collect();
+    let _ = write!(out, "{scope} holds {total} object(s)");
+    let mut top: Vec<(&&str, &usize)> = facts.counts.iter().collect();
     top.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
-    let kinds: Vec<String> = top.iter().take(6).map(|(k, n)| format!("{n} {}", plural(k, **n))).collect();
+    let kinds: Vec<String> = top.iter().take(NARRATIVE_KINDS).map(|(k, n)| format!("{n} {}", plural(k, **n))).collect();
     if !kinds.is_empty() {
-        out.push_str(&format!(": {}", kinds.join(", ")));
-        if top.len() > 6 {
-            out.push_str(&format!(", and {} more type(s)", top.len() - 6));
+        let _ = write!(out, ": {}", kinds.join(", "));
+        if top.len() > NARRATIVE_KINDS {
+            let _ = write!(out, ", and {} more type(s)", top.len() - NARRATIVE_KINDS);
         }
     }
     out.push('.');
-    if let Some((min, max)) = extents {
-        out.push_str(&format!(
+    if !facts.extents.is_empty() {
+        let (min, max) = (facts.extents.min, facts.extents.max);
+        let _ = write!(
+            out,
             " Extents {} × {} {unit}, from ({}, {}) to ({}, {}).",
             fmt_num(max.x - min.x),
             fmt_num(max.y - min.y),
@@ -571,33 +591,37 @@ fn narrative(
             fmt_num(min.y),
             fmt_num(max.x),
             fmt_num(max.y),
-        ));
+        );
     }
-    if total_length > 0.0 {
-        out.push_str(&format!(" Drawn length totals {}.", fmt_num(total_length)));
+    if facts.total_length > 0.0 {
+        let _ = write!(out, " Drawn length totals {}.", fmt_num(facts.total_length));
     }
-    if closed_count > 0 {
-        out.push_str(&format!(" {closed_count} closed shape(s) enclose {}.", fmt_num(closed_area)));
+    if facts.closed > 0 {
+        let _ = write!(out, " {} closed shape(s) enclose {}.", facts.closed, fmt_num(facts.closed_area));
     }
-    if open_contours > 0 {
-        out.push_str(&format!(" {open_contours} open contour(s) are not closed.",));
+    if facts.open_contours > 0 {
+        let _ = write!(out, " {} open contour(s) are not closed.", facts.open_contours);
     }
-    let used: Vec<String> =
-        layers.iter().filter_map(|l| Some(format!("{} ({})", l.get("name")?.as_str()?, l.get("objects")?.as_u64()?))).take(6).collect();
+    let used: Vec<String> = facts.layers.iter().take(NARRATIVE_LAYERS).map(|(name, (n, _))| format!("{name} ({n})")).collect();
     if !used.is_empty() {
-        out.push_str(&format!(" Layers in use: {}.", used.join(", ")));
+        let _ = write!(out, " Layers in use: {}.", used.join(", "));
     }
-    if text_count > 0 {
-        let sample: Vec<String> =
-            texts.iter().filter_map(|t| t.get("text").and_then(Value::as_str)).take(4).map(|t| format!("\"{}\"", truncate(t, 40))).collect();
-        out.push_str(&format!(" {text_count} text(s)"));
+    if facts.text_count > 0 {
+        let sample: Vec<String> = facts
+            .texts
+            .iter()
+            .filter_map(|t| t.get("text").and_then(Value::as_str))
+            .take(NARRATIVE_TEXTS)
+            .map(|t| format!("\"{}\"", truncate(t, NARRATIVE_SAMPLE_CHARS)))
+            .collect();
+        let _ = write!(out, " {} text(s)", facts.text_count);
         if !sample.is_empty() {
-            out.push_str(&format!(", including {}", sample.join(", ")));
+            let _ = write!(out, ", including {}", sample.join(", "));
         }
         out.push('.');
     }
-    if image_count > 0 {
-        out.push_str(&format!(" {image_count} raster reference(s)."));
+    if facts.image_count > 0 {
+        let _ = write!(out, " {} raster reference(s).", facts.image_count);
     }
     out
 }

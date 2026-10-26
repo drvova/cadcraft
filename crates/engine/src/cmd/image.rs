@@ -26,6 +26,12 @@ pub const MAX_TRACE_PIXELS: u64 = 16 * 1024 * 1024;
 pub const MAX_TRACE_POINTS: usize = 400_000;
 /// Most contours IMAGETRACE keeps.
 pub const MAX_TRACE_CONTOURS: usize = 4_096;
+/// Half a level step: a sample exactly at the threshold counts as inside, so a pure
+/// black-and-white picture (whose Otsu threshold is 0) still traces its black pixels.
+const LEVEL_BIAS: f64 = 0.5;
+/// Crossings are joined at 1/4096 pixel — finer than any sub-pixel interpolation produces, so
+/// two segments that meet do meet at the same key.
+const CHAIN_QUANT: f64 = 4096.0;
 /// Most bytes read for one image (the renderer's own cap).
 const MAX_IMAGE_BYTES: u64 = cadcraft_render::raster_image::MAX_IMAGE_BYTES;
 
@@ -397,10 +403,9 @@ fn run_trace(s: &mut Session, p: &Value) -> Result<Value> {
             _ => return Err(bad(cmd, "`maxPoints` must be 3 to 4000000")),
         },
     };
-    let mut gray = gray;
-    if blur > 0 {
-        gray.level = box_blur(&gray.level, gray.w, gray.h, blur);
-    }
+    // A little blur removes sensor noise before the threshold; afterwards the levels are read
+    // only, so the picture is frozen here.
+    let gray = if blur > 0 { Gray { level: box_blur(&gray.level, gray.w, gray.h, blur), ..gray } } else { gray };
     let (contours, mut capped) = trace_contours(&gray, f64::from(threshold), mode, closed, simplify);
     let mut sorted = contours;
     sorted.sort_by(|a, b| b.area.total_cmp(&a.area));
@@ -602,10 +607,8 @@ fn trace_contours(gray: &Gray, iso: f64, mode: Mode, closed: bool, simplify: f64
     let inside = |x: usize, y: usize| -> f64 {
         match mode {
             Mode::Alpha => f64::from(gray.alpha.as_ref().map(|a| a[y * w + x]).unwrap_or(255)) - iso,
-            // A level exactly at the threshold counts as inside, so a pure black-and-white
-            // picture (whose Otsu threshold is 0) still traces its black pixels.
-            Mode::Dark => iso - f64::from(gray.level[y * w + x]) + 0.5,
-            Mode::Light => f64::from(gray.level[y * w + x]) - iso + 0.5,
+            Mode::Dark => iso - f64::from(gray.level[y * w + x]) + LEVEL_BIAS,
+            Mode::Light => f64::from(gray.level[y * w + x]) - iso + LEVEL_BIAS,
         }
     };
     const MAX_SEGMENTS: usize = 6_000_000;
@@ -669,7 +672,7 @@ fn trace_contours(gray: &Gray, iso: f64, mode: Mode, closed: bool, simplify: f64
 
 /// Chain segments into outlines: joined at quantized endpoints, so sub-pixel crossings still meet.
 fn chain(segments: Vec<(Vec2, Vec2)>, closed: bool, simplify: f64) -> Vec<Traced> {
-    let key = |p: Vec2| ((p.x * 4096.0).round() as i64, (p.y * 4096.0).round() as i64);
+    let key = |p: Vec2| ((p.x * CHAIN_QUANT).round() as i64, (p.y * CHAIN_QUANT).round() as i64);
     let mut ends: std::collections::HashMap<(i64, i64), Vec<usize>> = std::collections::HashMap::new();
     for (i, (a, b)) in segments.iter().enumerate() {
         ends.entry(key(*a)).or_default().push(i);
