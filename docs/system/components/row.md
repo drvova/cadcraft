@@ -1,0 +1,99 @@
+# Row
+
+## Description
+A list row: the full-width clickable band that carries one entry of a list, menu or pane.
+
+source `crates/ui-egui/src/widgets.rs`, status `ready`.
+Foundation: hand-rolled. Traps checked: trap/list-dead-gap, trap/control-height, trap/hover-beats-focus.
+
+### Foundation
+Not applicable: hand-rolled — the recipe is measured from Cursor's CSS into `theme.rs` constants; no registry item ships it.
+
+## Examples
+Default: a row in a list.
+
+Real uses, 0 call sites (`rg 'widgets::row' crates/ui-egui/src`): the canonical entry lands first; the pilot and safe-moves steps move the surfaces onto it.
+
+### Example files
+| File | Covers | Caption |
+|---|---|---|
+| `docs/system/examples/row/default.rs` | default | A row in a list, with its content painted into the rect. |
+| `docs/system/examples/row/in-card.rs` | composition:Card | A selected row inside a card. |
+
+## Variants
+
+### Not applicable: single signature
+One row chrome; `selected` is a state and the content is the caller's.
+
+## States
+| State | Trigger | What the user can do | Shown by, besides color | Checked by |
+|---|---|---|---|---|
+| Rest | Nothing is over the row. | Click it. | Nothing; the caller's content shows. | by hand |
+| Hover | The pointer is over it. | Click it. | A `control_hover` fill at the 4px radius. | by hand |
+| Selected | `selected` is true. | Click it, or click another row. | A `select_bg` fill that outranks hover. | by hand |
+| Focused | Keyboard focus arrives by Tab. | Enter or Space clicks it. | A 1px ring just inside the 4px radius. | by hand |
+
+### State precedence
+- Hover and Selected: Selected wins. A selected row keeps the selection fill under the pointer.
+- Hover and Focused: Focused wins. The ring stays drawn while the pointer is over the row.
+
+### Motion
+Not applicable: no motion — the recipes paint each state directly, and the app's Animation preference governs egui's own widgets.
+
+## Props
+Signature: `pub fn row(ui: &mut egui::Ui, selected: bool) -> egui::Response`.
+- `selected`: the selection fill for the active entry; the caller paints the row's content into the returned response's rect and names it.
+
+## Usage
+
+### When to use
+- A list, a menu or a pane shows one entry per line and the whole line is the hit area.
+
+### When not to use
+- The line runs one labelled action. Use `button` instead.
+- The line is a status word. Use `chip` instead.
+
+### Rules
+- `rule/row-recipe`: When a list row is drawn, use `CONTROL_H_ROW` (22px) at `RADIUS_CARD` (4px), because `.explorer-item` measures `height:22px; line-height:22px` and `.action-menu-item` measures `border-radius:4px`. Evidence: measured 22px height and 4px radius, `.design-system/cursor/recipes.md` §2. Check: test crates/ui-egui/src/widgets.rs.
+  - Don't: rows at 20px and 26px in the same list.
+  - Do: `row(ui, selected)` and paint the content into its rect.
+- `rule/row-states`: When a row is hovered or selected, fill with `control_hover` or `select_bg`, because `.sidebar-list-item` hovers `list.hoverBackground` and selects `list.inactiveSelectionBackground`. Evidence: measured 2 fills, `.design-system/cursor/recipes.md` §2. Check: review crates/ui-egui/src/widgets.rs.
+  - Don't: paint `control_hover*0.5` by hand.
+  - Do: pass `selected` and let the row choose the fill.
+
+### Content
+- Not applicable: the row's content is the caller's.
+
+### Anti-slop
+- `rule/row-canonical`: When a list needs a row, call `row` rather than painting a fill, because the inventory counted rows at radius 1, 2, 3, 6 and 8 with five hover alphas. Evidence: app 5/5 row radii, `.design-system/boss/triage/inventory.md` §4. Check: review crates/ui-egui/src/widgets.rs.
+  - Don't: `p.rect_filled(r, 2.0, if hovered { t.cmd_keyword_hover } else { t.list_row })` in a list.
+  - Do: `let r = row(ui, selected);` then paint the content into `r.rect`.
+
+### Limits
+- Not applicable: no count or length limit; the list scrolls and the caller clips the text.
+
+## Accessibility
+Rests on the painted rect with `Sense::click()`; the caller adds the widget info that names the row.
+
+### Keyboard
+| Key | Where focus is | Effect | Focus after | Checked by |
+|---|---|---|---|---|
+| Tab | Anywhere | Moves focus to the row. | The row. | by hand |
+| Enter, Space | The row | Clicks it through egui's fake primary click. | The row. | by hand |
+
+### ARIA
+| Part | Role | Accessible name from | States and properties | Announced | Checked by |
+|---|---|---|---|---|---|
+| The row rect | `button`, refined by the caller | the caller's `widget_info` | `selected` when the caller passes it | The caller's label, as a button. | by hand |
+
+## Tokens
+| Part | State | Token |
+|---|---|---|
+| Fill | hover | `Tokens::control_hover` |
+| Fill | selected | `Tokens::select_bg` |
+| Height, radius | all | `theme::CONTROL_H_ROW`, `theme::RADIUS_CARD` |
+| Focus ring | focused | `theme::FOCUS_OUTLINE_W`, `theme::FOCUS_OUTLINE_OFFSET`, `Tokens::accent` |
+
+## Related
+- `chip`: when the line is a status rather than an entry.
+- `card`: the surface a row list usually sits in.

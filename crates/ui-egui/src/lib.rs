@@ -52,6 +52,7 @@ pub mod shortcut_menus;
 pub mod theme;
 pub mod viewcube;
 pub mod vpscale;
+pub mod widgets;
 
 pub mod exchange;
 

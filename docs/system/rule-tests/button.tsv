@@ -1,0 +1,5 @@
+rule_id	falsify	negation	two_agent	sweep	verdict	notes
+rule/button-recipe	pass	pass	n/a: falsify and sweep cover it	pass	ship	
+rule/button-states	pass	pass	n/a: falsify and sweep cover it	pass	ship	
+rule/button-focus	pass	pass	n/a: falsify and sweep cover it	pass	ship	
+rule/button-canonical	pass	pass	n/a: single-writer step, the two-agent test is deferred	n/a: no call sites yet, the pilot and safe-moves steps adopt the widget	ship	

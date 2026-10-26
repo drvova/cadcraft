@@ -125,6 +125,11 @@ pub struct Tokens {
     pub list_row: Color32,
     /// Transient warnings (status bar messages).
     pub warn: Color32,
+    /// Errors and destructive actions (Cursor's `errorForeground`); the palette's pink-red.
+    pub error: Color32,
+    /// Text and icons that read on an [`Tokens::accent`] or [`Tokens::error`] fill (Cursor's
+    /// `button.foreground`).
+    pub on_accent: Color32,
     /// The drawing-area crosshair cursor and its pick box.
     pub crosshair: Color32,
     /// The sheet of paper on a layout tab.
@@ -181,6 +186,8 @@ impl Tokens {
         list_bg: Color32::from_rgb(0x1c, 0x1c, 0x1c),
         list_row: Color32::from_rgb(0x2d, 0x2d, 0x2d),
         warn: Color32::from_rgb(0xf1, 0xb4, 0x67),
+        error: Color32::from_rgb(0xe3, 0x46, 0x71),
+        on_accent: Color32::from_rgb(0x14, 0x14, 0x14),
         crosshair: Color32::from_rgb(0xe4, 0xe4, 0xe4),
         paper: Color32::from_rgb(0xfc, 0xfc, 0xfc),
     };
@@ -216,6 +223,7 @@ impl Tokens {
         list_bg: Color32::from_rgb(0xff, 0xff, 0xff),
         list_row: Color32::from_rgb(0xe8, 0xe8, 0xe8),
         warn: Color32::from_rgb(0x8a, 0x53, 0x00),
+        on_accent: Color32::from_rgb(0xf1, 0xf1, 0xf1),
         ..Tokens::DARK
     };
 
@@ -249,6 +257,114 @@ impl Tokens {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Recipe constants: the measured values behind the canonical widgets
+// ([`crate::widgets`]). Every number quotes the Cursor rule it was measured from in
+// `.design-system/cursor/recipes.md`; the widget functions read these, never literals.
+// ---------------------------------------------------------------------------
+
+/// Control and input radius: `.cursor-button { border-radius:2px }` and
+/// `.monaco-inputbox { border-radius:2px }` (§3, §4). 2px is the second rung of the measured
+/// radius histogram (×65).
+pub const RADIUS_CONTROL: f32 = 2.0;
+
+/// Small-control radius: `.composer-button-secondary { border-radius:3px }` (§1.9) and
+/// `.picker-menu-search-input { border-radius:3px }` (§4).
+pub const RADIUS_SMALL: f32 = 3.0;
+
+/// Card, input-box and menu-item radius: `.composer-history-pane { border-radius:4px }`,
+/// `.monaco-menu .action-menu-item { border-radius:4px }` and `.composer-bar-button
+/// { border-radius:4px }` (§1.5, §1.17, §6). The modal radius of the histogram (×76).
+pub const RADIUS_CARD: f32 = 4.0;
+
+/// Composer chrome and menu radius: the bar's `border-top-left/right-radius:5px` (§1.1) and
+/// `.monaco-menu { border-radius:5px }` (§6).
+pub const RADIUS_COMPOSER: f32 = 5.0;
+
+/// Pill radius: `.monaco-count-badge { border-radius:11px }` (§7).
+pub const RADIUS_PILL: f32 = 11.0;
+
+/// Wide pill radius: the activity-bar badge's `border-radius:20px` (§2).
+pub const RADIUS_PILL_WIDE: f32 = 20.0;
+
+/// The measured spacing ladder (recipes.md §10): the padding and gap histograms share the rungs
+/// 2, 3, 4, 5, 6, 8, 10 and 12 (16 is the next rung up). `GAP_4` is the default gap.
+pub const GAP_2: f32 = 2.0;
+pub const GAP_3: f32 = 3.0;
+pub const GAP_4: f32 = 4.0;
+pub const GAP_5: f32 = 5.0;
+pub const GAP_6: f32 = 6.0;
+pub const GAP_8: f32 = 8.0;
+pub const GAP_10: f32 = 10.0;
+pub const GAP_12: f32 = 12.0;
+pub const GAP_16: f32 = 16.0;
+
+/// The default gap: `gap:4px` is the histogram's modal value (×53).
+pub const GAP_DEFAULT: f32 = GAP_4;
+
+/// `.cursor-button`'s height: 18px line-height + 4px + 4px padding + 1px + 1px hairline border =
+/// 28px (§3).
+pub const CONTROL_H_BUTTON: f32 = 28.0;
+
+/// The input height: the view-pane filter input measures `height:24px` with the
+/// `.monaco-inputbox` inner `padding:4px 6px` (§4).
+pub const CONTROL_H_INPUT: f32 = 24.0;
+
+/// List row height: `.explorer-item { height:22px; line-height:22px }` (§2).
+pub const CONTROL_H_ROW: f32 = 22.0;
+
+/// Tab height: 35px normal (§5).
+pub const CONTROL_H_TAB: f32 = 35.0;
+
+/// Tab height, compact: 22px (§5).
+pub const CONTROL_H_TAB_COMPACT: f32 = 22.0;
+
+/// `.cursor-button { padding:4px 8px }` (§3).
+pub const BUTTON_PAD_X: f32 = 8.0;
+pub const BUTTON_PAD_Y: f32 = 4.0;
+
+/// `.monaco-inputbox>.ibwrapper>.input { padding:4px 6px }` (§4).
+pub const FIELD_PAD_X: f32 = 6.0;
+pub const FIELD_PAD_Y: f32 = 4.0;
+
+/// `.monaco-count-badge { padding:3px 6px; min-height:18px; min-width:18px }` (§7).
+pub const CHIP_PAD_X: f32 = 6.0;
+pub const CHIP_PAD_Y: f32 = 3.0;
+pub const CHIP_MIN_H: f32 = 18.0;
+pub const CHIP_MIN_W: f32 = 18.0;
+
+/// The card's padding: 16px, the rung above the composer's inner blocks
+/// (`.composer-parallel-apply-block { padding:8px }`, §1.17) and the histogram's 16px rung (§10).
+pub const CARD_PADDING: f32 = 16.0;
+
+/// `.cursor-button { font-size:14px }` (§3).
+pub const FONT_BUTTON: f32 = 14.0;
+
+/// `.monaco-count-badge { font-size:11px; line-height:11px }` (§7).
+pub const FONT_CHIP: f32 = 11.0;
+
+/// The row and section-label size: `.context-list-item` and `.picker-menu-item` measure
+/// `font-size:12px` (§2, §6).
+pub const FONT_LABEL: f32 = 12.0;
+
+/// Cursor's hairline: every measured border is `1px solid` (`.cursor-button`'s focus ring,
+/// `.monaco-inputbox`, `.composer-history-pane`).
+pub const HAIRLINE: f32 = 1.0;
+
+/// Hover opacity: `.cursor-button-primary-clickable:not(.disabled):hover { opacity:.8 }` (§3).
+pub const HOVER_OPACITY: f32 = 0.8;
+
+/// Disabled opacity: `.cursor-button-primary.disabled { opacity:.5 }` (§3; `.monaco-button.disabled`
+/// uses `.4`).
+pub const DISABLED_OPACITY: f32 = 0.5;
+
+/// The focus ring: `outline:1px solid var(--vscode-focusBorder)` (§3, §4) …
+pub const FOCUS_OUTLINE_W: f32 = 1.0;
+
+/// … at `outline-offset:-1px`, so the ring sits just inside the control's edge and follows its
+/// radius (§3, §4, §8). The `:focus-visible` variant uses 2px at -2px.
+pub const FOCUS_OUTLINE_OFFSET: f32 = -1.0;
 
 /// The thin crosshair and pickbox contrast with the surface under their centre.
 pub(crate) fn crosshair_color(background: Color32) -> Color32 {
@@ -730,9 +846,11 @@ fn visuals(theme: Theme) -> Visuals {
     // Depth comes from luminance steps, not from shadow; popups keep a whisper of one.
     let shadow = Color32::from_black_alpha(if theme == Theme::Dark { 90 } else { 40 });
     v.popup_shadow = egui::epaint::Shadow { offset: [0, 4], blur: 12, spread: 0, color: shadow };
-    // Cursor's radius scale: 6 chip, 8 control, 10 card/window, 12 composer.
-    v.window_corner_radius = egui::CornerRadius::same(10);
-    v.menu_corner_radius = egui::CornerRadius::same(8);
+    // Cursor's measured radii (recipes.md §10): the chrome surfaces — menus (`.monaco-menu`) and
+    // the composer bar — are 5px, cards and menu items 4px. The old 6/8/10/12 scale came from a
+    // third-party clone's design doc, not from Cursor.
+    v.window_corner_radius = egui::CornerRadius::same(RADIUS_COMPOSER as u8);
+    v.menu_corner_radius = egui::CornerRadius::same(RADIUS_COMPOSER as u8);
     v
 }
 
@@ -747,8 +865,8 @@ pub fn apply(ctx: &egui::Context, theme: Theme, follow_system: bool) {
     // window appearance (winit then stops reporting OS changes) and the app would never follow again.
     ctx.set_theme(if follow_system { egui::ThemePreference::System } else { egui::ThemePreference::from(theme) });
     ctx.all_styles_mut(|s| {
-        s.spacing.item_spacing = egui::vec2(6.0, 4.0);
-        s.spacing.button_padding = egui::vec2(6.0, 3.0);
+        s.spacing.item_spacing = egui::vec2(GAP_6, GAP_DEFAULT);
+        s.spacing.button_padding = egui::vec2(GAP_6, GAP_3);
         s.spacing.interact_size.y = 20.0;
         s.text_styles.insert(egui::TextStyle::Body, body());
         s.text_styles.insert(egui::TextStyle::Button, body());
