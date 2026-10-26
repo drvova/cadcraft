@@ -4,10 +4,10 @@
 use std::collections::HashSet;
 
 use cadcraft_engine::Input;
-use egui::{Key, Pos2, Rect, Sense, Stroke, pos2, vec2};
+use egui::{Color32, Key, Pos2, Rect, Sense, Stroke, pos2, vec2};
 
 use crate::CadApp;
-use crate::theme::Tokens;
+use crate::theme::{self, Tokens};
 
 #[derive(Default)]
 pub struct CmdLine {
@@ -467,13 +467,18 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect) {
     if !lines.is_empty() {
         let lh = 16.0;
         let hr = Rect::from_min_size(pos2(bar.left(), bar.top() - lh * lines.len() as f32 - 4.0), vec2(w, lh * lines.len() as f32 + 2.0));
-        p.rect_filled(hr, 3.0, t.cmd_history);
+        p.rect_filled(hr, bar_radius(), t.cmd_bg);
         for (i, l) in lines.iter().enumerate() {
             p.text(pos2(hr.left() + 8.0, hr.top() + 1.0 + lh * i as f32), egui::Align2::LEFT_TOP, l, crate::theme::small(), t.text_dim);
         }
     }
-    p.rect_filled(bar, 8.0, t.cmd_bg);
-    p.rect_stroke(bar, 8.0, Stroke::new(1.0, t.cmd_border), egui::StrokeKind::Inside);
+    // The bar's chrome, Cursor's `.composer-bar`: `border-top-left/right-radius:5px` with the
+    // bottom corners square, `box-shadow:0 0 4px 1px`, and a 1px border that takes the focus
+    // colour while the bar holds the keyboard (recipes.md §1.1).
+    let radius = bar_radius();
+    p.add(egui::epaint::Shadow { offset: [0, 0], blur: 4, spread: 1, color: BAR_SHADOW }.as_shape(bar, radius));
+    p.rect_filled(bar, radius, t.cmd_bg);
+    p.rect_stroke(bar, radius, Stroke::new(theme::HAIRLINE, bar_border(ui, &t)), egui::StrokeKind::Inside);
     // Prompt glyph.
     p.text(pos2(bar.left() + 8.0, bar.center().y), egui::Align2::LEFT_CENTER, ">_", crate::theme::mono(), t.text_dim);
     let mut x = bar.left() + 30.0;
@@ -578,11 +583,11 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect) {
         if app.cmd.expanded { crate::icons::Icon::ChevronDown } else { crate::icons::Icon::ChevronUp },
         false,
     );
-    // AutoComplete list.
+    // AutoComplete list: `t.list_bg` behind `widgets::row` rows — 22px tall at radius 4.
     if !app.session.prompting() {
         let sug = suggestions(&app.cmd.buffer);
         if !sug.is_empty() {
-            let rh = 20.0;
+            let rh = theme::CONTROL_H_ROW;
             let lr = Rect::from_min_size(
                 pos2(
                     bar.left() + 24.0,
@@ -590,14 +595,14 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect) {
                 ),
                 vec2((bar.width() - 24.0).max(0.0), rh * sug.len() as f32),
             );
-            p.rect_filled(lr, 3.0, t.list_bg);
-            p.rect_stroke(lr, 6.0, Stroke::new(1.0, t.cmd_border), egui::StrokeKind::Inside);
+            p.rect_filled(lr, theme::RADIUS_CARD, t.list_bg);
+            p.rect_stroke(lr, theme::RADIUS_CARD, Stroke::new(theme::HAIRLINE, t.cmd_border), egui::StrokeKind::Inside);
             for (i, s) in sug.iter().enumerate() {
                 let r = Rect::from_min_size(pos2(lr.left(), lr.top() + rh * i as f32), vec2(lr.width(), rh));
-                let resp = ui.interact(r, ui.scope_id().with(("sug", i)), Sense::click());
-                if resp.hovered() || i == 0 {
-                    p.rect_filled(r.shrink(1.0), 2.0, if resp.hovered() { t.cmd_keyword_hover } else { t.list_row });
-                }
+                let mut row_ui =
+                    ui.new_child(egui::UiBuilder::new().max_rect(r).layout(egui::Layout::left_to_right(egui::Align::Center)).id_salt(("sug", i)));
+                // The first row is the Tab target, so it reads selected; the pointer's row hovers.
+                let resp = crate::widgets::row(&mut row_ui, i == 0);
                 p.text(Pos2::new(r.left() + 8.0, r.center().y), egui::Align2::LEFT_CENTER, &s.display, crate::theme::body(), t.text);
                 p.text(
                     Pos2::new(r.right() - 8.0, r.center().y),
@@ -613,6 +618,33 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect) {
             }
         }
     }
+}
+
+/// The bar's top-corner radius: `.composer-bar` chrome measures `border-top-left-radius:5px;
+/// border-top-right-radius:5px` with `border-bottom:none` (recipes.md §1.1), so the bottom
+/// corners stay square where the bar meets the drawing.
+fn bar_radius() -> egui::CornerRadius {
+    egui::CornerRadius { nw: theme::RADIUS_COMPOSER as u8, ne: theme::RADIUS_COMPOSER as u8, sw: 0, se: 0 }
+}
+
+/// `.composer-bar`'s `box-shadow: 0 0 4px 1px var(--vscode-widget-shadow)` (§1.1); the theme's
+/// `widget.shadow` measures `#111111eb` (§11). The token source (`theme.rs`) belongs to the
+/// harden writer, so the value lives here until it becomes a `theme::` constant (a gate).
+const BAR_SHADOW: Color32 = Color32::from_rgba_unmultiplied_const(0x11, 0x11, 0x11, 0xeb);
+
+/// `.composer-bar`'s `transition: border-color 50ms ease-in-out` (§1.1).
+const BAR_TRANSITION: f32 = 0.05;
+
+/// The bar's border: `1px solid commandCenter-inactiveBorder`, becoming
+/// `commandCenter-activeBorder` while the bar has focus (§1.1), blended over the recipe's 50ms
+/// transition. The bar holds the keyboard while no other text field does — the signal
+/// [`keyboard`] reads before it takes typing — so the border shows where typing will land. The
+/// Animation preference (a zero `animation_time`) snaps the change instead of gliding it.
+fn bar_border(ui: &egui::Ui, t: &Tokens) -> Color32 {
+    let focused = !ui.ctx().egui_wants_keyboard_input();
+    let time = ui.style().animation_time.min(BAR_TRANSITION);
+    let f = ui.ctx().animate_value_with_time(egui::Id::unique("cc_cmdline_border_focus"), if focused { 1.0 } else { 0.0 }, time);
+    t.cmd_border.lerp_to_gamma(t.accent, f)
 }
 
 /// The command line's areas, laid out like [`show`] draws them.
@@ -645,7 +677,7 @@ fn zones(app: &CadApp, canvas: Rect, bar: Rect) -> Zones {
         let k = suggestions(&app.cmd.buffer).len();
         if k > 0 {
             let above = if n == 0 { 0.0 } else { LINE_H * n as f32 + 6.0 };
-            all = all.union(Rect::from_min_size(pos2(bar.left(), bar.top() - 6.0 - 20.0 * k as f32 - above), vec2(bar.width(), 1.0)));
+            all = all.union(Rect::from_min_size(pos2(bar.left(), bar.top() - 6.0 - theme::CONTROL_H_ROW * k as f32 - above), vec2(bar.width(), 1.0)));
         }
     }
     Zones { lines, window, chevron: Rect::from_center_size(pos2(bar.right() - 14.0, bar.center().y), vec2(24.0, 22.0)), grip, all }
@@ -691,11 +723,13 @@ fn history(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect, bar: Rect) {
     }
 }
 
-/// The expanded history: the whole command log, scrollable, newest at the bottom.
+/// The expanded history: the whole command log, scrollable, newest at the bottom. It reads the
+/// bar's surface — `cmd_bg` inside `cmd_border` at the composer's radius — so the window and the
+/// bar under it are one material.
 fn history_window(app: &CadApp, ui: &mut egui::Ui, r: Rect) {
     let t = Tokens::get();
-    ui.painter().rect_filled(r, 6.0, t.cmd_bg);
-    ui.painter().rect_stroke(r, 3.0, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+    ui.painter().rect_filled(r, theme::RADIUS_COMPOSER, t.cmd_bg);
+    ui.painter().rect_stroke(r, theme::RADIUS_COMPOSER, Stroke::new(theme::HAIRLINE, t.cmd_border), egui::StrokeKind::Inside);
     let inner = r.shrink2(vec2(8.0, 3.0));
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
     child.spacing_mut().item_spacing.y = 0.0;

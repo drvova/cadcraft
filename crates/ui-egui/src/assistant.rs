@@ -27,7 +27,7 @@ use egui::{Align, Color32, RichText, vec2};
 use serde_json::Value;
 
 use crate::control::{ControlRequest, Outcome};
-use crate::theme::Tokens;
+use crate::theme::{self, Tokens};
 use crate::tl;
 
 /// How long one tool call may take before the model is told it did not finish. Generous: a
@@ -954,10 +954,12 @@ fn composer(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &mu
         };
         attachments.push((i, name, thumb));
     }
-    // What the reader queued while the turn runs, in order, each droppable.
+    // What the reader queued while the turn runs, in order, each droppable. The rows keep their
+    // shape and take the composer recipe's 6px inset and gap (§1.2).
     for (i, text) in queued.iter().enumerate() {
         ui.horizontal(|ui| {
-            ui.add_space(2.0);
+            ui.spacing_mut().item_spacing.x = theme::GAP_6;
+            ui.add_space(theme::GAP_6);
             ui.label(RichText::new(tl!("queued")).color(t.text_faint).small());
             let line = text.lines().next().unwrap_or("").trim();
             let line = if line.chars().count() > 64 { format!("{}…", line.chars().take(63).collect::<String>()) } else { line.to_string() };
@@ -969,38 +971,51 @@ fn composer(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &mu
             });
         });
     }
-    egui::Frame::new().fill(t.field).stroke(egui::Stroke::new(1.0, t.border)).corner_radius(8.0).inner_margin(egui::Margin::symmetric(10, 8)).show(
-        ui,
-        |ui| {
+    // `.full-input-box`'s `solid 1px` border, `border` at rest and the focus colour while the
+    // field holds keyboard focus (§1.2). The field's id is explicit so the focus read and the
+    // widget agree across passes.
+    let field_id = ui.make_persistent_id("assistant-composer-field");
+    let field_focused = ui.memory(|m| m.has_focus(field_id));
+    let frame =
+        egui::Frame::new().fill(t.field).corner_radius(theme::RADIUS_CARD).inner_margin(egui::Margin::same(theme::GAP_6 as i8)).show(ui, |ui| {
+            // `.full-input-box { border-radius:0.25rem; padding:6px; gap:6px }` (§1.2): the box's
+            // children sit 6px apart.
+            ui.spacing_mut().item_spacing = egui::vec2(theme::GAP_6, theme::GAP_6);
             ui.set_width(ui.available_width());
             if !attachments.is_empty() {
                 ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(theme::GAP_6, theme::GAP_4);
                     for (i, name, thumb) in &attachments {
-                        egui::Frame::new().fill(t.control).corner_radius(6.0).inner_margin(egui::Margin::symmetric(6, 4)).show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                match thumb {
-                                    Some(tex) => {
-                                        let side = 34.0;
-                                        let size = tex.size_vec2();
-                                        let scale = (side / size.x).min(side / size.y).min(1.0);
-                                        ui.add(egui::Image::new(tex).fit_to_exact_size(size * scale));
+                        egui::Frame::new()
+                            .fill(t.control)
+                            .corner_radius(theme::RADIUS_CARD)
+                            .inner_margin(egui::Margin::symmetric(theme::GAP_6 as i8, theme::GAP_4 as i8))
+                            .show(ui, |ui| {
+                                ui.spacing_mut().item_spacing.x = theme::GAP_4;
+                                ui.horizontal(|ui| {
+                                    match thumb {
+                                        Some(tex) => {
+                                            let side = 34.0;
+                                            let size = tex.size_vec2();
+                                            let scale = (side / size.x).min(side / size.y).min(1.0);
+                                            ui.add(egui::Image::new(tex).fit_to_exact_size(size * scale));
+                                        }
+                                        None => {
+                                            ui.label(RichText::new(tl!("picture")).color(t.text_faint).small());
+                                        }
                                     }
-                                    None => {
-                                        ui.label(RichText::new(tl!("picture")).color(t.text_faint).small());
+                                    ui.label(RichText::new(name).color(t.text_dim).small());
+                                    if ui.add(egui::Button::new(RichText::new("×").color(t.text_faint).small()).frame(false)).clicked() {
+                                        actions.detach = Some(*i);
                                     }
-                                }
-                                ui.label(RichText::new(name).color(t.text_dim).small());
-                                if ui.add(egui::Button::new(RichText::new("×").color(t.text_faint).small()).frame(false)).clicked() {
-                                    actions.detach = Some(*i);
-                                }
+                                });
                             });
-                        });
                     }
                 });
-                ui.add_space(4.0);
             }
             let hint = if running { tl!("Ask for a change while it works — Enter queues it") } else { tl!("Ask for a change to this drawing…") };
             let edit = egui::TextEdit::multiline(&mut app.assistant.input)
+                .id(field_id)
                 .desired_rows(2)
                 .desired_width(f32::INFINITY)
                 .frame(egui::Frame::NONE)
@@ -1018,16 +1033,20 @@ fn composer(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &mu
                     actions.send = true;
                 }
             }
-            ui.add_space(6.0);
             ui.horizontal(|ui| {
+                // `.composer-bar-input-buttons { align-items:center; display:flex; gap:4px }` (§1.3).
+                ui.spacing_mut().item_spacing.x = theme::GAP_4;
                 // The paperclip: a picture joins the next message.
-                if crate::icons::button(ui, crate::icons::Icon::Attach, 16.0, tl!("Attach a picture"), false).clicked()
+                if crate::widgets::icon_button(ui, crate::icons::Icon::Attach, 16.0, tl!("Attach a picture"), false).clicked()
                     && let Some(pick) = app.services.pick_image.as_ref()
                 {
                     actions.attach = pick();
                 }
+                // The model chip: `.composer-unified-dropdown` (§1.17) as `widgets::chip`; clicking
+                // it opens the preset menu.
                 let label = if app.assistant.provider.model.trim().is_empty() { tl!("No model") } else { app.assistant.provider.model.as_str() };
-                egui::ComboBox::from_id_salt("assistant-model-chip").selected_text(RichText::new(label).small()).width(170.0).show_ui(ui, |ui| {
+                let chip = crate::widgets::chip(ui, label, crate::widgets::ChipKind::Neutral);
+                egui::Popup::menu(&chip).show(|ui| {
                     for p in client::PRESETS {
                         let hit = app.assistant.preset == p.id;
                         let text = if p.model.is_empty() { p.label.to_string() } else { format!("{} · {}", p.label, p.model) };
@@ -1041,30 +1060,36 @@ fn composer(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &mu
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if running {
-                        let now = egui::Button::new(RichText::new(tl!("Send now")).color(t.text)).min_size(vec2(74.0, 24.0));
-                        if ui.add(now).on_hover_text(tl!("The model reads it at its next tool call")).clicked() {
+                        let now = crate::widgets::button(ui, "Send now", crate::widgets::Kind::Primary);
+                        if now.on_hover_text(tl!("The model reads it at its next tool call")).clicked() {
                             actions.send = true;
                             actions.steer_now = true;
                         }
-                        let queue = egui::Button::new(RichText::new(tl!("Queue")).color(t.canvas)).fill(t.accent).min_size(vec2(64.0, 24.0));
-                        if ui.add_enabled(!app.assistant.input.trim().is_empty(), queue).clicked() {
+                        let queue = ui
+                            .add_enabled_ui(!app.assistant.input.trim().is_empty(), |ui| {
+                                crate::widgets::button(ui, "Queue", crate::widgets::Kind::Ghost)
+                            })
+                            .inner;
+                        if queue.clicked() {
                             actions.send = true;
                         }
-                        if ui.add(egui::Button::new(RichText::new(tl!("Stop")).color(t.text_dim)).min_size(vec2(52.0, 24.0))).clicked() {
+                        if crate::widgets::button(ui, "Stop", crate::widgets::Kind::Ghost).clicked() {
                             actions.stop = true;
                         }
                     } else {
                         let ready = !app.assistant.input.trim().is_empty() || !app.assistant.attachments.is_empty();
-                        let send = egui::Button::new(RichText::new(tl!("Send")).color(t.canvas)).fill(t.accent).min_size(vec2(64.0, 24.0));
-                        if ui.add_enabled(ready, send).clicked() {
+                        let send = ui.add_enabled_ui(ready, |ui| crate::widgets::button(ui, "Send", crate::widgets::Kind::Primary)).inner;
+                        if send.clicked() {
                             actions.send = true;
                         }
                     }
                     context_meter(ui, t, &app.assistant.messages);
                 });
             });
-        },
-    );
+        });
+    // Painted over the content so the hairline reads on top.
+    let border = if field_focused { t.accent } else { t.border };
+    ui.painter().rect_stroke(frame.response.rect, theme::RADIUS_CARD, egui::Stroke::new(theme::HAIRLINE, border), egui::StrokeKind::Inside);
     if let Some(note) = app.assistant.note.clone() {
         ui.add_space(2.0);
         ui.label(RichText::new(note).color(t.compare_other).small());
