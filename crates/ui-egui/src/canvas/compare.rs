@@ -67,7 +67,7 @@ pub(super) fn paint(app: &mut CadApp, ctx: &egui::Context, p: &egui::Painter, xf
     let (added, removed, changed, name, areas, at) = (c.added.len(), c.removed.len(), c.changed.len(), c.other_name.clone(), c.regions.len(), c.at);
     let mut action = None;
     egui::Area::new(id().with("bar")).order(egui::Order::Foreground).fixed_pos(rect.center_top() + vec2(-200.0, 8.0)).show(ctx, |ui| {
-        egui::Frame::new().fill(t.cmd_bg).stroke(Stroke::new(1.0, t.cmd_border)).corner_radius(4.0).inner_margin(6.0).show(ui, |ui| {
+        egui::Frame::new().fill(t.cmd_bg).stroke(Stroke::new(1.0, t.cmd_border)).corner_radius(6.0).inner_margin(6.0).show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("■").color(t.compare_this));
                 ui.label(RichText::new(crate::tf!("Only in this drawing: {n}", n = added)).color(t.text));

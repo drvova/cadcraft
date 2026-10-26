@@ -845,7 +845,7 @@ fn activity(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, call: &cadcr
         app.assistant.expanded.insert(call.id.clone());
     }
     if open {
-        egui::Frame::new().fill(t.field).corner_radius(4.0).inner_margin(egui::Margin::symmetric(8, 6)).show(ui, |ui| {
+        egui::Frame::new().fill(t.field).corner_radius(6.0).inner_margin(egui::Margin::symmetric(8, 6)).show(ui, |ui| {
             ui.set_width(ui.available_width());
             mono(ui, t.text, &call.code());
             if let Some(m) = result {
@@ -976,7 +976,7 @@ fn composer(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &mu
             if !attachments.is_empty() {
                 ui.horizontal_wrapped(|ui| {
                     for (i, name, thumb) in &attachments {
-                        egui::Frame::new().fill(t.control).corner_radius(4.0).inner_margin(egui::Margin::symmetric(6, 4)).show(ui, |ui| {
+                        egui::Frame::new().fill(t.control).corner_radius(6.0).inner_margin(egui::Margin::symmetric(6, 4)).show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 match thumb {
                                     Some(tex) => {

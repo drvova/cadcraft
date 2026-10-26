@@ -84,8 +84,8 @@ impl Opening {
             .show(ctx, |ui| {
                 egui::Frame::NONE
                     .fill(t.panel)
-                    .stroke(egui::Stroke::new(1.0, t.accent))
-                    .corner_radius(6.0)
+                    .stroke(egui::Stroke::new(1.0, t.border))
+                    .corner_radius(10.0)
                     .inner_margin(egui::Margin::symmetric(18, 12))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {

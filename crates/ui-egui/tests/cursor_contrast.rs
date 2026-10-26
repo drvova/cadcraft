@@ -7,8 +7,13 @@ use cadcraft_ui_egui::{CadApp, Services, theme};
 use egui::{Color32, Context, Pos2, Rect, Shape, Stroke, pos2, vec2};
 use serde_json::json;
 
+/// The ink the cursor takes on a light surface ([`theme::crosshair_color`]'s own value).
 const DARK_INK: Color32 = Color32::from_rgb(0x20, 0x20, 0x20);
-const LIGHT_INK: Color32 = Color32::from_rgb(0xe8, 0xe8, 0xe8);
+/// The ink on a dark surface is the theme's crosshair token — read from it, not copied, so a
+/// palette change never makes this test assert a stale value.
+fn light_ink() -> Color32 {
+    theme::Tokens::DARK.crosshair
+}
 
 struct Canvas {
     app: CadApp,
@@ -109,11 +114,11 @@ fn cursor_strokes(shape: &Shape, at: Pos2, arms: &mut Vec<Stroke>, boxes: &mut V
 fn model_cursor_keeps_following_live_background_preferences() {
     let mut c = Canvas::new(false);
     let at = c.screen(Vec2::new(100.0, 100.0));
-    c.assert_ink(at, LIGHT_INK, "default model");
+    c.assert_ink(at, light_ink(), "default model");
     c.app.run("options", json!({"modelBackground": "#ffffff"})).unwrap();
     c.assert_ink(at, DARK_INK, "white model");
     c.app.run("options", json!({"modelBackground": null, "theme": "light"})).unwrap();
-    c.assert_ink(at, LIGHT_INK, "reset model with light interface");
+    c.assert_ink(at, light_ink(), "reset model with light interface");
 }
 
 #[test]
@@ -122,13 +127,13 @@ fn paper_and_surround_follow_the_sheet_after_pan_and_zoom() {
     let at = c.screen(Vec2::new(30.0, 40.0));
     c.assert_ink(at, DARK_INK, "white paper");
     let outside = c.screen(Vec2::new(-20.0, 40.0));
-    c.assert_ink(outside, LIGHT_INK, "gray surround");
+    c.assert_ink(outside, light_ink(), "gray surround");
 
     // Keep the pointer still while navigation moves the sheet out from underneath it.
     c.app.run("view.set", json!({"center": [500, 100], "height": 400})).unwrap();
-    c.assert_ink(at, LIGHT_INK, "paper panned away");
+    c.assert_ink(at, light_ink(), "paper panned away");
     c.app.run("view.set", json!({"center": [100, 100], "height": 1000})).unwrap();
-    c.assert_ink(at, LIGHT_INK, "paper zoomed away");
+    c.assert_ink(at, light_ink(), "paper zoomed away");
     c.app.run("view.set", json!({"center": [100, 100], "height": 400})).unwrap();
     c.assert_ink(at, DARK_INK, "paper returned");
 
@@ -136,7 +141,7 @@ fn paper_and_surround_follow_the_sheet_after_pan_and_zoom() {
     c.app.run("options", json!({"CURSORSIZE": 100})).unwrap();
     let edge = c.screen(Vec2::new(0.0, 40.0));
     c.assert_ink(edge + vec2(2.0, 0.0), DARK_INK, "just inside paper");
-    c.assert_ink(edge - vec2(2.0, 0.0), LIGHT_INK, "just outside paper");
+    c.assert_ink(edge - vec2(2.0, 0.0), light_ink(), "just outside paper");
 }
 
 #[test]
@@ -144,12 +149,12 @@ fn paper_preferences_are_independent_of_model_preferences() {
     let mut c = Canvas::new(true);
     let at = c.screen(Vec2::new(30.0, 40.0));
     c.app.run("options", json!({"modelBackground": "#ffffff", "paperBackground": "#202020"})).unwrap();
-    c.assert_ink(at, LIGHT_INK, "dark paper with white model preference");
-    c.assert_ink(c.screen(Vec2::new(-20.0, 40.0)), LIGHT_INK, "surround with white model preference");
+    c.assert_ink(at, light_ink(), "dark paper with white model preference");
+    c.assert_ink(c.screen(Vec2::new(-20.0, 40.0)), light_ink(), "surround with white model preference");
     c.app.run("options", json!({"paperBackground": "#ffffff", "modelBackground": "#202020", "theme": "light"})).unwrap();
     c.assert_ink(at, DARK_INK, "white paper with dark model preference and light interface");
     c.app.run("layout.set", json!({"name": "Model"})).unwrap();
-    c.assert_ink(at, LIGHT_INK, "switch to dark model");
+    c.assert_ink(at, light_ink(), "switch to dark model");
     c.app.run("layout.set", json!({"name": "Layout1"})).unwrap();
     c.app.run("view.set", json!({"center": [100, 100], "height": 400})).unwrap();
     c.assert_ink(at, DARK_INK, "switch back to white paper");
@@ -184,7 +189,7 @@ fn mspace_and_isometric_cursor_use_the_paper_display_transform() {
     c.app.session.settings.isodraft = true;
     c.app.run("options", json!({"CURSORSIZE": 100})).unwrap();
     c.assert_ink(at, DARK_INK, "MSPACE on paper");
-    c.assert_ink(outside, LIGHT_INK, "MSPACE outside paper");
+    c.assert_ink(outside, light_ink(), "MSPACE outside paper");
     c.app.run("view.set", json!({"center": [30000, -40000], "height": 4000})).unwrap();
     c.assert_ink(at, DARK_INK, "MSPACE after model pan and zoom");
     c.app.run("pspace", json!({})).unwrap();

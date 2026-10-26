@@ -1,5 +1,10 @@
-//! Design tokens. Colours were measured from the reference look (dark slate chrome, near-black
-//! navy model space) and are CADCraft's own values; every widget reads them from here.
+//! Design tokens. The dark palette follows Cursor's system, measured from the values in its own
+//! theme file ("Cursor Dark Anysphere"): a few opaque near-black surfaces — chrome #141414,
+//! content #181818, and the chrome is **darker** than the content — with everything else (text,
+//! borders, hovers, selection) being one base colour, #E4E4E4, painted at a low alpha over them.
+//! There is no ladder of opaque greys to keep in step, and colour is a signal, never decoration:
+//! the muted Anysphere blue for action and selection, cyan for counts, green for on/ready, amber
+//! for warnings, pink-red for errors. Every widget reads its colours from here.
 //!
 //! Two palettes: [`Tokens::DARK`] (the original look) and [`Tokens::LIGHT`]. The interface theme
 //! changes the chrome (title and tool bar, menus, palettes, tabs, command line, status bar,
@@ -128,79 +133,88 @@ pub struct Tokens {
 
 impl Tokens {
     pub const DARK: Tokens = Tokens {
-        chrome: Color32::from_rgb(0x3b, 0x44, 0x53),
-        chrome_dark: Color32::from_rgb(0x31, 0x38, 0x44),
-        panel: Color32::from_rgb(0x3c, 0x44, 0x52),
-        tab_active: Color32::from_rgb(0x4e, 0x5a, 0x6e),
-        control: Color32::from_rgb(0x50, 0x5a, 0x6d),
-        control_hover: Color32::from_rgb(0x5c, 0x67, 0x7c),
-        border: Color32::from_rgb(0x23, 0x29, 0x30),
-        canvas: Color32::from_rgb(0x22, 0x28, 0x2f),
-        grid_minor: Color32::from_rgb(0x29, 0x30, 0x3a),
-        grid_major: Color32::from_rgb(0x31, 0x39, 0x45),
-        axis_x: Color32::from_rgb(0x56, 0x28, 0x29),
-        axis_y: Color32::from_rgb(0x28, 0x4a, 0x2e),
-        text: Color32::from_rgb(0xd7, 0xdb, 0xe0),
-        text_dim: Color32::from_rgb(0xa3, 0xaa, 0xb4),
-        text_faint: Color32::from_rgb(0x87, 0x8d, 0x96),
-        icon: Color32::from_rgb(0xcf, 0xd4, 0xdb),
-        icon_accent: Color32::from_rgb(0x4f, 0xa3, 0xf7),
-        icon_point: Color32::from_rgb(0xf0, 0x7a, 0x3a),
-        accent: Color32::from_rgb(0x3d, 0x8b, 0xfd),
-        selection: Color32::from_rgb(0x4a, 0x8f, 0xff),
-        hover: Color32::from_rgb(0x9c, 0xc6, 0xff),
-        grip: Color32::from_rgb(0x2f, 0x6b, 0xff),
-        grip_hot: Color32::from_rgb(0xff, 0x3b, 0x3b),
-        grip_dyn: Color32::from_rgb(0x26, 0xc6, 0xe8),
-        snap: Color32::from_rgb(0x2f, 0xd0, 0x62),
-        compare_this: Color32::from_rgb(0x4c, 0xd9, 0x7b),
-        compare_other: Color32::from_rgb(0xff, 0x5c, 0x5c),
-        compare_area: Color32::from_rgb(0xff, 0xb4, 0x3c),
-        window_stroke: Color32::from_rgb(0x6f, 0xa8, 0xff),
-        crossing_stroke: Color32::from_rgb(0x7f, 0xe0, 0x7f),
-        cmd_bg: Color32::from_rgba_premultiplied(0x34, 0x3c, 0x4a, 0xf0),
-        toggle_on: Color32::from_rgb(0x3d, 0x8b, 0xfd),
-        field: Color32::from_rgb(0x31, 0x38, 0x44),
-        select_bg: Color32::from_rgb(0x3d, 0x8b, 0xfd),
-        canvas_ink: Color32::from_rgb(0xa3, 0xaa, 0xb4),
-        cmd_history: Color32::from_rgba_unmultiplied_const(0x2a, 0x30, 0x3a, 170),
-        cmd_border: Color32::from_rgb(0x55, 0x5f, 0x70),
-        cmd_keyword: Color32::from_rgb(0x8f, 0xc1, 0xff),
-        cmd_keyword_hover: Color32::from_rgb(0x2f, 0x5e, 0xa8),
-        list_bg: Color32::from_rgb(0x2b, 0x31, 0x3b),
-        list_row: Color32::from_rgb(0x3a, 0x42, 0x50),
-        warn: Color32::from_rgb(0xff, 0xd0, 0x80),
-        crosshair: Color32::from_rgb(0xe8, 0xe8, 0xe8),
-        paper: Color32::WHITE,
+        // Surfaces. Chrome is darker than the content, as in Cursor: the drawing area is the
+        // brightest near-black in the window, and everything around it recedes.
+        chrome: Color32::from_rgb(0x14, 0x14, 0x14),
+        chrome_dark: Color32::from_rgb(0x0f, 0x0f, 0x0f),
+        panel: Color32::from_rgb(0x14, 0x14, 0x14),
+        tab_active: Color32::from_rgb(0x2d, 0x2d, 0x2d),
+        control: Color32::from_rgb(0x1c, 0x1c, 0x1c),
+        control_hover: Color32::from_rgb(0x23, 0x23, 0x23),
+        border: Color32::from_rgb(0x23, 0x23, 0x23),
+        // The drawing area: the content surface (#181818), with the grid a 4% and 9% step of the
+        // base colour above it.
+        canvas: Color32::from_rgb(0x18, 0x18, 0x18),
+        grid_minor: Color32::from_rgb(0x20, 0x20, 0x20),
+        grid_major: Color32::from_rgb(0x2a, 0x2a, 0x2a),
+        axis_x: Color32::from_rgb(0x55, 0x26, 0x33),
+        axis_y: Color32::from_rgb(0x23, 0x41, 0x2f),
+        // Text: the base colour at 92%, 55% and 40% over the content surface.
+        text: Color32::from_rgb(0xd4, 0xd4, 0xd4),
+        text_dim: Color32::from_rgb(0x88, 0x88, 0x88),
+        text_faint: Color32::from_rgb(0x6b, 0x6b, 0x6b),
+        icon: Color32::from_rgb(0xb0, 0xb0, 0xb0),
+        icon_accent: Color32::from_rgb(0x81, 0xa1, 0xc1),
+        icon_point: Color32::from_rgb(0xf1, 0xb4, 0x67),
+        accent: Color32::from_rgb(0x81, 0xa1, 0xc1),
+        selection: Color32::from_rgb(0x81, 0xa1, 0xc1),
+        hover: Color32::from_rgb(0xb8, 0xce, 0xe6),
+        grip: Color32::from_rgb(0x81, 0xa1, 0xc1),
+        grip_hot: Color32::from_rgb(0xe3, 0x46, 0x71),
+        grip_dyn: Color32::from_rgb(0x88, 0xc0, 0xd0),
+        snap: Color32::from_rgb(0x3f, 0xa2, 0x66),
+        compare_this: Color32::from_rgb(0x3f, 0xa2, 0x66),
+        compare_other: Color32::from_rgb(0xe3, 0x46, 0x71),
+        compare_area: Color32::from_rgb(0xf1, 0xb4, 0x67),
+        window_stroke: Color32::from_rgb(0x81, 0xa1, 0xc1),
+        crossing_stroke: Color32::from_rgb(0x3f, 0xa2, 0x66),
+        // The command line is a composer surface: the wash, almost opaque over the drawing.
+        cmd_bg: Color32::from_rgba_premultiplied(0x1c, 0x1c, 0x1c, 0xf0),
+        toggle_on: Color32::from_rgb(0x3f, 0xa2, 0x66),
+        field: Color32::from_rgb(0x1c, 0x1c, 0x1c),
+        select_bg: Color32::from_rgb(0x2d, 0x2d, 0x2d),
+        canvas_ink: Color32::from_rgb(0x88, 0x88, 0x88),
+        cmd_history: Color32::from_rgba_unmultiplied_const(0x1a, 0x1a, 0x1a, 170),
+        cmd_border: Color32::from_rgb(0x33, 0x33, 0x33),
+        cmd_keyword: Color32::from_rgb(0x81, 0xa1, 0xc1),
+        cmd_keyword_hover: Color32::from_rgb(0x2a, 0x30, 0x37),
+        list_bg: Color32::from_rgb(0x1c, 0x1c, 0x1c),
+        list_row: Color32::from_rgb(0x2d, 0x2d, 0x2d),
+        warn: Color32::from_rgb(0xf1, 0xb4, 0x67),
+        crosshair: Color32::from_rgb(0xe4, 0xe4, 0xe4),
+        paper: Color32::from_rgb(0xfc, 0xfc, 0xfc),
     };
 
     /// Light grey chrome with dark text. The drawing-area colours (canvas, grid, axes, selection,
     /// grips, snap markers, selection windows) are the same as [`Tokens::DARK`]'s.
     pub const LIGHT: Tokens = Tokens {
-        chrome: Color32::from_rgb(0xe4, 0xe7, 0xeb),
-        chrome_dark: Color32::from_rgb(0xd5, 0xd9, 0xdf),
-        panel: Color32::from_rgb(0xee, 0xf0, 0xf3),
-        tab_active: Color32::from_rgb(0xc8, 0xd3, 0xe2),
-        control: Color32::from_rgb(0xdc, 0xe0, 0xe6),
-        control_hover: Color32::from_rgb(0xcb, 0xd2, 0xdc),
-        border: Color32::from_rgb(0xb3, 0xba, 0xc4),
-        text: Color32::from_rgb(0x1d, 0x23, 0x2b),
-        text_dim: Color32::from_rgb(0x47, 0x50, 0x5c),
-        text_faint: Color32::from_rgb(0x62, 0x6a, 0x76),
-        icon: Color32::from_rgb(0x34, 0x3c, 0x48),
-        icon_accent: Color32::from_rgb(0x1b, 0x6f, 0xd6),
-        icon_point: Color32::from_rgb(0xd3, 0x5a, 0x1c),
-        accent: Color32::from_rgb(0x2f, 0x7c, 0xf6),
-        cmd_bg: Color32::from_rgba_unmultiplied_const(0xf9, 0xfa, 0xfb, 0xf0),
-        toggle_on: Color32::from_rgb(0x2f, 0x7c, 0xf6),
+        // The same system in light: neutral surfaces, one base colour layered at low alpha, and
+        // the drawing-area colours inherited from the dark palette (the model space keeps its own
+        // background whatever the interface does).
+        chrome: Color32::from_rgb(0xf1, 0xf1, 0xf1),
+        chrome_dark: Color32::from_rgb(0xe8, 0xe8, 0xe8),
+        panel: Color32::from_rgb(0xf6, 0xf6, 0xf6),
+        tab_active: Color32::from_rgb(0xff, 0xff, 0xff),
+        control: Color32::from_rgb(0xe8, 0xe8, 0xe8),
+        control_hover: Color32::from_rgb(0xde, 0xde, 0xde),
+        border: Color32::from_rgb(0xd6, 0xd6, 0xd6),
+        text: Color32::from_rgb(0x1f, 0x1f, 0x1f),
+        text_dim: Color32::from_rgb(0x5c, 0x5c, 0x5c),
+        text_faint: Color32::from_rgb(0x7a, 0x7a, 0x7a),
+        icon: Color32::from_rgb(0x3a, 0x3a, 0x3a),
+        icon_accent: Color32::from_rgb(0x4a, 0x6e, 0x96),
+        icon_point: Color32::from_rgb(0xb8, 0x79, 0x1f),
+        accent: Color32::from_rgb(0x4a, 0x6e, 0x96),
+        cmd_bg: Color32::from_rgba_premultiplied(0xeb, 0xeb, 0xeb, 0xf0),
+        toggle_on: Color32::from_rgb(0x3f, 0xa2, 0x66),
         field: Color32::from_rgb(0xff, 0xff, 0xff),
-        select_bg: Color32::from_rgb(0xb6, 0xd3, 0xfb),
-        cmd_history: Color32::from_rgba_unmultiplied_const(0xf0, 0xf2, 0xf5, 0xdc),
-        cmd_border: Color32::from_rgb(0xa9, 0xb0, 0xba),
-        cmd_keyword: Color32::from_rgb(0x15, 0x59, 0xc0),
-        cmd_keyword_hover: Color32::from_rgb(0xcf, 0xe0, 0xfa),
-        list_bg: Color32::from_rgb(0xfb, 0xfc, 0xfd),
-        list_row: Color32::from_rgb(0xe3, 0xe8, 0xef),
+        select_bg: Color32::from_rgb(0xc9, 0xd4, 0xdf),
+        cmd_history: Color32::from_rgba_unmultiplied_const(0xf2, 0xf2, 0xf2, 0xdc),
+        cmd_border: Color32::from_rgb(0xc9, 0xc9, 0xc9),
+        cmd_keyword: Color32::from_rgb(0x3a, 0x5f, 0x86),
+        cmd_keyword_hover: Color32::from_rgb(0xdd, 0xe6, 0xef),
+        list_bg: Color32::from_rgb(0xff, 0xff, 0xff),
+        list_row: Color32::from_rgb(0xe8, 0xe8, 0xe8),
         warn: Color32::from_rgb(0x8a, 0x53, 0x00),
         ..Tokens::DARK
     };
@@ -225,8 +239,8 @@ impl Tokens {
         let ink = if light { Color32::BLACK } else { Color32::WHITE };
         Tokens {
             canvas: bg,
-            grid_minor: mix(bg, ink, 0.05),
-            grid_major: mix(bg, ink, 0.11),
+            grid_minor: mix(bg, ink, 0.04),
+            grid_major: mix(bg, ink, 0.09),
             axis_x: mix(bg, Color32::from_rgb(0xd0, 0x30, 0x30), 0.3),
             axis_y: mix(bg, Color32::from_rgb(0x30, 0xb0, 0x40), 0.3),
             canvas_ink: if light { Color32::from_rgb(0x47, 0x50, 0x5c) } else { Tokens::DARK.canvas_ink },
@@ -301,7 +315,7 @@ pub fn small() -> FontId {
     FontId::new(11.5, FontFamily::Proportional)
 }
 pub fn body() -> FontId {
-    FontId::new(12.5, FontFamily::Proportional)
+    FontId::new(13.0, FontFamily::Proportional)
 }
 pub fn mono() -> FontId {
     FontId::new(12.0, FontFamily::Monospace)
@@ -698,19 +712,27 @@ fn visuals(theme: Theme) -> Visuals {
     v.widgets.noninteractive.bg_fill = t.panel;
     v.widgets.noninteractive.fg_stroke.color = t.text;
     v.widgets.noninteractive.bg_stroke.color = t.border;
+    // Controls are Cursor's ghost buttons: a wash fill, a hairline border, and the border
+    // brightening on hover and press — no heavy fills, no glow.
     v.widgets.inactive.bg_fill = t.control;
     v.widgets.inactive.weak_bg_fill = t.control;
     v.widgets.inactive.fg_stroke.color = t.text;
+    v.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, t.border);
     v.widgets.hovered.bg_fill = t.control_hover;
     v.widgets.hovered.weak_bg_fill = t.control_hover;
-    v.widgets.active.bg_fill = t.accent;
-    v.widgets.active.weak_bg_fill = t.accent;
+    v.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, t.cmd_border);
+    v.widgets.active.bg_fill = t.control_hover;
+    v.widgets.active.weak_bg_fill = t.control_hover;
+    v.widgets.active.bg_stroke = egui::Stroke::new(1.0, t.cmd_border);
     v.selection.bg_fill = t.select_bg;
+    v.hyperlink_color = t.accent;
     v.window_stroke = egui::Stroke::new(1.0, t.border);
+    // Depth comes from luminance steps, not from shadow; popups keep a whisper of one.
     let shadow = Color32::from_black_alpha(if theme == Theme::Dark { 90 } else { 40 });
     v.popup_shadow = egui::epaint::Shadow { offset: [0, 4], blur: 12, spread: 0, color: shadow };
-    v.window_corner_radius = egui::CornerRadius::same(6);
-    v.menu_corner_radius = egui::CornerRadius::same(5);
+    // Cursor's radius scale: 6 chip, 8 control, 10 card/window, 12 composer.
+    v.window_corner_radius = egui::CornerRadius::same(10);
+    v.menu_corner_radius = egui::CornerRadius::same(8);
     v
 }
 

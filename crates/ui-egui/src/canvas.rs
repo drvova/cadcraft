@@ -1877,7 +1877,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
     }));
     ensure_list(app, &xf_paper, &views, ui.ctx());
     let sheet = app.canvas.list.as_ref().and_then(|l| l.sheet);
-    let surround = Color32::from_rgb(0x50, 0x57, 0x63);
+    let surround = Tokens::get().chrome_dark;
     let (bg, paper_rect) = match sheet {
         Some(sh) => {
             // Paper space: grey surround, the sheet with a shadow, the printable area dashed.
@@ -2333,10 +2333,12 @@ fn cycle_list(app: &mut CadApp, p: &egui::Painter) {
 }
 
 fn tooltip(p: &egui::Painter, at: Pos2, text: &str) {
-    let galley = p.layout_no_wrap(text.to_string(), crate::theme::small(), Color32::from_rgb(0x20, 0x20, 0x20));
+    let t = Tokens::get();
+    let galley = p.layout_no_wrap(text.to_string(), crate::theme::small(), t.text);
     let r = Rect::from_min_size(at, galley.size() + vec2(8.0, 4.0));
-    p.rect_filled(r, 2.0, Color32::from_rgb(0xf4, 0xf4, 0xf4));
-    p.galley(r.min + vec2(4.0, 2.0), galley, Color32::BLACK);
+    p.rect_filled(r, 6.0, t.cmd_bg);
+    p.rect_stroke(r, 6.0, Stroke::new(1.0, t.cmd_border), egui::StrokeKind::Inside);
+    p.galley(r.min + vec2(4.0, 2.0), galley, t.text);
 }
 
 /// The hatch under world point `w` within the pick aperture (PICKBOX × 1.5 pixels at `scale`
@@ -2545,8 +2547,8 @@ fn options_menu(app: &mut CadApp, p: &egui::Painter, r: Rect, hover: Pos2) {
 fn tooltip_frame(p: &egui::Painter, at: Pos2, size: egui::Vec2) -> Rect {
     let t = Tokens::get();
     let r = Rect::from_min_size(at + vec2(18.0, -size.y - 14.0), size);
-    p.rect_filled(r, 3.0, t.cmd_bg);
-    p.rect_stroke(r, 3.0, Stroke::new(1.0, t.cmd_border), egui::StrokeKind::Inside);
+    p.rect_filled(r, 6.0, t.cmd_bg);
+    p.rect_stroke(r, 6.0, Stroke::new(1.0, t.cmd_border), egui::StrokeKind::Inside);
     r
 }
 
@@ -2689,7 +2691,7 @@ fn draw_viewcube(app: &mut CadApp, ui: &mut egui::Ui, rect: Rect) {
     // WCS pill: the label and a down chevron, drawn as lines rather than a "⌄" glyph that a UI
     // font may lack (it showed as a box, #1541).
     let pill = Rect::from_center_size(c + vec2(0.0, ring + 26.0), vec2(56.0, 16.0));
-    p.rect_filled(pill, 8.0, Color32::from_rgb(0x48, 0x50, 0x5c));
+    p.rect_filled(pill, 6.0, Tokens::get().cmd_bg);
     let ink = Tokens::DARK.canvas_ink;
     let label = p.layout_no_wrap(crate::tl!("WCS").to_string(), crate::theme::small(), ink);
     let (gap, chevron) = (4.0, 6.0);

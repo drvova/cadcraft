@@ -952,7 +952,7 @@ pub fn button(ui: &mut egui::Ui, icon: Icon, size: f32, tooltip: &str, selected:
         hovered: visuals(t.control_hover.gamma_multiply(0.6)),
         pressed: None,
         selected: visuals(t.tab_active),
-        corner_radius: egui::CornerRadius::same(3),
+        corner_radius: egui::CornerRadius::same(6),
         focus_stroke: Stroke::new(1.0, t.accent),
     };
     let resp = IconButton::new(crate::i18n::t(tooltip), egui::vec2(size, size), &style).selected(selected).show(ui, |ui, rect, _| {

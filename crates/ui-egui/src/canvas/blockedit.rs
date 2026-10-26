@@ -43,7 +43,7 @@ pub(super) fn paint(app: &mut CadApp, ctx: &egui::Context, p: &egui::Painter, xf
     egui::Area::new(id()).order(egui::Order::Foreground).pivot(egui::Align2::CENTER_TOP).fixed_pos(rect.center_top() + vec2(0.0, 8.0)).show(
         ctx,
         |ui| {
-            egui::Frame::new().fill(t.cmd_bg).stroke(Stroke::new(1.0, t.accent)).corner_radius(4.0).inner_margin(6.0).show(ui, |ui| {
+            egui::Frame::new().fill(t.cmd_bg).stroke(Stroke::new(1.0, t.accent)).corner_radius(6.0).inner_margin(6.0).show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(crate::tl!("Block Editor")).color(t.accent).strong());
                     ui.label(RichText::new(&name).color(t.text));

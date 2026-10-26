@@ -472,8 +472,8 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect) {
             p.text(pos2(hr.left() + 8.0, hr.top() + 1.0 + lh * i as f32), egui::Align2::LEFT_TOP, l, crate::theme::small(), t.text_dim);
         }
     }
-    p.rect_filled(bar, 3.0, t.cmd_bg);
-    p.rect_stroke(bar, 3.0, Stroke::new(1.0, t.cmd_border), egui::StrokeKind::Inside);
+    p.rect_filled(bar, 8.0, t.cmd_bg);
+    p.rect_stroke(bar, 8.0, Stroke::new(1.0, t.cmd_border), egui::StrokeKind::Inside);
     // Prompt glyph.
     p.text(pos2(bar.left() + 8.0, bar.center().y), egui::Align2::LEFT_CENTER, ">_", crate::theme::mono(), t.text_dim);
     let mut x = bar.left() + 30.0;
@@ -591,7 +591,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect) {
                 vec2((bar.width() - 24.0).max(0.0), rh * sug.len() as f32),
             );
             p.rect_filled(lr, 3.0, t.list_bg);
-            p.rect_stroke(lr, 3.0, Stroke::new(1.0, t.cmd_border), egui::StrokeKind::Inside);
+            p.rect_stroke(lr, 6.0, Stroke::new(1.0, t.cmd_border), egui::StrokeKind::Inside);
             for (i, s) in sug.iter().enumerate() {
                 let r = Rect::from_min_size(pos2(lr.left(), lr.top() + rh * i as f32), vec2(lr.width(), rh));
                 let resp = ui.interact(r, ui.scope_id().with(("sug", i)), Sense::click());
@@ -694,7 +694,7 @@ fn history(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect, bar: Rect) {
 /// The expanded history: the whole command log, scrollable, newest at the bottom.
 fn history_window(app: &CadApp, ui: &mut egui::Ui, r: Rect) {
     let t = Tokens::get();
-    ui.painter().rect_filled(r, 3.0, t.cmd_bg);
+    ui.painter().rect_filled(r, 6.0, t.cmd_bg);
     ui.painter().rect_stroke(r, 3.0, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
     let inner = r.shrink2(vec2(8.0, 3.0));
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));

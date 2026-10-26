@@ -421,9 +421,9 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
             let active = active_tab == Some(i);
             let resp = ui.interact(tr, ui.scope_id().with(("lt", i)), Sense::click());
             if active {
-                tp.rect_filled(tr, 2.0, t.tab_active);
+                tp.rect_filled(tr, 0.0, t.tab_active);
             } else if resp.hovered() {
-                tp.rect_filled(tr, 2.0, t.control.gamma_multiply(0.5));
+                tp.rect_filled(tr, 0.0, t.control.gamma_multiply(0.5));
             }
             tp.galley(pos2(tr.left() + 13.0, tr.center().y - g.size().y / 2.0), g, if active { t.text } else { t.text_dim });
             icons::describe_control(ui, &resp, name, Some(active), true);
@@ -528,9 +528,11 @@ pub fn start_page(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
     let r = ui.max_rect();
     let p = ui.painter().clone();
+    // The sidebar is the chrome surface and the page behind it the content surface — chrome
+    // darker than content, as everywhere else.
     let left = Rect::from_min_size(r.min, vec2(300.0, r.height()));
-    p.rect_filled(left, 0.0, t.chrome_dark);
-    p.rect_filled(Rect::from_min_max(pos2(left.right(), r.top()), r.max), 0.0, t.chrome);
+    p.rect_filled(left, 0.0, t.chrome);
+    p.vline(left.right(), left.y_range(), Stroke::new(1.0, t.border));
     p.text(pos2(left.left() + 34.0, left.top() + 70.0), egui::Align2::LEFT_CENTER, crate::tl!("CADCraft"), egui::FontId::proportional(28.0), t.text);
     p.text(
         pos2(left.left() + 34.0, left.top() + 98.0),
@@ -544,7 +546,9 @@ pub fn start_page(app: &mut CadApp, ui: &mut egui::Ui) {
     for (label, cmd) in [("Open...", "open"), ("New", "new"), ("New (metric)", "new.metric"), ("Open sample drawing", "sample")] {
         let br = Rect::from_min_size(pos2(left.left() + 34.0, y), vec2(220.0, 34.0));
         let resp = ui.interact(br, ui.scope_id().with(("start", cmd)), Sense::click());
-        p.rect_stroke(br, 2.0, Stroke::new(1.0, if resp.hovered() { t.text } else { t.text_dim }), egui::StrokeKind::Inside);
+        // A ghost button: the wash fill, a hairline border that brightens on hover.
+        p.rect_filled(br, 8.0, if resp.hovered() { t.control_hover } else { t.control });
+        p.rect_stroke(br, 8.0, Stroke::new(1.0, if resp.hovered() { t.cmd_border } else { t.border }), egui::StrokeKind::Inside);
         p.text(pos2(br.left() + 16.0, br.center().y), egui::Align2::LEFT_CENTER, crate::i18n::t(label), crate::theme::body(), t.text);
         if resp.clicked() {
             action = Some(cmd);
@@ -559,7 +563,7 @@ pub fn start_page(app: &mut CadApp, ui: &mut egui::Ui) {
         let row = Rect::from_min_size(pos2(main.left(), y), vec2((r.right() - main.left() - 36.0).clamp(0.0, 640.0), 42.0));
         let resp = ui.interact(row, ui.scope_id().with(("recent", i)), Sense::click());
         if resp.hovered() {
-            p.rect_filled(row, 2.0, t.control_hover.gamma_multiply(0.5));
+            p.rect_filled(row, 8.0, t.control_hover);
         }
         let dir = std::path::Path::new(path).parent().map(|d| d.display().to_string()).unwrap_or_default();
         let clip = p.with_clip_rect(row.shrink(2.0));

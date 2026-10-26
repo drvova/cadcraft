@@ -121,7 +121,7 @@ pub fn qselect_dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                     .and_then(Value::as_array)
                     .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
                     .unwrap_or_default();
-                egui::Frame::NONE.fill(t.chrome_dark).corner_radius(3).inner_margin(4).show(ui, |ui| {
+                egui::Frame::NONE.fill(t.chrome_dark).corner_radius(6).inner_margin(4).show(ui, |ui| {
                     egui::ScrollArea::vertical().max_height(150.0).min_scrolled_height(150.0).show(ui, |ui| {
                         ui.set_width(212.0);
                         ui.vertical(|ui| {

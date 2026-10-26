@@ -182,7 +182,7 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
             }
             ui.add_space(4.0);
             ui.horizontal_top(|ui| {
-                egui::Frame::new().fill(t.field).stroke(Stroke::new(1.0, t.border)).corner_radius(4.0).inner_margin(4.0).show(ui, |ui| {
+                egui::Frame::new().fill(t.field).stroke(Stroke::new(1.0, t.border)).corner_radius(6.0).inner_margin(4.0).show(ui, |ui| {
                     ui.set_min_size(vec2(222.0, 250.0));
                     egui::ScrollArea::vertical().id_salt("bedit-blocks").max_height(250.0).min_scrolled_height(250.0).show(ui, |ui| {
                         ui.set_width(222.0);

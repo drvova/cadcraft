@@ -168,7 +168,7 @@ down-arrow options menu (DYNPROMPT), and DYNDIM.
 | Workspaces | Drafting & Annotation, 3D Modeling | no |
 | Options / Preferences dialog | many tabs | **no** (issue #23) |
 | Customisation (CUI, aliases editor, tool palettes) | yes | Command Aliases dialog (ALIASEDIT, #1381); no CUI or tool palettes |
-| Themes | Dark, Light | Dark, Light, System (#179) |
+| Themes | Dark, Light | Dark, Light, System (#179). The dark palette follows Cursor's system, taken from its own theme file: opaque near-black surfaces (chrome `#141414`, content `#181818` — chrome darker than content) with every text shade, border, hover and selection being one base colour (`#E4E4E4`) at 4–15% alpha over them, and colour used only as a signal (muted Anysphere blue `#81A1C1` for action and selection, cyan `#88C0D0`, green `#3FA266`, amber `#F1B467`, pink-red `#E34671`); 6/8/10/12 radii and 13 pt body, 11.5 caption |
 | Accessibility | VoiceOver basics | AccessKit through eframe; screen-reader coverage untested; magnifier issue #39; animation effects follow the OS setting (View ▸ Accessibility ▸ Animation Effects: System, On, Off) |
 
 ## Navigation (≈ 55%)
