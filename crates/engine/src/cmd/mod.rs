@@ -20,6 +20,7 @@ pub(crate) mod groups;
 pub(crate) mod hatch;
 mod image;
 mod inquiry;
+mod jewelry;
 mod layer;
 mod layout;
 mod lisp;
@@ -201,6 +202,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(image::specs());
         v.extend(props::specs());
         v.extend(inquiry::specs());
+        v.extend(jewelry::specs());
         v.extend(settings::specs());
         v.extend(options::specs());
         v.extend(utility::specs());

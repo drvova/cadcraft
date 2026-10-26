@@ -20,6 +20,7 @@ use serde_json::{Value, json};
 
 use super::super::*;
 use super::fmt_d;
+use crate::cmd::jewelry::{JewelryFacts, jewelry_facts};
 use crate::{Result, Session};
 
 const CMD: &str = "describe";
@@ -49,7 +50,7 @@ pub const PARAMS: &str = "{handles? | handle? (default: the whole active space),
     true lists each object), limit?: n (default 200; the per-object list), loops?: bool (default false; chain loose LINEs \
     and ARCs to find gaps and junctions), maxPairs?: n (default 200000), tolerance?: number} → \
     {schema: 1, scope, total, counts, extents, size, center, units, layers, geometry: {totalLength, lengths, closed, open}, \
-    texts, blocks, images, dimensions, hatches, degenerate, gaps?, objects?, notes, message}";
+    texts, blocks, images, dimensions, hatches, jewelry?, degenerate, gaps?, objects?, notes, message}";
 
 /// What one object contributed, for the per-object detail list.
 struct ObjectFacts {
@@ -309,6 +310,19 @@ pub fn run(s: &mut Session, p: &Value) -> Result<Value> {
         }
     }
 
+    // What the drawing holds as jewelry: stones by cut and size with their carats, and the bands
+    // with the size and metal their own blocks carry. A drafting report a bench can read.
+    let jewelry: JewelryFacts = jewelry_facts(d, &objects);
+    let jewelry_json = if jewelry.stones == 0 && jewelry.bands.is_empty() {
+        Value::Null
+    } else {
+        json!({
+            "stones": { "groups": jewelry.groups, "count": jewelry.stones, "carat": jewelry.carat },
+            "bands": jewelry.bands,
+            "warnings": jewelry.warnings,
+        })
+    };
+
     let extents_json = if facts.extents.is_empty() {
         Value::Null
     } else {
@@ -368,7 +382,10 @@ pub fn run(s: &mut Session, p: &Value) -> Result<Value> {
         notes.push(format!("the object list is cut at {limit}; raise `limit` or narrow the scope"));
     }
 
-    let message = narrative(&facts, &spaces, unit);
+    let mut message = narrative(&facts, &spaces, unit);
+    if let Some(line) = jewelry.line() {
+        message = format!("{message} {line}.");
+    }
 
     let mut out = json!({
         "schema": 1,
@@ -392,6 +409,7 @@ pub fn run(s: &mut Session, p: &Value) -> Result<Value> {
         "images": { "count": facts.image_count, "returned": facts.images.len(), "items": facts.images },
         "dimensions": facts.dimensions,
         "hatches": facts.hatches,
+        "jewelry": jewelry_json,
         "degenerate": facts.degenerate,
         "gaps": gaps,
         "notes": notes,

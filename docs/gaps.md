@@ -146,10 +146,25 @@ Detail: [localization-parity.md](localization-parity.md).
 | A2 | An in-app assistant (AutoCAD has Autodesk Assistant); CADCraft's MCP server already lets any agent drive it, including read-only structured queries of the current selection (`query_entities selected:true`) | 10–20 |
 | A3 | Markup Assist (import markups from PDFs/images) | 10–20 |
 
+## Jewelry (beyond AutoCAD)
+
+CADCraft drafts fine jewelry with the trade's own numbers: ring sizes in every system, each cut's
+real girdle, calibrated melee with the fit checked, settings built on the stone, and a bench sheet
+([jewelry.md](jewelry.md)). The commands are ordinary ones, so the command line, scripts, the CLI,
+the control channel and MCP all reach them, and DESCRIBE reads jewelry out of any drawing.
+
+| # | Gap | Est. |
+|---|---|---|
+| J1 | Elongated melee in a pavé region: the fit test takes a stone's width, so a marquise or baguette laid in a region is placed as if it were round (along a path it is rotated correctly). Oriented fit and `taper` rows are left | 8–14 |
+| J2 | Settings as solids: prongs, bezels and galleries are drawn as their 2D sections and outlines; no swept solid, no bearing cut, no under-gallery. STL/3D export of a finished piece is not there either | 20–35 |
+| J3 | A bench's own stone library: calibrated sizes, dealer girdle data and a house cut list (GEM takes any outline, but nothing imports a library file) | 6–10 |
+| J4 | Ring size measured off a drawn ring (a circle or an arc pair): RINGSIZES converts a size but does not measure one from the geometry | 3–5 |
+
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-25 | minor | Jewelry: RINGSIZES, RING, GEM, GEMLIST, PAVE, GEMFIT, SETTING and TECHSHEET (the trade's ring sizes, gem cuts with carat weights, calibrated melee with the fit checked, settings on the stone's girdle, and a bench sheet); DESCRIBE reports a drawing's stones and bands, MCP gains `bench_sheet`; new [jewelry.md](jewelry.md) and the J1–J4 rows |
 | 2026-10-25 | minor | Raster images attach, draw and trace (IMAGEATTACH, IMAGETRACE, IMAGEFRAME, IMAGEADJUST; Insert menu with a picture picker, MCP `attach_image`/`trace_image`); DESCRIBE (measured report of a drawing or selection with a narrative) and SCALE by `width`/`height`; FF10 narrowed, IMAGE row in the file-format list narrowed |
 | 2026-10-25 | minor | DIMTFILL limits: with DIMTFILL 1 (the drawing's background color) the written `*D` block and EXPLODE keep no background mask (a WIPEOUT over the text box would), and a true-color DIMTFILLCLR is written to DXF as the nearest ACI: F7 updated |
 | 2026-10-24 | minor | COMPAREEXPORT (typed, or Export on the comparison bar) opens the comparison as a new untitled drawing, `compare_<this> vs <other>.dwg`: this drawing's objects in one group and the other drawing's differing objects in a second group, in the comparison colors (green, red, gray for objects in both), block contents and style colors included: F22 narrowed |

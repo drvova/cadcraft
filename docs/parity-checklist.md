@@ -1,22 +1,22 @@
 # Parity checklist
 
-> **Generated:** 2026-10-25 by `cargo xtask parity`. Do not edit by hand.
+> **Generated:** 2026-10-26 by `cargo xtask parity`. Do not edit by hand.
 
 Menu-breadth parity: a reference menu item counts as covered when a CADCraft command is registered under the same menu label. It measures breadth, not depth; see [target-app-parity.md](target-app-parity.md) for the weighted assessment.
 
-**Menu breadth: 296 / 491 items (60%)** · 441 registered commands.
+**Menu breadth: 300 / 491 items (61%)** · 454 registered commands.
 
 | Menu | Items | Covered | % |
 |---|---|---|---|
 | File | 22 | 13 | 59% |
 | Edit | 13 | 12 | 92% |
 | View | 75 | 36 | 48% |
-| Insert | 11 | 5 | 45% |
+| Insert | 11 | 6 | 55% |
 | Format | 27 | 26 | 96% |
 | Tools | 85 | 66 | 78% |
 | Draw | 87 | 55 | 63% |
 | Dimension | 28 | 28 | 100% |
-| Modify | 113 | 52 | 46% |
+| Modify | 113 | 55 | 49% |
 | Window | 22 | 3 | 14% |
 | Help | 8 | 0 | 0% |
 
@@ -72,7 +72,6 @@ Menu-breadth parity: a reference menu item counts as covered when a CADCraft com
 - View > Lights
 - View > Enter Full Screen
 - Insert > PDF Underlay...
-- Insert > Raster Image Reference...
 - Insert > Field...
 - Insert > Layout > Layout from Template...
 - Insert > ACIS File...
@@ -129,11 +128,8 @@ Menu-breadth parity: a reference menu item counts as covered when a CADCraft com
 - Draw > 3D Modeling > Setup > Drawing
 - Draw > 3D Modeling > Setup > View
 - Draw > 3D Modeling > Setup > Profile
-- Modify > Object > External Reference > Frame
-- Modify > Object > Image > Adjust...
 - Modify > Object > Image > Quality
 - Modify > Object > Image > Transparency
-- Modify > Object > Image > Frame
 - Modify > Object > Block Description...
 - Modify > Clip > Image
 - Modify > Clip > Xref
