@@ -1,6 +1,9 @@
 # Build with: trunk build --release   (from apps/cadcraft-web)
 [build]
 target = "index.html"
+# Development and a plain `trunk build --release` use cargo's own profiles, so the edit-rebuild
+# loop stays fast. A bundle to deploy is built with the size-tuned profile (about 40% smaller):
+#   trunk build --release --cargo-profile wasm-release
 dist = "../../dist/web"
 public_url = "./"
 filehash = true

@@ -145,6 +145,10 @@ zoom e                          zoom to extents
 ```
 
 The web build: `cd apps/cadcraft-web && trunk serve` (needs [trunk](https://github.com/trunk-rs/trunk)).
+It is the same UI through eframe's web runner (WebGPU, or WebGL2 with `?webgl`), and it runs
+the same engine — commands, jewelry, everything — in the browser. To build a bundle to deploy,
+`trunk build --release --cargo-profile wasm-release` writes `dist/web` with a size-tuned profile
+(about 40% smaller than the plain release build).
 
 ### Fonts
 

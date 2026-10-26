@@ -86,6 +86,15 @@ lto = "thin"
 codegen-units = 16
 debug = 0
 
+# The browser build ships over the network, so it trades build time for size (opt-level "z",
+# fat LTO, one codegen unit). `panic` stays unwinding: the engine's last-resort guard is
+# `catch_unwind`, which a panic strategy of `abort` would remove.
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+
 # PDF backends for craft-pdf: pinned to the same reviewed craft-libs revision as craft-pdf itself
 # (Cargo ignores dependency-local patches).
 [patch.crates-io]
