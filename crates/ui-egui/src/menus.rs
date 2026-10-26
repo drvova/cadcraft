@@ -29,6 +29,8 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("ui.panel.layers", "Layers Palette", &["Window", "Layers Palette"], None),
     ("ui.toggle.quickcalc", "QuickCalc", &["Window", "QuickCalc"], Some("Cmd+8")),
     ("ui.panel.quickcalc", "QuickCalc", &[], None),
+    ("ui.toggle.assistant", "Assistant", &["Window", "Assistant"], Some("Cmd+7")),
+    ("ui.panel.assistant", "Assistant", &[], None),
     ("ui.toggle.systemcursor", "Show System Cursor", &["View", "Accessibility", "Show System Cursor"], None),
     ("ui.animations.system", "Use System Setting", &["View", "Accessibility", "Animation Effects", "Use System Setting"], None),
     ("ui.animations.on", "On", &["View", "Accessibility", "Animation Effects", "On"], None),
@@ -105,6 +107,14 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
     }
     if id == "ui.toggle.quickcalc" {
         return Some(crate::palettes::quickcalc::toggle(app));
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(r) = crate::assistant::route(app, id, params) {
+        return Some(r);
+    }
+    #[cfg(target_arch = "wasm32")]
+    if matches!(id, "ui.toggle.assistant" | "ui.panel.assistant" | "assistant" | "ai") {
+        return Some(Err("the assistant is not available in the browser build yet".into()));
     }
     // Explicit opens remain idempotent; typed QUICKCALC with JSON parameters uses the engine's CAL alias.
     if id == "ui.panel.quickcalc" || (matches!(id, "quickcalc" | "qc") && params.is_null()) {

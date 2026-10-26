@@ -149,6 +149,11 @@ struct UiChanges {
     savefilepath: Option<String>,
     time_sensitive_right_click: Option<bool>,
     interface_scale: Option<f32>,
+    assistant_preset: Option<String>,
+    assistant_base_url: Option<String>,
+    assistant_model: Option<String>,
+    assistant_key: Option<String>,
+    assistant_max_tokens: Option<Option<u32>>,
 }
 
 fn color_param(key: &str, v: &Value) -> Result<Option<Color32>, String> {
@@ -185,6 +190,14 @@ fn parse_ui(key: &str, v: &Value, c: &mut UiChanges) -> Result<bool, String> {
         "interfaceScale" => {
             let n = v.as_f64().filter(|n| n.is_finite() && INTERFACE_SCALES.contains(&(*n as f32))).ok_or("interfaceScale must be from 0.5 to 3")?;
             c.interface_scale = Some(n as f32);
+        }
+        "assistantPreset" => c.assistant_preset = Some(text()?.to_string()),
+        "assistantBaseUrl" => c.assistant_base_url = Some(text()?.to_string()),
+        "assistantModel" => c.assistant_model = Some(text()?.to_string()),
+        "assistantApiKey" => c.assistant_key = Some(text()?.to_string()),
+        "assistantMaxTokens" => {
+            let n = v.as_u64().filter(|n| *n <= 1_000_000).ok_or("assistantMaxTokens must be a whole number up to 1000000")?;
+            c.assistant_max_tokens = Some(if n == 0 { None } else { Some(n as u32) });
         }
         "saveVersion" => {
             let name = v.as_str().map_or_else(|| v.to_string(), str::to_string);
@@ -230,9 +243,26 @@ fn ui_json(app: &CadApp) -> Map<String, Value> {
     m
 }
 
+/// The assistant's settings, for the Options JSON form. Native-only: the browser build has no
+/// assistant yet.
+#[cfg(not(target_arch = "wasm32"))]
+fn assistant_json(app: &CadApp) -> Map<String, Value> {
+    let a = &app.assistant;
+    let mut m = Map::new();
+    m.insert("assistantPreset".into(), json!(a.preset));
+    m.insert("assistantBaseUrl".into(), json!(a.provider.base_url));
+    m.insert("assistantModel".into(), json!(a.provider.model));
+    m.insert("assistantMaxTokens".into(), json!(a.provider.max_tokens));
+    // The key itself is never reported: a report gets copied and pasted.
+    m.insert("assistantKeySet".into(), json!(!a.provider.api_key.trim().is_empty()));
+    m
+}
+
 /// Every preference: the interface's and the engine's profile variables.
 pub fn report(app: &CadApp) -> Value {
     let mut m = ui_json(app);
+    #[cfg(not(target_arch = "wasm32"))]
+    m.extend(assistant_json(app));
     if let Value::Object(engine) = cadcraft_engine::cmd::options::profile(&app.session) {
         m.extend(engine);
     }
@@ -300,6 +330,25 @@ fn run_json(app: &mut CadApp, params: &Value) -> Result<Value, String> {
     if let Some(b) = ui.time_sensitive_right_click {
         app.options.time_sensitive_right_click = b;
     }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let a = &mut app.assistant;
+        if let Some(p) = ui.assistant_preset {
+            a.preset = p;
+        }
+        if let Some(u) = ui.assistant_base_url {
+            a.provider.base_url = u;
+        }
+        if let Some(m) = ui.assistant_model {
+            a.provider.model = m;
+        }
+        if let Some(k) = ui.assistant_key {
+            a.provider.api_key = k;
+        }
+        if let Some(n) = ui.assistant_max_tokens {
+            a.provider.max_tokens = n;
+        }
+    }
     Ok(report(app))
 }
 
@@ -321,7 +370,7 @@ impl CadApp {
     /// ([`CadApp::prefs_json`]) and the desktop workspace file (panels, command line) do not
     /// already keep.
     pub fn profile_json(&self) -> String {
-        json!({
+        let mut v = json!({
             "version": 1,
             "sysvars": cadcraft_engine::cmd::options::profile(&self.session),
             "systemCursor": self.ui.system_cursor,
@@ -331,8 +380,13 @@ impl CadApp {
             "snapMarkerSize": self.options.snap_marker_size,
             "timeSensitiveRightClick": self.options.time_sensitive_right_click,
             "interfaceScale": self.options.interface_scale,
-        })
-        .to_string()
+        });
+        // The assistant's provider: where the pane sends the conversation (docs/assistant.md).
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Value::Object(m) = &mut v {
+            m.insert("assistant".into(), self.assistant.provider_json());
+        }
+        v.to_string()
     }
 
     /// Restore a profile saved by [`Self::profile_json`]. Unknown, malformed or out-of-range
@@ -374,6 +428,10 @@ impl CadApp {
         }
         if let Some(n) = c.interface_scale {
             self.options.interface_scale = n;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(a) = v.get("assistant") {
+            self.assistant.load(a);
         }
     }
 }

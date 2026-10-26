@@ -119,7 +119,7 @@ numbers):
 | Parametric | Geometric and dimensional constraints, AUTOCONSTRAIN, PARAMETERS with expressions, conflict detection; constraints re-solve after every edit |
 | Grips | Hot grips with Space to cycle Stretch, Move, Rotate, Scale and Mirror |
 | Interface languages | English, Ukrainian (Українська), Brazilian Portuguese (Português (Brasil)), German (Deutsch), Spanish (Español), Czech (Čeština), Russian (Русский), French (Français), Simplified Chinese (简体中文, with an installed CJK font), Italian (Italiano), Korean (한국어, with an installed Hangul font), Swedish (Svenska), Arabic (العربية, with an installed Arabic font), Hungarian (Magyar) and Turkish (Türkçe), live switching and a remembered Auto/system-language choice; [details](docs/localization.md) |
-| Automation | MCP server, JSON control channel, `cadcraft-cli` (info, convert, run, commands, mcp) |
+| Automation | MCP server, JSON control channel, `cadcraft-cli` (info, convert, run, commands, mcp), in-app assistant |
 
 ## Quick start
 
@@ -242,6 +242,10 @@ MCP tools include `command_line` (type at the prompt), `execute` (any command wi
 `inspect_drawing`, `query_entities`, `render` (returns a PNG) and, when connected to the app,
 `screenshot` and `ui_click`. The desktop app's JSON control channel is documented in
 [docs/control-protocol.md](docs/control-protocol.md).
+
+**The same catalog drives the in-app assistant** (Window ▸ Assistant): a model that works in the
+drawing in front of you, through the same commands, over any OpenAI-compatible provider — cloud or
+local. See [docs/assistant.md](docs/assistant.md).
 
 To run LISP routines, scripts and alias files, or to drive CADCraft from your own programs, see
 [docs/customization.md](docs/customization.md).

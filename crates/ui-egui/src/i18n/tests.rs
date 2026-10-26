@@ -84,6 +84,7 @@ fn missing_commands_menus_tools_and_snap_labels(language: &str) -> Vec<String> {
 fn missing_marked_ui_literals(language: &str) -> BTreeSet<String> {
     let catalog = catalog(language).unwrap();
     let sources = [
+        include_str!("../assistant.rs"),
         include_str!("../xrefs.rs"),
         include_str!("../canvas.rs"),
         include_str!("../chrome.rs"),

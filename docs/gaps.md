@@ -143,7 +143,7 @@ Detail: [localization-parity.md](localization-parity.md).
 | # | Gap | Est. |
 |---|---|---|
 | A1 | Smart Blocks equivalents (placement suggestions, replace, detect and convert, search), using local open models | 25–50 + model licensing |
-| A2 | An in-app assistant (AutoCAD has Autodesk Assistant); CADCraft's MCP server already lets any agent drive it, including read-only structured queries of the current selection (`query_entities selected:true`) | 10–20 |
+| A2 | ~~An in-app assistant~~ — **built** ([assistant.md](assistant.md)): the Assistant pane drives the drawing through the same tool catalog MCP publishes, over any OpenAI-compatible provider (cloud or local). What remains is a local default model and streaming markdown rendering | 2–4 |
 | A3 | Markup Assist (import markups from PDFs/images) | 10–20 |
 
 ## Jewelry (beyond AutoCAD)
@@ -164,6 +164,7 @@ the control channel and MCP all reach them, and DESCRIBE reads jewelry out of an
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-26 | minor | The assistant: an in-app pane (Window ▸ Assistant, ⌘7, `assistant {ask}`) where a model works in the open drawing through the same tool catalog MCP publishes — one list in `crates/ai/src/surface.rs`, two faces, so the pane can do exactly what an external agent can; any OpenAI-compatible provider (OpenAI, OpenRouter, Anthropic-compat, DeepSeek, Groq, Mistral, xAI, Together, Ollama, LM Studio, any base URL) with streamed answers and tool chips; the provider is saved with the profile and settable through `options`; new L5 `ai` crate and [assistant.md](assistant.md): A2 narrowed |
 | 2026-10-25 | minor | Jewelry: RINGSIZES, RING, GEM, GEMLIST, PAVE, GEMFIT, SETTING and TECHSHEET (the trade's ring sizes, gem cuts with carat weights, calibrated melee with the fit checked, settings on the stone's girdle, and a bench sheet); DESCRIBE reports a drawing's stones and bands, MCP gains `bench_sheet`; new [jewelry.md](jewelry.md) and the J1–J4 rows |
 | 2026-10-25 | minor | Raster images attach, draw and trace (IMAGEATTACH, IMAGETRACE, IMAGEFRAME, IMAGEADJUST; Insert menu with a picture picker, MCP `attach_image`/`trace_image`); DESCRIBE (measured report of a drawing or selection with a narrative) and SCALE by `width`/`height`; FF10 narrowed, IMAGE row in the file-format list narrowed |
 | 2026-10-25 | minor | DIMTFILL limits: with DIMTFILL 1 (the drawing's background color) the written `*D` block and EXPLODE keep no background mask (a WIPEOUT over the text box would), and a true-color DIMTFILLCLR is written to DXF as the nearest ACI: F7 updated |

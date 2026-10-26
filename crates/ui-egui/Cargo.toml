@@ -27,6 +27,11 @@ chrono = { workspace = true }
 image = { workspace = true }
 web-time = { workspace = true }
 
+# The assistant drives the application over HTTP from a worker thread; the browser build has no
+# assistant yet (docs/assistant.md).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+cadcraft-ai = { workspace = true }
+
 [dev-dependencies]
 # PNG fixtures for the canvas image test.
 tiny-skia = { workspace = true }

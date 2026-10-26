@@ -1,6 +1,8 @@
 # CADCraft and AI agents (MCP)
 
-CADCraft speaks the [Model Context Protocol](https://modelcontextprotocol.io) over stdio.
+CADCraft speaks the [Model Context Protocol](https://modelcontextprotocol.io) over stdio. The same
+tool catalog drives the **in-app assistant** ([assistant.md](assistant.md)): one list in
+`crates/ai/src/surface.rs`, two faces, so a command reachable from one is reachable from the other.
 
 ## Start it
 
@@ -50,11 +52,14 @@ Example client configuration (Claude Code / Claude Desktop):
 | `render {width?, height?, fit?, window?}` | A PNG image of the drawing, or of just the area `window` `[[x0,y0],[x1,y1]]` (one sheet or room of a large drawing; 1600 px wide with the window's shape unless sized). |
 | `find_text {contains?, layer?, window?, limit?, offset?}` | The readable texts — TEXT, MTEXT without formatting codes, block attributes, multileaders — with text, insertion point, height, rotation, style, layer and handle; filtered by content (any case), layer and a window around the insertion points. Read-only (the `texts` command). |
 | `attach_image {path? \| data?, name?, at?, width?, height?, rotation?, layer?, clip?, brightness?, contrast?, fade?}` | Place a raster image (PNG or JPEG) as an IMAGE reference: `path` (a file the CADCraft process reads) or `data` (base64, for uploads). `at` is the lower-left corner; `width`/`height` in drawing units size it (one of them keeps the picture's shape; default 1 unit per pixel); `clip` (pixels from the top-left) crops it; `brightness`/`contrast`/`fade` (0–100) dim it. Returns the handle, the pixel size, the placed size and unitsPerPixel. |
-| `trace_image {path? \| data? \| handle?, at?, scale?, width?, height?, mode?, threshold?, blur?, simplify?, downsample?, minArea?, holes?, closed?, layer?}` | Vectorize a picture into editable polylines: threshold (`mode: dark`\|`light`\|`alpha`, `threshold` defaults to Otsu), trace each region's outline with marching squares, simplify (Douglas–Peucker) and add one polyline per contour. A `handle` of a placed image keeps that image's placement and scale. `width`/`height` size the traced result to a measurement in the same call. Returns contours, points, the polyline handles, bounds, the threshold and what was skipped. |
+| `trace_image {path? \| data? \| handle?, at?, scale?, width?, height?, mode?, threshold?, blur?, simplify?, downsample?, minArea?, holes?, closed?, layer?}` | Vectorize a picture into editable polylines: threshold (`mode: dark`\|`light`\|`alpha`, `threshold` defaults to Otsu), trace each region's outline with marching squares, simplify (Douglas–Peucker) and add one polyline per contour. A `handle` of a placed image keeps that image's placement and scale, and so does a `path`/`data` trace: the picture's lower-left corner is the insertion point (`at`, default 0,0), 1 unit per pixel unless `scale`, so the outlines land exactly where they sit in the picture. `width`/`height` then size the result about its own lower-left corner, so a 1500 px-wide trace asked for 60 units is 60 units wide wherever the content sat. `width`/`height` size the traced result to a measurement in the same call. Returns contours, points, the polyline handles, bounds, the threshold and what was skipped. |
 | `describe_drawing {handles? \| space? \| window?, detail?, limit?, loops?, maxPairs?}` | The in-depth measured report of a drawing or selection: counts by type, extents/size/centre with units, per-layer usage, total drawn length and length per type, closed shapes with enclosed area, open contours, texts with contents, block references, raster references with pixel sizes, degenerate objects, optional gap/junction analysis of loose LINE/ARC chains (`loops: true`), per-object detail (`detail: true`), `notes` and a plain-language `message`.  When the drawing holds jewelry the report also reads it as such: stones by cut and size with carats, and each band with its size and metal. |
 | `bench_sheet {handles?, metal?, section?, size?, radius?, system?, table?, at?, layer?}` | The drawing as a jeweler's bench sheet: every stone by cut and size with count and carats, and the band's metal in grams. `section` (a closed polyline cross-section) with `size`/`radius` weighs metal by Pappus's theorem at the alloy's density; `table: true` also draws the sheet in the drawing. The jewelry commands themselves (`gem`, `gemlist`, `pave`, `gemfit`, `setting`, `ring`, `ringsizes`, `techsheet`) run through `execute`. |
 | `new_drawing {metric?}`, `open {path}`, `save {path?}`, `cancel` | Files and Escape. `save` to a `.svg`, `.png` or `.pdf` path exports: the drawing keeps its name and unsaved changes. |
 | `screenshot`, `ui_inspect`, `ui_click {x, y}` | Only when connected to the app. |
+
+The in-app assistant gets the same list minus `render`, `screenshot`, `ui_inspect` and `ui_click`:
+those answer with a picture of a window, which is what a client has and a conversation does not.
 
 Resources: `cadcraft://drawing` (inspect JSON) and `cadcraft://commands` (catalog).
 

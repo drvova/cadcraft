@@ -331,7 +331,7 @@ pub fn run(s: &mut Session, p: &Value) -> Result<Value> {
     let size = if facts.extents.is_empty() { None } else { Some((facts.extents.width(), facts.extents.height())) };
     let center = if facts.extents.is_empty() { None } else { Some(facts.extents.center()) };
     let insunits = d.header.i64("INSUNITS", 1);
-    let unit = unit_name(insunits);
+    let unit = crate::units::name(insunits);
 
     let layer_list: Vec<Value> = facts
         .layers
@@ -546,34 +546,6 @@ fn poly_vertices(kind: &EntityKind) -> Option<usize> {
         EntityKind::Polyline3d(p) => Some(p.points.len()),
         EntityKind::Spline(s) => Some(s.control.len()),
         _ => None,
-    }
-}
-
-/// AutoCAD's INSUNITS name.
-fn unit_name(insunits: i64) -> &'static str {
-    match insunits {
-        0 => "unitless",
-        1 => "inches",
-        2 => "feet",
-        3 => "miles",
-        4 => "millimeters",
-        5 => "centimeters",
-        6 => "meters",
-        7 => "kilometers",
-        8 => "microinches",
-        9 => "mils",
-        10 => "yards",
-        11 => "angstroms",
-        12 => "nanometers",
-        13 => "microns",
-        14 => "decimeters",
-        15 => "decameters",
-        16 => "hectometers",
-        17 => "gigameters",
-        18 => "astronomical units",
-        19 => "light years",
-        20 => "parsecs",
-        _ => "unknown units",
     }
 }
 

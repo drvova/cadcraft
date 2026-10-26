@@ -45,6 +45,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("engine", Class::Layer(4)),
     ("ui-egui", Class::Layer(5)),
     ("mcp", Class::Layer(5)),
+    ("ai", Class::Layer(5)),
     ("testkit", Class::Testkit),
     // apps and tooling
     ("cadcraft", Class::Exempt),
@@ -57,7 +58,14 @@ pub const TABLE: &[(&str, Class)] = &[
 /// The L0 foundation is a small chain: `raster` builds on `color` and
 /// `geom`, which the §3 diagram draws on one line. The GPU backend (`gpu`)
 /// reuses the CPU reference (`compose`) for LUTs and parity tests.
-pub const INTRA_LAYER_ORDER: &[&[&str]] = &[&["geom", "color"], &["fonts", "render"]];
+pub const INTRA_LAYER_ORDER: &[&[&str]] = &[
+    &["geom", "color"],
+    &["fonts", "render"],
+    // The assistant owns the agent-facing tool surface and the model transport; the interface and
+    // the MCP server both build on it (docs/assistant.md).
+    &["ai", "ui-egui"],
+    &["ai", "mcp"],
+];
 
 fn intra_layer_allowed(from: &str, to: &str) -> bool {
     let (from, to) = (short_name(from), short_name(to));

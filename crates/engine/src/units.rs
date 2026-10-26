@@ -365,6 +365,34 @@ impl crate::Session {
 
 pub const DEG: f64 = PI / 180.0;
 
+/// AutoCAD's INSUNITS name: what the drawing measures in, in words.
+pub fn name(insunits: i64) -> &'static str {
+    match insunits {
+        0 => "unitless",
+        1 => "inches",
+        2 => "feet",
+        3 => "miles",
+        4 => "millimeters",
+        5 => "centimeters",
+        6 => "meters",
+        7 => "kilometers",
+        8 => "microinches",
+        9 => "mils",
+        10 => "yards",
+        11 => "angstroms",
+        12 => "nanometers",
+        13 => "microns",
+        14 => "decimeters",
+        15 => "decameters",
+        16 => "hectometers",
+        17 => "gigameters",
+        18 => "astronomical units",
+        19 => "light years",
+        20 => "parsecs",
+        _ => "unknown units",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

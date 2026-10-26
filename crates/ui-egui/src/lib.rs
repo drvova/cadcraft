@@ -10,6 +10,8 @@
 
 pub mod aliasdlg;
 pub mod animation;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod assistant;
 pub mod autosave;
 pub mod bedit;
 pub mod canvas;
@@ -220,6 +222,13 @@ pub struct CadApp {
     pub canvas: canvas::CanvasState,
     /// Desktop HID status and navigation preferences; the web host supplies no HID backend.
     pub spacemouse: spacemouse::State,
+    /// The assistant pane: the conversation, the worker running the current turn, and the
+    /// provider settings ([`assistant`]).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub assistant: assistant::Assistant,
+    /// What the command line's ASSISTANT command asked the pane to do, for the next frame.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub assistant_pending: assistant::Pending,
     pub cmd: cmdline::CmdLine,
     pub status: Option<(String, f64)>,
     /// Drawings being read on worker threads ([`opening`]).
@@ -291,6 +300,10 @@ impl CadApp {
             services,
             canvas: canvas::CanvasState::default(),
             spacemouse: spacemouse::State::default(),
+            #[cfg(not(target_arch = "wasm32"))]
+            assistant: assistant::Assistant::default(),
+            #[cfg(not(target_arch = "wasm32"))]
+            assistant_pending: assistant::Pending::default(),
             cmd: cmdline::CmdLine::default(),
             status: None,
             opening: opening::Opening::default(),
@@ -589,6 +602,10 @@ impl CadApp {
         // Consume-based queues: each item is handled once, whichever callback delivers it. A
         // reply arriving during a later pass is never starved until the next frame.
         self.drain_control(ctx);
+        // Tool calls the assistant's worker queued, on the interface thread like every other
+        // control request (docs/assistant.md).
+        #[cfg(not(target_arch = "wasm32"))]
+        assistant::serve(self, ctx);
         self.finish_opening();
         // Finishing an open switches to the new drawing.
         capture::note_identity(self, ctx);

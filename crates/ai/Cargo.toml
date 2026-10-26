@@ -1,0 +1,20 @@
+[package]
+name = "cadcraft-ai"
+description = "The assistant: an agent that drives CADCraft through its own command harness"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version = "1.95"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+
+# The transport is native-only: the browser build has no assistant yet (docs/assistant.md). The
+# conversation, the tool catalog and the agent loop are plain Rust and build everywhere.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+ureq = { version = "3.5", features = ["json"] }
