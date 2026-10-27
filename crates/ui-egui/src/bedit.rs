@@ -134,8 +134,8 @@ fn draw_preview(ui: &mut egui::Ui, list: Option<&DisplayList>, note: &str, tex: 
     let t = Tokens::get();
     let (rect, _) = ui.allocate_exact_size(vec2(220.0, 170.0), egui::Sense::hover());
     let p = ui.painter_at(rect);
-    p.rect_filled(rect, 4.0, t.canvas);
-    p.rect_stroke(rect, 4.0, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+    p.rect_filled(rect, crate::theme::RADIUS_CARD, t.canvas);
+    p.rect_stroke(rect, crate::theme::RADIUS_CARD, Stroke::new(crate::theme::HAIRLINE, t.border), egui::StrokeKind::Inside);
     match list.filter(|l| !l.bounds.is_empty() && !l.prims.is_empty()) {
         Some(l) => {
             let b = l.bounds;
@@ -182,24 +182,27 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
             }
             ui.add_space(4.0);
             ui.horizontal_top(|ui| {
-                egui::Frame::new().fill(t.field).stroke(Stroke::new(1.0, t.border)).corner_radius(6.0).inner_margin(4.0).show(ui, |ui| {
-                    ui.set_min_size(vec2(222.0, 250.0));
-                    egui::ScrollArea::vertical().id_salt("bedit-blocks").max_height(250.0).min_scrolled_height(250.0).show(ui, |ui| {
-                        ui.set_width(222.0);
-                        ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
-                            for n in &names {
-                                let row = ui.selectable_label(existing.as_deref() == Some(n.as_str()), n);
-                                if row.clicked() {
-                                    app.bedit.name = n.clone();
-                                    app.bedit.error = None;
+                egui::Frame::new().fill(t.field).stroke(Stroke::new(crate::theme::HAIRLINE, t.border)).corner_radius(6.0).inner_margin(4.0).show(
+                    ui,
+                    |ui| {
+                        ui.set_min_size(vec2(222.0, 250.0));
+                        egui::ScrollArea::vertical().id_salt("bedit-blocks").max_height(250.0).min_scrolled_height(250.0).show(ui, |ui| {
+                            ui.set_width(222.0);
+                            ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
+                                for n in &names {
+                                    let row = ui.selectable_label(existing.as_deref() == Some(n.as_str()), n);
+                                    if row.clicked() {
+                                        app.bedit.name = n.clone();
+                                        app.bedit.error = None;
+                                    }
+                                    if row.double_clicked() {
+                                        ok = true;
+                                    }
                                 }
-                                if row.double_clicked() {
-                                    ok = true;
-                                }
-                            }
+                            });
                         });
-                    });
-                });
+                    },
+                );
                 ui.vertical(|ui| {
                     ui.label(RichText::new(crate::tl!("Preview")).color(t.text_dim));
                     let note = if typed.is_empty() {
