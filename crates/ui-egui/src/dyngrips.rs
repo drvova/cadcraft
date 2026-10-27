@@ -11,7 +11,7 @@ use serde_json::json;
 
 use crate::CadApp;
 use crate::canvas::Xf;
-use crate::theme::Tokens;
+use crate::theme::{self, Tokens};
 use cadcraft_engine::doc::Handle;
 use cadcraft_engine::doc::dynblock::{DynGrip, GripShape};
 
@@ -91,7 +91,7 @@ pub(crate) fn draw(app: &mut CadApp, painter: &Painter, xf: &Xf, rect: Rect, hov
         } else {
             t.grip_dyn
         };
-        painter.add(Shape::convex_polygon(pts, fill, Stroke::new(1.0, Color32::from_rgb(0x10, 0x30, 0x80))));
+        painter.add(Shape::convex_polygon(pts, fill, Stroke::new(theme::HAIRLINE, Color32::from_rgb(0x10, 0x30, 0x80))));
     }
 }
 
