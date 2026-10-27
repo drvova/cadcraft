@@ -476,7 +476,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect) {
     // bottom corners square, `box-shadow:0 0 4px 1px`, and a 1px border that takes the focus
     // colour while the bar holds the keyboard (recipes.md §1.1).
     let radius = bar_radius();
-    p.add(egui::epaint::Shadow { offset: [0, 0], blur: 4, spread: 1, color: BAR_SHADOW }.as_shape(bar, radius));
+    p.add(egui::epaint::Shadow { offset: [0, 0], blur: 4, spread: 1, color: theme::BAR_SHADOW }.as_shape(bar, radius));
     p.rect_filled(bar, radius, t.cmd_bg);
     p.rect_stroke(bar, radius, Stroke::new(theme::HAIRLINE, bar_border(ui, &t)), egui::StrokeKind::Inside);
     // Prompt glyph.
@@ -509,7 +509,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect) {
                     let r = Rect::from_min_size(pos2(x, bar.top() + 3.0), vec2(g.size().x, h - 6.0));
                     let resp = ui.interact(r, ui.scope_id().with(("kw", i)), Sense::click());
                     if resp.hovered() {
-                        p.rect_filled(r, 2.0, t.cmd_keyword_hover);
+                        p.rect_filled(r, theme::RADIUS_CONTROL, t.cmd_keyword_hover);
                     }
                     let gw = g.size().x;
                     p.galley(pos2(x, bar.center().y - g.size().y / 2.0), g, t.cmd_keyword);
@@ -565,13 +565,13 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect) {
         let pg = p.layout_no_wrap(app.cmd.preedit.clone(), font, t.text);
         let pw = pg.size().x;
         p.galley(pos2(caret_x, bar.center().y - pg.size().y / 2.0), pg, t.text);
-        p.line_segment([pos2(caret_x, bar.bottom() - 7.0), pos2(caret_x + pw, bar.bottom() - 7.0)], Stroke::new(1.0, t.accent));
+        p.line_segment([pos2(caret_x, bar.bottom() - 7.0), pos2(caret_x + pw, bar.bottom() - 7.0)], Stroke::new(theme::HAIRLINE, t.accent));
         caret_x += pw;
     }
     // Caret.
     let blink = (ui.input(|i| i.time) * 2.0).floor() as i64 % 2 == 0;
     if blink {
-        p.line_segment([pos2(caret_x + 1.0, bar.top() + 5.0), pos2(caret_x + 1.0, bar.bottom() - 5.0)], Stroke::new(1.0, t.text));
+        p.line_segment([pos2(caret_x + 1.0, bar.top() + 5.0), pos2(caret_x + 1.0, bar.bottom() - 5.0)], Stroke::new(theme::HAIRLINE, t.text));
     }
     // Where the IME's composition window follows: the whole command line and the caret in it.
     let caret = Rect::from_min_size(pos2(caret_x + 1.0, bar.top() + 5.0), vec2(1.0, h - 10.0));
@@ -627,11 +627,9 @@ fn bar_radius() -> egui::CornerRadius {
     egui::CornerRadius { nw: theme::RADIUS_COMPOSER as u8, ne: theme::RADIUS_COMPOSER as u8, sw: 0, se: 0 }
 }
 
-/// `.composer-bar`'s `box-shadow: 0 0 4px 1px var(--vscode-widget-shadow)` (§1.1); the theme's
-/// `widget.shadow` measures `#111111eb` (§11). The token source (`theme.rs`) belongs to the
-/// harden writer, so the value lives here until it becomes a `theme::` constant (a gate).
-const BAR_SHADOW: Color32 = Color32::from_rgba_unmultiplied_const(0x11, 0x11, 0x11, 0xeb);
-
+/// `.composer-bar`'s `box-shadow: 0 0 4px 1px var(--vscode-widget-shadow)` (§1.1) draws from
+/// [`theme::BAR_SHADOW`], the recipe constant holding the measured `#111111eb` (§11).
+///
 /// `.composer-bar`'s `transition: border-color 50ms ease-in-out` (§1.1).
 const BAR_TRANSITION: f32 = 0.05;
 
