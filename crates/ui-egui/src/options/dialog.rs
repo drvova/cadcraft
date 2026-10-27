@@ -131,7 +131,7 @@ fn preview_square(ui: &mut egui::Ui, side: f32, color: Color32) {
     let t = Tokens::get();
     let (rect, _) = ui.allocate_exact_size(vec2(36.0, 36.0), Sense::hover());
     let p = ui.painter();
-    p.rect_filled(rect, 3.0, t.canvas);
+    p.rect_filled(rect, crate::theme::RADIUS_SMALL, t.canvas);
     let side = side.clamp(1.0, 32.0);
     p.rect_stroke(egui::Rect::from_center_size(rect.center(), vec2(side, side)), 0.0, Stroke::new(2.0, color), egui::StrokeKind::Middle);
 }
@@ -506,7 +506,7 @@ fn aci_row(ui: &mut egui::Ui, current: u8, key: &str, changes: &mut Map<String, 
     ui.horizontal(|ui| {
         let c = cadcraft_color::aci_rgb(current);
         let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), egui::Sense::hover());
-        ui.painter().rect_filled(r, 2.0, Color32::from_rgb(c.0, c.1, c.2));
+        ui.painter().rect_filled(r, crate::theme::RADIUS_CONTROL, Color32::from_rgb(c.0, c.1, c.2));
         let mut v = current;
         if ui.add(egui::DragValue::new(&mut v).range(1..=255).prefix(format!("{} ", crate::tl!("Color")))).labelled_by(label).changed() {
             changes.insert(key.into(), json!(v));
