@@ -126,7 +126,7 @@ pub fn show(app: &mut CadApp, ctx: &egui::Context) {
     let mut done = Done::No;
     let top_start = pos.y - st.top;
     egui::Area::new(egui::Id::unique("mtext_editor_area")).order(egui::Order::Foreground).fixed_pos(pos2(pos.x, top_start)).show(ctx, |ui| {
-        egui::Frame::NONE.fill(t.panel).stroke(Stroke::new(1.0, t.accent)).inner_margin(egui::Margin::same(0)).show(ui, |ui| {
+        egui::Frame::NONE.fill(t.panel).stroke(Stroke::new(crate::theme::HAIRLINE, t.accent)).inner_margin(egui::Margin::same(0)).show(ui, |ui| {
             ui.set_width(width);
             let y0 = ui.cursor().top();
             toolbar(ui, &mut st, base_h);
@@ -273,7 +273,7 @@ fn toolbar(ui: &mut egui::Ui, st: &mut State, base_h: f64) {
             ui.horizontal(|ui| {
                 for v in SWATCHES {
                     let (r, resp) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::click());
-                    ui.painter().rect_filled(r, 2.0, color32(MTextColor::Aci(v)));
+                    ui.painter().rect_filled(r, crate::theme::RADIUS_CONTROL, color32(MTextColor::Aci(v)));
                     if resp.clicked() {
                         change(st, |c| c.color = Some(MTextColor::Aci(v)));
                         refocus = true;
@@ -454,7 +454,10 @@ fn ruler(ui: &mut egui::Ui, st: &mut State, px: f32, width: f32, base_h: f64) {
     for u in 0..=units.clamp(0, 400) {
         let x = tick(f64::from(u));
         let major = u % 5 == 0;
-        painter.line_segment([pos2(x, rect.bottom() - if major { 7.0 } else { 3.0 }), pos2(x, rect.bottom())], Stroke::new(1.0, t.text_faint));
+        painter.line_segment(
+            [pos2(x, rect.bottom() - if major { 7.0 } else { 3.0 }), pos2(x, rect.bottom())],
+            Stroke::new(crate::theme::HAIRLINE, t.text_faint),
+        );
         if major && u > 0 {
             painter.text(pos2(x + 2.0, rect.top() + 1.0), Align2::LEFT_TOP, u.to_string(), FontId::proportional(8.0), t.text_faint);
         }
@@ -534,7 +537,7 @@ fn text_box(ui: &mut egui::Ui, st: &mut State, base_h: f64, px: f32, width: f32,
                     font_id: FontId::proportional(size),
                     color,
                     italics: f.italic,
-                    underline: if f.underline { Stroke::new(1.0, color) } else { Stroke::NONE },
+                    underline: if f.underline { Stroke::new(crate::theme::HAIRLINE, color) } else { Stroke::NONE },
                     // The editor has one weight of each font: bold is shown wider.
                     extra_letter_spacing: if f.bold { size * 0.06 } else { 0.0 },
                     ..TextFormat::default()
