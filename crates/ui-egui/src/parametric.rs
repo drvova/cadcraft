@@ -52,10 +52,11 @@ pub struct Dof {
 
 /// What a DOF status reads as, and its colour (`None`: nothing to say).
 fn dof_text(status: &str, dof: Option<usize>) -> Option<(String, Color32)> {
+    let t = Tokens::get();
     match (status, dof) {
-        ("fully", _) => Some((crate::tf!("Degrees of freedom: {n}", n = 0), Color32::from_rgb(0x4c, 0xaf, 0x50))),
-        ("over", _) => Some((crate::tl!("Over-constrained").to_string(), Color32::from_rgb(0xff, 0x8a, 0x6a))),
-        ("under", Some(n)) => Some((crate::tf!("Degrees of freedom: {n}", n = n), Color32::from_rgb(0x9f, 0xb6, 0xd6))),
+        ("fully", _) => Some((crate::tf!("Degrees of freedom: {n}", n = 0), t.constraint_ok)),
+        ("over", _) => Some((crate::tl!("Over-constrained").to_string(), t.constraint_error)),
+        ("under", Some(n)) => Some((crate::tf!("Degrees of freedom: {n}", n = n), t.constraint_reference)),
         _ => None,
     }
 }
@@ -272,7 +273,7 @@ pub fn draw_overlay(app: &mut CadApp, ui: &mut egui::Ui, painter: &egui::Painter
     let glyphs = &app.canvas.param.glyphs;
     let (lu, lp) = (d.header.i64("LUNITS", 2), d.header.i64("LUPREC", 4));
     // ----- dynamic (dimensional) constraints -----
-    let dim_c = Color32::from_rgb(0x9f, 0xb6, 0xd6);
+    let dim_c = t.constraint_dim;
     let off_px: f32 = 26.0;
     let off = f64::from(off_px) / xf.scale.max(1e-300);
     for c in d.constraints.iter().filter(|c| c.kind.is_dimensional()).take(2000) {
@@ -290,8 +291,8 @@ pub fn draw_overlay(app: &mut CadApp, ui: &mut egui::Ui, painter: &egui::Painter
         };
         let label = format!("{}={}", c.name, label_value);
         let ok = g.is_none_or(|g| g.satisfied);
-        let col = if ok { dim_c } else { Color32::from_rgb(0xff, 0x8a, 0x6a) };
-        let st = Stroke::new(1.0, col);
+        let col = if ok { dim_c } else { t.constraint_error };
+        let st = Stroke::new(crate::theme::HAIRLINE, col);
         // Where the label goes (screen) and the dimension graphics.
         let mut label_at: Option<Pos2> = None;
         match c.kind {
@@ -389,7 +390,7 @@ pub fn draw_overlay(app: &mut CadApp, ui: &mut egui::Ui, painter: &egui::Painter
         let galley = painter.layout_no_wrap(label.clone(), crate::theme::small(), col);
         let size = galley.size() + vec2(22.0, 4.0);
         let r = Rect::from_center_size(at, size);
-        painter.rect_filled(r, 2.0, t.canvas.gamma_multiply(0.85));
+        painter.rect_filled(r, crate::theme::RADIUS_CONTROL, t.canvas.gamma_multiply(0.85));
         lock(painter, Rect::from_min_size(r.min + vec2(3.0, (r.height() - 13.0) / 2.0), vec2(13.0, 13.0)), col);
         painter.galley(r.min + vec2(19.0, 2.0), galley, col);
         let resp = ui.interact(r, ui.scope_id().with(("dimcon", c.id)), Sense::click());
@@ -459,22 +460,27 @@ pub fn draw_overlay(app: &mut CadApp, ui: &mut egui::Ui, painter: &egui::Painter
             }
         }
         placed.push(r);
-        let fill = Color32::from_rgb(0xb9, 0xbe, 0xc6).gamma_multiply(alpha);
-        painter.rect_filled(r, 4.0, fill);
-        painter.rect_stroke(r, 4.0, Stroke::new(1.0, Color32::from_rgb(0x6e, 0x75, 0x80).gamma_multiply(alpha)), egui::StrokeKind::Inside);
+        let fill = t.constraint_fill.gamma_multiply(alpha);
+        painter.rect_filled(r, crate::theme::RADIUS_CARD, fill);
+        painter.rect_stroke(
+            r,
+            crate::theme::RADIUS_CARD,
+            Stroke::new(crate::theme::HAIRLINE, t.constraint_stroke.gamma_multiply(alpha)),
+            egui::StrokeKind::Inside,
+        );
         for (i, (kind, id)) in kinds.iter().take(16).enumerate() {
             let cr = Rect::from_min_size(r.min + vec2(2.0 + i as f32 * cell, 2.0), vec2(cell, cell));
             let resp = ui.interact(cr, ui.scope_id().with(("cbar", h.0, *id)), Sense::hover());
             if resp.hovered() {
-                painter.rect_filled(cr.shrink(1.0), 3.0, Color32::from_rgb(0xf2, 0xf4, 0xf7));
+                painter.rect_filled(cr.shrink(1.0), crate::theme::RADIUS_SMALL, t.constraint_hover);
             }
-            paint_glyph(painter, cr.shrink(2.0), kind, Color32::from_rgb(0x26, 0x2b, 0x33));
+            paint_glyph(painter, cr.shrink(2.0), kind, t.constraint_glyph);
             resp.on_hover_text(crate::tf!("{kind} (constraint {id})", kind = crate::i18n::t(kind), id = id));
         }
         // The object's constraint state: a coloured strip at the end of its bar.
         if let Some((text, col)) = status {
             let sr = Rect::from_min_max(pos2(r.right() - strip - 1.0, r.top() + 3.0), pos2(r.right() - 2.0, r.bottom() - 3.0));
-            painter.rect_filled(sr, 2.0, col.gamma_multiply(alpha.max(0.5)));
+            painter.rect_filled(sr, crate::theme::RADIUS_CONTROL, col.gamma_multiply(alpha.max(0.5)));
             ui.interact(sr.expand(2.0), ui.scope_id().with(("cbar_dof", h.0)), Sense::hover()).on_hover_text(text);
         }
     }
@@ -485,7 +491,7 @@ pub fn draw_overlay(app: &mut CadApp, ui: &mut egui::Ui, painter: &egui::Painter
         let galley = painter.layout_no_wrap(text, crate::theme::small(), col);
         let at = pos2(xf.rect.left() + 96.0, xf.rect.bottom() - 10.0 - galley.size().y);
         let r = Rect::from_min_size(at, galley.size() + vec2(8.0, 4.0));
-        painter.rect_filled(r, 2.0, t.canvas.gamma_multiply(0.85));
+        painter.rect_filled(r, crate::theme::RADIUS_CONTROL, t.canvas.gamma_multiply(0.85));
         painter.galley(at + vec2(4.0, 2.0), galley, col);
     }
     let _ = act_take(app, act, ui);
@@ -632,9 +638,7 @@ pub fn parameters_dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool)
                             }
                             match (&r.value, &r.error) {
                                 (Some(v), _) => ui.label(trim_num(*v, 4)),
-                                (None, Some(e)) => {
-                                    ui.label(egui::RichText::new(crate::tl!("error")).color(Color32::from_rgb(0xff, 0x8a, 0x6a))).on_hover_text(e)
-                                }
+                                (None, Some(e)) => ui.label(egui::RichText::new(crate::tl!("error")).color(t.constraint_error)).on_hover_text(e),
                                 _ => ui.label(""),
                             };
                             ui.label(
