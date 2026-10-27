@@ -149,7 +149,7 @@ pub fn draw(app: &mut CadApp, p: &egui::Painter) -> bool {
     }
     let t = Tokens::get();
     let font = crate::theme::small();
-    let line = Stroke::new(1.0, t.text_dim);
+    let line = Stroke::new(crate::theme::HAIRLINE, t.text_dim);
     let st = app.canvas.grip_dyn.clone();
     let cs = xf.to_screen(c);
     let units = crate::canvas::length_units(&app.session);
@@ -189,8 +189,8 @@ pub fn draw(app: &mut CadApp, p: &egui::Painter) -> bool {
             // Each further length sits farther out and farther along, clear of the one before.
             let off = n * (24.0 * offset_rank);
             p.line_segment([a + off, cs + off], line);
-            p.line_segment([a + off * 0.2, a + off * 1.1], Stroke::new(1.0, t.text_faint));
-            p.line_segment([cs + off * 0.2, cs + off * 1.1], Stroke::new(1.0, t.text_faint));
+            p.line_segment([a + off * 0.2, a + off * 1.1], Stroke::new(crate::theme::HAIRLINE, t.text_faint));
+            p.line_segment([cs + off * 0.2, cs + off * 1.1], Stroke::new(crate::theme::HAIRLINE, t.text_faint));
             a + off + along * (0.25 + 0.25 * offset_rank.min(2.0))
         };
         let live = locked.is_none() && !(active && !app.cmd.buffer.is_empty());
@@ -205,13 +205,18 @@ fn field(p: &egui::Painter, at: Pos2, text: &str, font: &egui::FontId, active: b
     let g = p.layout_no_wrap(text.to_owned(), font.clone(), if live { t.text_faint } else { t.text });
     let lock_w = if locked { 11.0 } else { 0.0 };
     let r = Rect::from_center_size(at, vec2((g.size().x + 10.0 + lock_w).max(40.0), g.size().y + 6.0));
-    p.rect_filled(r, 2.0, t.chrome_dark);
-    p.rect_stroke(r, 2.0, if active { Stroke::new(1.5, t.accent) } else { Stroke::new(1.0, t.text_faint) }, egui::StrokeKind::Inside);
+    p.rect_filled(r, crate::theme::RADIUS_CONTROL, t.chrome_dark);
+    p.rect_stroke(
+        r,
+        crate::theme::RADIUS_CONTROL,
+        if active { Stroke::new(1.5, t.accent) } else { Stroke::new(crate::theme::HAIRLINE, t.text_faint) },
+        egui::StrokeKind::Inside,
+    );
     let gw = g.size().x;
     p.galley(pos2(r.left() + 5.0, r.center().y - g.size().y / 2.0), g, t.text);
     if active {
         let x = r.left() + 6.0 + gw;
-        p.line_segment([pos2(x, r.top() + 3.0), pos2(x, r.bottom() - 3.0)], Stroke::new(1.0, t.text));
+        p.line_segment([pos2(x, r.top() + 3.0), pos2(x, r.bottom() - 3.0)], Stroke::new(crate::theme::HAIRLINE, t.text));
     }
     if locked {
         padlock(p, pos2(r.right() - 7.0, r.center().y), t.accent);
