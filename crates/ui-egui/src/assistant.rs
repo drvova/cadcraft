@@ -529,9 +529,12 @@ const COMPOSER_HEIGHT: f32 = 96.0;
 /// The provider settings, shown under the header when the gear is on.
 fn settings(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens) {
     let running = app.assistant.running();
-    egui::Frame::new().fill(t.field).stroke(egui::Stroke::new(1.0, t.border)).corner_radius(6.0).inner_margin(egui::Margin::symmetric(10, 8)).show(
-        ui,
-        |ui| {
+    egui::Frame::new()
+        .fill(t.field)
+        .stroke(egui::Stroke::new(theme::HAIRLINE, t.border))
+        .corner_radius(6.0)
+        .inner_margin(egui::Margin::symmetric(10, 8))
+        .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.add_enabled_ui(!running, |ui| {
                 egui::Grid::new("assistant-settings-grid").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
@@ -596,8 +599,7 @@ fn settings(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens) {
                 });
                 ui.label(RichText::new(tl!("The key is saved in this machine's CADCraft profile.")).color(t.text_faint).small());
             });
-        },
-    );
+        });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -866,7 +868,11 @@ fn activity(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, call: &cadcr
 fn mono(ui: &mut egui::Ui, colour: Color32, text: &str) {
     let mut job = egui::text::LayoutJob::default();
     job.wrap.max_width = ui.available_width();
-    job.append(text, 0.0, egui::TextFormat { font_id: egui::FontId::monospace(11.0), color: colour, ..Default::default() });
+    job.append(
+        text,
+        0.0,
+        egui::TextFormat { font_id: egui::FontId::new(theme::FONT_CHIP, egui::FontFamily::Monospace), color: colour, ..Default::default() },
+    );
     ui.label(job);
 }
 
@@ -891,9 +897,12 @@ fn activity_lines(call: &cadcraft_ai::ToolCall, result: Option<&Message>) -> (St
 fn render_card(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, path: &str) {
     let Some((texture, size)) = texture_for(app, ui.ctx(), path) else { return };
     ui.add_space(2.0);
-    egui::Frame::new().fill(t.field).stroke(egui::Stroke::new(1.0, t.border)).corner_radius(6.0).inner_margin(egui::Margin::symmetric(8, 6)).show(
-        ui,
-        |ui| {
+    egui::Frame::new()
+        .fill(t.field)
+        .stroke(egui::Stroke::new(theme::HAIRLINE, t.border))
+        .corner_radius(6.0)
+        .inner_margin(egui::Margin::symmetric(8, 6))
+        .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.label(RichText::new(format!("{} · {}×{}", tl!("render"), size[0], size[1])).color(t.text_faint).small());
             ui.add_space(4.0);
@@ -904,8 +913,7 @@ fn render_card(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, path: &st
             ui.add(egui::Image::new(&texture).fit_to_exact_size(vec2((w * scale).max(1.0), (h * scale).max(1.0))));
             ui.add_space(2.0);
             ui.label(RichText::new(path).color(t.text_faint).small());
-        },
-    );
+        });
     ui.add_space(2.0);
 }
 
