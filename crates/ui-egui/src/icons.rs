@@ -678,26 +678,26 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, dim: bool) {
             pen.poly(&[(2.0, 13.0), (10.0, 17.0), (18.0, 13.0)], false, b);
             let (x, y) = (18.0, 17.0);
             match icon {
-                LayerOff => pen.fill_c(x, y, 3.5, Color32::from_rgb(0x8a, 0x8a, 0x5a)),
+                LayerOff => pen.fill_c(x, y, 3.5, t.icon_layer_off),
                 LayerIso => pen.fill_c(x, y, 3.5, a),
-                LayerFreeze => pen.text(x, y, "❄", 9.0, Color32::from_rgb(0x9f, 0xd4, 0xff)),
-                LayerLock => pen.rect(x - 3.0, y - 1.0, 6.0, 5.0, Color32::from_rgb(0xe6, 0xb4, 0x3c)),
+                LayerFreeze => pen.text(x, y, "❄", 9.0, t.icon_layer_frozen),
+                LayerLock => pen.rect(x - 3.0, y - 1.0, 6.0, 5.0, t.icon_locked),
                 LayerMatch => pen.la(x - 4.0, y, x + 4.0, y),
                 // Drawn rather than a "✓" glyph: no bundled font has U+2713, and a missing
                 // glyph panics under epaint's strict policy when no system font supplies one.
-                MakeCurrent => pen.poly(&[(x - 3.0, y), (x - 1.0, y + 2.0), (x + 3.0, y - 2.5)], false, Color32::from_rgb(0x6f, 0xe0, 0x6f)),
+                MakeCurrent => pen.poly(&[(x - 3.0, y), (x - 1.0, y + 2.0), (x + 3.0, y - 2.5)], false, t.icon_current),
                 _ => {
                     pen.arc(x, y, 3.5, 90.0, 360.0, a);
                 }
             }
         }
         Bulb | BulbOff => {
-            let c = if icon == Bulb { Color32::from_rgb(0xf5, 0xd0, 0x3b) } else { Color32::from_rgb(0x70, 0x78, 0x86) };
+            let c = if icon == Bulb { t.icon_bulb_on } else { t.icon_bulb_off };
             pen.fill_c(12.0, 10.0, 6.0, alpha(c));
-            pen.fill_rect(9.5, 15.0, 5.0, 4.0, alpha(Color32::from_rgb(0xb0, 0xb4, 0xba)));
+            pen.fill_rect(9.5, 15.0, 5.0, 4.0, alpha(t.icon_bulb_base));
         }
         Lock | Unlock => {
-            let c = alpha(Color32::from_rgb(0xe6, 0xb4, 0x3c));
+            let c = alpha(t.icon_locked);
             pen.fill_rect(6.0, 11.0, 12.0, 9.0, c);
             if icon == Lock {
                 pen.arc(12.0, 11.0, 4.0, 0.0, 180.0, c);
@@ -706,7 +706,7 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, dim: bool) {
             }
         }
         Sun => {
-            let c = alpha(Color32::from_rgb(0xf5, 0xd0, 0x3b));
+            let c = alpha(t.icon_bulb_on);
             pen.fill_c(12.0, 12.0, 4.0, c);
             for i in 0..8 {
                 let ang = (i as f32 * 45.0).to_radians();
@@ -714,7 +714,7 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, dim: bool) {
             }
         }
         Snowflake => {
-            let c = alpha(Color32::from_rgb(0x9f, 0xd4, 0xff));
+            let c = alpha(t.icon_layer_frozen);
             for i in 0..3 {
                 let ang = (i as f32 * 60.0).to_radians();
                 pen.poly(&[(12.0 - 8.0 * ang.cos(), 12.0 - 8.0 * ang.sin()), (12.0 + 8.0 * ang.cos(), 12.0 + 8.0 * ang.sin())], false, c);
@@ -828,8 +828,8 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, dim: bool) {
             }
         }
         Constraint | Fix => {
-            pen.fill_rect(7.0, 11.0, 10.0, 9.0, Color32::from_rgb(0xe6, 0xb4, 0x3c));
-            pen.arc(12.0, 11.0, 4.0, 0.0, 180.0, Color32::from_rgb(0xe6, 0xb4, 0x3c));
+            pen.fill_rect(7.0, 11.0, 10.0, 9.0, t.icon_locked);
+            pen.arc(12.0, 11.0, 4.0, 0.0, 180.0, t.icon_locked);
         }
         Collinear => {
             pen.l(3.0, 19.0, 9.0, 15.0);
@@ -849,7 +849,7 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, dim: bool) {
             }
         }
         DelConstraint => {
-            let lock = alpha(Color32::from_rgb(0xe6, 0xb4, 0x3c));
+            let lock = alpha(t.icon_locked);
             pen.fill_rect(3.0, 12.0, 9.0, 8.0, lock);
             pen.arc(7.5, 12.0, 3.5, 0.0, 180.0, lock);
             pen.l(15.0, 13.0, 21.0, 19.0);
@@ -953,7 +953,7 @@ pub fn button(ui: &mut egui::Ui, icon: Icon, size: f32, tooltip: &str, selected:
         pressed: None,
         selected: visuals(t.tab_active),
         corner_radius: egui::CornerRadius::same(6),
-        focus_stroke: Stroke::new(1.0, t.accent),
+        focus_stroke: Stroke::new(crate::theme::HAIRLINE, t.accent),
     };
     let resp = IconButton::new(crate::i18n::t(tooltip), egui::vec2(size, size), &style).selected(selected).show(ui, |ui, rect, _| {
         // A single tint would erase the blue geometry and orange picked points. Keep the
@@ -985,7 +985,12 @@ pub fn describe_control(ui: &egui::Ui, response: &egui::Response, label: &str, s
         }
     }
     if response.has_focus() && response.rect.width() > 4.0 && response.rect.height() > 4.0 {
-        ui.painter().rect_stroke(response.rect.shrink(2.0), 2.0, Stroke::new(1.0, Tokens::get().accent), egui::StrokeKind::Inside);
+        ui.painter().rect_stroke(
+            response.rect.shrink(2.0),
+            crate::theme::RADIUS_CONTROL,
+            Stroke::new(crate::theme::HAIRLINE, Tokens::get().accent),
+            egui::StrokeKind::Inside,
+        );
     }
     crate::control::record_widget(ui, response, label, if tab { "tab" } else { "button" }, selected);
 }
