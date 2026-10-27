@@ -1,0 +1,9 @@
+{
+  "src": "docs/system",
+  "out": "docs/generated/system",
+  "llms": "docs/generated/llms.txt",
+  "base": "docs/generated/system",
+  "name": "CADCraft",
+  "checkCommand": "cargo xtask system-check",
+  "examplesDir": "docs/system/examples"
+}

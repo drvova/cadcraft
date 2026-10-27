@@ -450,10 +450,11 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         ui.separator();
         ui.horizontal(|ui| {
             let ready = !st.edit.is_empty() || !(st.points.is_empty() && st.handles.is_empty());
-            if ui.add_enabled(ready, egui::Button::new(crate::tl!("OK"))).clicked() {
+            let ok = ui.add_enabled_ui(ready, |ui| crate::widgets::button(ui, "OK", crate::widgets::Kind::Primary).clicked()).inner;
+            if ok {
                 action = Action::Ok;
             }
-            if ui.button(crate::tl!("Cancel")).clicked() {
+            if crate::widgets::button(ui, "Cancel", crate::widgets::Kind::Ghost).clicked() {
                 action = Action::Cancel;
             }
         });
@@ -534,7 +535,7 @@ fn fill_ui(ui: &mut egui::Ui, f: &mut Fill, action: &mut Action) {
     ui.radio_value(&mut f.specified, false, crate::tl!("Use current origin"));
     ui.radio_value(&mut f.specified, true, crate::tl!("Specified origin"));
     ui.add_enabled_ui(f.specified, |ui| {
-        if ui.button(crate::tl!("Click to set new origin")).clicked() {
+        if crate::widgets::button(ui, "Click to set new origin", crate::widgets::Kind::Ghost).clicked() {
             *action = Action::Pick(PickMode::Origin);
         }
         if let Some([x, y]) = f.origin {
@@ -557,16 +558,17 @@ fn fill_ui(ui: &mut egui::Ui, f: &mut Fill, action: &mut Action) {
 fn options_ui(ui: &mut egui::Ui, st: &mut HatchDlgState, action: &mut Action) {
     if st.edit.is_empty() || st.edit.len() == 1 {
         ui.strong(crate::tl!("Boundaries"));
-        if ui.button(crate::tl!("Add: Pick points")).clicked() {
+        if crate::widgets::button(ui, "Add: Pick points", crate::widgets::Kind::Ghost).clicked() {
             *action = Action::Pick(PickMode::Points);
         }
-        if ui.button(crate::tl!("Add: Select objects")).clicked() {
+        if crate::widgets::button(ui, "Add: Select objects", crate::widgets::Kind::Ghost).clicked() {
             *action = Action::Pick(PickMode::Objects);
         }
         ui.horizontal(|ui| {
             ui.label(crate::tf!("Boundaries picked: {n}", n = st.points.len() + st.handles.len()));
             let any = !(st.points.is_empty() && st.handles.is_empty());
-            if ui.add_enabled(any, egui::Button::new(crate::tl!("Clear"))).clicked() {
+            let clear = ui.add_enabled_ui(any, |ui| crate::widgets::button(ui, "Clear", crate::widgets::Kind::Ghost).clicked()).inner;
+            if clear {
                 st.points.clear();
                 st.handles.clear();
             }

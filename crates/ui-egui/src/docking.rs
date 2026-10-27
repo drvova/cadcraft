@@ -235,7 +235,8 @@ pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
     style.active_background = t.tab_active;
     style.text = t.text;
     style.inactive_text = t.text_dim;
-    style.border = egui::Stroke::new(1.0, t.border);
+    style.gap = crate::theme::GAP_4;
+    style.border = egui::Stroke::new(crate::theme::HAIRLINE, t.border);
     style.accent = t.accent;
     style.font = crate::theme::body();
     // Panels arrange in a split tree around the drawing; floating title bars only move windows.

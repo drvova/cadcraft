@@ -2547,8 +2547,10 @@ fn options_menu(app: &mut CadApp, p: &egui::Painter, r: Rect, hover: Pos2) {
 fn tooltip_frame(p: &egui::Painter, at: Pos2, size: egui::Vec2) -> Rect {
     let t = Tokens::get();
     let r = Rect::from_min_size(at + vec2(18.0, -size.y - 14.0), size);
-    p.rect_filled(r, 6.0, t.cmd_bg);
-    p.rect_stroke(r, 6.0, Stroke::new(1.0, t.cmd_border), egui::StrokeKind::Inside);
+    // G-04: the tooltip follows the command line bar, whose chrome the pilot moved onto the
+    // composer recipe's measured 5-point radius (theme::RADIUS_COMPOSER).
+    p.rect_filled(r, crate::theme::RADIUS_COMPOSER, t.cmd_bg);
+    p.rect_stroke(r, crate::theme::RADIUS_COMPOSER, Stroke::new(crate::theme::HAIRLINE, t.cmd_border), egui::StrokeKind::Inside);
     r
 }
 

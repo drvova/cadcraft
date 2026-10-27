@@ -366,6 +366,12 @@ pub const FOCUS_OUTLINE_W: f32 = 1.0;
 /// radius (§3, §4, §8). The `:focus-visible` variant uses 2px at -2px.
 pub const FOCUS_OUTLINE_OFFSET: f32 = -1.0;
 
+/// The composer bar's shadow: Cursor's `box-shadow: 0 0 4px 1px widget-shadow` (§1.1), painted
+/// as `egui::epaint::Shadow { offset: [0, 0], blur: 4, spread: 1 }`. G-05 moved it here from
+/// `cmdline.rs`, so the bar and anything else following the composer chrome reads one value;
+/// `cmdline.rs` still declares its own copy until its writer switches over.
+pub const BAR_SHADOW: Color32 = Color32::from_rgba_unmultiplied_const(0x11, 0x11, 0x11, 0xeb);
+
 /// The thin crosshair and pickbox contrast with the surface under their centre.
 pub(crate) fn crosshair_color(background: Color32) -> Color32 {
     if luminance(background) > 0.5 { Color32::from_rgb(0x20, 0x20, 0x20) } else { Tokens::DARK.crosshair }

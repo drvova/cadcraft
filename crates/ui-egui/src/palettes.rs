@@ -187,7 +187,7 @@ pub fn toolsets(app: &mut CadApp, ui: &mut egui::Ui) {
                 for (name, large, small) in groups {
                     let collapsed = app.ui.collapsed_groups.iter().any(|g| g == name);
                     // Header.
-                    let (hr, hresp) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::click());
+                    let (hr, hresp) = ui.allocate_exact_size(vec2(ui.available_width(), crate::theme::CONTROL_H_ROW), Sense::click());
                     let pp = ui.painter();
                     icons::paint(
                         pp,
@@ -262,7 +262,7 @@ pub fn toolsets(app: &mut CadApp, ui: &mut egui::Ui) {
                         ui.add_space(6.0);
                     }
                     let (sr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
-                    ui.painter().hline(sr.x_range().shrink(6.0), sr.center().y, Stroke::new(1.0, t.border));
+                    ui.painter().hline(sr.x_range().shrink(6.0), sr.center().y, Stroke::new(crate::theme::HAIRLINE, t.border));
                 }
             });
         });
@@ -306,15 +306,17 @@ pub const MODELING: &[(&str, &[Tool], &[Tool])] = &[
 ];
 
 fn section_header(ui: &mut egui::Ui, title: &str) -> Rect {
-    let t = Tokens::get();
     let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 26.0), Sense::hover());
-    ui.painter().text(
-        pos2(hr.left() + 10.0, hr.center().y),
-        egui::Align2::LEFT_CENTER,
-        crate::i18n::t(title),
-        egui::FontId::proportional(14.0),
-        t.text,
-    );
+    // The recipe's section label (`.context-list-item { font-size:12px }`, the muted
+    // placeholder colour) in the palette's own 26-point header box; the callers lay controls
+    // out against the returned rect.
+    ui.scope_builder(egui::UiBuilder::new().max_rect(hr), |ui| {
+        ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+        ui.horizontal_centered(|ui| {
+            ui.add_space(10.0);
+            crate::widgets::section_label(ui, title);
+        });
+    });
     hr
 }
 
@@ -534,9 +536,9 @@ fn value_box(ui: &mut egui::Ui, text: &str, combo: bool, enabled: bool) -> egui:
     let t = Tokens::get();
     let w = ui.available_width() - 10.0;
     let (rect, resp) = ui.allocate_exact_size(vec2(w, 20.0), Sense::click());
-    ui.painter().rect_filled(rect, 2.0, if enabled { t.control } else { t.panel });
+    ui.painter().rect_filled(rect, crate::theme::RADIUS_CONTROL, if enabled { t.control } else { t.panel });
     if !enabled {
-        ui.painter().rect_stroke(rect, 2.0, Stroke::new(1.0, t.control), egui::StrokeKind::Inside);
+        ui.painter().rect_stroke(rect, crate::theme::RADIUS_CONTROL, Stroke::new(crate::theme::HAIRLINE, t.control), egui::StrokeKind::Inside);
     }
     ui.painter().text(
         pos2(rect.left() + 6.0, rect.center().y),
@@ -637,10 +639,10 @@ fn properties_header(app: &mut CadApp, ui: &mut egui::Ui) {
     let hr = section_header(ui, "Properties");
     // All | My segmented control ("My" property sets don't exist yet).
     let seg = Rect::from_min_size(pos2(hr.right() - 120.0, hr.top() + 4.0), vec2(70.0, 18.0));
-    ui.painter().rect_filled(seg, 3.0, t.chrome_dark);
+    ui.painter().rect_filled(seg, crate::theme::RADIUS_SMALL, t.chrome_dark);
     let half = Rect::from_min_size(seg.min, vec2(35.0, 18.0));
     let my = half.translate(vec2(35.0, 0.0));
-    ui.painter().rect_filled(if app.ui.properties_all { half } else { my }, 3.0, t.control);
+    ui.painter().rect_filled(if app.ui.properties_all { half } else { my }, crate::theme::RADIUS_SMALL, t.control);
     ui.painter().text(half.center(), egui::Align2::CENTER_CENTER, crate::tl!("All"), crate::theme::small(), t.text);
     ui.painter().text(my.center(), egui::Align2::CENTER_CENTER, crate::tl!("My"), crate::theme::small(), t.text_faint);
     ui.interact(my, ui.scope_id().with("prop_my"), Sense::hover()).on_hover_text(crate::tl!("My properties: not available yet"));

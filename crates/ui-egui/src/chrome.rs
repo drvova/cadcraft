@@ -544,16 +544,14 @@ pub fn start_page(app: &mut CadApp, ui: &mut egui::Ui) {
     let mut y = left.top() + 140.0;
     let mut action = None;
     for (label, cmd) in [("Open...", "open"), ("New", "new"), ("New (metric)", "new.metric"), ("Open sample drawing", "sample")] {
-        let br = Rect::from_min_size(pos2(left.left() + 34.0, y), vec2(220.0, 34.0));
-        let resp = ui.interact(br, ui.scope_id().with(("start", cmd)), Sense::click());
-        // A ghost button: the wash fill, a hairline border that brightens on hover.
-        p.rect_filled(br, 8.0, if resp.hovered() { t.control_hover } else { t.control });
-        p.rect_stroke(br, 8.0, Stroke::new(1.0, if resp.hovered() { t.cmd_border } else { t.border }), egui::StrokeKind::Inside);
-        p.text(pos2(br.left() + 16.0, br.center().y), egui::Align2::LEFT_CENTER, crate::i18n::t(label), crate::theme::body(), t.text);
+        // The recipe's ghost button (`.cursor-button-tertiary`: hairline border, fills on hover),
+        // in the sidebar's own column.
+        let at = Rect::from_min_size(pos2(left.left() + 34.0, y), vec2(220.0, crate::theme::CONTROL_H_BUTTON));
+        let resp = ui.scope_builder(egui::UiBuilder::new().max_rect(at), |ui| crate::widgets::button(ui, label, crate::widgets::Kind::Ghost)).inner;
         if resp.clicked() {
             action = Some(cmd);
         }
-        y += 44.0;
+        y = resp.rect.bottom() + crate::theme::GAP_10;
     }
     let main = Rect::from_min_max(pos2(left.right() + 36.0, r.top() + 40.0), r.max);
     p.text(main.min, egui::Align2::LEFT_TOP, crate::tl!("Recent"), egui::FontId::proportional(22.0), t.text);

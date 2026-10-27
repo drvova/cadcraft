@@ -205,20 +205,18 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         let sel_mine = sel.as_ref().is_some_and(|s| st.user.contains_key(s));
         let sel_known = sel.as_ref().is_some_and(|s| sel_mine || built.contains_key(s));
         ui.horizontal(|ui| {
-            if ui.button(crate::tl!("Add…")).clicked() {
+            if crate::widgets::button(ui, "Add…", crate::widgets::Kind::Ghost).clicked() {
                 st.form = Some(Form::default());
                 st.error = None;
             }
-            if ui.add_enabled(sel_known, egui::Button::new(crate::tl!("Edit…"))).clicked()
-                && let Some(s) = &sel
-            {
+            let edit = ui.add_enabled_ui(sel_known, |ui| crate::widgets::button(ui, "Edit…", crate::widgets::Kind::Ghost).clicked()).inner;
+            if edit && let Some(s) = &sel {
                 let command = st.user.get(s).or_else(|| built.get(s)).cloned().unwrap_or_default();
                 st.form = Some(Form { alias: s.to_ascii_uppercase(), command: command.to_ascii_uppercase(), editing: sel_mine.then(|| s.clone()) });
                 st.error = None;
             }
-            if ui.add_enabled(sel_mine, egui::Button::new(crate::tl!("Remove"))).clicked()
-                && let Some(s) = &sel
-            {
+            let remove = ui.add_enabled_ui(sel_mine, |ui| crate::widgets::button(ui, "Remove", crate::widgets::Kind::Danger).clicked()).inner;
+            if remove && let Some(s) = &sel {
                 st.user.remove(s);
             }
         });
@@ -246,8 +244,8 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                     });
                 }
                 ui.horizontal(|ui| {
-                    save = ui.button(crate::tl!("Save alias")).clicked();
-                    discard = ui.button(crate::tl!("Discard")).clicked();
+                    save = crate::widgets::button(ui, "Save alias", crate::widgets::Kind::Primary).clicked();
+                    discard = crate::widgets::button(ui, "Discard", crate::widgets::Kind::Ghost).clicked();
                 });
             });
         }
@@ -263,9 +261,9 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         }
         ui.separator();
         ui.horizontal(|ui| {
-            ok = ui.button(crate::tl!("OK")).clicked();
-            cancel = ui.button(crate::tl!("Cancel")).clicked();
-            apply_clicked = ui.button(crate::tl!("Apply")).clicked();
+            ok = crate::widgets::button(ui, "OK", crate::widgets::Kind::Primary).clicked();
+            cancel = crate::widgets::button(ui, "Cancel", crate::widgets::Kind::Ghost).clicked();
+            apply_clicked = crate::widgets::button(ui, "Apply", crate::widgets::Kind::Ghost).clicked();
         });
     });
     if (ok && apply(app)) || cancel {

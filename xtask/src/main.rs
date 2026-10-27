@@ -8,6 +8,7 @@ mod ico;
 mod layers;
 mod parity;
 mod stats;
+mod system_check;
 mod version;
 
 use std::path::{Path, PathBuf};
@@ -27,6 +28,11 @@ commands:
                   show where test corpora live; --download fetches PngSuite into corpus/pngsuite
   stats [--exact] count tests and lines per crate (--exact: ask the test harness via `-- --list`)
   parity          recompute the AutoCAD menu-breadth checklist in docs/parity-checklist.md
+  system-check [--root <dir>] [--ratchet <file>] [--ratchet-update] [--warn]
+               [--no-ratchet] [--list-rules] [--list-blind-spots]
+                  the design-system drift check: a literal colour, radius, font or control
+                  height where a token or recipe constant already holds that value. Fails on
+                  new drift; the counts in scripts/check-system-ratchet.json hold today's.
   ico <out.ico> <in.png>...
                   pack square PNGs (<= 256 px) into a Windows .ico (see packaging/icons.sh)
 ";
@@ -44,6 +50,7 @@ fn main() -> ExitCode {
         Some("corpus") => cmd_corpus(rest.contains(&"--download")),
         Some("stats") => stats::run(&root(), rest.contains(&"--exact")),
         Some("parity") => parity::run(&root()),
+        Some("system-check") => system_check::run(&root(), &rest.iter().map(|s| (*s).to_string()).collect::<Vec<_>>()),
         Some("ico") => ico::run(&rest),
         Some("version") => version::run(&root(), &rest),
         Some("-h" | "--help" | "help") | None => {
@@ -204,6 +211,7 @@ fn cmd_ci() -> Result<(), String> {
         ("i18n", Box::new(cmd_i18n)),
         ("assets", Box::new(|| assets::run(&root()))),
         ("layers", Box::new(cmd_layers)),
+        ("system-check", Box::new(|| system_check::run(&root(), &[]))),
         ("wasm", Box::new(cmd_wasm)),
     ];
     let mut done = Vec::new();

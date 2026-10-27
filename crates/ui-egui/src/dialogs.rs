@@ -301,8 +301,8 @@ fn units(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         });
         ui.separator();
         ui.horizontal(|ui| {
-            apply = ui.button("OK").clicked();
-            cancel = ui.button("Cancel").clicked();
+            apply = crate::widgets::button(ui, "OK", crate::widgets::Kind::Primary).clicked();
+            cancel = crate::widgets::button(ui, "Cancel", crate::widgets::Kind::Ghost).clicked();
         });
     });
     if apply {

@@ -1,0 +1,15 @@
+# CADCraft design system
+
+> Tokens, components and rules for CADCraft. Read a page's .md twin before writing UI. Start with docs/generated/system/rules.md.
+
+## Components
+- [Button](docs/generated/system/components/button.md): The one button: it runs the action its label names, on Cursor's measured .cursor-button recipe.
+- [Card](docs/generated/system/components/card.md): A raised block that groups related controls on an inset surface.
+- [Chip](docs/generated/system/components/chip.md): A small pill for a count or a status word, on Cursor's measured .monaco-count-badge recipe.
+- [Field](docs/generated/system/components/field.md): The one single-line text field: it edits a string and shows a hint while the string is empty.
+- [Icon button](docs/generated/system/components/icon-button.md): The icon-only control: a square target that draws a code-drawn glyph and names itself with a tooltip.
+- [Row](docs/generated/system/components/row.md): A list row: the full-width clickable band that carries one entry of a list, menu or pane.
+- [Section label](docs/generated/system/components/section-label.md): A quiet heading that names the block of controls under it.
+
+## Rules
+- [Rules](docs/generated/system/rules.md): every trap and rule ID, the page that answers it and the check that enforces it
