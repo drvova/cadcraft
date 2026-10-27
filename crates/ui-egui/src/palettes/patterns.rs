@@ -65,7 +65,7 @@ fn paint(p: &egui::Painter, r: Rect, s: &Swatch, selected: bool, hovered: bool) 
         p.rect_filled(inner, 1.0, t.text);
     } else {
         let at = |v: &Vec2| pos2(inner.min.x + v.x as f32 * inner.width(), inner.max.y - v.y as f32 * inner.height());
-        let stroke = Stroke::new(1.0, t.text);
+        let stroke = Stroke::new(crate::theme::HAIRLINE, t.text);
         for run in &s.runs {
             match run.as_slice() {
                 [] => {}
@@ -80,8 +80,8 @@ fn paint(p: &egui::Painter, r: Rect, s: &Swatch, selected: bool, hovered: bool) 
     }
     let border = match (selected, hovered) {
         (true, _) => Stroke::new(2.0, t.accent),
-        (false, true) => Stroke::new(1.0, t.accent),
-        _ => Stroke::new(1.0, t.border),
+        (false, true) => Stroke::new(crate::theme::HAIRLINE, t.accent),
+        _ => Stroke::new(crate::theme::HAIRLINE, t.border),
     };
     p.rect_stroke(square, crate::theme::RADIUS_SMALL, border, egui::StrokeKind::Inside);
     let label = Rect::from_min_max(pos2(r.min.x, square.max.y), r.max);

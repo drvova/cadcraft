@@ -323,7 +323,7 @@ fn section_header(ui: &mut egui::Ui, title: &str) -> Rect {
 fn swatch(p: &egui::Painter, r: Rect, c: Color) {
     let rgb = c.resolve(Color::Index(7), Color::Index(7));
     p.rect_filled(r, 1.0, Color32::from_rgb(rgb.0, rgb.1, rgb.2));
-    p.rect_stroke(r, 1.0, Stroke::new(1.0, Color32::from_gray(30)), egui::StrokeKind::Inside);
+    p.rect_stroke(r, 1.0, Stroke::new(crate::theme::HAIRLINE, Tokens::get().swatch_border_strong), egui::StrokeKind::Inside);
 }
 
 /// The strip collapsed Tool Sets leave on the left edge, like a collapsed palette title bar:
@@ -417,9 +417,9 @@ pub(crate) fn layers_section(app: &mut CadApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
         ui.add_space(8.0);
         let w = ui.available_width() - 10.0;
-        let (rect, resp) = ui.allocate_exact_size(vec2(w, 24.0), Sense::click());
+        let (rect, resp) = ui.allocate_exact_size(vec2(w, crate::theme::CONTROL_H_INPUT), Sense::click());
         let p = ui.painter();
-        p.rect_filled(rect, 3.0, t.control);
+        p.rect_filled(rect, crate::theme::RADIUS_SMALL, t.control);
         if let Some((name, on, frozen, locked, color)) = &cur_info {
             let mut x = rect.left() + 6.0;
             for icon in [
@@ -459,8 +459,8 @@ pub(crate) fn layers_section(app: &mut CadApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
         ui.add_space(8.0);
         let w = ui.available_width() - 10.0;
-        let (rect, _) = ui.allocate_exact_size(vec2(w, 24.0), Sense::hover());
-        ui.painter().rect_filled(rect, 3.0, t.control);
+        let (rect, _) = ui.allocate_exact_size(vec2(w, crate::theme::CONTROL_H_INPUT), Sense::hover());
+        ui.painter().rect_filled(rect, crate::theme::RADIUS_SMALL, t.control);
         ui.painter().text(
             pos2(rect.left() + 8.0, rect.center().y),
             egui::Align2::LEFT_CENTER,
@@ -887,7 +887,7 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
     let mut custom_set: Option<Value> = None;
     let group = |ui: &mut egui::Ui, title: &str| {
         let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::hover());
-        ui.painter().rect_filled(r.shrink2(vec2(6.0, 1.0)), 2.0, t.chrome_dark);
+        ui.painter().rect_filled(r.shrink2(vec2(6.0, 1.0)), crate::theme::RADIUS_CONTROL, t.chrome_dark);
         ui.painter().text(pos2(r.left() + 12.0, r.center().y), egui::Align2::LEFT_CENTER, crate::i18n::t(title), crate::theme::small(), t.text_dim);
     };
     group(ui, "General");
