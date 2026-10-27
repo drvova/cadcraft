@@ -84,7 +84,7 @@ impl Opening {
             .show(ctx, |ui| {
                 egui::Frame::NONE
                     .fill(t.panel)
-                    .stroke(egui::Stroke::new(1.0, t.border))
+                    .stroke(egui::Stroke::new(crate::theme::HAIRLINE, t.border))
                     .corner_radius(10.0)
                     .inner_margin(egui::Margin::symmetric(18, 12))
                     .show(ui, |ui| {

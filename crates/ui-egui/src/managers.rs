@@ -267,7 +267,7 @@ fn point_style(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) -> Action
                 } else {
                     t.control
                 };
-                ui.painter().rect_filled(rect, 3.0, fill);
+                ui.painter().rect_filled(rect, crate::theme::RADIUS_SMALL, fill);
                 draw_point(ui.painter(), rect.center(), 9.0, *v, Stroke::new(1.5, t.text));
                 if r.on_hover_text(format!("PDMODE {v}")).clicked() && *v != mode {
                     action = set(*v, size, rel);
@@ -1068,11 +1068,11 @@ fn sheet_sketch(ui: &mut egui::Ui, page: &cadcraft_doc::PageSetup, t: &Tokens) {
         let k = (110.0 / w.max(h).max(1.0)) as f32;
         let sheet = egui::Rect::from_center_size(rect.center(), vec2(w as f32 * k, h as f32 * k));
         ui.painter().rect_filled(sheet, 0.0, t.field);
-        ui.painter().rect_stroke(sheet, 0.0, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+        ui.painter().rect_stroke(sheet, 0.0, Stroke::new(crate::theme::HAIRLINE, t.border), egui::StrokeKind::Inside);
         let [l, b, r, top] = page.margins_mm.map(|m| m as f32 * k);
         let printable = egui::Rect::from_min_max(sheet.min + vec2(l, top), sheet.max - vec2(r, b));
         if printable.is_positive() {
-            ui.painter().rect_stroke(printable, 0.0, Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
+            ui.painter().rect_stroke(printable, 0.0, Stroke::new(crate::theme::HAIRLINE, t.accent), egui::StrokeKind::Inside);
         }
         ui.label(RichText::new(format!("{w:.1} × {h:.1} mm")).color(t.text_dim));
     });
