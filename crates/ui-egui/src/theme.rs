@@ -134,6 +134,64 @@ pub struct Tokens {
     pub crosshair: Color32,
     /// The sheet of paper on a layout tab.
     pub paper: Color32,
+
+    // Overlay chrome painted over the drawing area and its panels: the constraint bar and its
+    // dimensions, the ViewCube, the icon state glyphs, and the swatch borders. Each holds today's
+    // literal (value-identical), and LIGHT inherits it: the code painted them in both themes.
+    /// The constraint bar's fill.
+    pub constraint_fill: Color32,
+    /// The constraint bar's stroke.
+    pub constraint_stroke: Color32,
+    /// The fill under a hovered constraint glyph.
+    pub constraint_hover: Color32,
+    /// The constraint glyph's ink on [`Tokens::constraint_fill`].
+    pub constraint_glyph: Color32,
+    /// A satisfied dimensional constraint's lines and labels.
+    pub constraint_dim: Color32,
+    /// A fully constrained object's status strip.
+    pub constraint_ok: Color32,
+    /// An over-constrained object's or a failed dimension's status.
+    pub constraint_error: Color32,
+    /// An under-constrained object's status (the reference blue).
+    pub constraint_reference: Color32,
+    /// The ViewCube ring's edge.
+    pub viewcube_ring: Color32,
+    /// The ViewCube ring under the pointer.
+    pub viewcube_ring_hover: Color32,
+    /// The ViewCube's outer edge line.
+    pub viewcube_edge: Color32,
+    /// The ViewCube's compass letters.
+    pub viewcube_label: Color32,
+    /// The ViewCube's Top face.
+    pub viewcube_face: Color32,
+    /// The ViewCube's Top face under the pointer.
+    pub viewcube_face_hover: Color32,
+    /// The ViewCube Top face's border.
+    pub viewcube_face_border: Color32,
+    /// The ViewCube Top face's label ("TOP").
+    pub viewcube_face_label: Color32,
+    /// The layer-off dot on the layer icons.
+    pub icon_layer_off: Color32,
+    /// The freeze snowflake (a frozen layer, the freeze glyph).
+    pub icon_layer_frozen: Color32,
+    /// The padlock glyph (a locked layer, the lock toggle, the constraint locks).
+    pub icon_locked: Color32,
+    /// The MakeCurrent check on the layer icons.
+    pub icon_current: Color32,
+    /// The lit bulb and the sun.
+    pub icon_bulb_on: Color32,
+    /// The unlit bulb.
+    pub icon_bulb_off: Color32,
+    /// The bulb's screw base.
+    pub icon_bulb_base: Color32,
+    /// The check beside the current layer in the layer manager.
+    pub layer_current: Color32,
+    /// The do-not-plot slash over the layer's Plot button.
+    pub layer_no_plot: Color32,
+    /// The border of a colour swatch.
+    pub swatch_border: Color32,
+    /// The border of a palette swatch; a shade lighter than [`Tokens::swatch_border`].
+    pub swatch_border_strong: Color32,
 }
 
 impl Tokens {
@@ -190,6 +248,35 @@ impl Tokens {
         on_accent: Color32::from_rgb(0x14, 0x14, 0x14),
         crosshair: Color32::from_rgb(0xe4, 0xe4, 0xe4),
         paper: Color32::from_rgb(0xfc, 0xfc, 0xfc),
+        // Overlay chrome over the drawing area and its panels; each value is the literal it
+        // replaces, and LIGHT inherits it.
+        constraint_fill: Color32::from_rgb(0xb9, 0xbe, 0xc6),      // parametric.rs:462
+        constraint_stroke: Color32::from_rgb(0x6e, 0x75, 0x80),    // parametric.rs:464
+        constraint_hover: Color32::from_rgb(0xf2, 0xf4, 0xf7),     // parametric.rs:469
+        constraint_glyph: Color32::from_rgb(0x26, 0x2b, 0x33),     // parametric.rs:471
+        constraint_dim: Color32::from_rgb(0x9f, 0xb6, 0xd6),       // parametric.rs:275
+        constraint_ok: Color32::from_rgb(0x4c, 0xaf, 0x50),        // parametric.rs:56
+        constraint_error: Color32::from_rgb(0xff, 0x8a, 0x6a),     // parametric.rs:57, 293, 636
+        constraint_reference: Color32::from_rgb(0x9f, 0xb6, 0xd6), // parametric.rs:58
+        viewcube_ring: Color32::from_rgb(0x48, 0x50, 0x5c),        // viewcube.rs:86
+        viewcube_ring_hover: Color32::from_rgb(0x5c, 0x67, 0x7c),  // viewcube.rs:86
+        viewcube_edge: Color32::from_rgb(0x5c, 0x65, 0x72),        // viewcube.rs:88
+        viewcube_label: Color32::from_rgb(0xc8, 0xcc, 0xd2),       // viewcube.rs:90
+        viewcube_face: Color32::from_rgb(0x9a, 0x9e, 0xa4),        // viewcube.rs:97
+        viewcube_face_hover: Color32::from_rgb(0xb8, 0xbc, 0xc2),  // viewcube.rs:97
+        viewcube_face_border: Color32::from_rgb(0x6c, 0x70, 0x76), // viewcube.rs:99
+        viewcube_face_label: Color32::from_rgb(0x50, 0x54, 0x5a),  // viewcube.rs:100
+        icon_layer_off: Color32::from_rgb(0x8a, 0x8a, 0x5a),       // icons.rs:681
+        icon_layer_frozen: Color32::from_rgb(0x9f, 0xd4, 0xff),    // icons.rs:683, 717
+        icon_locked: Color32::from_rgb(0xe6, 0xb4, 0x3c),          // icons.rs:684, 700, 831, 832, 852
+        icon_current: Color32::from_rgb(0x6f, 0xe0, 0x6f),         // icons.rs:688
+        icon_bulb_on: Color32::from_rgb(0xf5, 0xd0, 0x3b),         // icons.rs:695, 709
+        icon_bulb_off: Color32::from_rgb(0x70, 0x78, 0x86),        // icons.rs:695
+        icon_bulb_base: Color32::from_rgb(0xb0, 0xb4, 0xba),       // icons.rs:697
+        layer_current: Color32::from_rgb(0x4c, 0xc2, 0x5a),        // layers.rs:198
+        layer_no_plot: Color32::from_rgb(0xe0, 0x50, 0x50),        // layers.rs:506
+        swatch_border: Color32::from_gray(25),                     // layers.rs:42
+        swatch_border_strong: Color32::from_gray(30),              // palettes.rs:326
     };
 
     /// Light grey chrome with dark text. The drawing-area colours (canvas, grid, axes, selection,
