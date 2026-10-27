@@ -728,7 +728,7 @@ fn draw_grid(app: &CadApp, p: &egui::Painter, xf: &Xf) {
                 let sx = xf.to_screen(Vec2::new(x, 0.0)).x;
                 lines.push(Shape::line_segment(
                     [pos2(sx, xf.rect.top()), pos2(sx, xf.rect.bottom())],
-                    Stroke::new(1.0, if is_major { t.grid_major } else { t.grid_minor }),
+                    Stroke::new(crate::theme::HAIRLINE, if is_major { t.grid_major } else { t.grid_minor }),
                 ));
             }
             for j in y0..=y1 {
@@ -737,7 +737,7 @@ fn draw_grid(app: &CadApp, p: &egui::Painter, xf: &Xf) {
                 let sy = xf.to_screen(Vec2::new(0.0, y)).y;
                 lines.push(Shape::line_segment(
                     [pos2(xf.rect.left(), sy), pos2(xf.rect.right(), sy)],
-                    Stroke::new(1.0, if is_major { t.grid_major } else { t.grid_minor }),
+                    Stroke::new(crate::theme::HAIRLINE, if is_major { t.grid_major } else { t.grid_minor }),
                 ));
             }
         }
@@ -746,10 +746,10 @@ fn draw_grid(app: &CadApp, p: &egui::Painter, xf: &Xf) {
     // Axes through the origin.
     let o = xf.to_screen(Vec2::ZERO);
     if xf.rect.y_range().contains(o.y) {
-        p.line_segment([pos2(xf.rect.left(), o.y), pos2(xf.rect.right(), o.y)], Stroke::new(1.0, t.axis_x));
+        p.line_segment([pos2(xf.rect.left(), o.y), pos2(xf.rect.right(), o.y)], Stroke::new(crate::theme::HAIRLINE, t.axis_x));
     }
     if xf.rect.x_range().contains(o.x) {
-        p.line_segment([pos2(o.x, xf.rect.top()), pos2(o.x, xf.rect.bottom())], Stroke::new(1.0, t.axis_y));
+        p.line_segment([pos2(o.x, xf.rect.top()), pos2(o.x, xf.rect.bottom())], Stroke::new(crate::theme::HAIRLINE, t.axis_y));
     }
 }
 
@@ -768,11 +768,12 @@ fn draw_iso_grid(app: &CadApp, p: &egui::Painter, xf: &Xf) {
     }
     let (origin, angle) = app.session.doc().map(cadcraft_engine::snap::grid_frame).unwrap_or((Vec2::ZERO, 0.0));
     let lines = iso::grid_lines(xf.world_bounds(), d, origin, angle, s.gridmajor);
-    p.extend(
-        lines.into_iter().map(|l| {
-            Shape::line_segment([xf.to_screen(l.a), xf.to_screen(l.b)], Stroke::new(1.0, if l.major { t.grid_major } else { t.grid_minor }))
-        }),
-    );
+    p.extend(lines.into_iter().map(|l| {
+        Shape::line_segment(
+            [xf.to_screen(l.a), xf.to_screen(l.b)],
+            Stroke::new(crate::theme::HAIRLINE, if l.major { t.grid_major } else { t.grid_minor }),
+        )
+    }));
 }
 
 fn clip_infinite(xf: &Xf, base: Vec2, dir: Vec2, ray: bool) -> Option<[Pos2; 2]> {
@@ -911,7 +912,7 @@ pub(crate) fn draw_list(p: &egui::Painter, xf: &Xf, list: &DisplayList, bg: Rgb,
                 if let (Some(b), Some(d)) = (pts.first(), pts.get(1))
                     && let Some(seg) = clip_infinite(xf, *b, *d, ray)
                 {
-                    shapes.push(Shape::line_segment(seg, Stroke::new(1.0, col)));
+                    shapes.push(Shape::line_segment(seg, Stroke::new(crate::theme::HAIRLINE, col)));
                 }
             }
             // Drawn as textured meshes by `draw_images`, before the linework.
@@ -1086,7 +1087,7 @@ fn draw_list_gpu(c: &mut CanvasState, p: &egui::Painter, xf: &Xf, bg: Rgb, lwdis
         if let (Kind::Infinite { ray }, Some(b), Some(d)) = (prim.kind, pts.first(), pts.get(1))
             && let Some(seg) = clip_infinite(xf, *b, *d, ray)
         {
-            shapes.push(Shape::line_segment(seg, Stroke::new(1.0, prim_color32(prim, bg))));
+            shapes.push(Shape::line_segment(seg, Stroke::new(crate::theme::HAIRLINE, prim_color32(prim, bg))));
         }
     }
     p.extend(shapes);
@@ -1139,7 +1140,7 @@ pub(crate) fn draw_highlight(p: &egui::Painter, xf: &Xf, list: &DisplayList, pri
             }
             Kind::Point => {
                 if let Some(q) = pts.first() {
-                    shapes.push(Shape::circle_stroke(xf.to_screen(*q), 3.0, Stroke::new(1.0, color)));
+                    shapes.push(Shape::circle_stroke(xf.to_screen(*q), 3.0, Stroke::new(crate::theme::HAIRLINE, color)));
                 }
             }
             Kind::Tris if !look.dashed => {
@@ -1325,7 +1326,7 @@ fn draw_snap_marker(p: &egui::Painter, at: Pos2, hit: &SnapHit) {
     p.text(at + vec2(12.0, 12.0), egui::Align2::LEFT_TOP, crate::i18n::t(hit.name), crate::theme::small(), Color32::BLACK);
     let galley = p.layout_no_wrap(crate::i18n::t(hit.name).to_string(), crate::theme::small(), Color32::BLACK);
     let r = Rect::from_min_size(at + vec2(10.0, 10.0), galley.size() + vec2(6.0, 2.0));
-    p.rect_filled(r, 2.0, Color32::from_rgb(0xff, 0xff, 0xe1));
+    p.rect_filled(r, crate::theme::RADIUS_CONTROL, Color32::from_rgb(0xff, 0xff, 0xe1));
     p.galley(r.min + vec2(3.0, 1.0), galley, Color32::BLACK);
 }
 
@@ -1334,7 +1335,7 @@ fn draw_snap_marker(p: &egui::Painter, at: Pos2, hit: &SnapHit) {
 fn draw_tracking(p: &egui::Painter, xf: &Xf, acquired: &[snap::tracking::Acquired], track: Option<&snap::tracking::Track>, far: f64) {
     use snap::tracking::{Acquired, PathShape};
     let t = Tokens::get();
-    let st = Stroke::new(1.0, t.snap);
+    let st = Stroke::new(crate::theme::HAIRLINE, t.snap);
     for a in acquired {
         let c = xf.to_screen(a.at());
         if let Acquired::Parallel { .. } = a {
@@ -1892,7 +1893,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
                 xf_paper.to_screen(Vec2::new(sh.printable.max.x, sh.printable.min.y)),
             );
             let pts = [pa.left_top(), pa.right_top(), pa.right_bottom(), pa.left_bottom(), pa.left_top()];
-            painter.extend(Shape::dashed_line(&pts, Stroke::new(1.0, Color32::from_gray(150)), 4.0, 4.0));
+            painter.extend(Shape::dashed_line(&pts, Stroke::new(crate::theme::HAIRLINE, Color32::from_gray(150)), 4.0, 4.0));
             (Rgb(t.paper.r(), t.paper.g(), t.paper.b()), Some(paper))
         }
         None => {
@@ -2053,7 +2054,12 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
                                 t.grip
                             },
                         );
-                        painter.rect_stroke(r, 0.0, Stroke::new(1.0, Color32::from_rgb(0x10, 0x30, 0x80)), egui::StrokeKind::Middle);
+                        painter.rect_stroke(
+                            r,
+                            0.0,
+                            Stroke::new(crate::theme::HAIRLINE, Color32::from_rgb(0x10, 0x30, 0x80)),
+                            egui::StrokeKind::Middle,
+                        );
                     }
                 }
             }
@@ -2092,7 +2098,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         if let Some(fill) = selection_area_fill(&app.session.settings, crossing) {
             painter.rect_filled(r, 0.0, fill);
         }
-        let st = Stroke::new(1.0, if crossing { t.crossing_stroke } else { t.window_stroke });
+        let st = Stroke::new(crate::theme::HAIRLINE, if crossing { t.crossing_stroke } else { t.window_stroke });
         if crossing {
             let pts = vec![r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
             painter.extend(Shape::dashed_line(&pts, st, 5.0, 3.0));
@@ -2288,7 +2294,7 @@ fn cycle_badge(p: &egui::Painter, at: Pos2) {
     for off in [vec2(14.0, -22.0), vec2(19.0, -17.0)] {
         let r = Rect::from_min_size(at + off, vec2(9.0, 9.0));
         p.rect_filled(r, 1.0, t.cmd_bg);
-        p.rect_stroke(r, 1.0, Stroke::new(1.0, t.text), egui::StrokeKind::Inside);
+        p.rect_stroke(r, 1.0, Stroke::new(crate::theme::HAIRLINE, t.text), egui::StrokeKind::Inside);
     }
 }
 
@@ -2317,14 +2323,14 @@ fn cycle_list(app: &mut CadApp, p: &egui::Painter) {
     let layer_w = galleys.iter().map(|(_, b)| b.size().x).fold(20.0, f32::max);
     let w = ty_w + layer_w + 36.0;
     let m = Rect::from_min_size(list.at + vec2(14.0, 14.0), vec2(w, row_h * galleys.len() as f32 + 4.0));
-    p.rect_filled(m, 3.0, t.cmd_bg);
-    p.rect_stroke(m, 3.0, Stroke::new(1.0, t.cmd_border), egui::StrokeKind::Inside);
+    p.rect_filled(m, crate::theme::RADIUS_SMALL, t.cmd_bg);
+    p.rect_stroke(m, crate::theme::RADIUS_SMALL, Stroke::new(crate::theme::HAIRLINE, t.cmd_border), egui::StrokeKind::Inside);
     let hover = app.canvas.hover;
     list.rows.clear();
     for (i, ((ty, layer), (h, _, _))) in galleys.into_iter().zip(&list.items).enumerate() {
         let row = Rect::from_min_size(pos2(m.left() + 2.0, m.top() + 2.0 + row_h * i as f32), vec2(w - 4.0, row_h));
         if hover == Some(*h) {
-            p.rect_filled(row, 2.0, t.cmd_keyword_hover);
+            p.rect_filled(row, crate::theme::RADIUS_CONTROL, t.cmd_keyword_hover);
         }
         p.galley(pos2(row.left() + 8.0, row.center().y - ty.size().y / 2.0), ty, t.text);
         p.galley(pos2(row.left() + 20.0 + ty_w, row.center().y - layer.size().y / 2.0), layer, t.text_dim);
@@ -2337,7 +2343,7 @@ fn tooltip(p: &egui::Painter, at: Pos2, text: &str) {
     let galley = p.layout_no_wrap(text.to_string(), crate::theme::small(), t.text);
     let r = Rect::from_min_size(at, galley.size() + vec2(8.0, 4.0));
     p.rect_filled(r, 6.0, t.cmd_bg);
-    p.rect_stroke(r, 6.0, Stroke::new(1.0, t.cmd_border), egui::StrokeKind::Inside);
+    p.rect_stroke(r, 6.0, Stroke::new(crate::theme::HAIRLINE, t.cmd_border), egui::StrokeKind::Inside);
     p.galley(r.min + vec2(4.0, 2.0), galley, t.text);
 }
 
@@ -2412,7 +2418,7 @@ fn pickbox_half(pickbox: f64) -> Option<f32> {
 }
 
 fn draw_crosshair(app: &CadApp, p: &egui::Painter, rect: Rect, at: Pos2, pickbox: bool, ink: Color32) {
-    let st = Stroke::new(1.0, ink);
+    let st = Stroke::new(crate::theme::HAIRLINE, ink);
     let len = (rect.height() * app.session.settings.cursorsize as f32 / 100.0).max(12.0);
     let pb = if pickbox { pickbox_half(app.session.settings.pickbox) } else { None };
     let gap = pb.unwrap_or(0.0);
@@ -2524,8 +2530,8 @@ fn options_menu(app: &mut CadApp, p: &egui::Painter, r: Rect, hover: Pos2) {
     let w = rows.iter().map(|g| g.size().x).fold(60.0, f32::max) + 28.0;
     let h = row_h * rows.len() as f32 + 4.0;
     let m = Rect::from_min_size(pos2(r.left(), r.bottom() + 2.0), vec2(w, h));
-    p.rect_filled(m, 3.0, t.cmd_bg);
-    p.rect_stroke(m, 3.0, Stroke::new(1.0, t.cmd_border), egui::StrokeKind::Inside);
+    p.rect_filled(m, crate::theme::RADIUS_SMALL, t.cmd_bg);
+    p.rect_stroke(m, crate::theme::RADIUS_SMALL, Stroke::new(crate::theme::HAIRLINE, t.cmd_border), egui::StrokeKind::Inside);
     let row_at = |i: usize| Rect::from_min_size(pos2(m.left() + 2.0, m.top() + 2.0 + row_h * i as f32), vec2(w - 4.0, row_h));
     // The row under the pointer is the highlighted one.
     if let Some(i) = (0..menu.keywords.len()).find(|i| row_at(*i).contains(hover)) {
@@ -2535,7 +2541,7 @@ fn options_menu(app: &mut CadApp, p: &egui::Painter, r: Rect, hover: Pos2) {
     for (i, (g, k)) in rows.into_iter().zip(&menu.keywords).enumerate() {
         let row = row_at(i);
         if i == menu.index {
-            p.rect_filled(row, 2.0, t.cmd_keyword_hover);
+            p.rect_filled(row, crate::theme::RADIUS_CONTROL, t.cmd_keyword_hover);
             p.circle_filled(pos2(row.left() + 9.0, row.center().y), 2.5, t.accent);
         }
         p.galley(pos2(row.left() + 20.0, row.center().y - g.size().y / 2.0), g, t.text);
@@ -2641,14 +2647,14 @@ fn dynamic_input_boxes(
         p.galley(pos2(x, cy - label.size().y / 2.0), label, t.text_faint);
         x += lw + 3.0;
         let b = Rect::from_min_size(pos2(x, cy - box_h / 2.0), vec2(bw, box_h));
-        p.rect_filled(b, 2.0, t.chrome_dark);
-        let stroke = if active { Stroke::new(1.5, t.accent) } else { Stroke::new(1.0, t.border) };
-        p.rect_stroke(b, 2.0, stroke, egui::StrokeKind::Inside);
+        p.rect_filled(b, crate::theme::RADIUS_CONTROL, t.chrome_dark);
+        let stroke = if active { Stroke::new(1.5, t.accent) } else { Stroke::new(crate::theme::HAIRLINE, t.border) };
+        p.rect_stroke(b, crate::theme::RADIUS_CONTROL, stroke, egui::StrokeKind::Inside);
         let vw = value.size().x;
         p.galley(pos2(b.left() + 5.0, cy - value.size().y / 2.0), value, t.text);
         if active {
             let cx = b.left() + 6.0 + vw;
-            p.line_segment([pos2(cx, b.top() + 3.0), pos2(cx, b.bottom() - 3.0)], Stroke::new(1.0, t.text));
+            p.line_segment([pos2(cx, b.top() + 3.0), pos2(cx, b.bottom() - 3.0)], Stroke::new(crate::theme::HAIRLINE, t.text));
         }
         if locked {
             draw_lock(p, pos2(b.right() - lock_w / 2.0 - 3.0, cy), t.accent);
@@ -2670,11 +2676,11 @@ fn draw_lock(p: &egui::Painter, c: Pos2, color: Color32) {
 fn draw_ucs_icon(p: &egui::Painter, rect: Rect) {
     let t = Tokens::get();
     let o = pos2(rect.left() + 36.0, rect.bottom() - 34.0);
-    let st = Stroke::new(1.0, t.canvas_ink);
+    let st = Stroke::new(crate::theme::HAIRLINE, t.canvas_ink);
     p.line_segment([o, o + vec2(60.0, 0.0)], st);
     p.line_segment([o, o + vec2(0.0, -60.0)], st);
     p.rect_stroke(Rect::from_center_size(o, vec2(9.0, 9.0)), 0.0, st, egui::StrokeKind::Middle);
-    let f = egui::FontId::proportional(13.0);
+    let f = crate::theme::body();
     p.text(o + vec2(70.0, 0.0), egui::Align2::LEFT_CENTER, crate::tl!("X"), f.clone(), t.canvas_ink);
     p.text(o + vec2(0.0, -70.0), egui::Align2::CENTER_BOTTOM, crate::tl!("Y"), f, t.canvas_ink);
 }

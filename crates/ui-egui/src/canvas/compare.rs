@@ -60,39 +60,42 @@ pub(super) fn paint(app: &mut CadApp, ctx: &egui::Context, p: &egui::Painter, xf
         let r = Rect::from_two_pos(xf.to_screen(b.min), xf.to_screen(b.max)).expand(6.0);
         if r.intersects(rect) {
             let w = if c.at == Some(i) { 2.5 } else { 1.0 };
-            p.rect_stroke(r, 4.0, Stroke::new(w, t.compare_area), egui::StrokeKind::Middle);
+            p.rect_stroke(r, crate::theme::RADIUS_CARD, Stroke::new(w, t.compare_area), egui::StrokeKind::Middle);
         }
     }
     // The comparison bar.
     let (added, removed, changed, name, areas, at) = (c.added.len(), c.removed.len(), c.changed.len(), c.other_name.clone(), c.regions.len(), c.at);
     let mut action = None;
     egui::Area::new(id().with("bar")).order(egui::Order::Foreground).fixed_pos(rect.center_top() + vec2(-200.0, 8.0)).show(ctx, |ui| {
-        egui::Frame::new().fill(t.cmd_bg).stroke(Stroke::new(1.0, t.cmd_border)).corner_radius(6.0).inner_margin(6.0).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("■").color(t.compare_this));
-                ui.label(RichText::new(crate::tf!("Only in this drawing: {n}", n = added)).color(t.text));
-                ui.label(RichText::new("■").color(t.compare_other));
-                ui.label(RichText::new(crate::tf!("Only in {name}: {n}", name = name, n = removed)).color(t.text));
-                ui.label(RichText::new(crate::tf!("Changed: {n}", n = changed)).color(t.text));
-                ui.separator();
-                if areas > 0 {
-                    let shown = at.map_or_else(|| "–".to_string(), |i| (i + 1).to_string());
-                    ui.label(RichText::new(format!("{shown}/{areas}")).color(t.text_dim));
-                }
-                if ui.button("◀").on_hover_text(crate::tl!("Previous Change")).clicked() {
-                    action = Some("compare.previous");
-                }
-                if ui.button("▶").on_hover_text(crate::tl!("Next Change")).clicked() {
-                    action = Some("compare.next");
-                }
-                if ui.button(crate::tl!("Export")).on_hover_text(crate::tl!("Export Comparison")).clicked() {
-                    action = Some("compareexport");
-                }
-                if ui.button("×").on_hover_text(crate::tl!("Close Comparison")).clicked() {
-                    action = Some("compareclose");
-                }
-            });
-        });
+        egui::Frame::new().fill(t.cmd_bg).stroke(Stroke::new(crate::theme::HAIRLINE, t.cmd_border)).corner_radius(6.0).inner_margin(6.0).show(
+            ui,
+            |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("■").color(t.compare_this));
+                    ui.label(RichText::new(crate::tf!("Only in this drawing: {n}", n = added)).color(t.text));
+                    ui.label(RichText::new("■").color(t.compare_other));
+                    ui.label(RichText::new(crate::tf!("Only in {name}: {n}", name = name, n = removed)).color(t.text));
+                    ui.label(RichText::new(crate::tf!("Changed: {n}", n = changed)).color(t.text));
+                    ui.separator();
+                    if areas > 0 {
+                        let shown = at.map_or_else(|| "–".to_string(), |i| (i + 1).to_string());
+                        ui.label(RichText::new(format!("{shown}/{areas}")).color(t.text_dim));
+                    }
+                    if ui.button("◀").on_hover_text(crate::tl!("Previous Change")).clicked() {
+                        action = Some("compare.previous");
+                    }
+                    if ui.button("▶").on_hover_text(crate::tl!("Next Change")).clicked() {
+                        action = Some("compare.next");
+                    }
+                    if ui.button(crate::tl!("Export")).on_hover_text(crate::tl!("Export Comparison")).clicked() {
+                        action = Some("compareexport");
+                    }
+                    if ui.button("×").on_hover_text(crate::tl!("Close Comparison")).clicked() {
+                        action = Some("compareclose");
+                    }
+                });
+            },
+        );
     });
     if let Some(a) = action {
         let _ = app.run(a, json!({}));
