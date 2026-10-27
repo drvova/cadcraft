@@ -497,14 +497,14 @@ fn production_font_chain_covers_latin_and_shortcut_symbols() {
     ctx.fonts_mut(|view| {
         for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
             for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".chars() {
-                assert!(view.has_glyph(&egui::FontId::new(12.0, family.clone()), c), "Latin {c:?} missing in {family:?}");
+                assert!(view.has_glyph(&egui::FontId::new(crate::theme::FONT_LABEL, family.clone()), c), "Latin {c:?} missing in {family:?}");
             }
         }
         // Proportional shortcut labels (`Button::shortcut_text` and the translated menus) use
         // these symbols: ⌘ from the monochrome icon face, ⇧ from Hack as a bounded fallback.
         for c in ['\u{2318}', '\u{21e7}', '\u{21a9}', '\u{2026}', '\u{2212}'] {
-            assert!(view.has_glyph(&egui::FontId::proportional(12.0), c), "U+{:04X} missing in Proportional", c as u32);
+            assert!(view.has_glyph(&egui::FontId::proportional(crate::theme::FONT_LABEL), c), "U+{:04X} missing in Proportional", c as u32);
         }
-        assert!(view.has_glyph(&egui::FontId::monospace(12.0), '\u{21e7}'), "U+21E7 shift symbol missing in Monospace");
+        assert!(view.has_glyph(&crate::theme::mono(), '\u{21e7}'), "U+21E7 shift symbol missing in Monospace");
     });
 }

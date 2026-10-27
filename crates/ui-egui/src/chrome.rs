@@ -75,7 +75,7 @@ pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
             };
             // Centred on the traffic lights' centre line (the row's middle): with the system font
             // the capitals' middle is the text box's middle, so no optical nudge.
-            let galley = ui.painter().layout_no_wrap(title, egui::FontId::proportional(13.0), t.text_dim);
+            let galley = ui.painter().layout_no_wrap(title, crate::theme::body(), t.text_dim);
             let x = title_left(r.left(), r.width(), galley.size().x);
             ui.painter().galley(pos2(x, r.top() + (title_h - galley.size().y) / 2.0), galley, t.text_dim);
             // Allow dragging the window by the title row.
@@ -124,7 +124,7 @@ pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
                     let br = Rect::from_min_size(pos2(x, row.center().y - size / 2.0), vec2(size, size));
                     let resp = ui.interact(br, ui.scope_id().with(("tb", *cmd)), Sense::click());
                     if resp.hovered() {
-                        ui.painter().rect_filled(br, 3.0, t.control_hover.gamma_multiply(0.6));
+                        ui.painter().rect_filled(br, crate::theme::RADIUS_SMALL, t.control_hover.gamma_multiply(0.6));
                     }
                     icons::paint(ui.painter(), br.shrink(4.0), *icon, false);
                     let tip = match shortcut {
@@ -143,7 +143,7 @@ pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
                 let br = Rect::from_min_size(pos2(x, row.center().y - size / 2.0), vec2(fit.overflow_width, size));
                 let response = ui.interact(br, ui.scope_id().with("toolbar_more"), Sense::click());
                 if response.hovered() {
-                    ui.painter().rect_filled(br, 3.0, t.control_hover.gamma_multiply(0.6));
+                    ui.painter().rect_filled(br, crate::theme::RADIUS_SMALL, t.control_hover.gamma_multiply(0.6));
                 }
                 for offset in [-5.0, 0.0, 5.0] {
                     ui.painter().circle_filled(br.center() + vec2(offset, 0.0), 1.5, t.text);
@@ -234,7 +234,7 @@ pub fn file_tabs(app: &mut CadApp, ui: &mut egui::Ui) {
                     close = cresp.clicked();
                 }
                 icons::describe_control(ui, &resp, label, Some(active), true);
-                ui.painter().vline(tr.right(), tr.y_range(), Stroke::new(1.0, t.border));
+                ui.painter().vline(tr.right(), tr.y_range(), Stroke::new(crate::theme::HAIRLINE, t.border));
                 x += w;
                 (resp.clicked(), close, resp)
             };
@@ -371,7 +371,7 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
             let label = if model { "MODEL" } else { "PAPER" };
             let br = Rect::from_min_max(pos2(rx - 60.0, r.center().y - 9.0), pos2(rx - 6.0, r.center().y + 9.0));
             let resp = ui.interact(br, ui.scope_id().with("mspace_toggle"), Sense::click());
-            p.rect_filled(br, 3.0, if resp.hovered() { t.control_hover } else { t.toggle_on.gamma_multiply(0.25) });
+            p.rect_filled(br, crate::theme::RADIUS_SMALL, if resp.hovered() { t.control_hover } else { t.toggle_on.gamma_multiply(0.25) });
             p.text(br.center(), egui::Align2::CENTER_CENTER, crate::i18n::t(label), crate::theme::small(), t.text);
             icons::describe_control(ui, &resp, label, None, false);
             if resp.on_hover_text(crate::tl!("Switch between model space in a viewport and paper space")).clicked() {
@@ -452,7 +452,7 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
             let mr = Rect::from_min_size(pos2(x + 2.0, r.top() + 5.0), vec2(16.0, 16.0));
             let resp = ui.interact(mr, ui.scope_id().with("layout_more"), Sense::click());
             if resp.hovered() {
-                p.rect_filled(mr, 3.0, t.control_hover.gamma_multiply(0.5));
+                p.rect_filled(mr, crate::theme::RADIUS_SMALL, t.control_hover.gamma_multiply(0.5));
             }
             icons::paint(&p, mr.shrink(2.0), Icon::ChevronDown, false);
             icons::describe_control(ui, &resp, "Layout list", None, false);
@@ -499,9 +499,9 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
             let br = Rect::from_min_size(pos2(rx, r.center().y - size / 2.0), vec2(size, size));
             let resp = ui.interact(br, ui.scope_id().with(("tg", tip)), Sense::click());
             if on {
-                p.rect_filled(br, 3.0, t.toggle_on.gamma_multiply(0.35));
+                p.rect_filled(br, crate::theme::RADIUS_SMALL, t.toggle_on.gamma_multiply(0.35));
             } else if resp.hovered() {
-                p.rect_filled(br, 3.0, t.control_hover.gamma_multiply(0.5));
+                p.rect_filled(br, crate::theme::RADIUS_SMALL, t.control_hover.gamma_multiply(0.5));
             }
             icons::paint(&p, br.shrink(2.5), icon, false);
             if on {
@@ -532,7 +532,7 @@ pub fn start_page(app: &mut CadApp, ui: &mut egui::Ui) {
     // darker than content, as everywhere else.
     let left = Rect::from_min_size(r.min, vec2(300.0, r.height()));
     p.rect_filled(left, 0.0, t.chrome);
-    p.vline(left.right(), left.y_range(), Stroke::new(1.0, t.border));
+    p.vline(left.right(), left.y_range(), Stroke::new(crate::theme::HAIRLINE, t.border));
     p.text(pos2(left.left() + 34.0, left.top() + 70.0), egui::Align2::LEFT_CENTER, crate::tl!("CADCraft"), egui::FontId::proportional(28.0), t.text);
     p.text(
         pos2(left.left() + 34.0, left.top() + 98.0),
