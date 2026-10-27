@@ -37,7 +37,9 @@ Blocks: nothing.
 
 ## G-07. No `registry.json` in this stack (gate: registry). Add one?
 Default: no — reconcile the migration against the specs and `widgets.rs`; the registry stays absent.
-Status: gate. Commit: -. From: brief (migrate-audit.1), build F-04.
+Status: gate
+Commit: -
+From: brief (migrate-audit.1), build F-04.
 Opened: 2026-10-26T21:05Z. Asked: person (or the system owner).
 Blocks: nothing: the migration reconciles by spec; `check-spec` keeps running `--no-props`, and the
 docs' Props sections stay written, not generated.
