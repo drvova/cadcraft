@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 use crate::CadApp;
 use crate::icons::{self, Icon};
-use crate::theme::Tokens;
+use crate::theme::{HAIRLINE, RADIUS_CONTROL, Tokens};
 
 /// Dialog-local UI state (kept in egui memory between frames).
 #[derive(Clone, Debug, Default)]
@@ -39,7 +39,7 @@ pub fn swatch(p: &egui::Painter, r: Rect, c: Color) {
 
 fn swatch_rgb(p: &egui::Painter, r: Rect, c: Rgb) {
     p.rect_filled(r, 1.0, rgb32(c));
-    p.rect_stroke(r, 1.0, Stroke::new(1.0, Color32::from_gray(25)), egui::StrokeKind::Inside);
+    p.rect_stroke(r, 1.0, Stroke::new(HAIRLINE, Tokens::get().swatch_border), egui::StrokeKind::Inside);
 }
 
 /// A colour button (swatch + name) that opens the Select Color popup: the AutoCAD Color Index
@@ -57,7 +57,7 @@ pub fn color_button_resolved(ui: &mut egui::Ui, id: egui::Id, current: Color, re
     let (rect, resp) = ui.allocate_exact_size(vec2(width, 20.0), Sense::click());
     let p = ui.painter();
     if resp.hovered() {
-        p.rect_filled(rect, 2.0, t.control_hover.gamma_multiply(0.5));
+        p.rect_filled(rect, RADIUS_CONTROL, t.control_hover.gamma_multiply(0.5));
     }
     swatch_rgb(p, Rect::from_min_size(pos2(rect.left() + 3.0, rect.center().y - 6.0), vec2(12.0, 12.0)), resolved);
     p.text(pos2(rect.left() + 20.0, rect.center().y), egui::Align2::LEFT_CENTER, crate::i18n::t(label), crate::theme::body(), t.text);
@@ -170,7 +170,7 @@ fn lw_sample(p: &egui::Painter, r: Rect, lw: Lineweight, c: Color32) {
 fn lt_sample(p: &egui::Painter, r: Rect, lt: Option<&cadcraft_doc::Linetype>, c: Color32) {
     let y = r.center().y;
     let Some(lt) = lt.filter(|l| !l.pattern.is_empty() && l.pattern.iter().any(|e| e.length.abs() > 1e-9)) else {
-        p.line_segment([pos2(r.left(), y), pos2(r.right(), y)], Stroke::new(1.0, c));
+        p.line_segment([pos2(r.left(), y), pos2(r.right(), y)], Stroke::new(HAIRLINE, c));
         return;
     };
     let total: f64 = lt.pattern.iter().map(|e| e.length.abs()).sum::<f64>().max(1e-9);
@@ -182,7 +182,7 @@ fn lt_sample(p: &egui::Painter, r: Rect, lt: Option<&cadcraft_doc::Linetype>, c:
             let l = e.length.abs() * k;
             let x1 = (x + l).min(f64::from(r.right()));
             if e.length > 0.0 {
-                p.line_segment([pos2(x as f32, y), pos2(x1 as f32, y)], Stroke::new(1.0, c));
+                p.line_segment([pos2(x as f32, y), pos2(x1 as f32, y)], Stroke::new(HAIRLINE, c));
             } else if e.length == 0.0 {
                 p.circle_filled(pos2(x as f32, y), 0.8, c);
             }
@@ -195,7 +195,7 @@ fn lt_sample(p: &egui::Painter, r: Rect, lt: Option<&cadcraft_doc::Linetype>, c:
 /// Status column: a green check for the current layer, a sheet for the others.
 fn status_icon(p: &egui::Painter, r: Rect, current: bool, used: bool) {
     if current {
-        let g = Color32::from_rgb(0x4c, 0xc2, 0x5a);
+        let g = Tokens::get().layer_current;
         p.line_segment([pos2(r.left() + 3.0, r.center().y), pos2(r.left() + 7.0, r.bottom() - 4.0)], Stroke::new(2.0, g));
         p.line_segment([pos2(r.left() + 7.0, r.bottom() - 4.0), pos2(r.right() - 3.0, r.top() + 3.0)], Stroke::new(2.0, g));
     } else {
@@ -427,7 +427,7 @@ fn row(
     // Status.
     let (sr, sresp) = ui.allocate_exact_size(vec2(22.0, 20.0), Sense::click());
     if selected {
-        ui.painter().rect_filled(sr, 2.0, t.accent.gamma_multiply(0.35));
+        ui.painter().rect_filled(sr, RADIUS_CONTROL, t.accent.gamma_multiply(0.35));
     }
     status_icon(ui.painter(), sr.shrink(2.0), current, is_used);
     let tip = if current {
@@ -463,9 +463,9 @@ fn row(
         _ => {
             let (nr, r) = ui.allocate_exact_size(vec2(150.0, 20.0), Sense::click());
             if selected {
-                ui.painter().rect_filled(nr, 2.0, t.accent.gamma_multiply(0.45));
+                ui.painter().rect_filled(nr, RADIUS_CONTROL, t.accent.gamma_multiply(0.45));
             } else if r.hovered() {
-                ui.painter().rect_filled(nr, 2.0, t.control_hover.gamma_multiply(0.5));
+                ui.painter().rect_filled(nr, RADIUS_CONTROL, t.control_hover.gamma_multiply(0.5));
             }
             ui.painter().text(pos2(nr.left() + 4.0, nr.center().y), egui::Align2::LEFT_CENTER, &name, crate::theme::body(), t.text);
             if r.clicked() {
@@ -503,7 +503,7 @@ fn row(
     let pr = icons::button(ui, Icon::Plot, 20.0, if l.plot { "Plot (click: do not plot)" } else { "Do not plot (click: plot)" }, false);
     if !l.plot {
         let r = pr.rect.shrink(3.0);
-        ui.painter().line_segment([r.left_bottom(), r.right_top()], Stroke::new(1.6, Color32::from_rgb(0xe0, 0x50, 0x50)));
+        ui.painter().line_segment([r.left_bottom(), r.right_top()], Stroke::new(1.6, t.layer_no_plot));
     }
     if pr.clicked() {
         actions.push(("layer.set", json!({ "name": name, "plot": !l.plot })));
@@ -517,7 +517,7 @@ fn row(
         .allocate_ui(vec2(130.0, 20.0), |ui| {
             let (r, resp) = ui.allocate_exact_size(vec2(130.0, 20.0), Sense::click());
             if resp.hovered() {
-                ui.painter().rect_filled(r, 2.0, t.control_hover.gamma_multiply(0.5));
+                ui.painter().rect_filled(r, RADIUS_CONTROL, t.control_hover.gamma_multiply(0.5));
             }
             lt_sample(
                 ui.painter(),
@@ -538,7 +538,7 @@ fn row(
             for lt in linetypes.iter().filter(|x| !["bylayer", "byblock"].contains(&x.name.to_ascii_lowercase().as_str())) {
                 let (r, resp) = ui.allocate_exact_size(vec2(230.0, 20.0), Sense::click());
                 if resp.hovered() || lt.name.eq_ignore_ascii_case(&l.linetype) {
-                    ui.painter().rect_filled(r, 2.0, t.accent.gamma_multiply(if resp.hovered() { 0.6 } else { 0.3 }));
+                    ui.painter().rect_filled(r, RADIUS_CONTROL, t.accent.gamma_multiply(if resp.hovered() { 0.6 } else { 0.3 }));
                 }
                 lt_sample(ui.painter(), Rect::from_min_size(pos2(r.left() + 4.0, r.top()), vec2(50.0, r.height())), Some(lt), t.text);
                 ui.painter().text(pos2(r.left() + 62.0, r.center().y), egui::Align2::LEFT_CENTER, &lt.name, crate::theme::body(), t.text);
@@ -572,7 +572,7 @@ fn row(
         .allocate_ui(vec2(100.0, 20.0), |ui| {
             let (r, resp) = ui.allocate_exact_size(vec2(100.0, 20.0), Sense::click());
             if resp.hovered() {
-                ui.painter().rect_filled(r, 2.0, t.control_hover.gamma_multiply(0.5));
+                ui.painter().rect_filled(r, RADIUS_CONTROL, t.control_hover.gamma_multiply(0.5));
             }
             lw_sample(ui.painter(), Rect::from_min_size(pos2(r.left() + 3.0, r.top()), vec2(22.0, r.height())), l.lineweight, t.text);
             ui.painter().text(
@@ -595,7 +595,7 @@ fn row(
                 for lw in opts {
                     let (r, resp) = ui.allocate_exact_size(vec2(160.0, 20.0), Sense::click());
                     if resp.hovered() || lw == l.lineweight {
-                        ui.painter().rect_filled(r, 2.0, t.accent.gamma_multiply(if resp.hovered() { 0.6 } else { 0.3 }));
+                        ui.painter().rect_filled(r, RADIUS_CONTROL, t.accent.gamma_multiply(if resp.hovered() { 0.6 } else { 0.3 }));
                     }
                     lw_sample(ui.painter(), Rect::from_min_size(pos2(r.left() + 4.0, r.top()), vec2(40.0, r.height())), lw, t.text);
                     ui.painter().text(
