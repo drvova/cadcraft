@@ -1,0 +1,49 @@
+imports 0
+raw 168
+palette 0
+files 0
+unassigned 0
+
+per rule:
+rule/raw-value 55
+rule/raw-radius 49
+rule/raw-font 7
+rule/raw-height 2
+rule/raw-hairline 55
+
+per surface:
+canvas 38
+canvas-overlays 6
+parametric 18
+viewcube 14
+icons 17
+layers 17
+chrome 15
+palettes 11
+grip_dyn 7
+mtext_editor 5
+options 5
+cmdline 4
+bedit 4
+assistant 3
+docking 0
+dialogs 4
+
+model-space / chrome:
+model-space 27
+chrome 141
+canvas model-space 24 chrome 14
+canvas-overlays model-space 3 chrome 3
+parametric model-space 0 chrome 18
+viewcube model-space 0 chrome 14
+icons model-space 0 chrome 17
+layers model-space 0 chrome 17
+chrome model-space 0 chrome 15
+palettes model-space 0 chrome 11
+grip_dyn model-space 0 chrome 7
+mtext_editor model-space 0 chrome 5
+options model-space 0 chrome 5
+cmdline model-space 0 chrome 4
+bedit model-space 0 chrome 4
+assistant model-space 0 chrome 3
+dialogs model-space 0 chrome 4

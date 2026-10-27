@@ -1,0 +1,19 @@
+# Standing orders
+
+1. Write only inside your brief's SCOPE. Your scratch lives only in .design-system/tmp/<your worker id>/, deleted at close. Never read, apply or delete another worker's. Shared files (the token source, generated files, the barrel, registries, indexes, the migration map, the check's config, allowlist and drift list) belong to their one writer, so report the change you need.
+2. Use only the colors, fonts, shadows, gradients, motion, logos and product names the app already has, or that the design source the Frame follows draws. The person's bans, quoted below, hold in code, copy, docs, examples and the showcase, except on a Don't: line.
+3. Baselines, fixtures and checks stay as written, and so do repo-wide gates (lint flags, CI thresholds, warning limits, project instructions). Fix the code instead.
+4. Commit only to the branch your brief names, locally. Never merge, deploy, publish, force-push, stash, reset or clean. No push or PR unless the person asked for one. Leave uncommitted changes and branches you did not create as they are.
+5. Put a question in your report as a gate with a default, apply the default, and finish the work. Never wait on an answer.
+6. Report with the REPORT block as your final message, as text, status first, commands and exit codes pasted, not summarized. Every claim that something is fixed, passes or works names the command that proved it this session and what that command covers. An audit that does not measure the reported defect is not evidence for it. Write no report file.
+7. In a checkout other workers share, make small exact edits that fail when the file changed since you read it. Never rewrite a file whole, and never revert or tidy a change you did not make.
+8. Start no agents unless your brief names you a coordinator, apart from the two fresh agents a two-agent test needs. A coordinator that is itself a subagent runs its workers as foreground calls and never returns while one runs.
+
+- `.design-system/boss/` belongs to the coordinator. Write nothing there.
+- Target is CADCraft's own layer at 2d63b6b: `crate::theme` (Tokens + the recipe constants) and `crate::widgets` (button, icon_button, field, chip, row, card, section_label). Read only from these.
+- Do not edit: `crates/ui-egui/src/theme.rs`, `crates/ui-egui/src/widgets.rs`, `scripts/check-system-ratchet.json`, `xtask/**`, `.migration/**`, tests, and the files the brief marks single-writer. A new role in `theme.rs` is the shared layer's one change, made by its one owner.
+- Never add a colour, radius, font size, height or hairline value: use the token or constant the check names. A model-space colour (canvas background, grid, axes, grips, snap, selection, crosshair, the UCS icon, the paper/printable area, the clip boundary) stays as it is and goes to `allowlist.tsv` with a reason; the mechanical swaps among model-space findings (a hairline width, a matching radius, the UCS label's font) still land, because they hold the same value and touch no colour.
+- A gap goes in your report under Shared gaps. Do not work around it.
+- Behaviour stays the same: same commands, same undo, same focus order, same dialogs, same URLs.
+- Do not rebase.
+- Project rules (D:/cadcraft/AGENTS.md): never crash (no unwrap/expect/panic/todo/unimplemented in non-test code; errors are Result; input-derived numbers are hostile); clean-room (never read or copy Autodesk code, fonts, patterns, icons or artwork; never copy GPL/LGPL code); assets absolutely essential (no third-party iconography, images, fonts or artwork — every icon drawn in code, every asset original or licensed with a row in ATTRIBUTION.md); everything is a command; the UI is thin and colours come from theme::Tokens; Rust only, never break wasm; quality gates `cargo xtask ci` (fmt, clippy -D warnings, tests, assets, layers, wasm) before every commit.

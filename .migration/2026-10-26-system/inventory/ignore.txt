@@ -1,0 +1,10 @@
+# The paths the migration's searches exclude. The check itself already skips theme.rs and cuts
+# code at `mod tests`; these lines keep the same exclusions in every search a worker runs.
+# - the token source defines the tokens
+crates/ui-egui/src/theme.rs
+# - the system's own components (the migration moves surfaces onto them, never edits them)
+crates/ui-egui/src/widgets.rs
+# - tests: checks stay as written (standing order 3)
+crates/ui-egui/src/i18n/tests.rs
+crates/ui-egui/src/palettes/layer_menu_tests.rs
+crates/ui-egui/src/**/tests.rs

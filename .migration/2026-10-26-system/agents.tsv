@@ -1,0 +1,7 @@
+id	role	surface	attempt	spawned	expect_by	last_side_effect	end
+migrate-audit	audit	-	1	20:35	22:05	.migration/2026-10-26-system/ written	done
+migrate-shared	edit	shared layer (theme.rs)	1	20:52	21:07	commit bf0a7ef4acfd; returns/migrate-shared.md	done
+migrate-ui	edit	10 UI surfaces	1	20:53	21:28	commits 32a5c96648bd..d0193c6151e3; returns/migrate-ui.md	done
+migrate-draw	edit	5 drawing surfaces	1	22:15	22:50	commits ad0041ee6e7e..fb86c8d760c3; returns/migrate-draw.md	done
+migrate-dyngrips	edit	dyngrips.rs (canvas-overlays)	1	22:45	23:00	commit fa2a4b6a1664; returns/migrate-dyngrips.md	done
+migrate-verify	verify	all landed surfaces	1	22:50	23:10	close.md, ledger.tsv, ratchet lowered; commit follows	done

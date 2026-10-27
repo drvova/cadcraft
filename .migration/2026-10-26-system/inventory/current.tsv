@@ -1,0 +1,169 @@
+kind	file	line	match	surface
+rule/raw-hairline	crates/ui-egui/src/assistant.rs	532	1.0	assistant
+rule/raw-font	crates/ui-egui/src/assistant.rs	869	11.0	assistant
+rule/raw-hairline	crates/ui-egui/src/assistant.rs	894	1.0	assistant
+rule/raw-radius	crates/ui-egui/src/bedit.rs	137	4.0	bedit
+rule/raw-hairline	crates/ui-egui/src/bedit.rs	138	1.0	bedit
+rule/raw-radius	crates/ui-egui/src/bedit.rs	138	4.0	bedit
+rule/raw-hairline	crates/ui-egui/src/bedit.rs	185	1.0	bedit
+rule/raw-value	crates/ui-egui/src/canvas.rs	267	Color32::from_rgb(c.0, c.1, c.2)	canvas
+rule/raw-value	crates/ui-egui/src/canvas.rs	273	Color32::from_rgba_unmultiplied(c.0, c.1, c.2, prim.alpha())	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	731	1.0	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	740	1.0	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	749	1.0	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	752	1.0	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	773	1.0	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	914	1.0	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	1089	1.0	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	1142	1.0	canvas
+rule/raw-value	crates/ui-egui/src/canvas.rs	1266	Color32::from_rgb(c.0, c.1, c.2)	canvas
+rule/raw-radius	crates/ui-egui/src/canvas.rs	1328	2.0	canvas
+rule/raw-value	crates/ui-egui/src/canvas.rs	1328	Color32::from_rgb(0xff, 0xff, 0xe1)	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	1337	1.0	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	1895	1.0	canvas
+rule/raw-value	crates/ui-egui/src/canvas.rs	1895	Color32::from_gray(150)	canvas
+rule/raw-value	crates/ui-egui/src/canvas.rs	1932	Color32::from_rgb(0x2a, 0x2a, 0x2a)	canvas
+rule/raw-value	crates/ui-egui/src/canvas.rs	2051	Color32::from_rgb(0xff, 0x7f, 0x9f)	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	2056	1.0	canvas
+rule/raw-value	crates/ui-egui/src/canvas.rs	2056	Color32::from_rgb(0x10, 0x30, 0x80)	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	2095	1.0	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	2291	1.0	canvas
+rule/raw-radius	crates/ui-egui/src/canvas.rs	2320	3.0	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	2321	1.0	canvas
+rule/raw-radius	crates/ui-egui/src/canvas.rs	2321	3.0	canvas
+rule/raw-radius	crates/ui-egui/src/canvas.rs	2327	2.0	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	2340	1.0	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	2415	1.0	canvas
+rule/raw-radius	crates/ui-egui/src/canvas.rs	2527	3.0	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	2528	1.0	canvas
+rule/raw-radius	crates/ui-egui/src/canvas.rs	2528	3.0	canvas
+rule/raw-radius	crates/ui-egui/src/canvas.rs	2538	2.0	canvas
+rule/raw-radius	crates/ui-egui/src/canvas.rs	2644	2.0	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	2645	1.0	canvas
+rule/raw-radius	crates/ui-egui/src/canvas.rs	2646	2.0	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	2651	1.0	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas.rs	2673	1.0	canvas
+rule/raw-font	crates/ui-egui/src/canvas.rs	2677	13.0	canvas
+rule/raw-hairline	crates/ui-egui/src/canvas/blockedit.rs	46	1.0	canvas-overlays
+rule/raw-radius	crates/ui-egui/src/canvas/compare.rs	63	4.0	canvas-overlays
+rule/raw-hairline	crates/ui-egui/src/canvas/compare.rs	70	1.0	canvas-overlays
+rule/raw-value	crates/ui-egui/src/dyngrips.rs	90	Color32::from_rgb(0xff, 0x7f, 0x9f)	canvas-overlays
+rule/raw-hairline	crates/ui-egui/src/dyngrips.rs	94	1.0	canvas-overlays
+rule/raw-value	crates/ui-egui/src/dyngrips.rs	94	Color32::from_rgb(0x10, 0x30, 0x80)	canvas-overlays
+rule/raw-font	crates/ui-egui/src/chrome.rs	78	13.0	chrome
+rule/raw-radius	crates/ui-egui/src/chrome.rs	127	3.0	chrome
+rule/raw-radius	crates/ui-egui/src/chrome.rs	146	3.0	chrome
+rule/raw-hairline	crates/ui-egui/src/chrome.rs	237	1.0	chrome
+rule/raw-radius	crates/ui-egui/src/chrome.rs	374	3.0	chrome
+rule/raw-radius	crates/ui-egui/src/chrome.rs	455	3.0	chrome
+rule/raw-radius	crates/ui-egui/src/chrome.rs	502	3.0	chrome
+rule/raw-radius	crates/ui-egui/src/chrome.rs	504	3.0	chrome
+rule/raw-hairline	crates/ui-egui/src/chrome.rs	535	1.0	chrome
+rule/raw-radius	crates/ui-egui/src/chrome/annoscale.rs	26	3.0	chrome
+rule/raw-font	crates/ui-egui/src/i18n/tests.rs	500	12.0	chrome
+rule/raw-font	crates/ui-egui/src/i18n/tests.rs	506	12.0	chrome
+rule/raw-font	crates/ui-egui/src/i18n/tests.rs	508	12.0	chrome
+rule/raw-radius	crates/ui-egui/src/vpscale.rs	125	3.0	chrome
+rule/raw-radius	crates/ui-egui/src/vpscale.rs	142	3.0	chrome
+rule/raw-radius	crates/ui-egui/src/cmdline.rs	512	2.0	cmdline
+rule/raw-hairline	crates/ui-egui/src/cmdline.rs	568	1.0	cmdline
+rule/raw-hairline	crates/ui-egui/src/cmdline.rs	574	1.0	cmdline
+rule/raw-value	crates/ui-egui/src/cmdline.rs	633	Color32::from_rgba_unmultiplied_const(0x11, 0x11, 0x11, 0xeb)	cmdline
+rule/raw-radius	crates/ui-egui/src/managers.rs	270	3.0	dialogs
+rule/raw-hairline	crates/ui-egui/src/managers.rs	1071	1.0	dialogs
+rule/raw-hairline	crates/ui-egui/src/managers.rs	1075	1.0	dialogs
+rule/raw-hairline	crates/ui-egui/src/opening.rs	87	1.0	dialogs
+rule/raw-hairline	crates/ui-egui/src/grip_dyn.rs	152	1.0	grip_dyn
+rule/raw-hairline	crates/ui-egui/src/grip_dyn.rs	192	1.0	grip_dyn
+rule/raw-hairline	crates/ui-egui/src/grip_dyn.rs	193	1.0	grip_dyn
+rule/raw-radius	crates/ui-egui/src/grip_dyn.rs	208	2.0	grip_dyn
+rule/raw-hairline	crates/ui-egui/src/grip_dyn.rs	209	1.0	grip_dyn
+rule/raw-radius	crates/ui-egui/src/grip_dyn.rs	209	2.0	grip_dyn
+rule/raw-hairline	crates/ui-egui/src/grip_dyn.rs	214	1.0	grip_dyn
+rule/raw-value	crates/ui-egui/src/icons.rs	452	Color32::from_rgb(40 + i * 22, 80 + i * 16, 160 + i * 9)	icons
+rule/raw-value	crates/ui-egui/src/icons.rs	681	Color32::from_rgb(0x8a, 0x8a, 0x5a)	icons
+rule/raw-value	crates/ui-egui/src/icons.rs	683	Color32::from_rgb(0x9f, 0xd4, 0xff)	icons
+rule/raw-value	crates/ui-egui/src/icons.rs	684	Color32::from_rgb(0xe6, 0xb4, 0x3c)	icons
+rule/raw-value	crates/ui-egui/src/icons.rs	688	Color32::from_rgb(0x6f, 0xe0, 0x6f)	icons
+rule/raw-value	crates/ui-egui/src/icons.rs	695	Color32::from_rgb(0xf5, 0xd0, 0x3b)	icons
+rule/raw-value	crates/ui-egui/src/icons.rs	695	Color32::from_rgb(0x70, 0x78, 0x86)	icons
+rule/raw-value	crates/ui-egui/src/icons.rs	697	Color32::from_rgb(0xb0, 0xb4, 0xba)	icons
+rule/raw-value	crates/ui-egui/src/icons.rs	700	Color32::from_rgb(0xe6, 0xb4, 0x3c)	icons
+rule/raw-value	crates/ui-egui/src/icons.rs	709	Color32::from_rgb(0xf5, 0xd0, 0x3b)	icons
+rule/raw-value	crates/ui-egui/src/icons.rs	717	Color32::from_rgb(0x9f, 0xd4, 0xff)	icons
+rule/raw-value	crates/ui-egui/src/icons.rs	831	Color32::from_rgb(0xe6, 0xb4, 0x3c)	icons
+rule/raw-value	crates/ui-egui/src/icons.rs	832	Color32::from_rgb(0xe6, 0xb4, 0x3c)	icons
+rule/raw-value	crates/ui-egui/src/icons.rs	852	Color32::from_rgb(0xe6, 0xb4, 0x3c)	icons
+rule/raw-hairline	crates/ui-egui/src/icons.rs	956	1.0	icons
+rule/raw-hairline	crates/ui-egui/src/icons.rs	988	1.0	icons
+rule/raw-radius	crates/ui-egui/src/icons.rs	988	2.0	icons
+rule/raw-value	crates/ui-egui/src/layers.rs	32	Color32::from_rgb(r.0, r.1, r.2)	layers
+rule/raw-hairline	crates/ui-egui/src/layers.rs	42	1.0	layers
+rule/raw-value	crates/ui-egui/src/layers.rs	42	Color32::from_gray(25)	layers
+rule/raw-radius	crates/ui-egui/src/layers.rs	60	2.0	layers
+rule/raw-value	crates/ui-egui/src/layers.rs	92	Color32::from_rgb(c.0, c.1, c.2)	layers
+rule/raw-value	crates/ui-egui/src/layers.rs	140	Color32::from_rgb(c[0], c[1], c[2])	layers
+rule/raw-hairline	crates/ui-egui/src/layers.rs	173	1.0	layers
+rule/raw-hairline	crates/ui-egui/src/layers.rs	185	1.0	layers
+rule/raw-value	crates/ui-egui/src/layers.rs	198	Color32::from_rgb(0x4c, 0xc2, 0x5a)	layers
+rule/raw-radius	crates/ui-egui/src/layers.rs	430	2.0	layers
+rule/raw-radius	crates/ui-egui/src/layers.rs	466	2.0	layers
+rule/raw-radius	crates/ui-egui/src/layers.rs	468	2.0	layers
+rule/raw-value	crates/ui-egui/src/layers.rs	506	Color32::from_rgb(0xe0, 0x50, 0x50)	layers
+rule/raw-radius	crates/ui-egui/src/layers.rs	520	2.0	layers
+rule/raw-radius	crates/ui-egui/src/layers.rs	541	2.0	layers
+rule/raw-radius	crates/ui-egui/src/layers.rs	575	2.0	layers
+rule/raw-radius	crates/ui-egui/src/layers.rs	598	2.0	layers
+rule/raw-value	crates/ui-egui/src/mtext_editor.rs	91	Color32::from_rgb(rgb.0, rgb.1, rgb.2)	mtext_editor
+rule/raw-hairline	crates/ui-egui/src/mtext_editor.rs	129	1.0	mtext_editor
+rule/raw-radius	crates/ui-egui/src/mtext_editor.rs	276	2.0	mtext_editor
+rule/raw-hairline	crates/ui-egui/src/mtext_editor.rs	457	1.0	mtext_editor
+rule/raw-hairline	crates/ui-egui/src/mtext_editor.rs	537	1.0	mtext_editor
+rule/raw-value	crates/ui-egui/src/options/dialog.rs	119	Color32::from_rgb(rgb[0], rgb[1], rgb[2])	options
+rule/raw-radius	crates/ui-egui/src/options/dialog.rs	134	3.0	options
+rule/raw-radius	crates/ui-egui/src/options/dialog.rs	509	2.0	options
+rule/raw-value	crates/ui-egui/src/options/dialog.rs	509	Color32::from_rgb(c.0, c.1, c.2)	options
+rule/raw-value	crates/ui-egui/src/options/mod.rs	114	Color32::from_rgb(byte(0)?, byte(2)?, byte(4)?)	options
+rule/raw-value	crates/ui-egui/src/palettes.rs	325	Color32::from_rgb(rgb.0, rgb.1, rgb.2)	palettes
+rule/raw-hairline	crates/ui-egui/src/palettes.rs	326	1.0	palettes
+rule/raw-value	crates/ui-egui/src/palettes.rs	326	Color32::from_gray(30)	palettes
+rule/raw-height	crates/ui-egui/src/palettes.rs	420	24.0	palettes
+rule/raw-radius	crates/ui-egui/src/palettes.rs	422	3.0	palettes
+rule/raw-height	crates/ui-egui/src/palettes.rs	462	24.0	palettes
+rule/raw-radius	crates/ui-egui/src/palettes.rs	463	3.0	palettes
+rule/raw-radius	crates/ui-egui/src/palettes.rs	890	2.0	palettes
+rule/raw-hairline	crates/ui-egui/src/palettes/patterns.rs	68	1.0	palettes
+rule/raw-hairline	crates/ui-egui/src/palettes/patterns.rs	83	1.0	palettes
+rule/raw-hairline	crates/ui-egui/src/palettes/patterns.rs	84	1.0	palettes
+rule/raw-value	crates/ui-egui/src/parametric.rs	56	Color32::from_rgb(0x4c, 0xaf, 0x50)	parametric
+rule/raw-value	crates/ui-egui/src/parametric.rs	57	Color32::from_rgb(0xff, 0x8a, 0x6a)	parametric
+rule/raw-value	crates/ui-egui/src/parametric.rs	58	Color32::from_rgb(0x9f, 0xb6, 0xd6)	parametric
+rule/raw-value	crates/ui-egui/src/parametric.rs	275	Color32::from_rgb(0x9f, 0xb6, 0xd6)	parametric
+rule/raw-value	crates/ui-egui/src/parametric.rs	293	Color32::from_rgb(0xff, 0x8a, 0x6a)	parametric
+rule/raw-hairline	crates/ui-egui/src/parametric.rs	294	1.0	parametric
+rule/raw-radius	crates/ui-egui/src/parametric.rs	392	2.0	parametric
+rule/raw-value	crates/ui-egui/src/parametric.rs	462	Color32::from_rgb(0xb9, 0xbe, 0xc6)	parametric
+rule/raw-radius	crates/ui-egui/src/parametric.rs	463	4.0	parametric
+rule/raw-hairline	crates/ui-egui/src/parametric.rs	464	1.0	parametric
+rule/raw-radius	crates/ui-egui/src/parametric.rs	464	4.0	parametric
+rule/raw-value	crates/ui-egui/src/parametric.rs	464	Color32::from_rgb(0x6e, 0x75, 0x80)	parametric
+rule/raw-radius	crates/ui-egui/src/parametric.rs	469	3.0	parametric
+rule/raw-value	crates/ui-egui/src/parametric.rs	469	Color32::from_rgb(0xf2, 0xf4, 0xf7)	parametric
+rule/raw-value	crates/ui-egui/src/parametric.rs	471	Color32::from_rgb(0x26, 0x2b, 0x33)	parametric
+rule/raw-radius	crates/ui-egui/src/parametric.rs	477	2.0	parametric
+rule/raw-radius	crates/ui-egui/src/parametric.rs	488	2.0	parametric
+rule/raw-value	crates/ui-egui/src/parametric.rs	636	Color32::from_rgb(0xff, 0x8a, 0x6a)	parametric
+rule/raw-value	crates/ui-egui/src/viewcube.rs	86	Color32::from_rgb(0x5c, 0x67, 0x7c)	viewcube
+rule/raw-value	crates/ui-egui/src/viewcube.rs	86	Color32::from_rgb(0x48, 0x50, 0x5c)	viewcube
+rule/raw-hairline	crates/ui-egui/src/viewcube.rs	88	1.0	viewcube
+rule/raw-value	crates/ui-egui/src/viewcube.rs	88	Color32::from_rgb(0x5c, 0x65, 0x72)	viewcube
+rule/raw-value	crates/ui-egui/src/viewcube.rs	90	Color32::from_rgb(0xc8, 0xcc, 0xd2)	viewcube
+rule/raw-value	crates/ui-egui/src/viewcube.rs	97	Color32::from_rgb(0xb8, 0xbc, 0xc2)	viewcube
+rule/raw-value	crates/ui-egui/src/viewcube.rs	97	Color32::from_rgb(0x9a, 0x9e, 0xa4)	viewcube
+rule/raw-radius	crates/ui-egui/src/viewcube.rs	98	2.0	viewcube
+rule/raw-hairline	crates/ui-egui/src/viewcube.rs	99	1.0	viewcube
+rule/raw-radius	crates/ui-egui/src/viewcube.rs	99	2.0	viewcube
+rule/raw-value	crates/ui-egui/src/viewcube.rs	99	Color32::from_rgb(0x6c, 0x70, 0x76)	viewcube
+rule/raw-font	crates/ui-egui/src/viewcube.rs	100	13.0	viewcube
+rule/raw-value	crates/ui-egui/src/viewcube.rs	100	Color32::from_rgb(0x50, 0x54, 0x5a)	viewcube
+rule/raw-radius	crates/ui-egui/src/viewcube.rs	144	3.0	viewcube
