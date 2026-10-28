@@ -1,0 +1,113 @@
+/*
+ * Design tokens, copied by hand from crates/ui-egui/src/theme.rs (phase 1; phase 2 generates
+ * this file from theme.rs and checks the two agree — plan/solid-ui-migration.md). Values are
+ * Tokens::DARK plus the recipe constants; the mapping is documented in apps/ui/README.md.
+ *
+ * Colours are one base colour (#E4E4E4) layered over a few opaque near-black surfaces; colour
+ * is a signal, never decoration. No colour may be written anywhere else in apps/ui.
+ */
+:root {
+  /* ---- Surfaces (Tokens::DARK: chrome, chrome_dark, panel, tab_active, control, control_hover, border) ---- */
+  --chrome: #141414;
+  --chrome-dark: #0f0f0f;
+  --panel: #141414;
+  --tab-active: #2d2d2d;
+  --control: #1c1c1c;
+  --control-hover: #232323;
+  --border: #232323;
+
+  /* ---- The drawing area (canvas, grid_minor, grid_major, axis_x, axis_y) ---- */
+  --canvas: #181818;
+  --grid-minor: #202020;
+  --grid-major: #2a2a2a;
+  --axis-x: #552633;
+  --axis-y: #23412f;
+
+  /* ---- Text and icons (text, text_dim, text_faint, icon, icon_accent, icon_point) ---- */
+  --text: #d4d4d4;
+  --text-dim: #888888;
+  --text-faint: #6b6b6b;
+  --icon: #b0b0b0;
+  --icon-accent: #81a1c1;
+  --icon-point: #f1b467;
+
+  /* ---- Action and selection (accent, selection, hover, grip, grip_hot) ---- */
+  --accent: #81a1c1;
+  --selection: #81a1c1;
+  --hover: #b8cee6;
+  --grip-hot: #e34671;
+
+  /* ---- Status (warn, error, snap, toggle_on) ---- */
+  --warn: #f1b467;
+  --error: #e34671;
+  --snap: #3fa266;
+  --toggle-on: #3fa266;
+
+  /* ---- The command line (cmd_bg a=f0, cmd_border, cmd_keyword, cmd_keyword_hover, cmd_history a=170) ---- */
+  --cmd-bg: rgba(28, 28, 28, 0.94);
+  --cmd-border: #333333;
+  --cmd-keyword: #81a1c1;
+  --cmd-keyword-hover: #2a3037;
+  --cmd-history: rgba(26, 26, 26, 0.667);
+
+  /* ---- Lists (list_bg, list_row) ---- */
+  --list-bg: #1c1c1c;
+  --list-row: #2d2d2d;
+
+  /* ---- Layers (icon_layer_off, icon_layer_frozen, icon_locked, icon_current, layer_current, swatch_border) ---- */
+  --icon-layer-off: #8a8a5a;
+  --icon-layer-frozen: #9fd4ff;
+  --icon-locked: #e6b43c;
+  --icon-current: #6fe06f;
+  --layer-current: #4cc25a;
+  --swatch-border: #191919;
+
+  /* ---- Misc (on_accent, crosshair, paper) ---- */
+  --on-accent: #141414;
+  --crosshair: #e4e4e4;
+  --paper: #fcfcfc;
+
+  /* ---- Geometry (RADIUS_*, GAP_*) ---- */
+  --radius-control: 2px;
+  --radius-small: 3px;
+  --radius-card: 4px;
+  --radius-composer: 5px;
+  --radius-pill: 11px;
+  --gap-2: 2px;
+  --gap-3: 3px;
+  --gap-4: 4px;
+  --gap-5: 5px;
+  --gap-6: 6px;
+  --gap-8: 8px;
+  --gap-10: 10px;
+  --gap-12: 12px;
+  --gap-16: 16px;
+  --gap-default: var(--gap-4);
+
+  /* ---- Control sizes (CONTROL_H_*, BUTTON_PAD_*, FIELD_PAD_*, CHIP_*, CARD_PADDING) ---- */
+  --control-h-button: 28px;
+  --control-h-input: 24px;
+  --control-h-row: 22px;
+  --control-h-tab: 35px;
+  --button-pad-x: 8px;
+  --button-pad-y: 4px;
+  --field-pad-x: 6px;
+  --field-pad-y: 4px;
+  --card-padding: 16px;
+
+  /* ---- Type (FONT_BUTTON, FONT_CHIP, FONT_LABEL, small()/body()/mono()) ---- */
+  --font-button: 14px;
+  --font-chip: 11px;
+  --font-label: 12px;
+  --font-small: 11.5px;
+  --font-body: 13px;
+  --font-mono: 12px;
+  --font-family: system-ui, "Segoe UI", -apple-system, sans-serif;
+  --font-family-mono: "Hack", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  /* ---- Lines (HAIRLINE, FOCUS_OUTLINE_W, FOCUS_OUTLINE_OFFSET, HOVER_OPACITY) ---- */
+  --hairline: 1px;
+  --focus-outline-w: 1px;
+  --focus-outline-offset: -1px;
+  --hover-opacity: 0.8;
+}

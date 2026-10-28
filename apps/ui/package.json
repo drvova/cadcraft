@@ -1,0 +1,24 @@
+{
+  "name": "cadcraft-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The CADCraft interface: SolidJS + TypeScript over the cadcraft-wasm facade.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "build:wasm": "bun ../../scripts/build-ui-wasm.mjs"
+  },
+  "dependencies": {
+    "solid-js": "^1.9.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.8.0",
+    "vite": "^6.3.0",
+    "vite-plugin-solid": "^2.11.0"
+  }
+}

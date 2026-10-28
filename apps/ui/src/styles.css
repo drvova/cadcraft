@@ -1,0 +1,416 @@
+/*
+ * The app's layout: real CSS grid/flex with the token ladder (tokens.css). Chrome is darker
+ * than the content, the drawing area is the brightest near-black, and every border is a
+ * hairline. No absolute positioning, no magic numbers beyond the token set.
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--chrome);
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-body);
+  overflow: hidden;
+}
+
+#app {
+  height: 100%;
+}
+
+/* ---- The shell: top bar / workspace / command line ---- */
+
+.app {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
+  background: var(--chrome);
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 0;
+  gap: var(--gap-2);
+  background: var(--chrome);
+}
+
+.stage {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.canvas-stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+.canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.canvas:active {
+  cursor: grabbing;
+}
+
+/* ---- Top bar ---- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-8);
+  padding: var(--gap-6) var(--gap-10);
+  background: var(--chrome);
+  border-bottom: var(--hairline) solid var(--border);
+  min-height: var(--control-h-button);
+}
+
+.doc-title {
+  font-size: var(--font-button);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 32ch;
+}
+
+.dirty {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-4);
+  font-size: var(--font-small);
+  color: var(--text-faint);
+}
+
+.dirty::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--text-faint);
+}
+
+.dirty.is-dirty {
+  color: var(--warn);
+}
+
+.dirty.is-dirty::before {
+  background: var(--warn);
+}
+
+.topbar-spacer {
+  flex: 1 1 auto;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: var(--gap-3) var(--gap-6);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--control);
+  color: var(--text-dim);
+  font-size: var(--font-chip);
+  line-height: 11px;
+  white-space: nowrap;
+}
+
+.chip.mode {
+  color: var(--text);
+}
+
+.chip.mode.is-wasm {
+  border-color: var(--snap);
+  color: var(--snap);
+}
+
+.chip.mode.is-mock {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  height: var(--control-h-button);
+  padding: var(--button-pad-y) var(--button-pad-x);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--control);
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-button);
+  cursor: pointer;
+}
+
+.button:hover {
+  background: var(--control-hover);
+  opacity: var(--hover-opacity);
+}
+
+.button:focus-visible {
+  outline: var(--focus-outline-w) solid var(--accent);
+  outline-offset: var(--focus-outline-offset);
+}
+
+/* ---- Layers panel ---- */
+
+.layers {
+  width: 232px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-card);
+}
+
+.layers-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-6);
+  padding: var(--gap-6) var(--gap-8);
+  border-bottom: var(--hairline) solid var(--border);
+}
+
+.section-label {
+  font-size: var(--font-label);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.layers-count {
+  font-size: var(--font-chip);
+  color: var(--text-faint);
+}
+
+.layers-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--gap-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-2);
+}
+
+.layer-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-6);
+  min-height: var(--control-h-row);
+  padding: 0 var(--gap-4);
+  border-radius: var(--radius-control);
+  background: var(--list-bg);
+}
+
+.layer-row.is-current {
+  background: var(--list-row);
+}
+
+.layer-swatch {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border: var(--hairline) solid var(--swatch-border);
+  border-radius: var(--radius-control);
+}
+
+.layer-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-label);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.layer-row.is-current .layer-name {
+  color: var(--layer-current);
+}
+
+.layer-name:focus-visible {
+  outline: var(--focus-outline-w) solid var(--accent);
+  outline-offset: var(--focus-outline-offset);
+}
+
+.layer-used {
+  flex: 0 0 auto;
+  font-size: var(--font-chip);
+  color: var(--text-faint);
+}
+
+.layer-toggles {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-2);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--control);
+  color: var(--text-faint);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-chip);
+  cursor: pointer;
+}
+
+.toggle:hover {
+  background: var(--control-hover);
+}
+
+.toggle:focus-visible {
+  outline: var(--focus-outline-w) solid var(--accent);
+  outline-offset: var(--focus-outline-offset);
+}
+
+.toggle .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  border: var(--hairline) solid var(--icon-layer-off);
+}
+
+.toggle.is-on .dot {
+  background: var(--icon-point);
+  border-color: var(--icon-point);
+}
+
+.toggle.is-frozen {
+  color: var(--icon-layer-frozen);
+  border-color: var(--icon-layer-frozen);
+}
+
+.toggle.is-locked {
+  color: var(--icon-locked);
+  border-color: var(--icon-locked);
+}
+
+.layers-foot {
+  padding: var(--gap-6) var(--gap-8);
+  border-top: var(--hairline) solid var(--border);
+}
+
+.hint {
+  font-size: var(--font-small);
+  color: var(--text-faint);
+  line-height: 1.4;
+}
+
+/* ---- Command line ---- */
+
+.cmdline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-4);
+  padding: var(--gap-6) var(--gap-10);
+  background: var(--cmd-bg);
+  border-top: var(--hairline) solid var(--cmd-border);
+}
+
+.cmd-output {
+  max-height: 96px;
+  overflow-y: auto;
+  padding: var(--gap-4) var(--gap-6);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--cmd-history);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-mono);
+  color: var(--text-dim);
+}
+
+.cmd-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.cmd-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-8);
+}
+
+.cmd-caret {
+  color: var(--accent);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-mono);
+}
+
+.cmd-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--control-h-input);
+  padding: var(--field-pad-y) var(--field-pad-x);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--control);
+  color: var(--text);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-mono);
+}
+
+.cmd-input::placeholder {
+  color: var(--text-faint);
+}
+
+.cmd-input:focus-visible {
+  outline: var(--focus-outline-w) solid var(--accent);
+  outline-offset: var(--focus-outline-offset);
+}
+
+.cmd-keywords {
+  flex: 0 0 auto;
+  padding: var(--gap-3) var(--gap-6);
+  border-radius: var(--radius-pill);
+  background: var(--cmd-keyword-hover);
+  color: var(--cmd-keyword);
+  font-size: var(--font-chip);
+  white-space: nowrap;
+}
+
+.cmd-error {
+  flex: 0 0 auto;
+  max-width: 40ch;
+  color: var(--error);
+  font-size: var(--font-small);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
