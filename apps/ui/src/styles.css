@@ -444,7 +444,7 @@ body {
 .cmd-input {
   flex: 1 1 auto;
   min-width: 0;
-  height: 22px;
+  height: var(--control-h-row);
   padding: 0 var(--gap-4);
   border: none;
   border-radius: var(--radius-small);

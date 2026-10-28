@@ -11,6 +11,7 @@
 
 import { createEffect, For, Show, type Accessor, type JSX } from "solid-js";
 import { promptText, type PromptState } from "../prompt";
+import { Chip } from "../ui/Chip";
 
 export interface CommandLineProps {
   prompt: PromptState | Accessor<PromptState>;
@@ -96,9 +97,9 @@ export function CommandLine(props: CommandLineProps): JSX.Element {
       <Show when={state().keywords.length > 0}>
         <div class="cmd-chips" role="group" aria-label="Keywords">
           <For each={state().keywords}>{(keyword) => (
-            <button class="keyword-chip" type="button" onClick={() => submit(keyword)}>
+            <Chip tone="accent" onClick={() => submit(keyword)}>
               {keyword}
-            </button>
+            </Chip>
           )}</For>
         </div>
       </Show>

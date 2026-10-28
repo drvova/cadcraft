@@ -147,24 +147,3 @@
   flex-wrap: wrap;
   gap: var(--gap-2);
 }
-
-/* Keywords read as words of the prompt, not as buttons. */
-.keyword-chip {
-  padding: 1px var(--gap-4);
-  border: none;
-  border-radius: var(--radius-small);
-  background: transparent;
-  color: var(--cmd-keyword);
-  font-family: var(--font-family-mono);
-  font-size: var(--font-chip);
-  cursor: pointer;
-}
-
-.keyword-chip:hover {
-  background: var(--cmd-keyword-hover);
-}
-
-.keyword-chip:focus-visible {
-  outline: var(--focus-outline-w) solid var(--accent);
-  outline-offset: var(--focus-outline-offset);
-}
