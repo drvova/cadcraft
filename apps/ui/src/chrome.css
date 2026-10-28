@@ -264,7 +264,7 @@
 
 .status-sep {
   width: var(--hairline);
-  height: 12px;
+  height: var(--icon-size-sm);
   margin: 0 var(--gap-4);
   background: var(--border);
 }
