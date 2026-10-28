@@ -47,6 +47,8 @@ field. `engine.commands` returns a separate command catalog, not a list of addit
 | `cmdline.script` | `{text}` | Run a multi-line script (like `.scr` files). |
 | `cmdline.key` | `{key: "enter"\|"escape"}` | Press Enter or Escape. Replies like `cmdline.input`: the state, `output`, and `error` when Enter was refused. |
 | `cmdline.state` | | Current prompt, keywords, accepted input kinds, history tail. |
+| `cadscript.source` |  | The drawing as CadScript text (`{text}`). |
+| `cadscript.run` | `{text}` | Rebuild from CadScript text; replies `{ok, output, ran}` or `{ok:false, error:"line N: ...", output}`. |
 | `engine.execute` | `{command, params}` | Run any command with JSON parameters. Never opens a dialog. `command` is an alias of this method, with the same parameters and result. |
 | `engine.commands` | | Every command: id, label, menu path, shortcut, aliases, params doc, enabled. |
 | `drawing.inspect` | `{entities?, limit?}` | Drawing summary (counts, extents, layers, styles, blocks, layouts, selection, undo) and entities with handles and geometry. |

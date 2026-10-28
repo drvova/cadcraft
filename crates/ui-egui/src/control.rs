@@ -6,6 +6,7 @@
 //! - `cmdline.script {text}`: run a multi-line script (spaces separate inputs, as in .scr files)
 //! - `cmdline.key {key}`: Enter / Escape at the command line
 //! - `cmdline.state`: current prompt, keywords, history tail
+//! - `cadscript.source`: the drawing as CadScript text; `cadscript.run {text}`: rebuild from it
 //! - `engine.commands`: every command with menu path, aliases, params and enablement
 //! - `drawing.inspect {entities?, limit?}`: drawing summary and entities (verifies agent work)
 //! - `ui.inspect`: UI state, canvas rect, view, performance
@@ -194,6 +195,8 @@ const METHODS: &[(&str, &str, &str)] = &[
     ("cmdline.script", "{text}", "Run a multi-line script, like a .scr file."),
     ("cmdline.key", "{key: \"enter\"|\"escape\"}", "Press Enter or Escape at the command line."),
     ("cmdline.state", "", "Current prompt, keywords, accepted input kinds and history tail."),
+    ("cadscript.source", "", "The drawing as CadScript text (replies {text})."),
+    ("cadscript.run", "{text}", "Rebuild from CadScript text (replies {ok, output, ran}, or {ok: false, error: \"line N: ...\", output})."),
     ("engine.execute", "{command, params}", "Run any command with JSON parameters. Never opens a dialog."),
     ("engine.commands", "", "Every command: id, label, menu path, shortcut, aliases, params doc, enabled."),
     ("drawing.inspect", "{entities?, limit?}", "Drawing summary and entities with handles and geometry."),
@@ -348,6 +351,29 @@ pub fn handle(app: &mut CadApp, ctx: &egui::Context, req: &ControlRequest) -> Ou
             ok(st)
         }
         "cmdline.state" => ok(cmdline_state(app)),
+        // The drawing as CadScript text, and the rebuild from it: the same serializer and runner
+        // the assistant pane's Source tab reads and edits (`cadcraft_engine::cadscript`).
+        "cadscript.source" => {
+            let Ok(st) = app.session.state() else { return err("no drawing") };
+            ok(json!({"text": cadcraft_engine::cadscript::to_script(&st.doc)}))
+        }
+        "cadscript.run" => {
+            // `replace` (default false): clear model space first, so running a drawing's own
+            // script rebuilds it instead of adding a second copy. A failed rebuild restores the
+            // drawing; a successful one leaves one undo step.
+            let replace = p.get("replace").and_then(Value::as_bool).unwrap_or(false);
+            let text = s("text").unwrap_or("");
+            let report = if replace {
+                cadcraft_engine::cadscript::run_replace(&mut app.session, text)
+            } else {
+                cadcraft_engine::cadscript::run(&mut app.session, text)
+            };
+            let mut v = json!({"ok": report.ok, "ran": report.ran, "output": report.output});
+            if let (Some(e), Some(o)) = (report.error, v.as_object_mut()) {
+                o.insert("error".into(), json!(e));
+            }
+            ok(v)
+        }
         "engine.commands" => ok(all_commands(app)),
         "drawing.inspect" | "document.inspect" => wrap(app.session.execute("drawing.inspect", p).map_err(|e| e.to_string())),
         "ui.inspect" => ok(inspect(app, ctx)),
@@ -790,5 +816,34 @@ mod tests {
         assert_eq!(r["bytes"], 3);
         assert_eq!(r["path"], "x.png");
         assert!(render_reply(b"abc", 7, 5, None).get("path").is_none());
+    }
+
+    /// The two CadScript methods: `source` replies the drawing as text, `run` rebuilds from text
+    /// (the exact shapes the assistant pane's Source tab reads).
+    #[test]
+    fn cadscript_source_and_run_through_the_control_channel() {
+        let mut app = crate::CadApp::new(cadcraft_engine::Session::new(), crate::Services::default());
+        let (req, _) = ControlRequest::new("cadscript.source", json!({}));
+        let Outcome::Done(v) = handle(&mut app, &egui::Context::default(), &req) else { panic!("source replied with a screenshot") };
+        assert_eq!(v["ok"], true, "{v}");
+        let text = v["result"]["text"].as_str().unwrap_or_default();
+        assert!(text.starts_with("; CADCraft drawing script\n"), "{text}");
+        assert!(text.contains("UNIT inches\n"), "{text}");
+
+        let script = "LAYER \"A\"\nLINE 0,0 10,0\nCIRCLE 5,5 2.5\n";
+        let (req, _) = ControlRequest::new("cadscript.run", json!({ "text": script }));
+        let Outcome::Done(v) = handle(&mut app, &egui::Context::default(), &req) else { panic!("run replied with a screenshot") };
+        assert_eq!(v["ok"], true, "{v}");
+        assert_eq!(v["result"]["ran"], 3, "the LAYER directive and the two entity lines ran: {v}");
+        assert!(v["result"]["output"].is_array(), "{v}");
+        assert!(v["result"].get("error").is_none(), "{v}");
+        assert_eq!(app.session.doc().expect("a drawing").model.len(), 2);
+
+        // An error names its line, and the reply carries it.
+        let (req, _) = ControlRequest::new("cadscript.run", json!({ "text": "LINE 0,0 1,0\nCIRCLE 5,5\n" }));
+        let Outcome::Done(v) = handle(&mut app, &egui::Context::default(), &req) else { panic!("run replied with a screenshot") };
+        assert_eq!(v["ok"], true, "{v}");
+        assert_eq!(v["result"]["ok"], false, "{v}");
+        assert!(v["result"]["error"].as_str().is_some_and(|e| e.starts_with("line 2: CIRCLE 5,5:")), "{v}");
     }
 }
