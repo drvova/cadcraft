@@ -21,6 +21,20 @@ One token source, one set of canonical widgets and one check for the interface a
   `row`, `card`, `section_label`. Each reads `Tokens::get()` and the recipe constants, so a
   control's radius, fill, hover, disabled and focus treatment live in one place instead of in
   every surface that draws one.
+- **The layout kit** is `crates/ui-egui/src/layout.rs`: the flex-like primitives egui lacks.
+  `row`/`col` (a real gap, no `add_space`), `spread` (left group and right group, edges pinned),
+  `columns` (n equal columns that fit the width), `field` (the two-column inspector form row),
+  `split` (a draggable split), `card` with the `Elev` ladder (Flat/Panel/Float/Popover),
+  `divider`, `section`, `sticky` (a header pinned while its list scrolls) and `edge_fade`. A
+  Cursor-style layout is these instead of hand-mathed rectangles: the Layer Properties Manager's
+  table is `columns`, and its Description column stopped being clipped the day it moved.
+- **The motion kit** is `crates/ui-egui/src/motion.rs`: CSS-transition behaviour for egui, which
+  has none. `DUR_FAST`/`DUR_MED`/`DUR_SLOW` (0.12/0.15/0.25 s) with `ease_out` (Cursor's
+  `cubic-bezier(.4,0,.2,1)`), and `value`/`hover` animate a number toward a target per frame,
+  keyed by an `Id`, requesting repaints while it moves. The canonical widgets call it, so button,
+  icon-button and row hover fills glide instead of snapping. `motion::set_animations` carries the
+  app's animation-effects setting: off means every value returns its target at once, so a
+  reduced-motion user sees no partial states.
 - **The specs** are this folder: one page per canonical control, each with its states, props,
   keyboard path and tokens — [button](components/button.md), [card](components/card.md),
   [chip](components/chip.md), [field](components/field.md),
