@@ -1,8 +1,7 @@
 {
-  "rule/css-px": 63,
-  "rule/deprecated-import": 6,
+  "rule/css-px": 39,
   "rule/named-color": 3,
   "rule/raw-value": 27,
   "trap/button-div": 1,
-  "trap/native-control": 16
+  "trap/native-control": 12
 }
