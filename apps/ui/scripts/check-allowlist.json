@@ -12,11 +12,10 @@
   "src/assistant.css": {
     "rule/css-px": {
       "font-size: 10px": 1,
-      "gap: 2px": 4,
-      "height: 14px": 2,
+      "gap: 2px": 1,
+      "height: 14px": 1,
       "height: 18px": 1,
       "height: 20px": 1,
-      "height: 22px": 3,
       "height: 35px": 1,
       "height: 7px": 1,
       "max-height: 180px": 1,
@@ -24,14 +23,9 @@
       "max-height: 340px": 1,
       "max-width: 120px": 1,
       "max-width: 160px": 1,
-      "min-height: 40px": 1,
-      "padding: 0 2px": 1,
       "padding: 0 3px": 1,
-      "padding: 2px": 1,
-      "padding: 2px var(--gap-4)": 3,
-      "padding: 2px var(--gap-6)": 2,
-      "padding: 3px var(--gap-6)": 1,
-      "width: 14px": 2,
+      "padding: 2px var(--gap-4)": 1,
+      "width: 14px": 1,
       "width: 18px": 1,
       "width: 20px": 1,
       "width: 340px": 1,
@@ -80,7 +74,7 @@
   },
   "src/components/AssistantPane.tsx": {
     "trap/native-control": {
-      "<button> where the system has Button": 12
+      "<button> where the system has Button": 5
     }
   },
   "src/components/CanvasView.tsx": {
