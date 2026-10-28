@@ -14,7 +14,7 @@
       "variants": { "variant": ["primary", "secondary", "ghost", "danger"], "size": ["sm", "md"] },
       "states": ["disabled"],
       "tokens": ["--control-h-button", "--control-h-input", "--radius-control", "--accent", "--accent-hover", "--accent-pressed", "--error", "--error-hover", "--error-pressed", "--hover", "--fill-active", "--fill-pressed", "--fill-disabled", "--text-disabled", "--on-accent"],
-      "replaces": ["src/components/TopBar.tsx", "src/components/AssistantPane.tsx"]
+      "replaces": []
     },
     {
       "id": "icon-button",
@@ -30,7 +30,7 @@
       "variants": { "variant": ["ghost", "soft", "inverted"], "size": ["sm", "md"] },
       "states": ["disabled", "selected"],
       "tokens": ["--control-h-input", "--control-h-chip", "--radius-round", "--icon-size-md", "--icon-size-sm", "--icon", "--hover", "--fill-active", "--fill-pressed", "--fill-disabled", "--text", "--text-disabled", "--on-accent"],
-      "replaces": ["src/components/AssistantPane.tsx"]
+      "replaces": []
     },
     {
       "id": "chip",
@@ -46,7 +46,7 @@
       "variants": { "tone": ["neutral", "accent"] },
       "states": [],
       "tokens": ["--control-h-chip", "--radius-round", "--gap-8", "--font-chip", "--text-faint", "--accent", "--accent-soft", "--hover", "--fill-active"],
-      "replaces": ["src/components/CommandLine.tsx"]
+      "replaces": []
     },
     {
       "id": "field",
@@ -62,7 +62,7 @@
       "variants": { "type": ["text", "email", "search", "password"] },
       "states": ["disabled"],
       "tokens": ["--control-h-input", "--radius-control", "--field-pad-y", "--field-pad-x", "--font-body", "--control", "--border-soft", "--hairline", "--accent", "--text", "--text-faint", "--text-disabled"],
-      "replaces": ["src/components/CommandLine.tsx"]
+      "replaces": []
     },
     {
       "id": "row",
@@ -78,7 +78,7 @@
       "variants": {},
       "states": ["selected", "disabled"],
       "tokens": ["--control-h-row", "--radius-card", "--gap-4", "--font-body", "--text-dim", "--hover", "--fill-active", "--text", "--text-disabled"],
-      "replaces": ["src/components/AssistantPane.tsx"]
+      "replaces": []
     },
     {
       "id": "section-label",
