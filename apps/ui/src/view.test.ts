@@ -7,6 +7,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   boundsOfPoints,
+  fitAspect,
   makeProjection,
   normalizeRect,
   padRect,
@@ -139,5 +140,38 @@ describe("rect helpers", () => {
   test("rectsOverlap counts touching edges", () => {
     expect(rectsOverlap({ x0: 0, y0: 0, x1: 1, y1: 1 }, { x0: 1, y0: 0, x1: 2, y1: 1 })).toBe(true);
     expect(rectsOverlap({ x0: 0, y0: 0, x1: 1, y1: 1 }, { x0: 2, y0: 0, x1: 3, y1: 1 })).toBe(false);
+  });
+});
+
+describe("fitAspect", () => {
+  test("a wider screen widens the world around its centre", () => {
+    const out = fitAspect({ x0: 0, y0: 0, x1: 100, y1: 50 }, { w: 400, h: 100 });
+    expect(out.y0).toBeCloseTo(0);
+    expect(out.y1).toBeCloseTo(50);
+    expect(out.x0).toBeCloseTo(50 - 100);
+    expect(out.x1).toBeCloseTo(50 + 100);
+  });
+
+  test("a taller screen heightens the world", () => {
+    const out = fitAspect({ x0: 0, y0: 0, x1: 100, y1: 100 }, { w: 100, h: 400 });
+    expect(out.x0).toBeCloseTo(0);
+    expect(out.x1).toBeCloseTo(100);
+    expect(out.y0).toBeCloseTo(50 - 200);
+    expect(out.y1).toBeCloseTo(50 + 200);
+  });
+
+  test("a matching aspect is left alone", () => {
+    const out = fitAspect({ x0: 0, y0: 0, x1: 200, y1: 100 }, { w: 800, h: 400 });
+    expect(out.x0).toBeCloseTo(0);
+    expect(out.x1).toBeCloseTo(200);
+    expect(out.y0).toBeCloseTo(0);
+    expect(out.y1).toBeCloseTo(100);
+  });
+
+  test("a degenerate screen is returned unchanged (a degenerate rect is normalized, as everywhere)", () => {
+    const r = { x0: 1, y0: 2, x1: 3, y1: 4 };
+    expect(fitAspect(r, { w: 0, h: 100 })).toEqual(r);
+    expect(fitAspect(r, { w: 100, h: 0 })).toEqual(r);
+    expect(fitAspect({ x0: 5, y0: 5, x1: 5, y1: 5 }, { w: 100, h: 100 })).toEqual(normalizeRect({ x0: 5, y0: 5, x1: 5, y1: 5 }));
   });
 });

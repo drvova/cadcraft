@@ -145,13 +145,11 @@ export function systemPrompt(b: Briefing): string {
     "4. Build your own tooling. `(defun NAME …)` and `(setq NAME literal)` are KEPT and reloaded\n" +
     "in your next session — `(kept)` lists them, `(forget \"NAME\")` removes one. Write a helper\n" +
     "once, reuse it always.\n" +
-    "5. Show your work when a picture helps: `(render)` draws the drawing to a PNG and returns\n" +
-    "its path.\n" +
-    "6. Pictures the reader attaches are in the message and you can see them. Their files are on\n" +
-    "disk, so you can also measure them: `(cmd \"imagetrace\" '((PATH . \"…\") (WIDTH . 30)))`\n" +
-    "turns one into editable polylines at that measurement, and\n" +
-    "`(cmd \"imageattach\" '((PATH . \"…\") (WIDTH . 30)))` places it as a reference. Trace it,\n" +
-    "then fix up and size the geometry — that is how a photograph becomes a part.\n\n";
+    "5. This is the browser build: there is no filesystem. `(render)` and file paths answer with\n" +
+    "an error, and `(defun …)` helpers are kept for this session only, not reloaded next time.\n" +
+    "Everything else works: drawing, reading back, measuring.\n" +
+    "6. Pictures the reader attaches are in the message and you can see them, but they have no\n" +
+    "file path here, so they cannot be traced or measured with code — describe what you see.\n\n";
   s +=
     "How to report what you did:\n" +
     "- Say what you changed and **the numbers that came out of it**: how many objects, which handles or " +
@@ -248,9 +246,17 @@ export interface ToolCall {
   args: unknown;
 }
 
+/** A picture the reader attached: its name (for the model's text) and its data URL (for vision). */
+export interface ChatImage {
+  name: string;
+  dataUrl: string;
+}
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
   content?: string;
+  /** Pictures that travel with the message in the OpenAI vision shape. */
+  images?: readonly ChatImage[];
   toolCalls?: ToolCall[];
   toolCallId?: string;
   toolName?: string;
@@ -260,7 +266,15 @@ export interface ChatMessage {
 export function wireMessages(messages: readonly ChatMessage[]): unknown[] {
   return messages.map((m) => {
     const o: Record<string, unknown> = { role: m.role };
-    if (m.content !== undefined) o["content"] = m.content;
+    const images = m.images ?? [];
+    if (images.length > 0) {
+      // The OpenAI vision shape: one text part naming the pictures (the name is what the reader
+      // called the file), then one image part per attachment. The desktop names the file's path
+      // here; the browser has no path, so the name stands.
+      let text = m.content ?? "";
+      for (const img of images) text += `\n\n[attached picture: ${img.name}]`;
+      o["content"] = [{ type: "text", text }, ...images.map((img) => ({ type: "image_url", image_url: { url: img.dataUrl } }))];
+    } else if (m.content !== undefined) o["content"] = m.content;
     else if (m.role === "assistant" && (m.toolCalls?.length ?? 0) > 0) o["content"] = null; // OpenAI wants null, not missing
     if ((m.toolCalls?.length ?? 0) > 0) {
       o["tool_calls"] = (m.toolCalls ?? []).map((c) => ({
@@ -282,7 +296,9 @@ export function wireMessages(messages: readonly ChatMessage[]): unknown[] {
  */
 export function trimToBudget(messages: readonly ChatMessage[], budget: number): ChatMessage[] {
   const cost = (m: ChatMessage): number =>
-    (m.content ?? "").length + (m.toolCalls ?? []).reduce((n, c) => n + c.name.length + JSON.stringify(c.args ?? {}).length, 0);
+    (m.content ?? "").length +
+    (m.images ?? []).reduce((n, img) => n + img.dataUrl.length, 0) +
+    (m.toolCalls ?? []).reduce((n, c) => n + c.name.length + JSON.stringify(c.args ?? {}).length, 0);
   const starts: number[] = messages.map((m, i) => (m.role === "user" ? i : -1)).filter((i) => i >= 0);
   if (starts.length === 0 || starts[0] !== 0) starts.unshift(0);
   let total = 0;
@@ -501,6 +517,36 @@ export function checkRunArgs(args: unknown): { code: string; values: Record<stri
     values[k] = typeof v === "string" ? v : (JSON.stringify(v) ?? String(v));
   }
   return { code: typeof code === "string" ? code : "", values };
+}
+
+// ---- Inline text (the model's words, rendered) ----------------------------------------------------
+
+/** One run of the model's text: plain, **bold**, or `code`. */
+export interface InlinePart {
+  kind: "text" | "bold" | "code";
+  text: string;
+}
+
+const INLINE_RE = /`([^`]+)`|\*\*([^*]+)\*\*/g;
+
+/**
+ * Split one line of the model's text into plain, bold and code runs. Backticks win over bold
+ * inside them; a marker that never closes stays literal. No HTML is produced: the pane maps the
+ * parts to elements, so a model's words can never inject markup.
+ */
+export function parseInline(text: string): InlinePart[] {
+  const parts: InlinePart[] = [];
+  let last = 0;
+  for (const m of text.matchAll(INLINE_RE)) {
+    const index = m.index ?? 0;
+    if (index > last) parts.push({ kind: "text", text: text.slice(last, index) });
+    if (m[1] !== undefined) parts.push({ kind: "code", text: m[1] });
+    else parts.push({ kind: "bold", text: m[2] ?? "" });
+    last = index + m[0].length;
+  }
+  if (last < text.length) parts.push({ kind: "text", text: text.slice(last) });
+  if (parts.length === 0) parts.push({ kind: "text", text });
+  return parts;
 }
 
 // ---- The request ----------------------------------------------------------------------------------

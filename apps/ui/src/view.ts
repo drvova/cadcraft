@@ -127,6 +127,29 @@ export function panBy(view: Rect, screen: ScreenSize, dxPx: number, dyPx: number
   return normalizeRect({ x0: v.x0 - dx, y0: v.y0 + dy, x1: v.x1 - dx, y1: v.y1 + dy });
 }
 
+/**
+ * Adjust a view rectangle to a screen's aspect, around its centre: the world stays centred and
+ * nothing is cropped when the canvas changes shape (the assistant panel opening, a window
+ * resize). The dimension that has to grow is the one the screen has proportionally more of.
+ * A degenerate rectangle or screen is returned unchanged.
+ */
+export function fitAspect(rect: Rect, screen: ScreenSize): Rect {
+  const v = normalizeRect(rect);
+  const w = screen.w > 0 ? screen.w : 0;
+  const h = screen.h > 0 ? screen.h : 0;
+  if (w <= 0 || h <= 0) return v;
+  const wantAspect = w / h;
+  const haveAspect = (v.x1 - v.x0) / Math.max(v.y1 - v.y0, 1e-12);
+  if (!Number.isFinite(wantAspect) || !Number.isFinite(haveAspect) || haveAspect <= 0) return v;
+  const cx = (v.x0 + v.x1) / 2;
+  const cy = (v.y0 + v.y1) / 2;
+  let halfW = (v.x1 - v.x0) / 2;
+  let halfH = (v.y1 - v.y0) / 2;
+  if (haveAspect < wantAspect) halfW = halfH * wantAspect;
+  else halfH = halfW / wantAspect;
+  return { x0: cx - halfW, y0: cy - halfH, x1: cx + halfW, y1: cy + halfH };
+}
+
 /** Grow a rectangle by a fraction of its own span (the initial fit's breathing room). */
 export function padRect(r: Rect, fraction: number): Rect {
   const v = normalizeRect(r);

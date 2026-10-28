@@ -5,6 +5,7 @@ import {
   MAX_ROUNDS,
   noteOf,
   oneShot,
+  parseInline,
   parseToolArgs,
   providerEndpoint,
   providerReady,
@@ -107,6 +108,7 @@ describe("the tool surface", () => {
     expect(p).toContain("Objects in the active space: 46");
     expect(p).toContain("- Extents: (-0.500, -0.500) to (18.000, 7.500)");
     expect(p).toContain("You have exactly one tool, `run`");
+    expect(p).toContain("This is the browser build: there is no filesystem");
     expect(p).not.toContain("; 0 selected");
   });
 
@@ -159,6 +161,56 @@ describe("the wire shape", () => {
   test("a tool result carries its call id and name", () => {
     const w = wireMessages([{ role: "tool", content: "ok", toolCallId: "c1", toolName: "run" }]) as Array<Record<string, unknown>>;
     expect(w[0]).toEqual({ role: "tool", content: "ok", tool_call_id: "c1", name: "run" });
+  });
+
+  test("an attached picture travels in the vision shape, named in the text", () => {
+    const w = wireMessages([
+      { role: "user", content: "trace this", images: [{ name: "wing.png", dataUrl: "data:image/png;base64,AAAA" }] },
+    ]) as Array<Record<string, unknown>>;
+    const content = w[0]?.["content"] as Array<Record<string, unknown>>;
+    expect(content[0]).toEqual({ type: "text", text: "trace this\n\n[attached picture: wing.png]" });
+    expect(content[1]).toEqual({ type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } });
+  });
+
+  test("no pictures means plain string content, unchanged", () => {
+    const w = wireMessages([{ role: "user", content: "hi" }]) as Array<Record<string, unknown>>;
+    expect(w[0]?.["content"]).toBe("hi");
+  });
+});
+
+describe("parseInline", () => {
+  test("plain text is one run", () => {
+    expect(parseInline("hello there")).toEqual([{ kind: "text", text: "hello there" }]);
+  });
+
+  test("bold and code runs are split out", () => {
+    expect(parseInline("a **b** c `d` e")).toEqual([
+      { kind: "text", text: "a " },
+      { kind: "bold", text: "b" },
+      { kind: "text", text: " c " },
+      { kind: "code", text: "d" },
+      { kind: "text", text: " e" },
+    ]);
+  });
+
+  test("a marker that never closes stays literal", () => {
+    expect(parseInline("a **b")).toEqual([{ kind: "text", text: "a **b" }]);
+    expect(parseInline("a `b")).toEqual([{ kind: "text", text: "a `b" }]);
+  });
+
+  test("code wins over bold inside it", () => {
+    expect(parseInline("`a **b**`")).toEqual([{ kind: "code", text: "a **b**" }]);
+  });
+
+  test("newlines survive inside a run", () => {
+    expect(parseInline("one\ntwo **x**")).toEqual([
+      { kind: "text", text: "one\ntwo " },
+      { kind: "bold", text: "x" },
+    ]);
+  });
+
+  test("empty text is one empty run", () => {
+    expect(parseInline("")).toEqual([{ kind: "text", text: "" }]);
   });
 });
 

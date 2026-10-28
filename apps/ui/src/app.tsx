@@ -438,7 +438,7 @@ export function App(props: AppProps): JSX.Element {
       <Show when={showToolbar()}>
         <ToolStrip onInvoke={onInvoke} />
       </Show>
-      <div class="workspace">
+      <div class={showAssistant() ? "workspace has-assistant" : "workspace"}>
         <main class="stage">
           <CanvasView
             facade={props.facade}
@@ -450,10 +450,10 @@ export function App(props: AppProps): JSX.Element {
             onPick={onPick}
             onCursor={setCursor}
           />
-          <Show when={showAssistant()}>
-            <AssistantPane facade={props.facade} onChanged={refresh} />
-          </Show>
         </main>
+        <Show when={showAssistant()}>
+          <AssistantPane facade={props.facade} onChanged={refresh} onClose={() => setShowAssistant(false)} />
+        </Show>
         <aside class="rail">
           <Show when={showLayers()}>
             <LayersPanel layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} />

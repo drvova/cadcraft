@@ -78,6 +78,12 @@ body {
   background: var(--chrome);
 }
 
+/* With the assistant docked, the workspace has three columns: the drawing takes what is left,
+   the panel its 340px, the rail its 252px. */
+.workspace.has-assistant {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
 /* The right rail: one surface, the palettes stacked and divided by a hairline. Hidden entirely
    when neither palette is shown (an empty grid column would leave a strip of nothing). */
 .rail {

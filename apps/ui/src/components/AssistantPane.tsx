@@ -1,26 +1,32 @@
 /**
- * The composer: the assistant's floating panel over the drawing area, built to Cursor's measured
- * composer recipe (`.design-system/cursor/recipes.md` §1) — the box is `input.background` with a
- * 1px border that turns active on focus, radius 5px, `padding: 6px`, `gap: 6px`, a
- * `0 0 4px 1px` shadow and the `border-color .1s ease-in-out, box-shadow .1s ease-in-out`
- * transition; the button row under the input is `flex` with a `4px` gap; the model chip is a
- * ghost button at `opacity .8` that rises to `1` on hover; the running state carries the
- * `ripple 1.2s` dot. The transcript above it follows the agent-panel grammar: a prompt in a quiet
- * inset block, the model's words plain on the surface, and each tool call one dim line that opens
- * on click to the code and the report.
+ * The assistant panel: the agent docked to the right of the workspace, on Cursor's measured
+ * recipes (`.design-system/cursor/recipes.md`). The part title is §2's (35px, padding 8px); the
+ * composer is the full-input-box (§1.2: `input.background`, a 1px border that turns active on
+ * focus, radius 5px, `padding: 6px`, `gap: 6px`, `box-shadow: 0 0 4px 1px`, the
+ * `border-color .1s, box-shadow .1s` transition; input `min-height: 40px`, `max-height: 240px`);
+ * its button row is §1.3 (flex, `gap: 4px`, right side pushed by `margin-left: auto`); the
+ * control icon buttons are §1.7 (18px, `opacity .8` → `1`); the model chip is the ghost button
+ * (§1.9); send is §1.5; the running dot carries §1.14's `ripple 1.2s` to `scale(1.7)`.
+ *
+ * The transcript is the agent-panel grammar: a prompt in a quiet inset block, the model's words
+ * plain on the surface (with inline `code` and **bold** runs), and each tool call one dim line
+ * that opens on click to its code and report.
  *
  * The turn itself lives in `../assistant.ts`; this component owns the view state, the provider
- * settings (kept in `localStorage`), and the `run` executor (the shell's own `engine.execute`).
+ * settings (kept in `localStorage`), the attachments (paperclip, paste, drop — they travel to the
+ * model in the vision shape) and the `run` executor (the shell's own `engine.execute`).
  */
 
-import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from "solid-js";
 import type { AppFacade } from "../facade";
 import {
   MAX_REQUEST_CHARS,
+  parseInline,
   PROVIDER_PRESETS,
   runTurn,
   type AssistantEvent,
   type Briefing,
+  type ChatImage,
   type ChatMessage,
   type ProviderConfig,
 } from "../assistant";
@@ -31,6 +37,8 @@ export interface AssistantPaneProps {
   facade: AppFacade;
   /** The drawing changed (a tool call ran): re-read what the surfaces show. */
   onChanged: () => void;
+  /** The panel's close button. */
+  onClose: () => void;
 }
 
 interface ToolEntry {
@@ -43,9 +51,20 @@ interface ToolEntry {
   open: boolean;
 }
 
-type Entry = { kind: "user"; text: string } | { kind: "assistant"; text: string } | { kind: "failed"; text: string } | ToolEntry;
+type Entry =
+  | { kind: "user"; text: string; pictures: number }
+  | { kind: "assistant"; text: string }
+  | { kind: "failed"; text: string }
+  | ToolEntry;
 
 const STORAGE_KEY = "cadcraft.assistant.provider";
+
+/** The empty state's examples: one click fills the composer. */
+const EXAMPLES: readonly string[] = ["Draw a 20 mm circle at 0,0", "What is the total length of the lines?", "List the layers and what is on them"];
+
+/** How many pictures one message may carry, and how large each may be. */
+const MAX_ATTACHMENTS = 4;
+const MAX_ATTACHMENT_BYTES = 4 << 20;
 
 /** The provider settings the pane keeps: the last one saved in this browser. */
 function loadProvider(): ProviderConfig {
@@ -77,32 +96,62 @@ function saveProvider(p: ProviderConfig): void {
 /** How full the context is: the characters the conversation would send, against the budget. */
 function contextUsed(conversation: readonly ChatMessage[]): number {
   return conversation.reduce(
-    (n, m) => n + (m.content ?? "").length + (m.toolCalls ?? []).reduce((k, c) => k + c.name.length + JSON.stringify(c.args ?? {}).length, 0),
+    (n, m) =>
+      n +
+      (m.content ?? "").length +
+      (m.images ?? []).reduce((k, img) => k + img.dataUrl.length, 0) +
+      (m.toolCalls ?? []).reduce((k, c) => k + c.name.length + JSON.stringify(c.args ?? {}).length, 0),
     0,
   );
+}
+
+/** Read a file as a data URL (the wire wants base64; the reader's file is never uploaded). */
+function readAsDataUrl(file: File): Promise<string> {
+  const { promise, resolve, reject } = Promise.withResolvers<string>();
+  const reader = new FileReader();
+  reader.onload = () => resolve(String(reader.result));
+  reader.onerror = () => reject(reader.error ?? new Error("could not read the file"));
+  reader.readAsDataURL(file);
+  return promise;
+}
+
+/** The textarea grows with its content between the recipe's min and max (40px … 240px). */
+function grow(el: HTMLTextAreaElement): void {
+  el.style.height = "auto";
+  el.style.height = `${Math.min(Math.max(el.scrollHeight, 40), 240)}px`;
 }
 
 export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   const [entries, setEntries] = createSignal<Entry[]>([]);
   const [conversation, setConversation] = createSignal<ChatMessage[]>([]);
   const [input, setInput] = createSignal("");
+  const [attached, setAttached] = createSignal<readonly ChatImage[]>([]);
   const [running, setRunning] = createSignal(false);
   const [status, setStatus] = createSignal("");
   const [provider, setProvider] = createSignal<ProviderConfig>(loadProvider());
   const [menuOpen, setMenuOpen] = createSignal(false);
   const [draft, setDraft] = createSignal<ProviderConfig>(loadProvider());
-  let transcript: HTMLDivElement | undefined;
+  let body: HTMLDivElement | undefined;
+  let inputEl: HTMLTextAreaElement | undefined;
+  let fileInput: HTMLInputElement | undefined;
   let controller: AbortController | null = null;
 
   const used = createMemo(() => contextUsed(conversation()));
   const ready = createMemo(() => provider().baseUrl !== "" && provider().model !== "");
+  const title = createMemo(() => {
+    const first = entries().find((e) => e.kind === "user");
+    if (first === undefined || first.kind !== "user") return "New chat";
+    const line = first.text.split("\n")[0] ?? "";
+    return line.length > 48 ? `${line.slice(0, 48)}…` : line;
+  });
 
   // The transcript follows the conversation as it grows.
   createEffect(() => {
     entries();
-    if (transcript !== undefined) queueMicrotask(() => (transcript as HTMLDivElement).scrollTop = (transcript as HTMLDivElement).scrollHeight);
+    if (body !== undefined) queueMicrotask(() => (body as HTMLDivElement).scrollTop = (body as HTMLDivElement).scrollHeight);
   });
 
+  onMount(() => inputEl?.focus());
   onCleanup(() => controller?.abort());
 
   /** The briefing the model is told about the drawing, read fresh at the start of every turn. */
@@ -157,17 +206,62 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     setStatus("");
   };
 
+  /** Add files from the picker, a paste or a drop: pictures only, within the caps. */
+  const addFiles = async (files: readonly File[]): Promise<void> => {
+    const pictures = files.filter((f) => f.type.startsWith("image/"));
+    if (pictures.length === 0) return;
+    const room = MAX_ATTACHMENTS - attached().length;
+    if (room <= 0) {
+      setStatus(`At most ${MAX_ATTACHMENTS} pictures per message.`);
+      return;
+    }
+    const accepted: ChatImage[] = [];
+    for (const file of pictures.slice(0, room)) {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        setStatus(`${file.name} is too large (limit ${Math.round(MAX_ATTACHMENT_BYTES / (1 << 20))} MB).`);
+        continue;
+      }
+      try {
+        accepted.push({ name: file.name === "" ? "pasted.png" : file.name, dataUrl: await readAsDataUrl(file) });
+      } catch {
+        setStatus(`${file.name} could not be read.`);
+      }
+    }
+    if (accepted.length > 0) setAttached((prev) => [...prev, ...accepted]);
+  };
+
+  const onPaste = (e: ClipboardEvent): void => {
+    const files = [...(e.clipboardData?.items ?? [])]
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((f): f is File => f !== null);
+    if (files.length === 0) return;
+    e.preventDefault();
+    void addFiles(files);
+  };
+
+  const onDrop = (e: DragEvent): void => {
+    const files = [...(e.dataTransfer?.files ?? [])];
+    if (files.length === 0) return;
+    e.preventDefault();
+    void addFiles(files);
+  };
+
   const send = async (): Promise<void> => {
     const text = input().trim();
     if (text === "" || running()) return;
     if (!ready()) {
-      setMenuOpen(true);
       setDraft(provider());
+      setMenuOpen(true);
       return;
     }
+    const pictures = attached();
     setInput("");
-    setEntries((prev) => [...prev, { kind: "user", text }]);
-    const next: ChatMessage[] = [...conversation(), { role: "user", content: text }];
+    if (inputEl !== undefined) inputEl.style.height = "";
+    setAttached([]);
+    setEntries((prev) => [...prev, { kind: "user", text, pictures: pictures.length }]);
+    const message: ChatMessage = pictures.length === 0 ? { role: "user", content: text } : { role: "user", content: text, images: pictures };
+    const next: ChatMessage[] = [...conversation(), message];
     setConversation(next);
     setRunning(true);
     setStatus("Thinking…");
@@ -200,6 +294,10 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     controller?.abort();
     setEntries([]);
     setConversation([]);
+    setAttached([]);
+    setInput("");
+    if (inputEl !== undefined) inputEl.style.height = "";
+    inputEl?.focus();
   };
 
   const onKeyDown = (e: KeyboardEvent): void => {
@@ -219,137 +317,222 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     setProvider(p);
     saveProvider(p);
     setMenuOpen(false);
+    inputEl?.focus();
   };
 
   const toggleTool = (index: number): void => {
     setEntries((prev) => prev.map((entry, i) => (i === index && entry.kind === "tool" ? { ...entry, open: !entry.open } : entry)));
   };
 
-  const modelLabel = createMemo(() => (ready() ? provider().model : "Set up model"));
+  /** The model's words, with inline `code` and **bold** runs rendered as elements. */
+  const richText = (text: string): JSX.Element => (
+    <For each={parseInline(text)}>
+      {(part) => (part.kind === "bold" ? <strong>{part.text}</strong> : part.kind === "code" ? <code>{part.text}</code> : part.text)}
+    </For>
+  );
 
   return (
-    <div class="assistant" role="region" aria-label="Assistant">
-      <Show when={entries().length > 0}>
-        <div class="assistant-transcript" ref={transcript}>
-          <For each={entries()}>
-            {(entry, index) => (
-              <Switch>
-                <Match when={entry.kind === "user"}>
-                  <div class="assistant-prompt">{entry.kind === "user" ? entry.text : ""}</div>
-                </Match>
-                <Match when={entry.kind === "assistant"}>
-                  <div class="assistant-text">{entry.kind === "assistant" ? entry.text : ""}</div>
-                </Match>
-                <Match when={entry.kind === "failed"}>
-                  <div class="assistant-failed">{entry.kind === "failed" ? entry.text : ""}</div>
-                </Match>
-                <Match when={entry.kind === "tool"}>
-                  <button class="assistant-tool" type="button" onClick={() => toggleTool(index())} aria-expanded={entry.kind === "tool" && entry.open}>
-                    <span class="assistant-tool-arrow">{entry.kind === "tool" && entry.open ? "▾" : "▸"}</span>
-                    <span class="assistant-tool-name">{entry.kind === "tool" ? entry.name : ""}</span>
-                    <span class="assistant-tool-note">{entry.kind === "tool" ? entry.note : ""}</span>
-                  </button>
-                  <Show when={entry.kind === "tool" && entry.open}>
-                    <div class="assistant-detail">
-                      <pre class="assistant-code">{entry.kind === "tool" ? entry.code : ""}</pre>
-                      <Show when={entry.kind === "tool" && entry.report !== ""}>
-                        <pre class="assistant-report">{entry.kind === "tool" ? entry.report : ""}</pre>
-                      </Show>
-                    </div>
-                  </Show>
-                </Match>
-              </Switch>
-            )}
-          </For>
-        </div>
-      </Show>
-
-      <div class="assistant-box">
-        <Show when={running()}>
-          <div class="assistant-status">
-            <span class="assistant-ripple" />
-            <span>{status()}</span>
-          </div>
-        </Show>
-        <textarea
-          class="assistant-input"
-          rows={1}
-          placeholder="Ask the assistant…"
-          value={input()}
-          onInput={(e) => setInput(e.currentTarget.value)}
-          onKeyDown={onKeyDown}
-          aria-label="Ask the assistant"
-        />
-        <div class="assistant-row">
-          <button
-            class="assistant-ghost"
-            type="button"
-            title={ready() ? `${provider().baseUrl} · ${provider().model}` : "Choose a provider and model"}
-            onClick={() => {
-              setDraft(provider());
-              setMenuOpen((v) => !v);
-            }}
-          >
-            <span class="assistant-ghost-label">{modelLabel()}</span>
-            <span class="assistant-ghost-caret">▾</span>
+    <aside
+      class="assistant-panel"
+      role="complementary"
+      aria-label="Assistant"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={onDrop}
+    >
+      <div class="assistant-head">
+        <span class="assistant-title" title={title()}>
+          {title()}
+        </span>
+        <div class="assistant-head-actions">
+          <button class="assistant-icon" type="button" title="New chat" aria-label="New chat" onClick={newChat}>
+            <ToolIcon id="plus" />
           </button>
-          <Show when={entries().length > 0}>
-            <button class="assistant-ghost" type="button" title="Start a new conversation" onClick={newChat}>
-              New chat
-            </button>
-          </Show>
-          <div class="assistant-actions">
-            <span class="assistant-context" title={`${used()} characters of the ${MAX_REQUEST_CHARS} the model can be sent`}>
-              {used() === 0 ? "" : `${Math.round(used() / 100) / 10}k / ${Math.round(MAX_REQUEST_CHARS / 1000)}k`}
-            </span>
-            <Show
-              when={running()}
-              fallback={
-                <button class="assistant-send" type="button" title="Send (Enter)" disabled={input().trim() === ""} onClick={() => void send()}>
-                  <ToolIcon id="send" />
-                </button>
-              }
-            >
-              <button class="assistant-send" type="button" title="Stop" onClick={stop}>
-                <ToolIcon id="stop" />
-              </button>
-            </Show>
-          </div>
+          <button class="assistant-icon" type="button" title="Close" aria-label="Close" onClick={() => props.onClose()}>
+            <ToolIcon id="close" />
+          </button>
         </div>
-        <Show when={menuOpen()}>
-          <div class="assistant-menu">
-            <div class="assistant-menu-title">Provider</div>
-            <For each={PROVIDER_PRESETS}>
-              {(preset) => (
-                <button class="assistant-preset" type="button" onClick={() => applyPreset(preset.id)}>
-                  <span>{preset.label}</span>
-                  <span class="assistant-preset-url">{preset.baseUrl === "" ? "—" : preset.baseUrl.replace(/^https?:\/\//, "")}</span>
+      </div>
+
+      <div class="assistant-body" ref={body}>
+        <Show when={entries().length === 0}>
+          <div class="assistant-empty">
+            <p>The assistant works in the open drawing: it draws, measures and changes it, and reports the numbers.</p>
+            <For each={EXAMPLES}>
+              {(example) => (
+                <button
+                  class="assistant-example"
+                  type="button"
+                  onClick={() => {
+                    setInput(example);
+                    inputEl?.focus();
+                  }}
+                >
+                  {example}
                 </button>
               )}
             </For>
-            <label class="assistant-field">
-              <span>Base URL</span>
-              <input value={draft().baseUrl} onInput={(e) => setDraft({ ...draft(), baseUrl: e.currentTarget.value })} placeholder="http://127.0.0.1:11434/v1" />
-            </label>
-            <label class="assistant-field">
-              <span>Model</span>
-              <input value={draft().model} onInput={(e) => setDraft({ ...draft(), model: e.currentTarget.value })} placeholder="llama3.2" />
-            </label>
-            <label class="assistant-field">
-              <span>API key</span>
-              <input type="password" value={draft().apiKey} onInput={(e) => setDraft({ ...draft(), apiKey: e.currentTarget.value })} placeholder="left empty for a local server" />
-            </label>
-            <div class="assistant-menu-actions">
-              <button class="assistant-ghost" type="button" onClick={() => setMenuOpen(false)}>
-                Cancel
-              </button>
-              <button class="assistant-save" type="button" onClick={saveDraft}>
-                Save
-              </button>
-            </div>
           </div>
         </Show>
+        <For each={entries()}>
+          {(entry, index) => (
+            <Switch>
+              <Match when={entry.kind === "user"}>
+                <div class="assistant-prompt">
+                  {entry.kind === "user" ? entry.text : ""}
+                  {entry.kind === "user" && entry.pictures > 0 ? <span class="assistant-prompt-pics">{` · ${entry.pictures} picture${entry.pictures === 1 ? "" : "s"}`}</span> : ""}
+                </div>
+              </Match>
+              <Match when={entry.kind === "assistant"}>
+                <div class="assistant-text">{entry.kind === "assistant" ? richText(entry.text) : ""}</div>
+              </Match>
+              <Match when={entry.kind === "failed"}>
+                <div class="assistant-failed">{entry.kind === "failed" ? entry.text : ""}</div>
+              </Match>
+              <Match when={entry.kind === "tool"}>
+                <button class="assistant-tool" type="button" onClick={() => toggleTool(index())} aria-expanded={entry.kind === "tool" && entry.open}>
+                  <span class="assistant-tool-arrow">{entry.kind === "tool" && entry.open ? "▾" : "▸"}</span>
+                  <span class="assistant-tool-name">{entry.kind === "tool" ? entry.name : ""}</span>
+                  <span class="assistant-tool-note">{entry.kind === "tool" ? entry.note : ""}</span>
+                </button>
+                <Show when={entry.kind === "tool" && entry.open}>
+                  <div class="assistant-detail">
+                    <pre class="assistant-code">{entry.kind === "tool" ? entry.code : ""}</pre>
+                    <Show when={entry.kind === "tool" && entry.report !== ""}>
+                      <pre class="assistant-report">{entry.kind === "tool" ? entry.report : ""}</pre>
+                    </Show>
+                  </div>
+                </Show>
+              </Match>
+            </Switch>
+          )}
+        </For>
       </div>
-    </div>
+
+      <div class="assistant-composer">
+        <div class="assistant-box">
+          <Show when={attached().length > 0}>
+            <div class="assistant-attachments">
+              <For each={attached()}>
+                {(picture, index) => (
+                  <span class="assistant-attachment">
+                    <img src={picture.dataUrl} alt={picture.name} />
+                    <span class="assistant-attachment-name">{picture.name}</span>
+                    <button
+                      class="assistant-attachment-x"
+                      type="button"
+                      title={`Remove ${picture.name}`}
+                      onClick={() => setAttached((prev) => prev.filter((_, i) => i !== index()))}
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
+              </For>
+            </div>
+          </Show>
+          <Show when={status() !== ""}>
+            <div class="assistant-status">
+              <Show when={running()}>
+                <span class="assistant-ripple" />
+              </Show>
+              <span>{status()}</span>
+            </div>
+          </Show>
+          <textarea
+            class="assistant-input"
+            ref={inputEl}
+            rows={1}
+            placeholder="Ask the assistant…"
+            value={input()}
+            onInput={(e) => {
+              setInput(e.currentTarget.value);
+              grow(e.currentTarget);
+            }}
+            onKeyDown={onKeyDown}
+            onPaste={onPaste}
+            aria-label="Ask the assistant"
+          />
+          <div class="assistant-row">
+            <button class="assistant-icon" type="button" title="Attach a picture (or paste, or drop one)" aria-label="Attach a picture" onClick={() => fileInput?.click()}>
+              <ToolIcon id="attach" />
+            </button>
+            <button
+              class="assistant-ghost"
+              type="button"
+              title={ready() ? `${provider().baseUrl} · ${provider().model}` : "Choose a provider and model"}
+              onClick={() => {
+                setDraft(provider());
+                setMenuOpen((v) => !v);
+              }}
+            >
+              <span class="assistant-ghost-label">{ready() ? provider().model : "Set up model"}</span>
+              <span class="assistant-ghost-caret">▾</span>
+            </button>
+            <div class="assistant-actions">
+              <span class="assistant-context" title={`${used()} characters of the ${MAX_REQUEST_CHARS} the model can be sent`}>
+                {used() === 0 ? "" : `${Math.round(used() / 100) / 10}k / ${Math.round(MAX_REQUEST_CHARS / 1000)}k`}
+              </span>
+              <Show
+                when={running()}
+                fallback={
+                  <button class="assistant-send" type="button" title="Send (Enter)" disabled={input().trim() === ""} onClick={() => void send()}>
+                    <ToolIcon id="send" />
+                  </button>
+                }
+              >
+                <button class="assistant-send" type="button" title="Stop" onClick={stop}>
+                  <ToolIcon id="stop" />
+                </button>
+              </Show>
+            </div>
+          </div>
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            ref={fileInput}
+            onChange={(e) => {
+              const files = [...(e.currentTarget.files ?? [])];
+              e.currentTarget.value = "";
+              void addFiles(files);
+            }}
+          />
+          <Show when={menuOpen()}>
+            <div class="assistant-menu">
+              <div class="assistant-menu-title">Provider</div>
+              <For each={PROVIDER_PRESETS}>
+                {(preset) => (
+                  <button class="assistant-preset" type="button" onClick={() => applyPreset(preset.id)}>
+                    <span>{preset.label}</span>
+                    <span class="assistant-preset-url">{preset.baseUrl === "" ? "—" : preset.baseUrl.replace(/^https?:\/\//, "")}</span>
+                  </button>
+                )}
+              </For>
+              <label class="assistant-field">
+                <span>Base URL</span>
+                <input value={draft().baseUrl} onInput={(e) => setDraft({ ...draft(), baseUrl: e.currentTarget.value })} placeholder="http://127.0.0.1:11434/v1" />
+              </label>
+              <label class="assistant-field">
+                <span>Model</span>
+                <input value={draft().model} onInput={(e) => setDraft({ ...draft(), model: e.currentTarget.value })} placeholder="llama3.2" />
+              </label>
+              <label class="assistant-field">
+                <span>API key</span>
+                <input type="password" value={draft().apiKey} onInput={(e) => setDraft({ ...draft(), apiKey: e.currentTarget.value })} placeholder="left empty for a local server" />
+              </label>
+              <div class="assistant-menu-actions">
+                <button class="assistant-ghost" type="button" onClick={() => setMenuOpen(false)}>
+                  Cancel
+                </button>
+                <button class="assistant-save" type="button" onClick={saveDraft}>
+                  Save
+                </button>
+              </div>
+            </div>
+          </Show>
+        </div>
+      </div>
+    </aside>
   );
 }

@@ -14,7 +14,7 @@ import { createEffect, onCleanup, onMount, type Accessor, type JSX } from "solid
 import type { DisplayList } from "../display";
 import type { AppFacade } from "../facade";
 import { drawDisplay, paletteFrom, type Palette } from "../canvas";
-import { panBy, screenToWorld, zoomAt, type Point, type Rect } from "../view";
+import { fitAspect, panBy, screenToWorld, zoomAt, type Point, type Rect } from "../view";
 
 export interface CanvasViewProps {
   facade: AppFacade;
@@ -95,7 +95,15 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     if (stage !== undefined) {
       palette = paletteFrom(stage);
       const measure = (): void => {
+        const before = { w: size.w, h: size.h };
         size = { w: stage?.clientWidth ?? 0, h: stage?.clientHeight ?? 0 };
+        // The canvas changed shape (the assistant panel opened, a window resize): keep the view
+        // centred and uncropped by fitting it to the new aspect. Only when the shape really
+        // changed — a first measure has nothing to fit, and a pixel of drift is not a reshape.
+        if (before.w > 0 && before.h > 0 && size.w > 0 && size.h > 0) {
+          const drift = Math.abs(before.w / before.h - size.w / size.h);
+          if (drift > 0.01) props.onViewChange(fitAspect(view(), size));
+        }
         redraw();
       };
       measure();

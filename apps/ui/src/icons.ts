@@ -67,6 +67,10 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
   send: "M12 19V5 M6 11l6-6 6 6",
   /** A solid square: stop. */
   stop: "M7 7h10v10H7z",
+  /** A plus: new chat. */
+  plus: "M12 5v14 M5 12h14",
+  /** A cross: close the panel. */
+  close: "M6 6l12 12 M18 6L6 18",
 };
 
 /**
@@ -74,7 +78,7 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
  * because it is the one icon set, and this list is what lets the icon test tell a used path from
  * an orphan one.
  */
-export const COMPOSER_ICONS: readonly string[] = ["send", "stop"];
+export const COMPOSER_ICONS: readonly string[] = ["send", "stop", "plus", "close"];
 
 /** The path for a toolbar id, or null when there is none. */
 export function iconPath(id: string): string | null {
