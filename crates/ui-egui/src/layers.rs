@@ -10,7 +10,8 @@ use serde_json::{Value, json};
 
 use crate::CadApp;
 use crate::icons::{self, Icon};
-use crate::theme::{HAIRLINE, RADIUS_CONTROL, Tokens};
+use crate::layout;
+use crate::theme::{self, HAIRLINE, RADIUS_CONTROL, Tokens};
 
 /// Dialog-local UI state (kept in egui memory between frames).
 #[derive(Clone, Debug, Default)]
@@ -215,6 +216,17 @@ fn natural_lower(s: &str) -> String {
     s.to_lowercase()
 }
 
+/// The table's columns: VP Freeze and VP Color join between Transparency and New VP Freeze only
+/// inside a layout viewport. The header row and every layer row read the same list.
+fn table_columns(vp: bool) -> Vec<&'static str> {
+    let mut cols = vec!["Status", "Name", "On", "Freeze", "Lock", "Plot", "Color", "Linetype", "Lineweight", "Transparency"];
+    if vp {
+        cols.extend(["VP Freeze", "VP Color"]);
+    }
+    cols.extend(["New VP Freeze", "Description"]);
+    cols
+}
+
 /// The Layer Properties Manager window.
 pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     let t = Tokens::get();
@@ -229,6 +241,7 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     let cur = d.header.str("CLAYER", "0");
     let used = used_layers(d);
     let vp: Option<(Handle, cadcraft_doc::Viewport)> = dst.active_viewport();
+    let cols = table_columns(vp.is_some());
     let linetypes: Vec<cadcraft_doc::Linetype> = d.linetypes.clone();
     let library: Vec<String> = cadcraft_doc::library::standard_linetypes().into_iter().map(|l| l.name).filter(|n| d.linetype(n).is_none()).collect();
     let states: Vec<String> = d.layer_states.iter().map(|s| s.name.clone()).collect();
@@ -256,70 +269,71 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
         .resizable(true)
         .show(ctx, |ui| {
             // ----- tool row -----
-            ui.horizontal(|ui| {
-                if icons::button(ui, Icon::Plus, 24.0, "New Layer", false).clicked() {
-                    let mut n = 1;
-                    while d.layer(&format!("Layer{n}")).is_some() {
-                        n += 1;
-                    }
-                    let name = format!("Layer{n}");
-                    actions.push(("layer.new", json!({ "name": name })));
-                    st.renaming = Some((name.clone(), name.clone()));
-                    st.selected = Some(name);
-                }
-                if icons::button(ui, Icon::Close, 24.0, "Delete Layer", false).clicked()
-                    && let Some(s) = &st.selected
-                {
-                    actions.push(("layer.delete", json!({ "name": s })));
-                }
-                if icons::button(ui, Icon::MakeCurrent, 24.0, "Set Current", false).clicked()
-                    && let Some(s) = &st.selected
-                {
-                    actions.push(("layer.current", json!({ "name": s })));
-                }
-                ui.separator();
-                // Layer states.
-                ui.label(crate::tl!("Layer State"));
-                let label = st.state_sel.clone().unwrap_or_else(|| crate::tl!("Unsaved Layer State").into());
-                egui::ComboBox::from_id_salt("lpm_states").selected_text(label).width(170.0).show_ui(ui, |ui| {
-                    for s in &states {
-                        if ui.selectable_label(st.state_sel.as_deref() == Some(s), s).clicked() {
-                            st.state_sel = Some(s.clone());
+            layout::row(ui, theme::GAP_6, |ui| {
+                layout::spread(ui, |ui, right| {
+                    if icons::button(ui, Icon::Plus, 24.0, "New Layer", false).clicked() {
+                        let mut n = 1;
+                        while d.layer(&format!("Layer{n}")).is_some() {
+                            n += 1;
                         }
+                        let name = format!("Layer{n}");
+                        actions.push(("layer.new", json!({ "name": name })));
+                        st.renaming = Some((name.clone(), name.clone()));
+                        st.selected = Some(name);
                     }
-                    if states.is_empty() {
-                        ui.label(RichText::new(crate::tl!("No saved layer states")).color(t.text_dim));
+                    if icons::button(ui, Icon::Close, 24.0, "Delete Layer", false).clicked()
+                        && let Some(s) = &st.selected
+                    {
+                        actions.push(("layer.delete", json!({ "name": s })));
                     }
-                });
-                let has = st.state_sel.is_some();
-                if ui.add_enabled(has, egui::Button::new(crate::tl!("Restore"))).clicked()
-                    && let Some(s) = &st.state_sel
-                {
-                    actions.push(("layerstate.restore", json!({ "name": s })));
-                }
-                if ui.add_enabled(has, egui::Button::new(crate::tl!("Delete"))).clicked()
-                    && let Some(s) = st.state_sel.take()
-                {
-                    actions.push(("layerstate.delete", json!({ "name": s })));
-                }
-                ui.add(egui::TextEdit::singleline(&mut st.state_name).hint_text(crate::tl!("New state name")).desired_width(120.0))
-                    .on_hover_text(crate::tl!("New state name"));
-                if ui.add_enabled(!st.state_name.trim().is_empty(), egui::Button::new(crate::tl!("Save State"))).clicked() {
-                    let n = st.state_name.trim().to_string();
-                    actions.push(("layerstate.save", json!({ "name": n })));
-                    st.state_sel = Some(n);
-                    st.state_name.clear();
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.add(egui::TextEdit::singleline(&mut st.search).hint_text(crate::tl!("Search for layer")).desired_width(160.0))
+                    if icons::button(ui, Icon::MakeCurrent, 24.0, "Set Current", false).clicked()
+                        && let Some(s) = &st.selected
+                    {
+                        actions.push(("layer.current", json!({ "name": s })));
+                    }
+                    ui.separator();
+                    // Layer states.
+                    ui.label(crate::tl!("Layer State"));
+                    let label = st.state_sel.clone().unwrap_or_else(|| crate::tl!("Unsaved Layer State").into());
+                    egui::ComboBox::from_id_salt("lpm_states").selected_text(label).width(170.0).show_ui(ui, |ui| {
+                        for s in &states {
+                            if ui.selectable_label(st.state_sel.as_deref() == Some(s), s).clicked() {
+                                st.state_sel = Some(s.clone());
+                            }
+                        }
+                        if states.is_empty() {
+                            ui.label(RichText::new(crate::tl!("No saved layer states")).color(t.text_dim));
+                        }
+                    });
+                    let has = st.state_sel.is_some();
+                    if ui.add_enabled(has, egui::Button::new(crate::tl!("Restore"))).clicked()
+                        && let Some(s) = &st.state_sel
+                    {
+                        actions.push(("layerstate.restore", json!({ "name": s })));
+                    }
+                    if ui.add_enabled(has, egui::Button::new(crate::tl!("Delete"))).clicked()
+                        && let Some(s) = st.state_sel.take()
+                    {
+                        actions.push(("layerstate.delete", json!({ "name": s })));
+                    }
+                    ui.add(egui::TextEdit::singleline(&mut st.state_name).hint_text(crate::tl!("New state name")).desired_width(120.0))
+                        .on_hover_text(crate::tl!("New state name"));
+                    if ui.add_enabled(!st.state_name.trim().is_empty(), egui::Button::new(crate::tl!("Save State"))).clicked() {
+                        let n = st.state_name.trim().to_string();
+                        actions.push(("layerstate.save", json!({ "name": n })));
+                        st.state_sel = Some(n);
+                        st.state_name.clear();
+                    }
+                    // The search field belongs at the right edge, where it is today.
+                    right
+                        .add(egui::TextEdit::singleline(&mut st.search).hint_text(crate::tl!("Search for layer")).desired_width(160.0))
                         .on_hover_text(crate::tl!("Search for layer"));
                     icons::paint(
-                        ui.painter(),
-                        Rect::from_center_size(ui.cursor().right_center() - vec2(8.0, 0.0), vec2(14.0, 14.0)),
+                        right.painter(),
+                        Rect::from_center_size(right.cursor().right_center() - vec2(8.0, 0.0), vec2(14.0, 14.0)),
                         Icon::Search,
                         false,
                     );
-                    ui.add_space(18.0);
                 });
             });
             ui.separator();
@@ -350,43 +364,37 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                 // ----- the table -----
                 ui.vertical(|ui| {
                     egui::ScrollArea::both().id_salt("lpm_table").auto_shrink([false, false]).max_height(avail).show(ui, |ui| {
-                        let mut cols: Vec<&str> =
-                            vec!["Status", "Name", "On", "Freeze", "Lock", "Plot", "Color", "Linetype", "Lineweight", "Transparency"];
-                        if vp.is_some() {
-                            cols.extend(["VP Freeze", "VP Color"]);
-                        }
-                        cols.extend(["New VP Freeze", "Description"]);
-                        egui::Grid::new("lpm_grid").striped(true).num_columns(cols.len()).spacing(vec2(10.0, 3.0)).min_row_height(22.0).show(
-                            ui,
-                            |ui| {
-                                for h in &cols {
-                                    if *h == "Name" {
+                        layout::col(ui, theme::GAP_4, |ui| {
+                            // The column headings pin to the top of the scroll view while the rows
+                            // move under them.
+                            layout::sticky(ui, theme::CONTROL_H_ROW, |ui| {
+                                layout::columns(ui, cols.len(), theme::GAP_6, |i, col| {
+                                    let h = cols[i];
+                                    if h == "Name" {
                                         let arrow = if st.sort_desc { " ▼" } else { " ▲" };
-                                        if ui
-                                            .add(
-                                                egui::Label::new(RichText::new(format!("{}{arrow}", crate::tl!("Name"))).strong())
-                                                    .sense(Sense::click()),
-                                            )
-                                            .clicked()
-                                        {
+                                        let label = RichText::new(format!("{}{arrow}", crate::tl!("Name"))).strong();
+                                        if col.add(egui::Label::new(label).sense(Sense::click())).clicked() {
                                             st.sort_desc = !st.sort_desc;
                                         }
                                     } else {
-                                        ui.label(RichText::new(crate::i18n::t(h)).strong());
+                                        col.add(egui::Label::new(RichText::new(crate::i18n::t(h)).strong()).truncate());
                                     }
+                                });
+                            });
+                            for (i, l) in shown.iter().enumerate() {
+                                if i % 2 == 0 {
+                                    // The grid's stripe, kept: every other row on the darker chrome.
+                                    let r = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), theme::CONTROL_H_ROW));
+                                    ui.painter().rect_filled(r.expand2(vec2(0.0, theme::GAP_2)), RADIUS_CONTROL, t.chrome_dark);
                                 }
-                                ui.end_row();
-                                for l in &shown {
-                                    row(ui, l, &cur, &used, vp.as_ref(), &linetypes, &library, &mut st, &mut actions);
-                                    ui.end_row();
-                                }
-                            },
-                        );
+                                row(ui, l, &cur, &used, vp.as_ref(), &linetypes, &library, &cols, &mut st, &mut actions);
+                            }
+                        });
                     });
                 });
             });
             ui.separator();
-            ui.horizontal(|ui| {
+            layout::spread(ui, |ui, _| {
                 ui.label(
                     RichText::new(crate::tf!(
                         "Layers displayed: {shown} of {total}.   Current layer: {layer}",
@@ -405,7 +413,18 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     }
 }
 
+/// Painter text from `x` inside `cell`, ellipsized when it does not fit before the cell's right
+/// edge, so a narrow column reads `Continu…` instead of cutting a glyph in half.
+fn text_fit(p: &egui::Painter, cell: Rect, x: f32, text: &str, color: Color32) {
+    let mut job = egui::text::LayoutJob::simple_singleline(text.to_string(), crate::theme::body(), color);
+    job.wrap = egui::text::TextWrapping::truncate_at_width((cell.right() - x).max(0.0));
+    let galley = p.layout_job(job);
+    p.galley(pos2(x, cell.center().y - galley.size().y * 0.5), galley, color);
+}
+
 /// One Layer Properties Manager row: status/name, on/freeze/lock/plot, colour, linetype, lineweight, transparency, viewport overrides, new-viewport freeze and description.
+/// The cells are laid out by [`layout::columns`] — one per heading in `cols`, all the same width
+/// and ending at the table's right edge — so no column runs past the window edge.
 /// Edits update `st` and push commands into `actions`.
 #[allow(clippy::too_many_arguments)]
 fn row(
@@ -416,6 +435,7 @@ fn row(
     vp: Option<&(Handle, cadcraft_doc::Viewport)>,
     linetypes: &[cadcraft_doc::Linetype],
     library: &[String],
+    cols: &[&str],
     st: &mut LpmState,
     actions: &mut Vec<(&'static str, Value)>,
 ) {
@@ -424,264 +444,275 @@ fn row(
     let current = name.eq_ignore_ascii_case(cur);
     let is_used = used.contains(&name.to_ascii_lowercase());
     let selected = st.selected.as_deref().is_some_and(|s| s.eq_ignore_ascii_case(&name));
-    // Status.
-    let (sr, sresp) = ui.allocate_exact_size(vec2(22.0, 20.0), Sense::click());
-    if selected {
-        ui.painter().rect_filled(sr, RADIUS_CONTROL, t.accent.gamma_multiply(0.35));
-    }
-    status_icon(ui.painter(), sr.shrink(2.0), current, is_used);
-    let tip = if current {
-        "Current layer"
-    } else if is_used {
-        "Layer contains objects (double-click to make current)"
-    } else {
-        "Layer is empty (double-click to make current)"
-    };
-    if sresp.on_hover_text(crate::i18n::t(tip)).double_clicked() {
-        actions.push(("layer.current", json!({ "name": name })));
-    }
-    // Name (double-click or F2-style rename).
-    match st.renaming.clone() {
-        Some((n, mut buf)) if n.eq_ignore_ascii_case(&name) => {
-            let r = ui
-                .add(egui::TextEdit::singleline(&mut buf).desired_width(150.0).id(egui::Id::unique(("lpm_rename", &name))))
-                .accessible_name(crate::tl!("Name"));
-            if !r.has_focus() && !r.lost_focus() {
-                r.request_focus();
-            }
-            if r.lost_focus() {
-                let cancel = ui.input(|i| i.key_pressed(egui::Key::Escape));
-                if !cancel && buf.trim() != name && !buf.trim().is_empty() {
-                    actions.push(("layer.set", json!({ "name": name, "newName": buf.trim() })));
-                    st.selected = Some(buf.trim().to_string());
-                }
-                st.renaming = None;
-            } else {
-                st.renaming = Some((n, buf));
-            }
-        }
-        _ => {
-            let (nr, r) = ui.allocate_exact_size(vec2(150.0, 20.0), Sense::click());
+    layout::columns(ui, cols.len(), theme::GAP_6, |i, col| match cols[i] {
+        // Status.
+        "Status" => {
+            let (sr, sresp) = col.allocate_exact_size(vec2(theme::CONTROL_H_ROW, theme::CONTROL_H_ROW), Sense::click());
             if selected {
-                ui.painter().rect_filled(nr, RADIUS_CONTROL, t.accent.gamma_multiply(0.45));
-            } else if r.hovered() {
-                ui.painter().rect_filled(nr, RADIUS_CONTROL, t.control_hover.gamma_multiply(0.5));
+                col.painter().rect_filled(sr, RADIUS_CONTROL, t.accent.gamma_multiply(0.35));
             }
-            ui.painter().text(pos2(nr.left() + 4.0, nr.center().y), egui::Align2::LEFT_CENTER, &name, crate::theme::body(), t.text);
-            if r.clicked() {
-                st.selected = Some(name.clone());
+            status_icon(col.painter(), sr.shrink(2.0), current, is_used);
+            let tip = if current {
+                "Current layer"
+            } else if is_used {
+                "Layer contains objects (double-click to make current)"
+            } else {
+                "Layer is empty (double-click to make current)"
+            };
+            if sresp.on_hover_text(crate::i18n::t(tip)).double_clicked() {
+                actions.push(("layer.current", json!({ "name": name })));
             }
-            if r.double_clicked() && name != "0" && !name.eq_ignore_ascii_case("Defpoints") {
-                st.renaming = Some((name.clone(), name.clone()));
-            }
-            r.context_menu(|ui| {
-                if ui.button(crate::tl!("Set Current")).clicked() {
-                    actions.push(("layer.current", json!({ "name": name })));
-                    ui.close();
-                }
-                if ui.button(crate::tl!("Rename Layer")).clicked() {
-                    st.renaming = Some((name.clone(), name.clone()));
-                    ui.close();
-                }
-                if ui.button(crate::tl!("Delete Layer")).clicked() {
-                    actions.push(("layer.delete", json!({ "name": name })));
-                    ui.close();
-                }
-            });
         }
-    }
-    // On / Freeze / Lock / Plot.
-    if icons::button(ui, if l.on { Icon::Bulb } else { Icon::BulbOff }, 20.0, "On/Off", false).clicked() {
-        actions.push(("layer.set", json!({ "name": name, "on": !l.on })));
-    }
-    if icons::button(ui, if l.frozen { Icon::Snowflake } else { Icon::Sun }, 20.0, "Freeze/Thaw in all viewports", false).clicked() {
-        actions.push(("layer.set", json!({ "name": name, "frozen": !l.frozen })));
-    }
-    if icons::button(ui, if l.locked { Icon::Lock } else { Icon::Unlock }, 20.0, "Lock/Unlock", false).clicked() {
-        actions.push(("layer.set", json!({ "name": name, "locked": !l.locked })));
-    }
-    let pr = icons::button(ui, Icon::Plot, 20.0, if l.plot { "Plot (click: do not plot)" } else { "Do not plot (click: plot)" }, false);
-    if !l.plot {
-        let r = pr.rect.shrink(3.0);
-        ui.painter().line_segment([r.left_bottom(), r.right_top()], Stroke::new(1.6, t.layer_no_plot));
-    }
-    if pr.clicked() {
-        actions.push(("layer.set", json!({ "name": name, "plot": !l.plot })));
-    }
-    // Color.
-    if let Some(c) = color_button(ui, egui::Id::unique(("lpm_color", &name)), l.color, false, 96.0) {
-        actions.push(("layer.set", json!({ "name": name, "color": c.name() })));
-    }
-    // Linetype.
-    let lt_resp = ui
-        .allocate_ui(vec2(130.0, 20.0), |ui| {
-            let (r, resp) = ui.allocate_exact_size(vec2(130.0, 20.0), Sense::click());
-            if resp.hovered() {
-                ui.painter().rect_filled(r, RADIUS_CONTROL, t.control_hover.gamma_multiply(0.5));
-            }
-            lt_sample(
-                ui.painter(),
-                Rect::from_min_size(pos2(r.left() + 3.0, r.top()), vec2(30.0, r.height())),
-                linetypes.iter().find(|x| x.name.eq_ignore_ascii_case(&l.linetype)),
-                t.text,
-            );
-            ui.painter().text(pos2(r.left() + 38.0, r.center().y), egui::Align2::LEFT_CENTER, &l.linetype, crate::theme::body(), t.text);
-            resp
-        })
-        .inner;
-    egui::Popup::from_toggle_button_response(&lt_resp)
-        .id(egui::Id::unique(("lpm_lt", &name)))
-        .width(240.0)
-        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-        .show(|ui| {
-            ui.label(RichText::new(crate::tl!("Loaded linetypes")).small().color(t.text_dim));
-            for lt in linetypes.iter().filter(|x| !["bylayer", "byblock"].contains(&x.name.to_ascii_lowercase().as_str())) {
-                let (r, resp) = ui.allocate_exact_size(vec2(230.0, 20.0), Sense::click());
-                if resp.hovered() || lt.name.eq_ignore_ascii_case(&l.linetype) {
-                    ui.painter().rect_filled(r, RADIUS_CONTROL, t.accent.gamma_multiply(if resp.hovered() { 0.6 } else { 0.3 }));
+        // Name (double-click or F2-style rename).
+        "Name" => match st.renaming.clone() {
+            Some((n, mut buf)) if n.eq_ignore_ascii_case(&name) => {
+                let r = col
+                    .add(egui::TextEdit::singleline(&mut buf).desired_width(col.available_width()).id(egui::Id::unique(("lpm_rename", &name))))
+                    .accessible_name(crate::tl!("Name"));
+                if !r.has_focus() && !r.lost_focus() {
+                    r.request_focus();
                 }
-                lt_sample(ui.painter(), Rect::from_min_size(pos2(r.left() + 4.0, r.top()), vec2(50.0, r.height())), Some(lt), t.text);
-                ui.painter().text(pos2(r.left() + 62.0, r.center().y), egui::Align2::LEFT_CENTER, &lt.name, crate::theme::body(), t.text);
-                if resp.on_hover_text(&lt.description).clicked() {
-                    actions.push(("layer.set", json!({ "name": name, "linetype": lt.name })));
-                    ui.close();
+                if r.lost_focus() {
+                    let cancel = col.input(|i| i.key_pressed(egui::Key::Escape));
+                    if !cancel && buf.trim() != name && !buf.trim().is_empty() {
+                        actions.push(("layer.set", json!({ "name": name, "newName": buf.trim() })));
+                        st.selected = Some(buf.trim().to_string());
+                    }
+                    st.renaming = None;
+                } else {
+                    st.renaming = Some((n, buf));
                 }
             }
-            if !library.is_empty() {
-                ui.separator();
-                ui.menu_button("Load...", |ui| {
-                    egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
-                        for n in library {
-                            if ui.button(n).clicked() {
-                                actions.push(("linetype", json!({ "load": n })));
-                                actions.push(("layer.set", json!({ "name": name, "linetype": n })));
-                                ui.close();
-                            }
-                        }
-                    });
-                    ui.separator();
-                    if ui.button(crate::tl!("Load all")).clicked() {
-                        actions.push(("linetype", json!({ "load": "*" })));
+            _ => {
+                let (nr, r) = col.allocate_exact_size(vec2(col.available_width(), theme::CONTROL_H_ROW), Sense::click());
+                if selected {
+                    col.painter().rect_filled(nr, RADIUS_CONTROL, t.accent.gamma_multiply(0.45));
+                } else if r.hovered() {
+                    col.painter().rect_filled(nr, RADIUS_CONTROL, t.control_hover.gamma_multiply(0.5));
+                }
+                text_fit(col.painter(), nr, nr.left() + 4.0, &name, t.text);
+                if r.clicked() {
+                    st.selected = Some(name.clone());
+                }
+                if r.double_clicked() && name != "0" && !name.eq_ignore_ascii_case("Defpoints") {
+                    st.renaming = Some((name.clone(), name.clone()));
+                }
+                r.context_menu(|ui| {
+                    if ui.button(crate::tl!("Set Current")).clicked() {
+                        actions.push(("layer.current", json!({ "name": name })));
+                        ui.close();
+                    }
+                    if ui.button(crate::tl!("Rename Layer")).clicked() {
+                        st.renaming = Some((name.clone(), name.clone()));
+                        ui.close();
+                    }
+                    if ui.button(crate::tl!("Delete Layer")).clicked() {
+                        actions.push(("layer.delete", json!({ "name": name })));
                         ui.close();
                     }
                 });
             }
-        });
-    // Lineweight.
-    let lw_resp = ui
-        .allocate_ui(vec2(100.0, 20.0), |ui| {
-            let (r, resp) = ui.allocate_exact_size(vec2(100.0, 20.0), Sense::click());
-            if resp.hovered() {
-                ui.painter().rect_filled(r, RADIUS_CONTROL, t.control_hover.gamma_multiply(0.5));
+        },
+        // On / Freeze / Lock / Plot.
+        "On" => {
+            if icons::button(col, if l.on { Icon::Bulb } else { Icon::BulbOff }, 20.0, "On/Off", false).clicked() {
+                actions.push(("layer.set", json!({ "name": name, "on": !l.on })));
             }
-            lw_sample(ui.painter(), Rect::from_min_size(pos2(r.left() + 3.0, r.top()), vec2(22.0, r.height())), l.lineweight, t.text);
-            ui.painter().text(
-                pos2(r.left() + 30.0, r.center().y),
-                egui::Align2::LEFT_CENTER,
-                crate::i18n::t(&l.lineweight.name()),
-                crate::theme::body(),
+        }
+        "Freeze" => {
+            if icons::button(col, if l.frozen { Icon::Snowflake } else { Icon::Sun }, 20.0, "Freeze/Thaw in all viewports", false).clicked() {
+                actions.push(("layer.set", json!({ "name": name, "frozen": !l.frozen })));
+            }
+        }
+        "Lock" => {
+            if icons::button(col, if l.locked { Icon::Lock } else { Icon::Unlock }, 20.0, "Lock/Unlock", false).clicked() {
+                actions.push(("layer.set", json!({ "name": name, "locked": !l.locked })));
+            }
+        }
+        "Plot" => {
+            let pr = icons::button(col, Icon::Plot, 20.0, if l.plot { "Plot (click: do not plot)" } else { "Do not plot (click: plot)" }, false);
+            if !l.plot {
+                let r = pr.rect.shrink(3.0);
+                col.painter().line_segment([r.left_bottom(), r.right_top()], Stroke::new(1.6, t.layer_no_plot));
+            }
+            if pr.clicked() {
+                actions.push(("layer.set", json!({ "name": name, "plot": !l.plot })));
+            }
+        }
+        // Color.
+        "Color" => {
+            if let Some(c) = color_button(col, egui::Id::unique(("lpm_color", &name)), l.color, false, col.available_width()) {
+                actions.push(("layer.set", json!({ "name": name, "color": c.name() })));
+            }
+        }
+        // Linetype.
+        "Linetype" => {
+            let (r, lt_resp) = col.allocate_exact_size(vec2(col.available_width(), theme::CONTROL_H_ROW), Sense::click());
+            if lt_resp.hovered() {
+                col.painter().rect_filled(r, RADIUS_CONTROL, t.control_hover.gamma_multiply(0.5));
+            }
+            lt_sample(
+                col.painter(),
+                Rect::from_min_size(pos2(r.left() + 3.0, r.top()), vec2(30.0, r.height())),
+                linetypes.iter().find(|x| x.name.eq_ignore_ascii_case(&l.linetype)),
                 t.text,
             );
-            resp
-        })
-        .inner;
-    egui::Popup::from_toggle_button_response(&lw_resp)
-        .id(egui::Id::unique(("lpm_lw", &name)))
-        .width(170.0)
-        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-        .show(|ui| {
-            egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
-                let opts = std::iter::once(Lineweight::Default).chain(Lineweight::STANDARD.iter().map(|v| Lineweight::Mm100(*v)));
-                for lw in opts {
-                    let (r, resp) = ui.allocate_exact_size(vec2(160.0, 20.0), Sense::click());
-                    if resp.hovered() || lw == l.lineweight {
-                        ui.painter().rect_filled(r, RADIUS_CONTROL, t.accent.gamma_multiply(if resp.hovered() { 0.6 } else { 0.3 }));
+            text_fit(col.painter(), r, r.left() + 38.0, &l.linetype, t.text);
+            egui::Popup::from_toggle_button_response(&lt_resp)
+                .id(egui::Id::unique(("lpm_lt", &name)))
+                .width(240.0)
+                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                .show(|ui| {
+                    ui.label(RichText::new(crate::tl!("Loaded linetypes")).small().color(t.text_dim));
+                    for lt in linetypes.iter().filter(|x| !["bylayer", "byblock"].contains(&x.name.to_ascii_lowercase().as_str())) {
+                        let (r, resp) = ui.allocate_exact_size(vec2(230.0, 20.0), Sense::click());
+                        if resp.hovered() || lt.name.eq_ignore_ascii_case(&l.linetype) {
+                            ui.painter().rect_filled(r, RADIUS_CONTROL, t.accent.gamma_multiply(if resp.hovered() { 0.6 } else { 0.3 }));
+                        }
+                        lt_sample(ui.painter(), Rect::from_min_size(pos2(r.left() + 4.0, r.top()), vec2(50.0, r.height())), Some(lt), t.text);
+                        ui.painter().text(pos2(r.left() + 62.0, r.center().y), egui::Align2::LEFT_CENTER, &lt.name, crate::theme::body(), t.text);
+                        if resp.on_hover_text(&lt.description).clicked() {
+                            actions.push(("layer.set", json!({ "name": name, "linetype": lt.name })));
+                            ui.close();
+                        }
                     }
-                    lw_sample(ui.painter(), Rect::from_min_size(pos2(r.left() + 4.0, r.top()), vec2(40.0, r.height())), lw, t.text);
-                    ui.painter().text(
-                        pos2(r.left() + 52.0, r.center().y),
-                        egui::Align2::LEFT_CENTER,
-                        crate::i18n::t(&lw.name()),
-                        crate::theme::body(),
-                        t.text,
-                    );
-                    if resp.clicked() {
-                        let v = match lw {
-                            Lineweight::Mm100(v) => json!(f64::from(v) / 100.0),
-                            _ => json!("Default"),
-                        };
-                        actions.push(("layer.set", json!({ "name": name, "lineweight": v })));
-                        ui.close();
+                    if !library.is_empty() {
+                        ui.separator();
+                        ui.menu_button("Load...", |ui| {
+                            egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                                for n in library {
+                                    if ui.button(n).clicked() {
+                                        actions.push(("linetype", json!({ "load": n })));
+                                        actions.push(("layer.set", json!({ "name": name, "linetype": n })));
+                                        ui.close();
+                                    }
+                                }
+                            });
+                            ui.separator();
+                            if ui.button(crate::tl!("Load all")).clicked() {
+                                actions.push(("linetype", json!({ "load": "*" })));
+                                ui.close();
+                            }
+                        });
                     }
+                });
+        }
+        // Lineweight.
+        "Lineweight" => {
+            let (r, lw_resp) = col.allocate_exact_size(vec2(col.available_width(), theme::CONTROL_H_ROW), Sense::click());
+            if lw_resp.hovered() {
+                col.painter().rect_filled(r, RADIUS_CONTROL, t.control_hover.gamma_multiply(0.5));
+            }
+            lw_sample(col.painter(), Rect::from_min_size(pos2(r.left() + 3.0, r.top()), vec2(22.0, r.height())), l.lineweight, t.text);
+            text_fit(col.painter(), r, r.left() + 30.0, crate::i18n::t(&l.lineweight.name()), t.text);
+            egui::Popup::from_toggle_button_response(&lw_resp)
+                .id(egui::Id::unique(("lpm_lw", &name)))
+                .width(170.0)
+                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                .show(|ui| {
+                    egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+                        let opts = std::iter::once(Lineweight::Default).chain(Lineweight::STANDARD.iter().map(|v| Lineweight::Mm100(*v)));
+                        for lw in opts {
+                            let (r, resp) = ui.allocate_exact_size(vec2(160.0, 20.0), Sense::click());
+                            if resp.hovered() || lw == l.lineweight {
+                                ui.painter().rect_filled(r, RADIUS_CONTROL, t.accent.gamma_multiply(if resp.hovered() { 0.6 } else { 0.3 }));
+                            }
+                            lw_sample(ui.painter(), Rect::from_min_size(pos2(r.left() + 4.0, r.top()), vec2(40.0, r.height())), lw, t.text);
+                            ui.painter().text(
+                                pos2(r.left() + 52.0, r.center().y),
+                                egui::Align2::LEFT_CENTER,
+                                crate::i18n::t(&lw.name()),
+                                crate::theme::body(),
+                                t.text,
+                            );
+                            if resp.clicked() {
+                                let v = match lw {
+                                    Lineweight::Mm100(v) => json!(f64::from(v) / 100.0),
+                                    _ => json!("Default"),
+                                };
+                                actions.push(("layer.set", json!({ "name": name, "lineweight": v })));
+                                ui.close();
+                            }
+                        }
+                    });
+                });
+        }
+        // Transparency (commits when the drag or edit ends).
+        "Transparency" => {
+            let tid = egui::Id::unique(("lpm_tr", &name));
+            let mut tr = col.data_mut(|d| d.get_temp::<u8>(tid)).unwrap_or(l.transparency);
+            let r = col.add(egui::DragValue::new(&mut tr).range(0..=90).speed(0.5));
+            if r.dragged() || r.has_focus() {
+                col.data_mut(|d| d.insert_temp(tid, tr));
+            }
+            if (r.drag_stopped() || r.lost_focus()) && tr != l.transparency {
+                actions.push(("layer.set", json!({ "name": name, "transparency": tr })));
+                col.data_mut(|d| d.remove::<u8>(tid));
+            } else if !r.dragged() && !r.has_focus() {
+                col.data_mut(|d| d.remove::<u8>(tid));
+            }
+        }
+        // VP Freeze / VP Color (inside a layout viewport).
+        "VP Freeze" => {
+            if let Some((h, v)) = vp {
+                let vf = v.frozen_layers.iter().any(|f| f.eq_ignore_ascii_case(&name));
+                if icons::button(col, if vf { Icon::Snowflake } else { Icon::Sun }, 20.0, "Freeze/Thaw in the current viewport", false).clicked() {
+                    let key = if vf { "thaw" } else { "freeze" };
+                    actions.push(("vplayer", json!({ "handle": h.hex(), key: [name] })));
                 }
-            });
-        });
-    // Transparency (commits when the drag or edit ends).
-    let tid = egui::Id::unique(("lpm_tr", &name));
-    let mut tr = ui.data_mut(|d| d.get_temp::<u8>(tid)).unwrap_or(l.transparency);
-    let r = ui.add(egui::DragValue::new(&mut tr).range(0..=90).speed(0.5));
-    if r.dragged() || r.has_focus() {
-        ui.data_mut(|d| d.insert_temp(tid, tr));
-    }
-    if (r.drag_stopped() || r.lost_focus()) && tr != l.transparency {
-        actions.push(("layer.set", json!({ "name": name, "transparency": tr })));
-        ui.data_mut(|d| d.remove::<u8>(tid));
-    } else if !r.dragged() && !r.has_focus() {
-        ui.data_mut(|d| d.remove::<u8>(tid));
-    }
-    // VP Freeze / VP Color (inside a layout viewport).
-    if let Some((h, v)) = vp {
-        let vf = v.frozen_layers.iter().any(|f| f.eq_ignore_ascii_case(&name));
-        if icons::button(ui, if vf { Icon::Snowflake } else { Icon::Sun }, 20.0, "Freeze/Thaw in the current viewport", false).clicked() {
-            let key = if vf { "thaw" } else { "freeze" };
-            actions.push(("vplayer", json!({ "handle": h.hex(), key: [name] })));
+            }
         }
-        let vc = v.layer_colors.iter().find(|(n, _)| n.eq_ignore_ascii_case(&name)).map(|(_, c)| *c);
-        ui.horizontal(|ui| {
-            if let Some(c) = color_button(ui, egui::Id::unique(("lpm_vpcolor", &name)), vc.unwrap_or(l.color), false, 96.0) {
-                actions.push(("vplayer", json!({ "handle": h.hex(), "colors": { name.clone(): c.name() } })));
+        "VP Color" => {
+            if let Some((h, v)) = vp {
+                let vc = v.layer_colors.iter().find(|(n, _)| n.eq_ignore_ascii_case(&name)).map(|(_, c)| *c);
+                let w = (col.available_width() - if vc.is_some() { theme::CHIP_MIN_W + theme::GAP_4 } else { 0.0 }).max(0.0);
+                layout::row(col, theme::GAP_4, |ui| {
+                    if let Some(c) = color_button(ui, egui::Id::unique(("lpm_vpcolor", &name)), vc.unwrap_or(l.color), false, w) {
+                        actions.push(("vplayer", json!({ "handle": h.hex(), "colors": { name.clone(): c.name() } })));
+                    }
+                    if vc.is_some() && ui.small_button("×").on_hover_text(crate::tl!("Remove the viewport override")).clicked() {
+                        actions.push(("vplayer", json!({ "handle": h.hex(), "colors": { name.clone(): Value::Null } })));
+                    }
+                });
             }
-            if vc.is_some() && ui.small_button("×").on_hover_text(crate::tl!("Remove the viewport override")).clicked() {
-                actions.push(("vplayer", json!({ "handle": h.hex(), "colors": { name.clone(): Value::Null } })));
+        }
+        // New VP Freeze.
+        "New VP Freeze" => {
+            let nvf = icons::button(col, if l.vp_freeze_new { Icon::Snowflake } else { Icon::Sun }, 20.0, "Freeze in new viewports", false);
+            // A small "new" mark distinguishes it from the Freeze column.
+            let r = nvf.rect;
+            col.painter().rect_filled(Rect::from_min_size(r.right_bottom() - vec2(7.0, 7.0), vec2(6.0, 6.0)), 1.0, t.icon_accent);
+            if nvf.clicked() {
+                actions.push(("layer.set", json!({ "name": name, "newVpFreeze": !l.vp_freeze_new })));
             }
-        });
-    }
-    // New VP Freeze.
-    let nvf = icons::button(ui, if l.vp_freeze_new { Icon::Snowflake } else { Icon::Sun }, 20.0, "Freeze in new viewports", false);
-    {
-        // A small "new" mark distinguishes it from the Freeze column.
-        let r = nvf.rect;
-        ui.painter().rect_filled(Rect::from_min_size(r.right_bottom() - vec2(7.0, 7.0), vec2(6.0, 6.0)), 1.0, t.icon_accent);
-    }
-    if nvf.clicked() {
-        actions.push(("layer.set", json!({ "name": name, "newVpFreeze": !l.vp_freeze_new })));
-    }
-    // Description (double-click to edit).
-    match st.describing.clone() {
-        Some((n, mut buf)) if n.eq_ignore_ascii_case(&name) => {
-            let r = ui
-                .add(egui::TextEdit::singleline(&mut buf).desired_width(200.0).id(egui::Id::unique(("lpm_desc", &name))))
-                .accessible_name(crate::tl!("Description"));
-            if !r.has_focus() && !r.lost_focus() {
-                r.request_focus();
-            }
-            if r.lost_focus() {
-                if !ui.input(|i| i.key_pressed(egui::Key::Escape)) && buf != l.description {
-                    actions.push(("layer.set", json!({ "name": name, "description": buf })));
+        }
+        // Description (double-click to edit): the last column.
+        _ => match st.describing.clone() {
+            Some((n, mut buf)) if n.eq_ignore_ascii_case(&name) => {
+                let r = col
+                    .add(egui::TextEdit::singleline(&mut buf).desired_width(col.available_width()).id(egui::Id::unique(("lpm_desc", &name))))
+                    .accessible_name(crate::tl!("Description"));
+                if !r.has_focus() && !r.lost_focus() {
+                    r.request_focus();
                 }
-                st.describing = None;
-            } else {
-                st.describing = Some((n, buf));
+                if r.lost_focus() {
+                    if !col.input(|i| i.key_pressed(egui::Key::Escape)) && buf != l.description {
+                        actions.push(("layer.set", json!({ "name": name, "description": buf })));
+                    }
+                    st.describing = None;
+                } else {
+                    st.describing = Some((n, buf));
+                }
             }
-        }
-        _ => {
-            let text = if l.description.is_empty() { RichText::new("—").color(t.text_faint) } else { RichText::new(&l.description) };
-            let r = ui.add_sized([200.0, 20.0], egui::Label::new(text).sense(Sense::click()).truncate());
-            if r.on_hover_text(crate::tl!("Double-click to edit the description")).double_clicked() {
-                st.describing = Some((name.clone(), l.description.clone()));
+            _ => {
+                let text = if l.description.is_empty() { RichText::new("—").color(t.text_faint) } else { RichText::new(&l.description) };
+                let r = col.add_sized([col.available_width(), theme::CONTROL_H_ROW], egui::Label::new(text).sense(Sense::click()).truncate());
+                if r.on_hover_text(crate::tl!("Double-click to edit the description")).double_clicked() {
+                    st.describing = Some((name.clone(), l.description.clone()));
+                }
             }
-        }
-    }
+        },
+    });
 }
 
 /// Lower-case names of layers with objects on them.
@@ -763,5 +794,81 @@ mod tests {
         }
         let (first, last) = (heights[5], heights[29]);
         assert!(first > 0.0 && first < 700.0 && (last - first).abs() < 0.5, "window height drifted: {heights:?}");
+    }
+
+    /// The dialog's table is laid out by [`layout::columns`]: the 12 columns (14 inside a layout
+    /// viewport) are equal and their widths and gaps fill the row, so the Description column sits
+    /// inside the window instead of being clipped by its edge.
+    #[test]
+    fn table_columns_are_equal_and_fit() {
+        let cols = table_columns(false);
+        assert_eq!((cols.len(), cols.last().copied()), (12, Some("Description")), "Description is the last of 12 columns");
+        assert_eq!(table_columns(true).len(), 14, "VP Freeze and VP Color join inside a viewport");
+        let avail = 900.0;
+        let mut widths = Vec::new();
+        let ctx = egui::Context::default();
+        let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(avail, 200.0))), ..Default::default() };
+        let mut out = ctx.run_ui(input, |ui| layout::columns(ui, cols.len(), theme::GAP_6, |_, col| widths.push(col.max_rect().width())));
+        out.textures_delta.clear();
+        assert!(widths.iter().all(|w| (w - widths[0]).abs() < 0.001), "equal columns: {widths:?}");
+        assert!((widths.iter().sum::<f32>() + theme::GAP_6 * 11.0 - avail).abs() < 0.01, "the columns and their gaps fill the row");
+    }
+
+    /// The top of the first text shape whose galley starts with `text`.
+    fn text_top(shapes: &[egui::epaint::ClippedShape], text: &str) -> Option<f32> {
+        shapes.iter().find_map(|clipped| match &clipped.shape {
+            egui::Shape::Text(t) if t.galley.text().starts_with(text) => Some(t.pos.y),
+            _ => None,
+        })
+    }
+
+    /// The column header pins to the top of the scroll view: the rows move under it.
+    #[test]
+    fn header_stays_while_the_list_scrolls() {
+        let mut session = cadcraft_engine::Session::new();
+        session.open_drawing(cadcraft_engine::sample::default_sample(), "Bracket", None);
+        let mut app = CadApp::new(session, crate::Services::default());
+        for i in 0..40 {
+            let _ = app.run("layer.new", json!({ "name": format!("Extra{i}") }));
+        }
+        let ctx = egui::Context::default();
+        let screen = Rect::from_min_size(egui::Pos2::ZERO, vec2(1600.0, 1000.0));
+        let (mut before, mut after) = (None, None);
+        let mut at = None;
+        for frame in 0..12 {
+            let mut input = egui::RawInput { screen_rect: Some(screen), ..Default::default() };
+            if frame >= 4
+                && let Some(p) = at
+            {
+                input.events.push(egui::Event::PointerMoved(p));
+                input.events.push(egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta: vec2(0.0, -120.0),
+                    phase: egui::TouchPhase::Move,
+                    source: egui::MouseWheelSource::Unknown,
+                    modifiers: egui::Modifiers::NONE,
+                });
+            }
+            let mut out = ctx.run_ui(input, |ui| {
+                let mut open = true;
+                dialog(&mut app, ui.ctx(), &mut open);
+            });
+            out.textures_delta.clear();
+            if let (Some(h), Some(r)) = (text_top(&out.shapes, "Status"), text_top(&out.shapes, "Center")) {
+                match frame {
+                    3 => before = Some((h, r)),
+                    11 => after = Some((h, r)),
+                    _ => {}
+                }
+            }
+            if frame == 3 {
+                let id = egui::LayerId::new(egui::Order::Middle, egui::Id::unique("lpm_window"));
+                let w = ctx.memory(|m| m.area_rect(id.id)).expect("the window is laid out");
+                at = Some(pos2(w.center().x, w.top() + 200.0));
+            }
+        }
+        let (before, after) = (before.expect("frame 3 draws the header and a row"), after.expect("frame 11 draws them"));
+        assert!((after.0 - before.0).abs() < 1.0, "the header stays pinned: {before:?} -> {after:?}");
+        assert!(after.1 < before.1 - 20.0, "the rows scroll under it: {before:?} -> {after:?}");
     }
 }
