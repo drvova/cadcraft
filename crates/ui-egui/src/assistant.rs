@@ -13,17 +13,25 @@
 //!
 //! The conversation lives in memory for the session. The provider (URL, model, key) is saved with
 //! the profile — see [`Assistant::provider_json`] and [`Assistant::load`].
+//!
+//! The pane has two faces, chosen by the tab strip under the header ([`Mode`]). **Chat** is the
+//! conversation: the model's turns as full-width prose with a quiet role dot, the reader's as
+//! bubbles on the right, markdown-lite for the model's text, and one rounded composer with the
+//! action inside it. **Source** is the CAD face: the drawing as CadScript over the control
+//! channel (`cadscript.source` / `cadscript.run`), cached against the drawing's revision,
+//! editable, and rebuildable.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::time::Duration;
 
 use cadcraft_ai::chat::{Message, Role};
 use cadcraft_ai::client::{self, Provider};
 use cadcraft_ai::code;
 use cadcraft_ai::{Event, ToolExecutor};
-use egui::{Align, Color32, RichText, vec2};
+use egui::epaint::text::VariationCoords;
+use egui::{Align, Align2, Color32, FontId, RichText, pos2, vec2};
 use serde_json::Value;
 
 use crate::control::{ControlRequest, Outcome};
@@ -34,6 +42,14 @@ use crate::tl;
 /// drawing-wide operation on a large drawing is slow, and the worker is not blocking the
 /// interface while it waits.
 const TOOL_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// How long a `cadscript` control call may take before the Source tab gives up on it. The call is
+/// answered on the interface thread, so this only bounds a stalled or absent control channel.
+const SOURCE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Lines past which the Source gutter stops measuring every line's wrapped height (a script that
+/// long is not a script a reader scrolls; the numbers still count lines, one row each).
+const SOURCE_GUTTER_LINES: usize = 4_000;
 
 /// What the worker sends the pane.
 enum Progress {
@@ -99,6 +115,55 @@ pub struct Assistant {
     cancel: Arc<AtomicBool>,
     /// Tool calls made so far this turn, for the status line.
     steps: usize,
+    /// Which face of the pane shows: the conversation, or the drawing as a script.
+    pub mode: Mode,
+    /// The Source tab's state: the script, how it was fetched, and the last rebuild's answer.
+    source: Source,
+}
+
+/// Which face of the pane shows: the conversation, or the drawing as CadScript.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Mode {
+    /// The chat: the transcript, the composer, the model.
+    #[default]
+    Chat,
+    /// The drawing as a readable script, editable and rebuildable.
+    Source,
+}
+
+/// What the Source tab is waiting for on the control channel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Waiting {
+    /// The drawing's script, for the editor.
+    Source,
+    /// The answer to a rebuild: the script run back into the drawing.
+    Rebuild,
+}
+
+/// The Source tab: the drawing's CadScript, cached until the tab is opened, `Rebuild` is pressed,
+/// or the drawing revision changes.
+#[derive(Default)]
+struct Source {
+    /// The text the editor holds (editable, so not always what the drawing last said).
+    text: String,
+    /// Whether the drawing's script has ever arrived.
+    loaded: bool,
+    /// A control call is in flight.
+    fetching: bool,
+    /// The reader asked for a fresh copy (opening the tab, pressing `Rebuild`, a new revision).
+    needs: bool,
+    /// The drawing `(uid, revision)` the text was fetched for.
+    key: Option<(u64, u64)>,
+    /// The drawing `(uid, revision)` the in-flight fetch was issued for.
+    issued: Option<(u64, u64)>,
+    /// What the in-flight call is.
+    waiting: Option<Waiting>,
+    /// The last failure, shown quietly in the toolbar area — never a dialog.
+    error: Option<String>,
+    /// What a rebuild printed, one line each.
+    output: Vec<String>,
+    /// The reply of the in-flight call, sent by its own thread so the interface never blocks.
+    rx: Option<Receiver<Value>>,
 }
 
 impl Default for Assistant {
@@ -126,6 +191,8 @@ impl Default for Assistant {
             jobs_tx,
             cancel: Arc::new(AtomicBool::new(false)),
             steps: 0,
+            mode: Mode::default(),
+            source: Source::default(),
         }
     }
 }
@@ -324,6 +391,15 @@ impl Assistant {
         &self.queued
     }
 
+    /// Show a face of the pane. Opening `Source` asks the control channel for the drawing's
+    /// script, the same way pressing `Rebuild` does.
+    pub fn open_tab(&mut self, mode: Mode) {
+        self.mode = mode;
+        if mode == Mode::Source {
+            self.source.needs = true;
+        }
+    }
+
     /// Take the composer's message (text and attachment paths) the way `send_text` would, for a
     /// test that wants to check the hand-over without a provider.
     pub fn take_message_for_test(&mut self) -> (String, Vec<String>) {
@@ -441,7 +517,7 @@ pub fn briefing(app: &crate::CadApp) -> cadcraft_ai::agent::Briefing {
     b
 }
 
-/// Draw the pane: the conversation, the composer, and the provider settings.
+/// Draw the pane: the conversation or the drawing's script, the composer, and the settings.
 pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
     app.assistant.drain();
@@ -450,6 +526,16 @@ pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
     if app.assistant.running() {
         // Streamed text arrives on another thread; keep painting until the turn is over.
         ui.ctx().request_repaint();
+    }
+    // The Source tab's control calls: what came back, and what the drawing's revision asks for.
+    drain_source(app);
+    if app.assistant.mode == Mode::Source {
+        // The request is answered between frames, so the pane keeps painting while one is in
+        // flight — otherwise a quiet window would never drain it and the call would time out.
+        if app.assistant.source.fetching {
+            ui.ctx().request_repaint();
+        }
+        maybe_fetch_source(app, ui.ctx());
     }
 
     // A picture pasted into the pane (Ctrl+V) attaches to the next message, the way a drop does.
@@ -468,23 +554,77 @@ pub fn show(app: &mut crate::CadApp, ui: &mut egui::Ui) {
             ui.add_space(4.0);
             settings(app, ui, &t);
         }
-        ui.add_space(4.0);
+        ui.add_space(theme::GAP_4);
+        tabs(app, ui, &t, &mut actions);
         ui.separator();
-        let list = (ui.available_height() - COMPOSER_HEIGHT).max(80.0);
-        example = egui::ScrollArea::vertical()
-            .id_salt("assistant-transcript")
-            .auto_shrink([false, false])
-            .max_height(list)
-            .show(ui, |ui| transcript(app, ui, &t, &mut actions))
-            .inner;
-        ui.separator();
-        composer(app, ui, &t, &mut actions);
+        match app.assistant.mode {
+            Mode::Chat => {
+                let list = (ui.available_height() - COMPOSER_HEIGHT).max(80.0);
+                example = chat(app, ui, &t, &mut actions, list);
+                composer(app, ui, &t, &mut actions);
+            }
+            Mode::Source => source_tab(app, ui, &t, &mut actions),
+        }
     });
     if let Some(example) = example {
         app.assistant.input = example;
     }
     let ctx = ui.ctx().clone();
     apply(app, &ctx, actions);
+}
+
+/// The pane's two faces as a quiet tab strip under the header: the active label sits on an accent
+/// hairline, the other stays dim.
+fn tabs(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &mut Actions) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = theme::GAP_12;
+        for (mode, label) in [(Mode::Chat, tl!("Chat")), (Mode::Source, tl!("Source"))] {
+            let active = app.assistant.mode == mode;
+            let colour = if active { t.text } else { t.text_dim };
+            let galley = ui.painter().layout_no_wrap(label.to_owned(), theme::body(), colour);
+            let (rect, response) = ui.allocate_exact_size(vec2(galley.size().x, theme::CONTROL_H_TAB_COMPACT), egui::Sense::click());
+            let at = pos2(rect.left(), rect.center().y - galley.size().y / 2.0);
+            ui.painter().galley(at, galley, colour);
+            if active {
+                ui.painter().hline(rect.x_range(), rect.bottom(), egui::Stroke::new(theme::HAIRLINE, t.accent));
+            }
+            response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Tab, true, active, label));
+            crate::control::record_widget(ui, &response, label, "tab", Some(active));
+            if response.clicked() {
+                actions.mode = Some(mode);
+            }
+        }
+    });
+}
+
+/// The conversation face: the transcript, with the way back to the newest message floating over
+/// its bottom corner once the reader has scrolled up.
+fn chat(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &mut Actions, height: f32) -> Option<String> {
+    let out = egui::ScrollArea::vertical()
+        .id_salt("assistant-transcript")
+        .auto_shrink([false, false])
+        .max_height(height)
+        .show(ui, |ui| transcript(app, ui, t, actions));
+    let max = (out.content_size.y - out.inner_rect.height()).max(0.0);
+    if max > 0.0 && out.state.clamped_offset().y < max - theme::GAP_8 {
+        let side = theme::CONTROL_H_BUTTON;
+        let rect = egui::Rect::from_min_size(
+            pos2(out.inner_rect.right() - side - theme::GAP_8, out.inner_rect.bottom() - side - theme::GAP_8),
+            vec2(side, side),
+        );
+        let response = ui.interact(rect, ui.scope_id().with("assistant-scroll-down"), egui::Sense::click());
+        let fill = if response.hovered() { t.control_hover } else { t.control };
+        ui.painter().circle_filled(rect.center(), side / 2.0, fill);
+        ui.painter().circle_stroke(rect.center(), side / 2.0, egui::Stroke::new(theme::HAIRLINE, t.border));
+        crate::icons::paint(ui.painter(), rect.shrink(theme::GAP_6), crate::icons::Icon::ChevronDown, false);
+        let label = tl!("Scroll to the newest message");
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+        crate::control::record_widget(ui, &response, label, "button", None);
+        if response.clicked() {
+            actions.scroll_to_bottom = true;
+        }
+    }
+    out.inner
 }
 
 /// Pictures pasted into the window since the last frame (`Event::PasteImage`), taken out of the
@@ -523,8 +663,9 @@ fn save_pasted_image(image: &egui::ColorImage) -> Result<String, String> {
     Ok(path.to_string_lossy().to_string())
 }
 
-/// Room the composer and its margins need at the bottom of the pane.
-const COMPOSER_HEIGHT: f32 = 96.0;
+/// Room the composer and its margins need at the bottom of the pane: the field (two rows), the
+/// footer line, and the attachment chips when there are any.
+const COMPOSER_HEIGHT: f32 = 104.0;
 
 /// The provider settings, shown under the header when the gear is on.
 fn settings(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens) {
@@ -626,6 +767,13 @@ struct Actions {
     unqueue: Option<usize>,
     /// Restore the drawing to a checkpoint: the undo depth recorded before that request.
     restore: Option<usize>,
+    /// A tab the reader chose.
+    mode: Option<Mode>,
+    /// The Source toolbar's two actions.
+    source_copy: bool,
+    source_rebuild: bool,
+    /// The reader asked for the newest message (the floating button).
+    scroll_to_bottom: bool,
 }
 
 /// The pane's header: which conversation this is (the dock tab already says "Assistant"), and the
@@ -706,6 +854,7 @@ fn transcript(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &
         }
     }
     let live = app.assistant.live.clone();
+    let running = app.assistant.running;
     for row in &rows {
         match row {
             Row::Said { text, mine: true, at } => {
@@ -715,18 +864,22 @@ fn transcript(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &
                     actions.restore = checkpoint;
                 }
             }
-            Row::Said { text, mine: false, .. } => assistant_text(ui, t, text),
+            Row::Said { text, mine: false, .. } => assistant_turn(ui, t, text, false),
             Row::Ran(call, result) => activity(app, ui, t, call, result.as_ref()),
         }
     }
     if !live.is_empty() {
-        assistant_text(ui, t, &live);
+        assistant_turn(ui, t, &live, running);
     }
-    if app.assistant.running && app.assistant.live.is_empty() {
+    if running && app.assistant.live.is_empty() {
+        // Before the first token: a spinner and the word, never an empty pane.
+        ui.add_space(theme::GAP_6);
         ui.horizontal(|ui| {
-            ui.add_space(2.0);
-            ui.label(RichText::new(tl!("Thinking…")).color(t.text_faint).small());
+            ui.spacing_mut().item_spacing.x = theme::GAP_6;
+            ui.spinner();
+            ui.label(RichText::new(tl!("Thinking")).color(t.text_dim));
         });
+        ui.add_space(theme::GAP_4);
     }
     if app.assistant.follow {
         ui.scroll_to_cursor(Some(Align::BOTTOM));
@@ -761,30 +914,37 @@ fn empty_state(ui: &mut egui::Ui, t: &Tokens) -> Option<String> {
     clicked
 }
 
-/// One user turn: a quiet inset block, the way a prompt reads in Cursor's composer. When the row
-/// has a checkpoint, a restore control appears while the pointer is over it: clicking reverts the
-/// drawing to the state before that request (the conversation stays). Returns whether it was
-/// clicked.
+/// One reader turn: a soft bubble hugging the right of the pane, the way a chat shows the reader.
+/// When the row has a checkpoint, a restore control appears while the pointer is over it: clicking
+/// reverts the drawing to the state before that request (the conversation stays). Returns whether
+/// it was clicked.
 fn user_turn(ui: &mut egui::Ui, t: &Tokens, text: &str, restorable: bool) -> bool {
-    ui.add_space(6.0);
+    ui.add_space(theme::GAP_6);
     let mut slot = None;
-    let inner = egui::Frame::new().fill(t.control).corner_radius(6.0).inner_margin(egui::Margin::symmetric(10, 7)).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        if restorable {
-            ui.horizontal(|ui| {
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+        ui.spacing_mut().item_spacing.x = theme::GAP_4;
+        ui.add_space(theme::GAP_2);
+        // The bubble keeps a margin from the pane's left edge, so a long prompt still reads as the
+        // reader's own turn rather than a full-width block.
+        let max_w = ui.available_width() * 0.82;
+        let inner = egui::Frame::new()
+            .fill(t.control)
+            .corner_radius(theme::RADIUS_PILL)
+            .inner_margin(egui::Margin::symmetric(theme::GAP_10 as i8, theme::GAP_6 as i8))
+            .show(ui, |ui| {
+                ui.set_max_width(max_w);
                 prose(ui, t.text, text);
-                // The space is reserved either way, so the text does not move when the control
-                // appears.
-                let (rect, _) = ui.allocate_exact_size(vec2(18.0, 18.0), egui::Sense::hover());
-                slot = Some(rect);
             });
-        } else {
-            prose(ui, t.text, text);
+        if restorable {
+            // The space is reserved either way, so the bubble does not move when the control
+            // appears.
+            let (rect, _) = ui.allocate_exact_size(vec2(18.0, 18.0), egui::Sense::hover());
+            slot = Some((rect, inner.response.hovered()));
         }
     });
     let mut clicked = false;
-    if let Some(rect) = slot
-        && inner.response.hovered()
+    if let Some((rect, hovered)) = slot
+        && hovered
     {
         let resp = ui.interact(rect, ui.scope_id().with(("assistant-restore", rect.top() as i32)), egui::Sense::click());
         crate::icons::paint(ui.painter(), rect, crate::icons::Icon::Undo, !resp.hovered());
@@ -792,26 +952,307 @@ fn user_turn(ui: &mut egui::Ui, t: &Tokens, text: &str, restorable: bool) -> boo
             clicked = true;
         }
     }
-    ui.add_space(4.0);
+    ui.add_space(theme::GAP_4);
     clicked
 }
 
-/// The model's words: plain on the surface, no bubble, comfortable measure.
-fn assistant_text(ui: &mut egui::Ui, t: &Tokens, text: &str) {
-    ui.add_space(4.0);
-    ui.horizontal_wrapped(|ui| {
-        ui.add_space(2.0);
-        prose(ui, t.text, text);
+/// One model turn: a quiet role dot at the left, then the answer as full-width prose on the pane
+/// background — no bubble, the way a modern chat shows the model. `streaming` puts the caret at
+/// the end of the words arriving now.
+fn assistant_turn(ui: &mut egui::Ui, t: &Tokens, text: &str, streaming: bool) {
+    ui.add_space(theme::GAP_6);
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = theme::GAP_6;
+        let (dot, _) = ui.allocate_exact_size(vec2(theme::GAP_6, theme::GAP_6), egui::Sense::hover());
+        ui.painter().circle_filled(dot.center(), theme::GAP_6 / 2.0, t.accent);
+        ui.vertical(|ui| markdown(ui, t, text, streaming));
     });
-    ui.add_space(4.0);
+    ui.add_space(theme::GAP_8);
 }
 
 /// Text with the pane's own measure and wrapping.
 fn prose(ui: &mut egui::Ui, colour: Color32, text: &str) {
     let mut job = egui::text::LayoutJob::default();
-    job.wrap.max_width = ui.available_width() - 4.0;
+    job.wrap.max_width = ui.available_width() - theme::GAP_4;
     job.append(text, 0.0, egui::TextFormat { font_id: crate::theme::body(), color: colour, ..Default::default() });
     ui.label(job);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Markdown-lite. The model writes prose, and the pane reads the small subset that makes it
+// legible: paragraphs, `-`/`*` bullets, `1.` lists, `#`/`##` headings, `**bold**`, `` `code` ``
+// and fenced blocks as their own cards. Nothing else is interpreted — no tables, no images, no
+// syntax highlighting — so a text that uses none of it reads exactly as written.
+// ---------------------------------------------------------------------------------------------
+
+/// One run of inline text, with the two emphases the subset knows.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Span {
+    /// Plain words.
+    Text(String),
+    /// `**bold**`.
+    Bold(String),
+    /// `` `code` ``.
+    Code(String),
+}
+
+/// One block of the model's answer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Block {
+    /// A paragraph, as its inline runs.
+    Paragraph(Vec<Span>),
+    /// A `#`/`##` heading: the level, and its inline runs.
+    Heading { level: u8, spans: Vec<Span> },
+    /// A `-`/`*` bullet list.
+    Bullets(Vec<Vec<Span>>),
+    /// A `1.` ordered list, renumbered from one.
+    Ordered(Vec<Vec<Span>>),
+    /// A fenced block: the language on the fence, and the code.
+    Code { language: String, text: String },
+}
+
+/// Parse the markdown-lite subset into blocks. Total, never panics: anything it does not
+/// recognise is a paragraph line, and an unterminated fence still yields its code.
+fn parse_markdown_lite(text: &str) -> Vec<Block> {
+    let mut blocks: Vec<Block> = Vec::new();
+    let mut paragraph: Vec<String> = Vec::new();
+    let mut list: Vec<Vec<Span>> = Vec::new();
+    let mut ordered = false;
+    let mut fence: Option<(String, Vec<String>)> = None;
+    let flush_paragraph = |blocks: &mut Vec<Block>, paragraph: &mut Vec<String>| {
+        if !paragraph.is_empty() {
+            blocks.push(Block::Paragraph(parse_inline(&paragraph.join(" "))));
+            paragraph.clear();
+        }
+    };
+    let flush_list = |blocks: &mut Vec<Block>, list: &mut Vec<Vec<Span>>, ordered: &mut bool| {
+        if !list.is_empty() {
+            blocks.push(if *ordered { Block::Ordered(std::mem::take(list)) } else { Block::Bullets(std::mem::take(list)) });
+            *ordered = false;
+        }
+    };
+    for line in text.lines() {
+        if let Some((language, code)) = &mut fence {
+            if line.trim_start().starts_with("```") {
+                blocks.push(Block::Code { language: language.clone(), text: code.join("\n") });
+                fence = None;
+            } else {
+                code.push(line.to_string());
+            }
+            continue;
+        }
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") {
+            flush_paragraph(&mut blocks, &mut paragraph);
+            flush_list(&mut blocks, &mut list, &mut ordered);
+            fence = Some((trimmed.trim_start_matches('`').trim().to_string(), Vec::new()));
+            continue;
+        }
+        if trimmed.is_empty() {
+            flush_paragraph(&mut blocks, &mut paragraph);
+            flush_list(&mut blocks, &mut list, &mut ordered);
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix('#') {
+            let level = 1 + rest.chars().take_while(|c| *c == '#').count();
+            let heading = rest.trim_start_matches('#').trim();
+            flush_paragraph(&mut blocks, &mut paragraph);
+            flush_list(&mut blocks, &mut list, &mut ordered);
+            blocks.push(Block::Heading { level: level.min(6) as u8, spans: parse_inline(heading) });
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("- ").or_else(|| trimmed.strip_prefix("* ")) {
+            flush_paragraph(&mut blocks, &mut paragraph);
+            if ordered {
+                flush_list(&mut blocks, &mut list, &mut ordered);
+            }
+            list.push(parse_inline(rest.trim()));
+            continue;
+        }
+        if let Some((_number, rest)) = ordered_item(trimmed) {
+            flush_paragraph(&mut blocks, &mut paragraph);
+            if !list.is_empty() && !ordered {
+                flush_list(&mut blocks, &mut list, &mut ordered);
+            }
+            ordered = true;
+            list.push(parse_inline(rest));
+            continue;
+        }
+        flush_list(&mut blocks, &mut list, &mut ordered);
+        paragraph.push(trimmed.to_string());
+    }
+    if let Some((language, code)) = fence {
+        blocks.push(Block::Code { language, text: code.join("\n") });
+    }
+    flush_paragraph(&mut blocks, &mut paragraph);
+    flush_list(&mut blocks, &mut list, &mut ordered);
+    blocks
+}
+
+/// `1. text` (or `12. text`) as its number and the rest, when the line is an ordered item.
+fn ordered_item(line: &str) -> Option<(u64, &str)> {
+    let digits = line.chars().take_while(char::is_ascii_digit).count();
+    if digits == 0 || digits > 3 {
+        return None;
+    }
+    let rest = line.get(digits..)?.strip_prefix(". ")?;
+    Some((line.get(..digits)?.parse().ok()?, rest.trim()))
+}
+
+/// Split a line into plain, `**bold**` and `` `code` `` runs. Unclosed markers stay as written.
+fn parse_inline(text: &str) -> Vec<Span> {
+    let mut spans = Vec::new();
+    let mut rest = text;
+    while !rest.is_empty() {
+        let code = rest.find('`');
+        let bold = rest.find("**");
+        let at = match (code, bold) {
+            (Some(c), Some(b)) => Some(c.min(b)),
+            (Some(c), None) => Some(c),
+            (None, Some(b)) => Some(b),
+            (None, None) => None,
+        };
+        let Some(at) = at else {
+            spans.push(Span::Text(rest.to_string()));
+            break;
+        };
+        if at > 0 {
+            spans.push(Span::Text(rest[..at].to_string()));
+        }
+        let tail = &rest[at..];
+        if let Some(inner) = tail.strip_prefix('`') {
+            match inner.find('`') {
+                Some(end) => {
+                    spans.push(Span::Code(inner[..end].to_string()));
+                    rest = &inner[end + 1..];
+                }
+                None => {
+                    spans.push(Span::Text(tail.to_string()));
+                    break;
+                }
+            }
+        } else {
+            let inner = tail.strip_prefix("**").unwrap_or(tail);
+            match inner.find("**") {
+                Some(end) => {
+                    spans.push(Span::Bold(inner[..end].to_string()));
+                    rest = &inner[end + 2..];
+                }
+                None => {
+                    spans.push(Span::Text(tail.to_string()));
+                    break;
+                }
+            }
+        }
+    }
+    spans
+}
+
+/// Render the blocks. `streaming` draws the caret at the end of the last paragraph.
+fn markdown(ui: &mut egui::Ui, t: &Tokens, text: &str, streaming: bool) {
+    let blocks = parse_markdown_lite(text);
+    let last = blocks.len().saturating_sub(1);
+    let caret = streaming && caret_visible(ui.ctx());
+    for (i, block) in blocks.into_iter().enumerate() {
+        match block {
+            Block::Heading { level, spans } => {
+                ui.add_space(theme::GAP_6);
+                let (font, colour) = match level {
+                    1 => (FontId::new(theme::FONT_BUTTON, egui::FontFamily::Proportional), t.text),
+                    2 => (theme::body(), t.text),
+                    _ => (theme::body(), t.text_dim),
+                };
+                spans_label(ui, t, &spans, font, colour, false);
+                ui.add_space(theme::GAP_2);
+            }
+            Block::Paragraph(spans) => spans_label(ui, t, &spans, theme::body(), t.text, caret && i == last),
+            Block::Bullets(items) => {
+                for item in &items {
+                    marker_row(ui, t, item, "\u{2022}");
+                }
+            }
+            Block::Ordered(items) => {
+                for (n, item) in items.iter().enumerate() {
+                    marker_row(ui, t, item, &format!("{}.", n + 1));
+                }
+            }
+            Block::Code { language, text } => code_card(ui, t, &language, &text, i),
+        }
+    }
+}
+
+/// One inline run set as a wrapping label, with the caret appended when this is the live text.
+fn spans_label(ui: &mut egui::Ui, t: &Tokens, spans: &[Span], font: FontId, colour: Color32, caret: bool) {
+    let mut job = egui::text::LayoutJob::default();
+    job.wrap.max_width = (ui.available_width() - theme::GAP_4).max(theme::CONTROL_H_INPUT);
+    for span in spans {
+        match span {
+            Span::Text(s) => job.append(s, 0.0, egui::TextFormat { font_id: font.clone(), color: colour, ..Default::default() }),
+            // No bold face ships with the interface; a variable font's weight axis is asked for,
+            // and the run keeps the body colour where the axis is missing.
+            Span::Bold(s) => job.append(
+                s,
+                0.0,
+                egui::TextFormat { font_id: font.clone(), color: colour, coords: VariationCoords::new([(b"wght", 700.0)]), ..Default::default() },
+            ),
+            Span::Code(s) => {
+                job.append(s, 0.0, egui::TextFormat { font_id: theme::mono(), color: t.text, background: t.field, ..Default::default() })
+            }
+        }
+    }
+    if caret {
+        // The caret is a space painted in the text colour: a thin block at the end of the words
+        // arriving now.
+        job.append(" ", 0.0, egui::TextFormat { font_id: font, color: colour, background: colour, ..Default::default() });
+    }
+    ui.label(job);
+}
+
+/// Whether the streaming caret shows this half-second.
+fn caret_visible(ctx: &egui::Context) -> bool {
+    (ctx.input(|i| i.time) * 2.0).rem_euclid(2.0) < 1.0
+}
+
+/// One list item: the marker in the faint colour, the item's runs beside it.
+fn marker_row(ui: &mut egui::Ui, t: &Tokens, spans: &[Span], marker: &str) {
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = theme::GAP_6;
+        ui.label(RichText::new(marker).color(t.text_faint));
+        ui.vertical(|ui| spans_label(ui, t, spans, theme::body(), t.text, false));
+    });
+    ui.add_space(theme::GAP_2);
+}
+
+/// A fenced block as its own card: the language and a Copy button in a header row, then the code
+/// in mono on the field colour, scrolling sideways rather than wrapping.
+fn code_card(ui: &mut egui::Ui, t: &Tokens, language: &str, code: &str, at: usize) {
+    ui.add_space(theme::GAP_4);
+    egui::Frame::new()
+        .fill(t.field)
+        .stroke(egui::Stroke::new(theme::HAIRLINE, t.border))
+        .corner_radius(theme::RADIUS_CARD)
+        .inner_margin(egui::Margin::symmetric(theme::GAP_8 as i8, theme::GAP_6 as i8))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = theme::GAP_6;
+                let name = if language.is_empty() { tl!("code") } else { language };
+                ui.label(RichText::new(name).color(t.text_faint).small());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if crate::widgets::button(ui, "Copy", crate::widgets::Kind::Ghost).clicked() {
+                        ui.ctx().copy_text(code.to_string());
+                    }
+                });
+            });
+            ui.add_space(theme::GAP_4);
+            egui::ScrollArea::horizontal().id_salt(("assistant-code", at)).auto_shrink([false, true]).show(ui, |ui| {
+                let mut job = egui::text::LayoutJob::default();
+                job.wrap.max_width = f32::INFINITY;
+                job.append(code, 0.0, egui::TextFormat { font_id: theme::mono(), color: t.text, ..Default::default() });
+                ui.label(job);
+            });
+        });
+    ui.add_space(theme::GAP_4);
 }
 
 /// One tool call as Cursor shows work: a single dim line that opens on a click, with anything it
@@ -947,8 +1388,8 @@ fn results_by_call(messages: &[Message]) -> std::collections::HashMap<&str, &Mes
     messages.iter().filter(|m| m.role == Role::Tool).filter_map(|m| m.tool_call_id.as_deref().map(|id| (id, m))).collect()
 }
 
-/// The composer: a bordered box holding the attachments, the field, and a bottom row with the
-/// model, how full the context is, and the action — the shape Cursor's input has.
+/// The composer: attachment chips above one rounded field, the input and the action button inside
+/// it, and a footer line with the model chip, how full the context is, the note and the shortcut.
 fn composer(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &mut Actions) {
     let running = app.assistant.running();
     let queued = app.assistant.queued.clone();
@@ -962,8 +1403,7 @@ fn composer(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &mu
         };
         attachments.push((i, name, thumb));
     }
-    // What the reader queued while the turn runs, in order, each droppable. The rows keep their
-    // shape and take the composer recipe's 6px inset and gap (§1.2).
+    // What the reader queued while the turn runs, in order, each droppable.
     for (i, text) in queued.iter().enumerate() {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = theme::GAP_6;
@@ -979,129 +1419,224 @@ fn composer(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &mu
             });
         });
     }
-    // `.full-input-box`'s `solid 1px` border, `border` at rest and the focus colour while the
-    // field holds keyboard focus (§1.2). The field's id is explicit so the focus read and the
-    // widget agree across passes.
+    // The attachments ride above the field as chips: the picture, its name, and the way off.
+    if !attachments.is_empty() {
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(theme::GAP_6, theme::GAP_4);
+            for (i, name, thumb) in &attachments {
+                egui::Frame::new()
+                    .fill(t.control)
+                    .corner_radius(theme::RADIUS_CARD)
+                    .inner_margin(egui::Margin::symmetric(theme::GAP_6 as i8, theme::GAP_4 as i8))
+                    .show(ui, |ui| {
+                        ui.spacing_mut().item_spacing.x = theme::GAP_4;
+                        ui.horizontal(|ui| {
+                            match thumb {
+                                Some(tex) => {
+                                    let side = 34.0;
+                                    let size = tex.size_vec2();
+                                    let scale = (side / size.x).min(side / size.y).min(1.0);
+                                    ui.add(egui::Image::new(tex).fit_to_exact_size(size * scale));
+                                }
+                                None => {
+                                    ui.label(RichText::new(tl!("picture")).color(t.text_faint).small());
+                                }
+                            }
+                            ui.label(RichText::new(name).color(t.text_dim).small());
+                            if ui.add(egui::Button::new(RichText::new("×").color(t.text_faint).small()).frame(false)).clicked() {
+                                actions.detach = Some(*i);
+                            }
+                        });
+                    });
+            }
+        });
+        ui.add_space(theme::GAP_4);
+    }
+    // The one field: the input on the left, the action inside at the right. Its id is explicit so
+    // the focus read and the widget agree across passes.
     let field_id = ui.make_persistent_id("assistant-composer-field");
     let field_focused = ui.memory(|m| m.has_focus(field_id));
-    let frame =
-        egui::Frame::new().fill(t.field).corner_radius(theme::RADIUS_CARD).inner_margin(egui::Margin::same(theme::GAP_6 as i8)).show(ui, |ui| {
-            // `.full-input-box { border-radius:0.25rem; padding:6px; gap:6px }` (§1.2): the box's
-            // children sit 6px apart.
+    let side = theme::CONTROL_H_BUTTON;
+    let frame = egui::Frame::new()
+        .fill(t.field)
+        .corner_radius(theme::RADIUS_PILL)
+        .inner_margin(egui::Margin::symmetric(theme::GAP_8 as i8, theme::GAP_6 as i8))
+        .show(ui, |ui| {
             ui.spacing_mut().item_spacing = egui::vec2(theme::GAP_6, theme::GAP_6);
             ui.set_width(ui.available_width());
-            if !attachments.is_empty() {
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = egui::vec2(theme::GAP_6, theme::GAP_4);
-                    for (i, name, thumb) in &attachments {
-                        egui::Frame::new()
-                            .fill(t.control)
-                            .corner_radius(theme::RADIUS_CARD)
-                            .inner_margin(egui::Margin::symmetric(theme::GAP_6 as i8, theme::GAP_4 as i8))
-                            .show(ui, |ui| {
-                                ui.spacing_mut().item_spacing.x = theme::GAP_4;
-                                ui.horizontal(|ui| {
-                                    match thumb {
-                                        Some(tex) => {
-                                            let side = 34.0;
-                                            let size = tex.size_vec2();
-                                            let scale = (side / size.x).min(side / size.y).min(1.0);
-                                            ui.add(egui::Image::new(tex).fit_to_exact_size(size * scale));
-                                        }
-                                        None => {
-                                            ui.label(RichText::new(tl!("picture")).color(t.text_faint).small());
-                                        }
-                                    }
-                                    ui.label(RichText::new(name).color(t.text_dim).small());
-                                    if ui.add(egui::Button::new(RichText::new("×").color(t.text_faint).small()).frame(false)).clicked() {
-                                        actions.detach = Some(*i);
-                                    }
-                                });
-                            });
-                    }
-                });
-            }
-            let hint = if running { tl!("Ask for a change while it works — Enter queues it") } else { tl!("Ask for a change to this drawing…") };
-            let edit = egui::TextEdit::multiline(&mut app.assistant.input)
-                .id(field_id)
-                .desired_rows(2)
-                .desired_width(f32::INFINITY)
-                .frame(egui::Frame::NONE)
-                .hint_text(hint);
-            let response = ui.add(edit);
-            let (enter, enter_now) = ui.input(|i| {
-                let pressed = i.key_pressed(egui::Key::Enter);
-                (pressed && !i.modifiers.command && !i.modifiers.ctrl, pressed && (i.modifiers.command || i.modifiers.ctrl))
-            });
-            if response.has_focus() {
-                if enter_now {
-                    actions.send = true;
-                    actions.steer_now = running;
-                } else if enter {
-                    actions.send = true;
-                }
-            }
             ui.horizontal(|ui| {
-                // `.composer-bar-input-buttons { align-items:center; display:flex; gap:4px }` (§1.3).
-                ui.spacing_mut().item_spacing.x = theme::GAP_4;
-                // The paperclip: a picture joins the next message.
-                if crate::widgets::icon_button(ui, crate::icons::Icon::Attach, 16.0, tl!("Attach a picture"), false).clicked()
-                    && let Some(pick) = app.services.pick_image.as_ref()
-                {
-                    actions.attach = pick();
-                }
-                // The model chip: `.composer-unified-dropdown` (§1.17) as `widgets::chip`; clicking
-                // it opens the preset menu.
-                let label = if app.assistant.provider.model.trim().is_empty() { tl!("No model") } else { app.assistant.provider.model.as_str() };
-                let chip = crate::widgets::chip(ui, label, crate::widgets::ChipKind::Neutral);
-                egui::Popup::menu(&chip).show(|ui| {
-                    for p in client::PRESETS {
-                        let hit = app.assistant.preset == p.id;
-                        let text = if p.model.is_empty() { p.label.to_string() } else { format!("{} · {}", p.label, p.model) };
-                        if ui.selectable_label(hit, RichText::new(text).small()).clicked() {
-                            actions.preset = Some(p.id);
-                        }
-                    }
-                });
-                if app.assistant.provider.ready().is_err() {
-                    ui.label(RichText::new(tl!("needs a provider")).color(t.compare_other).small());
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if running {
-                        let now = crate::widgets::button(ui, "Send now", crate::widgets::Kind::Primary);
-                        if now.on_hover_text(tl!("The model reads it at its next tool call")).clicked() {
+                let hint = if running { tl!("Ask for a change while it works — Enter queues it") } else { tl!("Ask for a change...") };
+                let width = (ui.available_width() - side - theme::GAP_6).max(theme::CONTROL_H_INPUT);
+                let edit = egui::TextEdit::multiline(&mut app.assistant.input)
+                    .id(field_id)
+                    .desired_rows(2)
+                    .desired_width(width)
+                    // The keys are the pane's: Enter sends, Shift+Enter is a newline, and the
+                    // field inserts nothing on its own.
+                    .return_key(None)
+                    .frame(egui::Frame::NONE)
+                    .hint_text(hint);
+                let response = ui.add(edit);
+                if response.has_focus() {
+                    let (enter, modifiers) = ui.input(|i| (i.key_pressed(egui::Key::Enter), i.modifiers));
+                    match composer_key(enter, modifiers) {
+                        KeyAction::Send => actions.send = true,
+                        KeyAction::Steer => {
                             actions.send = true;
                             actions.steer_now = true;
                         }
-                        let queue = ui
-                            .add_enabled_ui(!app.assistant.input.trim().is_empty(), |ui| {
-                                crate::widgets::button(ui, "Queue", crate::widgets::Kind::Ghost)
-                            })
-                            .inner;
-                        if queue.clicked() {
-                            actions.send = true;
-                        }
-                        if crate::widgets::button(ui, "Stop", crate::widgets::Kind::Ghost).clicked() {
-                            actions.stop = true;
-                        }
-                    } else {
-                        let ready = !app.assistant.input.trim().is_empty() || !app.assistant.attachments.is_empty();
-                        let send = ui.add_enabled_ui(ready, |ui| crate::widgets::button(ui, "Send", crate::widgets::Kind::Primary)).inner;
-                        if send.clicked() {
-                            actions.send = true;
-                        }
+                        KeyAction::Newline => insert_newline(ui.ctx(), field_id, &mut app.assistant.input),
+                        KeyAction::None => {}
                     }
-                    context_meter(ui, t, &app.assistant.messages);
-                });
+                }
+                action_button(app, ui, t, running, actions);
             });
         });
-    // Painted over the content so the hairline reads on top.
+    // Painted over the content so the hairline reads on top; the field takes the accent while it
+    // holds keyboard focus.
     let border = if field_focused { t.accent } else { t.border };
-    ui.painter().rect_stroke(frame.response.rect, theme::RADIUS_CARD, egui::Stroke::new(theme::HAIRLINE, border), egui::StrokeKind::Inside);
-    if let Some(note) = app.assistant.note.clone() {
-        ui.add_space(2.0);
-        ui.label(RichText::new(note).color(t.compare_other).small());
+    ui.painter().rect_stroke(frame.response.rect, theme::RADIUS_PILL, egui::Stroke::new(theme::HAIRLINE, border), egui::StrokeKind::Inside);
+    // The footer: what the model is, how full the context is, what just happened, and the keys.
+    ui.add_space(theme::GAP_6);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = theme::GAP_6;
+        // The paperclip: a picture joins the next message.
+        if crate::widgets::icon_button(ui, crate::icons::Icon::Attach, 16.0, tl!("Attach a picture"), false).clicked()
+            && let Some(pick) = app.services.pick_image.as_ref()
+        {
+            actions.attach = pick();
+        }
+        // The model chip: the preset in use; clicking it opens the preset menu.
+        let label = preset_label(app);
+        let chip = crate::widgets::chip(ui, &label, crate::widgets::ChipKind::Neutral);
+        egui::Popup::menu(&chip).show(|ui| {
+            for p in client::PRESETS {
+                let hit = app.assistant.preset == p.id;
+                let text = if p.model.is_empty() { p.label.to_string() } else { format!("{} · {}", p.label, p.model) };
+                if ui.selectable_label(hit, RichText::new(text).small()).clicked() {
+                    actions.preset = Some(p.id);
+                }
+            }
+        });
+        if app.assistant.provider.ready().is_err() {
+            ui.label(RichText::new(tl!("needs a provider")).color(t.compare_other).small());
+        }
+        if running {
+            // The mouse's way to steer: the keys do the same.
+            let now = crate::widgets::button(ui, "Send now", crate::widgets::Kind::Ghost);
+            if now.on_hover_text(tl!("The model reads it at its next tool call")).clicked() {
+                actions.send = true;
+                actions.steer_now = true;
+            }
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = theme::GAP_6;
+            // The pane is a dock tab and often narrow: the hint is the first thing to give way,
+            // and it never clips at the edge (the full sentence needs ~260 pt).
+            let room = ui.available_width();
+            if room > 260.0 {
+                ui.label(RichText::new(tl!("Enter to send, Shift+Enter for a new line")).color(t.text_faint).small());
+            } else if room > 120.0 {
+                ui.label(RichText::new(tl!("Enter sends")).color(t.text_faint).small());
+            }
+            if let Some(note) = app.assistant.note.clone() {
+                ui.add(egui::Label::new(RichText::new(note.clone()).color(t.compare_other).small()).truncate()).on_hover_text(note);
+            }
+            context_meter(ui, t, &app.assistant.messages);
+        });
+    });
+}
+
+/// What the composer's chip says: the provider preset in use, or the model once the URL has been
+/// typed by hand.
+fn preset_label(app: &crate::CadApp) -> String {
+    match client::preset(&app.assistant.preset) {
+        Some(p) => p.label.to_string(),
+        None if !app.assistant.provider.model.trim().is_empty() => app.assistant.provider.model.clone(),
+        None => tl!("No model").to_string(),
     }
+}
+
+/// What the Enter key means in the composer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum KeyAction {
+    /// No Enter was pressed.
+    None,
+    /// Send the message (queued while a turn runs).
+    Send,
+    /// Send now: the running model reads it at its next tool call.
+    Steer,
+    /// Shift+Enter: a newline at the caret.
+    Newline,
+}
+
+/// Enter sends, Shift+Enter inserts a newline, Ctrl/Cmd+Enter steers the running turn. The field's
+/// own return key is off (`.return_key(None)`), so each key means exactly this and nothing else.
+fn composer_key(enter: bool, modifiers: egui::Modifiers) -> KeyAction {
+    if !enter {
+        return KeyAction::None;
+    }
+    if modifiers.shift {
+        return KeyAction::Newline;
+    }
+    if modifiers.command || modifiers.ctrl { KeyAction::Steer } else { KeyAction::Send }
+}
+
+/// Insert a newline at the field's caret (at the end when the caret is unknown). The caret moves
+/// past it, so typing continues on the new line.
+fn insert_newline(ctx: &egui::Context, id: egui::Id, input: &mut String) {
+    let at = egui::text_edit::TextEditState::load(ctx, id).and_then(|s| s.cursor.char_range()).map(|r| r.primary.index);
+    let byte = at.and_then(|i| input.char_indices().nth(i.0).map(|(b, _)| b)).unwrap_or(input.len());
+    input.insert(byte, '\n');
+    if let Some(mut state) = egui::text_edit::TextEditState::load(ctx, id) {
+        let next = input[..byte].chars().count() + 1;
+        state.cursor.set_char_range(Some(egui::text::CCursorRange::one(egui::text::CCursor::new(next))));
+        state.store(ctx, id);
+    }
+}
+
+/// The composer's action: an accent circle with an arrow while the reader can send, a square
+/// while a turn runs (pressing it stops the turn).
+fn action_button(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, running: bool, actions: &mut Actions) {
+    let side = theme::CONTROL_H_BUTTON;
+    let (rect, response) = ui.allocate_exact_size(vec2(side, side), egui::Sense::click());
+    let ready = running || !app.assistant.input.trim().is_empty() || !app.assistant.attachments.is_empty();
+    let fill = if !ready {
+        t.control
+    } else if response.hovered() {
+        t.accent.gamma_multiply(theme::HOVER_OPACITY)
+    } else {
+        t.accent
+    };
+    let ink = if ready { t.on_accent } else { t.text_faint };
+    ui.painter().circle_filled(rect.center(), side / 2.0, fill);
+    if running {
+        let s = side * 0.32;
+        ui.painter().rect_filled(egui::Rect::from_center_size(rect.center(), vec2(s, s)), theme::RADIUS_CONTROL, ink);
+    } else {
+        send_glyph(ui.painter(), rect, ink);
+    }
+    let label = if running { tl!("Stop") } else { tl!("Send") };
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ready, label));
+    crate::control::record_widget(ui, &response, label, "button", None);
+    if response.clicked() && ready {
+        if running {
+            actions.stop = true;
+        } else {
+            actions.send = true;
+        }
+    }
+}
+
+/// The send arrow: a filled triangle pointing up, drawn here because the icon set has no arrow.
+fn send_glyph(painter: &egui::Painter, rect: egui::Rect, colour: Color32) {
+    let c = rect.center();
+    let h = rect.width() * 0.22;
+    painter.add(egui::Shape::convex_polygon(
+        vec![pos2(c.x, c.y - h), pos2(c.x - h, c.y + h * 0.75), pos2(c.x + h, c.y + h * 0.75)],
+        colour,
+        egui::Stroke::NONE,
+    ));
 }
 
 /// How full the context is: the characters the conversation will send, of the budget the request
@@ -1134,6 +1669,220 @@ fn context_usage(messages: &[Message]) -> (usize, usize) {
     (total, tool)
 }
 
+// ---------------------------------------------------------------------------------------------
+// Source. The drawing as CadScript: fetched over the control channel, cached against the drawing
+// revision, editable, and rebuildable. The call is answered on the interface thread like every
+// other control request, so a reply is waited for on its own thread and polled here — the
+// interface never blocks, and a call the channel does not know yet is a quiet row, not a panic.
+// ---------------------------------------------------------------------------------------------
+
+/// The drawing the Source tab caches against: which document, and how many changes it has seen.
+fn source_key(app: &crate::CadApp) -> Option<(u64, u64)> {
+    app.session.state().ok().map(|st| (st.uid, st.revision))
+}
+
+/// Take what the in-flight `cadscript` call answered, if anything.
+fn drain_source(app: &mut crate::CadApp) {
+    let Some(rx) = app.assistant.source.rx.take() else { return };
+    match rx.try_recv() {
+        Ok(reply) => {
+            let waiting = app.assistant.source.waiting.take();
+            handle_source_reply(app, waiting, &reply);
+        }
+        Err(TryRecvError::Empty) => app.assistant.source.rx = Some(rx),
+        Err(TryRecvError::Disconnected) => {
+            app.assistant.source.fetching = false;
+            app.assistant.source.waiting = None;
+            app.assistant.source.error = Some(tl!("The drawing's script could not be read.").to_string());
+        }
+    }
+}
+
+/// Ask for a fresh copy when the reader opened the tab, pressed `Rebuild`, or the drawing changed.
+fn maybe_fetch_source(app: &mut crate::CadApp, ctx: &egui::Context) {
+    let key = source_key(app);
+    if key != app.assistant.source.key {
+        app.assistant.source.needs = true;
+    }
+    if app.assistant.source.needs && !app.assistant.source.fetching {
+        app.assistant.source.needs = false;
+        app.assistant.source.issued = key;
+        request_source(app, ctx, Waiting::Source, "cadscript.source", serde_json::json!({}));
+    }
+}
+
+/// Send one `cadscript` call and wait for its reply on a thread of its own. The pane keeps
+/// repainting while `fetching` is set, so the interface thread drains the request as usual.
+fn request_source(app: &mut crate::CadApp, ctx: &egui::Context, kind: Waiting, method: &str, params: Value) {
+    let pending = app.assistant.control_call(method, params);
+    let (tx, rx) = channel();
+    let ctx = ctx.clone();
+    app.assistant.source.rx = Some(rx);
+    app.assistant.source.fetching = true;
+    app.assistant.source.waiting = Some(kind);
+    app.assistant.source.error = None;
+    if kind == Waiting::Rebuild {
+        app.assistant.source.output.clear();
+    }
+    let spawned = std::thread::Builder::new().name("cadcraft-cadscript".into()).spawn(move || {
+        let reply = pending.wait(SOURCE_TIMEOUT);
+        let _ = tx.send(reply);
+        ctx.request_repaint();
+    });
+    if let Err(e) = spawned {
+        app.assistant.source.fetching = false;
+        app.assistant.source.waiting = None;
+        app.assistant.source.rx = None;
+        app.assistant.source.error = Some(format!("{} {e}", tl!("The drawing's script could not be read:")));
+    }
+}
+
+/// Take a `cadscript` answer: the script into the editor, or a rebuild's output and error.
+fn handle_source_reply(app: &mut crate::CadApp, waiting: Option<Waiting>, reply: &Value) {
+    match waiting {
+        Some(Waiting::Source) => {
+            app.assistant.source.fetching = false;
+            // The key of the fetch, not of the moment the reply arrived: a change made while it
+            // was in flight asks for another copy on the next frame.
+            app.assistant.source.key = app.assistant.source.issued;
+            match reply_payload(reply) {
+                Ok(payload) => match payload.get("text").and_then(Value::as_str).or_else(|| payload.as_str()) {
+                    Some(text) => {
+                        app.assistant.source.text = text.to_string();
+                        app.assistant.source.loaded = true;
+                        app.assistant.source.error = None;
+                    }
+                    None => app.assistant.source.error = Some(tl!("The drawing's script came back without text.").to_string()),
+                },
+                Err(e) => app.assistant.source.error = Some(e),
+            }
+        }
+        Some(Waiting::Rebuild) => {
+            app.assistant.source.fetching = false;
+            match reply_payload(reply) {
+                Ok(payload) => {
+                    app.assistant.source.output = payload
+                        .get("output")
+                        .and_then(Value::as_array)
+                        .map(|lines| lines.iter().filter_map(|l| l.as_str().map(str::to_string)).collect())
+                        .unwrap_or_default();
+                    app.assistant.source.error = payload.get("error").and_then(Value::as_str).map(str::to_string);
+                    if payload.get("ok").and_then(Value::as_bool) == Some(false) && app.assistant.source.error.is_none() {
+                        app.assistant.source.error = Some(tl!("The rebuild was refused.").to_string());
+                    }
+                }
+                Err(e) => app.assistant.source.error = Some(e),
+            }
+        }
+        None => app.assistant.source.fetching = false,
+    }
+}
+
+/// The payload of a control reply: `{"ok":true,"result":…}` unwrapped, a bare payload as it came,
+/// and the error text when the call failed.
+fn reply_payload(reply: &Value) -> Result<&Value, String> {
+    match reply.get("ok").and_then(Value::as_bool) {
+        Some(true) => Ok(reply.get("result").unwrap_or(reply)),
+        Some(false) => Err(reply.get("error").and_then(Value::as_str).map(str::to_string).unwrap_or_else(|| reply.to_string())),
+        None => Ok(reply),
+    }
+}
+
+/// The CAD face: the drawing as CadScript — the toolbar, the quiet rows that report what the
+/// channel said, and the script itself in a gutter-lined editor.
+fn source_tab(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens, actions: &mut Actions) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = theme::GAP_6;
+        if crate::widgets::button(ui, "Copy", crate::widgets::Kind::Ghost).clicked() {
+            actions.source_copy = true;
+        }
+        if crate::widgets::button(ui, "Rebuild", crate::widgets::Kind::Ghost).clicked() {
+            actions.source_rebuild = true;
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let lines = app.assistant.source.text.lines().count();
+            let chars = app.assistant.source.text.chars().count();
+            ui.label(RichText::new(crate::tf!("{lines} lines · {chars} chars", lines = lines, chars = chars)).color(t.text_faint).small());
+        });
+    });
+    if let Some(error) = app.assistant.source.error.clone() {
+        ui.add(egui::Label::new(RichText::new(error.clone()).color(t.compare_other).small()).truncate()).on_hover_text(error);
+    }
+    // The rebuild's messages, capped: a 46-object drawing answers every line with a handle, and
+    // an uncapped list would push the editor off the pane. The last few are the ones that matter.
+    const OUTPUT_ROWS: usize = 6;
+    let output = &app.assistant.source.output;
+    let start = output.len().saturating_sub(OUTPUT_ROWS);
+    if start > 0 {
+        ui.add(egui::Label::new(RichText::new(crate::tf!("… {n} earlier message(s)", n = start)).color(t.text_faint).small()).truncate());
+    }
+    for line in output.iter().skip(start) {
+        ui.add(egui::Label::new(RichText::new(line.clone()).color(t.text_faint).small()).truncate()).on_hover_text(line);
+    }
+    if !app.assistant.source.loaded && app.assistant.source.error.is_none() {
+        ui.add_space(theme::GAP_6);
+        ui.label(RichText::new(tl!("Loading...")).color(t.text_faint).small());
+    }
+    ui.add_space(theme::GAP_6);
+    let height = (ui.available_height() - theme::GAP_8).max(theme::CONTROL_H_BUTTON * 3.0);
+    egui::Frame::new()
+        .fill(t.field)
+        .stroke(egui::Stroke::new(theme::HAIRLINE, t.border))
+        .corner_radius(theme::RADIUS_CARD)
+        .inner_margin(egui::Margin::symmetric(theme::GAP_6 as i8, theme::GAP_4 as i8))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.set_height(height);
+            egui::ScrollArea::vertical().id_salt("assistant-source").auto_shrink([false, false]).show(ui, |ui| {
+                source_editor(app, ui, t);
+            });
+        });
+}
+
+/// The script in a gutter-lined editor: line numbers in mono at the left, a frameless multiline
+/// field beside them. The field is the reader's to fix; `Rebuild` runs what it holds.
+fn source_editor(app: &mut crate::CadApp, ui: &mut egui::Ui, t: &Tokens) {
+    let row_h = ui.fonts_mut(|f| f.row_height(&theme::mono())) + ui.spacing().extra_text_line_spacing;
+    let gutter_w = ui.painter().layout_no_wrap("0000".to_owned(), theme::mono(), t.text_faint).size().x;
+    let gap = theme::GAP_6;
+    let edit_w = (ui.available_width() - gutter_w - gap).max(theme::CONTROL_H_INPUT);
+    let heights = line_heights(ui, &app.assistant.source.text, edit_w, row_h);
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = gap;
+        let total: f32 = heights.iter().sum::<f32>().max(row_h);
+        let (rect, _) = ui.allocate_exact_size(vec2(gutter_w, total), egui::Sense::hover());
+        let mut y = rect.top();
+        for (i, h) in heights.iter().enumerate() {
+            ui.painter().text(pos2(rect.right(), y + row_h / 2.0), Align2::RIGHT_CENTER, (i + 1).to_string(), theme::mono(), t.text_faint);
+            y += h;
+        }
+        let edit = egui::TextEdit::multiline(&mut app.assistant.source.text)
+            .desired_rows(1)
+            .desired_width(edit_w)
+            .font(theme::mono())
+            .frame(egui::Frame::NONE);
+        ui.add(edit);
+    });
+}
+
+/// One height per line: how tall the line is once the editor wraps it at `wrap`, so a wrapped line
+/// keeps its number on the first of its rows. At most [`SOURCE_GUTTER_LINES`] lines are measured —
+/// the loop and its allocation are bounded whatever the text holds, and a script that long simply
+/// stops showing numbers.
+fn line_heights(ui: &egui::Ui, text: &str, wrap: f32, row_h: f32) -> Vec<f32> {
+    let mut heights: Vec<f32> = Vec::new();
+    for line in text.lines().take(SOURCE_GUTTER_LINES) {
+        let mut job = egui::text::LayoutJob::default();
+        job.wrap.max_width = wrap;
+        job.append(line, 0.0, egui::TextFormat { font_id: theme::mono(), color: Color32::PLACEHOLDER, ..Default::default() });
+        heights.push(ui.fonts_mut(|f| f.layout_job(job)).size().y.max(row_h));
+    }
+    if heights.is_empty() {
+        heights.push(row_h);
+    }
+    heights
+}
+
 /// A thumbnail for one attachment, loaded once and kept.
 fn thumb_for(app: &mut crate::CadApp, ctx: &egui::Context, a: &Attachment) -> Option<egui::TextureHandle> {
     if a.thumb.is_some() {
@@ -1155,6 +1904,21 @@ fn apply(app: &mut crate::CadApp, ctx: &egui::Context, actions: Actions) {
     }
     if actions.clear {
         app.assistant.clear();
+    }
+    if let Some(mode) = actions.mode {
+        app.assistant.open_tab(mode);
+    }
+    if actions.source_copy {
+        ctx.copy_text(app.assistant.source.text.clone());
+    }
+    if actions.source_rebuild && !app.assistant.source.fetching {
+        app.assistant.source.issued = source_key(app);
+        let text = app.assistant.source.text.clone();
+        request_source(app, ctx, Waiting::Rebuild, "cadscript.run", serde_json::json!({ "text": text, "replace": true }));
+    }
+    if actions.scroll_to_bottom {
+        app.assistant.follow = true;
+        ctx.request_repaint();
     }
     if let Some(id) = actions.preset
         && let Some(p) = client::preset(id)
@@ -1492,5 +2256,112 @@ mod tests {
         assert!(!a.cancel.load(Ordering::Relaxed));
         a.stop();
         assert!(a.cancel.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn the_tab_strip_switches_the_mode_and_asks_for_the_source() {
+        let mut a = Assistant::default();
+        assert_eq!(a.mode, Mode::Chat, "the conversation is the face the pane opens with");
+        a.open_tab(Mode::Source);
+        assert_eq!(a.mode, Mode::Source);
+        assert!(a.source.needs, "opening the tab asks for a fresh copy of the drawing's script");
+        a.source.needs = false;
+        a.open_tab(Mode::Chat);
+        assert_eq!(a.mode, Mode::Chat);
+        assert!(!a.source.needs, "the conversation does not fetch the script");
+        a.open_tab(Mode::Source);
+        assert!(a.source.needs, "coming back to the tab asks again");
+    }
+
+    #[test]
+    fn markdown_lite_reads_the_subset_it_promises() {
+        let text = "# Wing\n\nA **bold** word and `code`.\n\n- one\n- two\n\n1. first\n2. second\n\n```lisp\n(cmd \"circle\")\n```";
+        let blocks = parse_markdown_lite(text);
+        assert_eq!(blocks.len(), 5, "{blocks:?}");
+        match &blocks[0] {
+            Block::Heading { level, spans } => {
+                assert_eq!(*level, 1);
+                assert_eq!(spans, &vec![Span::Text("Wing".into())]);
+            }
+            other => panic!("a heading leads: {other:?}"),
+        }
+        match &blocks[1] {
+            Block::Paragraph(spans) => {
+                assert!(spans.contains(&Span::Bold("bold".into())), "{spans:?}");
+                assert!(spans.contains(&Span::Code("code".into())), "{spans:?}");
+            }
+            other => panic!("a paragraph follows: {other:?}"),
+        }
+        match &blocks[2] {
+            Block::Bullets(items) => assert_eq!(items.len(), 2, "{items:?}"),
+            other => panic!("a bullet list: {other:?}"),
+        }
+        match &blocks[3] {
+            Block::Ordered(items) => assert_eq!(items.len(), 2, "{items:?}"),
+            other => panic!("an ordered list: {other:?}"),
+        }
+        match &blocks[4] {
+            Block::Code { language, text } => {
+                assert_eq!(language, "lisp");
+                assert_eq!(text, "(cmd \"circle\")");
+            }
+            other => panic!("a fenced block: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_fence_without_its_close_still_yields_its_code() {
+        let blocks = parse_markdown_lite("```\n(cmd \"line\")\n");
+        assert_eq!(blocks, vec![Block::Code { language: String::new(), text: "(cmd \"line\")".into() }]);
+    }
+
+    #[test]
+    fn an_unclosed_marker_stays_as_written() {
+        let spans = parse_inline("a **b and `c");
+        assert_eq!(spans, vec![Span::Text("a ".into()), Span::Text("**b and `c".into())]);
+    }
+
+    #[test]
+    fn the_composer_keys_send_steer_or_leave_the_newline_alone() {
+        let plain = egui::Modifiers::default();
+        assert_eq!(composer_key(true, plain), KeyAction::Send);
+        assert_eq!(composer_key(false, plain), KeyAction::None, "nothing was pressed");
+        let shift = egui::Modifiers { shift: true, ..Default::default() };
+        assert_eq!(composer_key(true, shift), KeyAction::Newline, "Shift+Enter is a newline");
+        let ctrl = egui::Modifiers { ctrl: true, ..Default::default() };
+        assert_eq!(composer_key(true, ctrl), KeyAction::Steer, "Ctrl+Enter steers the running turn");
+        let cmd = egui::Modifiers { command: true, ..Default::default() };
+        assert_eq!(composer_key(true, cmd), KeyAction::Steer);
+        // Shift wins over the steering modifiers: a newline is never a send.
+        let both = egui::Modifiers { shift: true, ctrl: true, ..Default::default() };
+        assert_eq!(composer_key(true, both), KeyAction::Newline);
+    }
+
+    #[test]
+    fn a_newline_goes_in_at_the_caret() {
+        let ctx = egui::Context::default();
+        let id = egui::Id::unique("assistant-test-field");
+        let mut input = "one\ntwo".to_string();
+        // No stored caret: the end of the text is the caret.
+        insert_newline(&ctx, id, &mut input);
+        assert_eq!(input, "one\ntwo\n");
+        let mut state = egui::text_edit::TextEditState::default();
+        state.cursor.set_char_range(Some(egui::text::CCursorRange::one(egui::text::CCursor::new(3))));
+        state.store(&ctx, id);
+        insert_newline(&ctx, id, &mut input);
+        assert_eq!(input, "one\n\ntwo\n", "the newline lands where the caret was");
+    }
+
+    #[test]
+    fn a_control_reply_reads_in_either_shape() {
+        // The channel's envelope, as `control::handle` answers it.
+        let wrapped = json!({"ok": true, "result": {"text": "(cmd \"line\")"}});
+        let payload = reply_payload(&wrapped).expect("a successful call has a payload");
+        assert_eq!(payload.get("text").and_then(Value::as_str), Some("(cmd \"line\")"));
+        // A failure carries the reason — the other worker's methods may not exist yet.
+        let failed = json!({"ok": false, "error": "unknown method `cadscript.source`"});
+        assert_eq!(reply_payload(&failed), Err("unknown method `cadscript.source`".to_string()));
+        // A bare payload is taken as it came.
+        assert!(reply_payload(&json!({"text": "x"})).is_ok());
     }
 }
