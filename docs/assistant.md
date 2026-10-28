@@ -80,8 +80,27 @@ preferences live), so it survives restarts. The key is stored in that profile in
 your machine's profile, and a key that cannot be read cannot be used, but do not paste a key you
 would not leave in a local file.
 
-**The browser build has no assistant yet.** The pane needs a worker thread and a socket; the web
-build says so instead of pretending.
+## In the browser
+
+The SolidJS interface (`apps/ui`) carries the same assistant: **Window ▸ Assistant** (Ctrl+7)
+opens the composer over the drawing — Cursor's measured recipe (`.design-system/cursor/recipes.md`
+§1: the 5px box with a 6px padding and gap, the border that turns active on focus, the ghost model
+chip, the `0 0 4px 1px` shadow, the ripple while a turn runs), the same one the desktop pane
+follows. It speaks the same OpenAI chat protocol with the same one tool — `run`, AutoLISP in the
+open drawing — so a model that works in the desktop works here, and the model's code reaches the
+same engine through the wasm facade (`execute("run", …)`).
+
+What the browser changes:
+
+- **The provider lives in the browser** (`localStorage`), set from the composer's model button;
+  the preset list is the desktop's. The key is in the browser's storage in clear text — treat it
+  as you would a key in a local file. A local server (Ollama, LM Studio) needs no key, and it must
+  allow the page's origin (`OLLAMA_ORIGINS` for Ollama).
+- **There is no filesystem.** A definition a run writes with `(defun …)` is kept for the session —
+  live in the drawing's namespace, reported as kept — but not reloaded next time, and `(render)`
+  answers that the browser has nowhere to write a PNG. Everything else behaves as on the desktop:
+  `(cmd …)`, `(commands)`, `(describe "id")`, `(inspect)`, measurements.
+- Attachments (paperclip, paste, drop) are not in the browser composer yet.
 
 ## The namespace
 

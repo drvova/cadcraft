@@ -373,6 +373,8 @@ impl Facade {
             "entityCount": st.doc.entity_count(),
             "currentLayer": st.doc.header.str("CLAYER", "0"),
             "space": st.space.tab_name(),
+            // What the assistant's briefing names: the drawing's units in words (`INSUNITS`).
+            "units": cadcraft_engine::units::name(st.doc.header.i64("INSUNITS", 1)),
         })
         .to_string()
     }
@@ -1051,6 +1053,30 @@ mod tests {
         let v = parse(&f.view());
         assert_eq!(v["min"][0], json!(x1 + w));
         assert_eq!(v["max"][0], json!(x1 + 2.0 * w));
+    }
+
+    /// The assistant's one tool, end to end in wasm: `run` evaluates code in the drawing's
+    /// namespace, and code can draw through `(cmd …)`. The browser's assistant loop depends on
+    /// exactly this: the same command the desktop pane and MCP call.
+    #[test]
+    fn the_run_command_works_in_the_wasm_facade() {
+        let mut f = Facade::sample();
+        let before = parse(&f.state())["entityCount"].as_u64().unwrap();
+        // Arithmetic: the interpreter answers.
+        let r = parse(&f.execute("run", r#"{"code":"(+ 1 2)"}"#));
+        assert_eq!(r["ok"], json!(true), "{r}");
+        assert_eq!(r["result"]["value"], json!("3"), "{r}");
+        // Drawing: `(cmd …)` reaches the engine, and the state reflects it.
+        let r = parse(&f.execute("run", r#"{"code":"(cmd \"circle\" '((CENTER . (0 0)) (RADIUS . 5)))"}"#));
+        assert_eq!(r["ok"], json!(true), "{r}");
+        assert_eq!(parse(&f.state())["entityCount"].as_u64().unwrap(), before + 1);
+        // Empty code returns the manual (the namespace's own words).
+        let r = parse(&f.execute("run", "{}"));
+        assert!(r["result"]["manual"].as_str().is_some_and(|m| m.contains("cmd")), "the manual names the namespace");
+        // A failure is reported, not a panic.
+        let r = parse(&f.execute("run", r#"{"code":"(no-such-fn 1)"}"#));
+        assert_eq!(r["ok"], json!(true), "a LISP error is a report: {r}");
+        assert!(r["result"]["error"].as_str().is_some(), "{r}");
     }
 
     /// A facade with no drawing at all (the tolerant replies of `selection`/`format_point`).

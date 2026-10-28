@@ -63,7 +63,18 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
   area: "M4 19L12 5l8 14z M8 13h8 M10 9h4",
   /** A ring with an information stem. */
   "ui.dialog.about": "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18 M12 8h0 M12 11v6",
+  /** An arrow rising out of a floor line: send (the composer's right-hand action). */
+  send: "M12 19V5 M6 11l6-6 6 6",
+  /** A solid square: stop. */
+  stop: "M7 7h10v10H7z",
 };
+
+/**
+ * The composer's icons (`AssistantPane.tsx`): the send and stop glyphs. They live in this map
+ * because it is the one icon set, and this list is what lets the icon test tell a used path from
+ * an orphan one.
+ */
+export const COMPOSER_ICONS: readonly string[] = ["send", "stop"];
 
 /** The path for a toolbar id, or null when there is none. */
 export function iconPath(id: string): string | null {

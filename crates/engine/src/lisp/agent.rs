@@ -386,6 +386,12 @@ fn example_for(id: &str) -> &'static str {
 /// The path is optional and comes first when it is there: `(render)`, `(render 800 600)`,
 /// `(render "out.png" 1200 800)`, `(render 800 600 0 0 10 5)`.
 fn render(ctx: &mut Ctx<'_>, a: Vec<Value>) -> Result<Flow, LispError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (ctx, a);
+        return Err(LispError::new("render: the browser build has no filesystem to write a PNG to; the drawing is on screen"));
+    }
+    #[cfg(not(target_arch = "wasm32"))]
     if a.len() > 7 {
         return Err(args_err(false));
     }
@@ -505,8 +511,23 @@ fn file_for(name: &str) -> PathBuf {
     dir().join(format!("{stem}.lsp"))
 }
 
+/// Whether a kept definition outlives the session. The browser build has no filesystem: a
+/// definition is live in the drawing's namespace for the session and never written to disk.
+#[cfg(target_arch = "wasm32")]
+pub fn persistent() -> bool {
+    false
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn persistent() -> bool {
+    true
+}
+
 /// The definitions kept on disk, by name.
 pub fn list() -> Vec<String> {
+    if !persistent() {
+        return Vec::new();
+    }
     let Ok(entries) = std::fs::read_dir(dir()) else { return Vec::new() };
     let mut names: Vec<String> = entries
         .filter_map(|e| e.ok())
@@ -517,15 +538,23 @@ pub fn list() -> Vec<String> {
     names
 }
 
-/// Keep one definition: its name and the exact source the model wrote.
+/// Keep one definition: its name and the exact source the model wrote. In the browser there is
+/// nothing to write — the definition is already live in the namespace — so the call succeeds
+/// and the run reports it as kept, truthfully, for this session.
 pub fn save(name: &str, source: &str) -> std::io::Result<()> {
+    if !persistent() {
+        return Ok(());
+    }
     let d = dir();
     std::fs::create_dir_all(&d)?;
     std::fs::write(file_for(name), source.trim_end())
 }
 
-/// Delete one; `false` when there was nothing to delete.
+/// Delete one; `false` when there was nothing to delete (always, in the browser).
 pub fn delete(name: &str) -> bool {
+    if !persistent() {
+        return false;
+    }
     let path = file_for(name);
     let existed = path.exists();
     if existed {
@@ -575,6 +604,9 @@ fn is_literal(v: &Value) -> bool {
 /// own: a broken one is reported and the rest still load, so a bad definition can never stop a
 /// session from starting. Returns what was loaded and what failed.
 pub fn load(s: &mut Session) -> (Vec<String>, Vec<(String, String)>) {
+    if !persistent() {
+        return (Vec::new(), Vec::new());
+    }
     let mut loaded = Vec::new();
     let mut broken = Vec::new();
     for name in list() {

@@ -71,6 +71,11 @@
   --scrollbar: rgba(103, 103, 103, 0.31);
   --scrollbar-hover: rgba(103, 103, 103, 0.62);
 
+  /* The composer's border roles: Cursor's commandCenter.inactiveBorder/activeBorder (its
+     foreground at .25/.30 alpha; here the base colour at the same visual weight). */
+  --composer-border: rgba(228, 228, 228, 0.14);
+  --composer-border-active: rgba(228, 228, 228, 0.28);
+
   /* ---- Misc (on_accent, crosshair, paper) ---- */
   --on-accent: #141414;
   --crosshair: #e4e4e4;
@@ -162,4 +167,6 @@
   --error: #b3261e;
   --layer-current: #d5dfe9;
   --grip-hot: #e34671;
+  --composer-border: rgba(31, 31, 31, 0.14);
+  --composer-border-active: rgba(31, 31, 31, 0.28);
 }

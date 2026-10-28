@@ -35,6 +35,7 @@ export const UI_ITEMS: readonly UiItem[] = [
   { id: "ui.saveas", label: "Save As...", menu: [] },
   { id: "ui.sample", label: "Open Sample Drawing", menu: ["Help", "Open Sample Drawing"] },
   { id: "ui.panel.properties", label: "Properties Inspector", menu: ["Window", "Properties Inspector"], shortcut: "Cmd+1" },
+  { id: "ui.toggle.assistant", label: "Assistant", menu: ["Window", "Assistant"], shortcut: "Cmd+7" },
   { id: "ui.panel.layers", label: "Layers Palette", menu: ["Window", "Layers Palette"] },
   { id: "ui.animations.system", label: "Use System Setting", menu: ["View", "Accessibility", "Animation Effects", "Use System Setting"] },
   { id: "ui.animations.on", label: "On", menu: ["View", "Accessibility", "Animation Effects", "On"] },

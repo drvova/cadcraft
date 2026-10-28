@@ -27,7 +27,7 @@ describe("parseDrawingState", () => {
     const state = parseDrawingState(
       JSON.stringify({ title: "plate.dxf", dirty: true, revision: 12, extents: [0, 0, 100, 60], layerCount: 4, entityCount: 7, currentLayer: "Hidden", space: "model" }),
     );
-    expect(state).toEqual({ title: "plate.dxf", dirty: true, revision: 12, extents: { x0: 0, y0: 0, x1: 100, y1: 60 }, layerCount: 4, entityCount: 7, currentLayer: "Hidden", space: "model" });
+    expect(state).toEqual({ title: "plate.dxf", dirty: true, revision: 12, extents: { x0: 0, y0: 0, x1: 100, y1: 60 }, layerCount: 4, entityCount: 7, currentLayer: "Hidden", space: "model", units: "" });
     const alt = parseDrawingState(JSON.stringify({ name: "x", modified: false, bounds: { min: [0, 0], max: [1, 1] }, layers: [{}, {}], entities: [{}, {}, {}], clayer: "0", activeSpace: "layout1" }));
     expect(alt?.title).toBe("x");
     expect(alt?.dirty).toBe(false);

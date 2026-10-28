@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { ICON_PATHS, iconPath } from "./icons";
+import { COMPOSER_ICONS, ICON_PATHS, iconPath } from "./icons";
 import { TOOLBAR } from "./components/ToolStrip";
 
 /** SVG path data: command letters, digits and the separators between numbers. */
@@ -43,10 +43,11 @@ describe("the toolbar table", () => {
 });
 
 describe("ICON_PATHS", () => {
-  test("every toolbar icon id has a path, and there are no unused paths", () => {
+  test("every toolbar icon id has a path, and the only extra paths are the composer's", () => {
     const iconIds = entries.map((entry) => entry.icon);
     for (const id of iconIds) expect(iconPath(id)).not.toBeNull();
-    expect([...Object.keys(ICON_PATHS)].sort()).toEqual([...new Set(iconIds)].sort());
+    // The composer's own two glyphs are the only paths no toolbar entry draws.
+    expect([...Object.keys(ICON_PATHS)].sort()).toEqual([...new Set([...iconIds, ...COMPOSER_ICONS])].sort());
   });
 
   test("every path is non-empty, well-formed SVG path data starting with a move", () => {

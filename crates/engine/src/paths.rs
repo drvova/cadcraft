@@ -40,15 +40,25 @@ pub fn config_dir_from(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Opti
 /// per test process (still shared by every `Session` in it, so loading a definition a previous
 /// run kept is tested for real), unless a test asked for its own with `CADCRAFT_DEFINITIONS`.
 pub fn definitions_dir() -> PathBuf {
-    if let Some(dir) = std::env::var_os("CADCRAFT_DEFINITIONS").filter(|v| !v.is_empty()) {
-        return PathBuf::from(dir);
+    #[cfg(target_arch = "wasm32")]
+    {
+        // The browser build has no filesystem and no environment: the path is only ever
+        // formatted, never read or written (`lisp::agent` gates persistence on `persistent()`),
+        // so a fixed value keeps callers working without touching `temp_dir`.
+        PathBuf::from("/cadcraft-definitions")
     }
-    #[cfg(test)]
-    return std::env::temp_dir().join(format!("cadcraft-definitions-test-{}", std::process::id()));
-    #[cfg(not(test))]
-    match config_dir() {
-        Some(dir) => dir.join("definitions"),
-        None => std::env::temp_dir().join(format!("cadcraft-definitions-{}", std::process::id())),
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if let Some(dir) = std::env::var_os("CADCRAFT_DEFINITIONS").filter(|v| !v.is_empty()) {
+            return PathBuf::from(dir);
+        }
+        #[cfg(test)]
+        return std::env::temp_dir().join(format!("cadcraft-definitions-test-{}", std::process::id()));
+        #[cfg(not(test))]
+        match config_dir() {
+            Some(dir) => dir.join("definitions"),
+            None => std::env::temp_dir().join(format!("cadcraft-definitions-{}", std::process::id())),
+        }
     }
 }
 

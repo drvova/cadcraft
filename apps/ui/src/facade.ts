@@ -71,6 +71,8 @@ export interface DrawingState {
   entityCount: number;
   currentLayer: string;
   space: string;
+  /** The drawing's units in words (`INSUNITS`), as the assistant's briefing names them. */
+  units: string;
 }
 
 export function parseDrawingState(raw: string): DrawingState | null {
@@ -101,6 +103,7 @@ export function parseDrawingState(raw: string): DrawingState | null {
     entityCount: typeof entities === "number" ? Math.round(entities) : Array.isArray(entities) ? entities.length : 0,
     currentLayer: asString(first("currentLayer", "current", "clayer")) ?? "0",
     space: asString(first("space", "activeSpace")) ?? "model",
+    units: asString(first("units", "insunits")) ?? "",
   };
 }
 

@@ -24,6 +24,7 @@ import { TopBar } from "./components/TopBar";
 import { MenuBar } from "./components/MenuBar";
 import { ToolStrip } from "./components/ToolStrip";
 import { StatusBar } from "./components/StatusBar";
+import { AssistantPane } from "./components/AssistantPane";
 import { CanvasView } from "./components/CanvasView";
 import { LayersPanel } from "./components/LayersPanel";
 import { PropertiesPanel } from "./components/PropertiesPanel";
@@ -81,6 +82,7 @@ export function App(props: AppProps): JSX.Element {
   const [showStatusbar, setShowStatusbar] = createSignal(true);
   const [showCmdline, setShowCmdline] = createSignal(true);
   const [showLayers, setShowLayers] = createSignal(true);
+  const [showAssistant, setShowAssistant] = createSignal(false);
   const [showProperties, setShowProperties] = createSignal(true);
   const [theme, setTheme] = createSignal<ThemeChoice>("dark");
   const [animations, setAnimations] = createSignal<AnimChoice>("on");
@@ -159,7 +161,13 @@ export function App(props: AppProps): JSX.Element {
     if (initial !== null) props.facade.setView(initial);
 
     // Escape clears the selection (PLAN.md C6); the command line clears its own input.
+    // Ctrl/Cmd+7 toggles the assistant, the desktop's ⌘7.
     const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "7") {
+        e.preventDefault();
+        setShowAssistant((v) => !v);
+        return;
+      }
       if (e.key !== "Escape") return;
       if (selection().length > 0) {
         props.facade.execute("select", { clear: true });
@@ -322,6 +330,9 @@ export function App(props: AppProps): JSX.Element {
       case "ui.panel.properties":
         setShowProperties((v) => !v);
         return;
+      case "ui.toggle.assistant":
+        setShowAssistant((v) => !v);
+        return;
       case "ui.toggle.cmdline":
         setShowCmdline((v) => !v);
         return;
@@ -439,6 +450,9 @@ export function App(props: AppProps): JSX.Element {
             onPick={onPick}
             onCursor={setCursor}
           />
+          <Show when={showAssistant()}>
+            <AssistantPane facade={props.facade} onChanged={refresh} />
+          </Show>
         </main>
         <aside class="rail">
           <Show when={showLayers()}>

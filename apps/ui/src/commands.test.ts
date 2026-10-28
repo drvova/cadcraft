@@ -174,6 +174,7 @@ describe("UI_ITEMS", () => {
         "ui.sample",
         "ui.panel.layers",
         "ui.panel.properties",
+        "ui.toggle.assistant",
         "ui.toggle.cmdline",
         "ui.toggle.statusbar",
         "ui.toggle.toolbar",
