@@ -14,8 +14,12 @@
  *     carries `ripple 1.2s cubic-bezier(.25,.8,.25,1)` to `scale(1.7)` (§1.14);
  *   - the provider popover: the elevated surface, the hairline stroke, radius 8, the shadow; its
  *     preset rows are the system's `Row`, its inputs `Field`, its actions `Button`.
- * The transcript follows the agent-panel grammar: a prompt in a quiet inset block, the model's
- * words plain on the surface, and each tool call one dim line that opens on click.
+ * The transcript follows the measured glass transcript (research §7): the prompt is the human
+ * bubble (the elevated surface, radius 12, the .08 hairline, 8px/12px, 15px/24px), the model's
+ * prose runs at the same 15/24 on the surface, an activity row is the 24px flat line (label .6,
+ * detail .36, trailing chevron, no hover fill) that opens 14px above its detail, a code block is
+ * the recessed surface at radius 12 with the .12 hairline and 12/18 mono, and a turn ends with
+ * the 24px action row and the 13px timestamp.
  */
 
 .assistant-panel {
@@ -94,10 +98,10 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--gap-8);
+  padding: var(--gap-16);
   display: flex;
   flex-direction: column;
-  gap: var(--gap-6);
+  gap: var(--gap-14);
 }
 
 .assistant-empty {
@@ -135,14 +139,18 @@
   color: var(--text);
 }
 
+/* The human message: the measured glass bubble — the elevated surface, radius 12, the .08
+   hairline, 8px/12px inside, the composer's 15px/24px type (research §2). */
 .assistant-prompt {
-  align-self: flex-end;
-  max-width: 90%;
-  padding: var(--gap-6) var(--gap-8);
-  background: var(--control);
-  border-radius: var(--radius-card);
+  align-self: stretch;
+  max-width: none;
+  padding: var(--gap-8) var(--gap-12);
+  background: var(--surface-elevated);
+  border: var(--hairline) solid var(--border-soft);
+  border-radius: var(--radius-block);
   color: var(--text);
-  font-size: var(--font-label);
+  font-size: var(--composer-font);
+  line-height: var(--composer-leading);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -152,10 +160,11 @@
   font-size: var(--font-chip);
 }
 
+/* The model's words: prose on the surface at the transcript's 15px/24px (research §2). */
 .assistant-text {
   color: var(--text);
-  font-size: var(--font-label);
-  line-height: 1.55;
+  font-size: var(--composer-font);
+  line-height: var(--composer-leading);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -185,26 +194,44 @@
   word-break: break-word;
 }
 
-/* A tool call is one dim line that opens on click (the agent-panel grammar). */
+/* An activity row: the measured 24px line that opens on click — the label at .6, the detail and
+   the trailing chevron at .36, no fill on hover (the flat row, research §2). */
 .assistant-tool {
   display: flex;
   align-items: center;
   gap: var(--gap-6);
   width: 100%;
-  padding: 2px var(--gap-4);
+  min-height: var(--control-h-input);
+  padding: 0;
   border: none;
-  border-radius: var(--radius-small);
+  border-radius: 0;
   background: transparent;
   color: var(--text-faint);
   font-family: var(--font-family);
-  font-size: var(--font-small);
+  font-size: var(--composer-font);
+  line-height: var(--composer-leading);
   text-align: left;
   cursor: pointer;
 }
 
 .assistant-tool:hover {
-  background: var(--control-hover);
-  color: var(--text);
+  color: var(--text-dim);
+}
+
+.assistant-tool:focus-visible {
+  outline: var(--focus-outline-w) solid var(--accent);
+  outline-offset: var(--focus-outline-offset);
+}
+
+.assistant-tool-chevron {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--text-disabled);
+}
+
+.assistant-tool-chevron .tool-icon {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
 }
 
 .assistant-tool-arrow {
@@ -213,28 +240,68 @@
 
 .assistant-tool-name {
   flex: 0 0 auto;
-  font-family: var(--font-family-mono);
 }
 
 .assistant-tool-note {
   flex: 1 1 auto;
   min-width: 0;
+  color: var(--text-disabled);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* The opened row: the content sits 14px under its header (the measured collapsible padding),
+   with no fill of its own. */
 .assistant-detail {
-  margin: 0 var(--gap-4) var(--gap-2);
-  padding: var(--gap-6);
+  margin: 0;
+  padding: var(--gap-14) 0 0;
   display: flex;
   flex-direction: column;
-  gap: var(--gap-6);
-  background: var(--chrome-dark);
-  border-radius: var(--radius-small);
+  gap: var(--gap-8);
 }
 
-.assistant-code,
+/* A code block: the measured recipe — the recessed surface, radius 12, the .12 hairline,
+   12px/18px mono with 6px/10px inside (research §2). */
+.assistant-code {
+  margin: 0;
+  padding: var(--gap-6) var(--gap-10);
+  max-height: 180px;
+  overflow: auto;
+  background: var(--surface-inset);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-block);
+  color: var(--text);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-mono);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* The copy affordance: the measured 20px overlay at the block's top-right, shown on hover. */
+.assistant-code-wrap {
+  position: relative;
+}
+
+.assistant-code-copy {
+  position: absolute;
+  top: var(--gap-4);
+  right: var(--gap-4);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .assistant-code-wrap:hover .assistant-code-copy {
+    opacity: 1;
+  }
+}
+
+.assistant-code-wrap:focus-within .assistant-code-copy {
+  opacity: 1;
+}
+
 .assistant-report {
   margin: 0;
   max-height: 180px;
@@ -242,13 +309,23 @@
   color: var(--text-dim);
   font-family: var(--font-family-mono);
   font-size: var(--font-mono);
-  line-height: 1.45;
+  line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.assistant-code {
-  color: var(--text);
+/* The turn's actions: the measured 24px icon row, the 13px timestamp at .36 (research §2). */
+.assistant-turn-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-6);
+  min-height: var(--control-h-input);
+}
+
+.assistant-time {
+  color: var(--text-disabled);
+  font-size: var(--font-body);
+  line-height: var(--composer-leading);
 }
 
 /* ---- The composer (the glass composer's recipe, research §2) ---- */

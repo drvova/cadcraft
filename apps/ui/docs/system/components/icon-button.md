@@ -12,7 +12,7 @@ Not applicable: hand-rolled — the circle, the .08 hover fill and the 14px glyp
 ## Examples
 `<IconButton icon="close" title="Close the panel" />` — the panel's close control.
 
-Real uses, 5 call sites (`rg -c "<IconButton" src/components` → `src/components/AssistantPane.tsx:4`, `src/components/ToolStrip.tsx:1`):
+Real uses, 8 call sites (`rg -c "<IconButton" src/components` → `src/components/AssistantPane.tsx:7`, `src/components/ToolStrip.tsx:1`):
 - `src/components/AssistantPane.tsx` — the composer pilot: the toolbar's attach (`soft`), stop and send (`inverted`), and each attachment chip's remove circle (`sm`).
 - `src/components/ToolStrip.tsx:80` — every tool in the strip: the glyph from the tool's icon id, the title its label and shortcut, click to invoke it.
 
@@ -33,12 +33,12 @@ Real uses, 5 call sites (`rg -c "<IconButton" src/components` → `src/component
 ## Variants
 
 ### variant
-- `ghost`: the transparent circle for a tool bar; the default. Used at 2 call sites (an attachment chip's remove and every tool in the tool strip).
+- `ghost`: the transparent circle for a tool bar; the default. Used at 5 call sites (an attachment chip's remove, the turn's copy, a tool's code copy, a reply's code copy, and every tool in the tool strip).
 - `soft`: the resting `.08` fill, for a tool that is currently on. Used at 1 call site (the composer's attach).
 - `inverted`: the ink-coloured circle with the accent-surface glyph, for the one primary action. Used at 2 call sites (the composer's stop and send).
 
 ### size
-- `sm`: the 20px circle with the 12px glyph, for a chip row. Used at 1 call site (an attachment chip's remove).
+- `sm`: the 20px circle with the 12px glyph, for a chip row. Used at 4 call sites (an attachment chip's remove, the turn's copy, a tool's code copy, a reply's code copy).
 - `md`: the 24px circle with the 14px glyph, the composer's size. Used at 4 call sites (the composer's attach, stop and send, and every tool in the tool strip).
 
 ## States
@@ -93,7 +93,7 @@ Real uses, 5 call sites (`rg -c "<IconButton" src/components` → `src/component
   - Do: 1 `inverted` send and `ghost` for attach and stop.
 
 ### Content
-- `rule/icon-button-title-sentence`: When `title` is written, name the action in sentence case with no full stop (Close the panel, Send, Stop), because the same string is the tooltip and the accessible name. Evidence: single use `src/components/AssistantPane.tsx:454`, the "Attach a picture (or paste, or drop one)" label. Check: review `src/components/AssistantPane.tsx`.
+- `rule/icon-button-title-sentence`: When `title` is written, name the action in sentence case with no full stop (Close the panel, Send, Stop), because the same string is the tooltip and the accessible name. Evidence: single use `src/components/AssistantPane.tsx:472`, the "Attach a picture (or paste, or drop one)" label. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `title="close panel."`
   - Do: `title="Close the panel"`
 

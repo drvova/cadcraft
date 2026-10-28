@@ -71,6 +71,14 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
   plus: "M12 5v14 M5 12h14",
   /** A cross: close the panel. */
   close: "M6 6l12 12 M18 6L6 18",
+  /** A right chevron: a collapsed activity row (the transcript's trailing marker). */
+  "chevron-right": "M9 6l6 6-6 6",
+  /** A down chevron: an open activity row. */
+  "chevron-down": "M6 9l6 6 6-6",
+  /** Two offset sheets: copy the message or code. */
+  copy: "M9 9h10v10H9z M15 5H5v10",
+  /** A circular arrow: retry the turn. */
+  retry: "M20 12a8 8 0 1 1-2.6-5.9 M20 4v5h-5",
 };
 
 /**
@@ -78,7 +86,7 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
  * because it is the one icon set, and this list is what lets the icon test tell a used path from
  * an orphan one.
  */
-export const COMPOSER_ICONS: readonly string[] = ["send", "stop", "plus", "close"];
+export const COMPOSER_ICONS: readonly string[] = ["send", "stop", "plus", "close", "chevron-right", "chevron-down", "copy", "retry"];
 
 /** The path for a toolbar id, or null when there is none. */
 export function iconPath(id: string): string | null {

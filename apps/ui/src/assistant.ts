@@ -534,6 +534,51 @@ const INLINE_RE = /`([^`]+)`|\*\*([^*]+)\*\*/g;
  * inside them; a marker that never closes stays literal. No HTML is produced: the pane maps the
  * parts to elements, so a model's words can never inject markup.
  */
+/**
+ * Split a reply into prose and fenced code: `[{ kind: "text", text }, { kind: "code", text }]`.
+ * A fence opens on ``` (an optional language word on the same line is dropped) and closes on the
+ * next ```; an unclosed fence runs to the end, useless to hide from the reader.
+ */
+export type ReplyPart = { kind: "text"; text: string } | { kind: "code"; text: string };
+
+export function splitFences(text: string): ReplyPart[] {
+  const parts: ReplyPart[] = [];
+  let rest = text;
+  for (;;) {
+    const open = rest.indexOf("```");
+    if (open === -1) break;
+    const before = rest.slice(0, open).replace(/\n+$/, "\n");
+    if (before !== "" && before !== "\n") parts.push({ kind: "text", text: before });
+    const from = open + 3;
+    const nl = rest.indexOf("\n", from);
+    const lang = (nl === -1 ? rest.slice(from) : rest.slice(from, nl)).trim();
+    const bodyStart = nl !== -1 && /^[\w+#-]*$/.test(lang) ? nl + 1 : from;
+    const close = rest.indexOf("```", bodyStart);
+    const code = (close === -1 ? rest.slice(bodyStart) : rest.slice(bodyStart, close)).replace(/\n$/, "");
+    if (code !== "") parts.push({ kind: "code", text: code });
+    if (close === -1) { rest = ""; break; }
+    rest = rest.slice(close + 3);
+  }
+  const tail = rest.replace(/^\n+/, "");
+  if (tail !== "") parts.push({ kind: "text", text: tail });
+  return parts;
+}
+
+/**
+ * A turn's age, in the transcript's own words ("Just now", "2m ago", "1h ago", "3d ago"), the
+ * measured timestamps' format (Cursor's turn actions row).
+ */
+export function relativeTime(then: number, now: number): string {
+  const s = Math.max(0, Math.floor((now - then) / 1000));
+  if (s < 45) return "Just now";
+  const m = Math.floor(s / 60);
+  if (m < 1) return "Just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
 export function parseInline(text: string): InlinePart[] {
   const parts: InlinePart[] = [];
   let last = 0;

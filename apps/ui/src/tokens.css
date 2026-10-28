@@ -19,6 +19,7 @@
   --control: #1c1c1c;
   --control-hover: #232323;
   --surface-elevated: #212121; /* Cursor's elevated surface: the composer, menus, popovers */
+  --surface-inset: #181818; /* the recessed block: the transcript's code (measured oklch .209) */
   --border: rgba(240, 240, 240, 0.12);
   --border-soft: rgba(240, 240, 240, 0.08); /* the hairline stroke */
 
@@ -102,6 +103,7 @@
   --radius-composer: 5px;
   --radius-elevated: 20px; /* the glass composer, menus and popovers (Cursor §2) */
   --radius-popover: 8px; /* the provider menu's popover (the composer pilot) */
+  --radius-block: 12px; /* the transcript's message bubble and code block (measured) */
   --radius-pill: 11px;
   --radius-round: 9999px; /* the pill/circle radius (Chip, IconButton; Cursor §2) */
   --gap-2: 2px;
@@ -112,6 +114,7 @@
   --gap-8: 8px;
   --gap-10: 10px;
   --gap-12: 12px;
+  --gap-14: 14px; /* the transcript's row pitch (measured 14px between rows) */
   --gap-16: 16px;
   --gap-default: var(--gap-4);
 
@@ -176,6 +179,7 @@
   --control: #e8e8e8;
   --control-hover: #dedede;
   --surface-elevated: #FCFCFC;
+  --surface-inset: #F3F3F3; /* the light recessed block (the pane surface) */
   --border: rgba(20, 20, 20, 0.12);
   --border-soft: rgba(20, 20, 20, 0.08);
   --text: #141414;

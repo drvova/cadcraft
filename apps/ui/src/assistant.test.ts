@@ -7,6 +7,8 @@ import {
   oneShot,
   parseInline,
   parseToolArgs,
+  relativeTime,
+  splitFences,
   providerEndpoint,
   providerReady,
   reportText,
@@ -423,5 +425,42 @@ describe("runTurn", () => {
     const { events, onEvent } = collect();
     await runTurn({ provider: PROVIDER, briefing: BRIEFING, conversation: [], execute: () => ({ ok: true, result: {} }), onEvent, signal: controller.signal, fetchImpl: fetch });
     expect(events[events.length - 1]).toEqual({ type: "done", reason: "stopped" });
+  });
+});
+
+describe("relativeTime", () => {
+  const t0 = 1_000_000_000_000;
+  test("the transcript's own words", () => {
+    expect(relativeTime(t0, t0 + 5_000)).toBe("Just now");
+    expect(relativeTime(t0, t0 + 44_000)).toBe("Just now");
+    expect(relativeTime(t0, t0 + 60_000)).toBe("1m ago");
+    expect(relativeTime(t0, t0 + 3 * 60_000)).toBe("3m ago");
+    expect(relativeTime(t0, t0 + 2 * 3_600_000)).toBe("2h ago");
+    expect(relativeTime(t0, t0 + 50 * 3_600_000)).toBe("2d ago");
+  });
+  test("a clock that went backwards still reads Just now", () => {
+    expect(relativeTime(t0, t0 - 5_000)).toBe("Just now");
+  });
+});
+
+describe("splitFences", () => {
+  test("prose, a fence, prose", () => {
+    expect(splitFences("before\n```py\nprint(1)\n```\nafter")).toEqual([
+      { kind: "text", text: "before\n" },
+      { kind: "code", text: "print(1)" },
+      { kind: "text", text: "after" },
+    ]);
+  });
+  test("no fence is one text run", () => {
+    expect(splitFences("plain")).toEqual([{ kind: "text", text: "plain" }]);
+  });
+  test("an unclosed fence still reads", () => {
+    expect(splitFences("x\n```\nDraw(1)")).toEqual([
+      { kind: "text", text: "x\n" },
+      { kind: "code", text: "Draw(1)" },
+    ]);
+  });
+  test("a bare fence with no language keeps its first line", () => {
+    expect(splitFences("```\na\nb\n```")).toEqual([{ kind: "code", text: "a\nb" }]);
   });
 });

@@ -23,6 +23,8 @@ import type { AppFacade } from "../facade";
 import {
   MAX_REQUEST_CHARS,
   parseInline,
+  relativeTime,
+  splitFences,
   PROVIDER_PRESETS,
   runTurn,
   type AssistantEvent,
@@ -54,12 +56,13 @@ interface ToolEntry {
   ok: boolean;
   note: string;
   open: boolean;
+  at: number;
 }
 
 type Entry =
-  | { kind: "user"; text: string; pictures: number }
-  | { kind: "assistant"; text: string }
-  | { kind: "failed"; text: string }
+  | { kind: "user"; text: string; pictures: number; at: number }
+  | { kind: "assistant"; text: string; at: number }
+  | { kind: "failed"; text: string; at: number }
   | ToolEntry;
 
 const STORAGE_KEY = "cadcraft.assistant.provider";
@@ -177,14 +180,14 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
       setStatus("");
       setEntries((prev) => {
         const last = prev[prev.length - 1];
-        if (last?.kind === "assistant") return [...prev.slice(0, -1), { kind: "assistant", text: last.text + e.text }];
-        return [...prev, { kind: "assistant", text: e.text }];
+        if (last?.kind === "assistant") return [...prev.slice(0, -1), { ...last, text: last.text + e.text }];
+        return [...prev, { kind: "assistant", text: e.text, at: Date.now() }];
       });
       return;
     }
     if (e.type === "call") {
       setStatus(`Running ${e.name}…`);
-      setEntries((prev) => [...prev, { kind: "tool", name: e.name, code: e.code, report: "", ok: true, note: "running…", open: false }]);
+      setEntries((prev) => [...prev, { kind: "tool", name: e.name, code: e.code, report: "", ok: true, note: "running…", open: false, at: Date.now() }]);
       return;
     }
     if (e.type === "result") {
@@ -205,7 +208,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     }
     if (e.type === "failed") {
       setStatus("");
-      setEntries((prev) => [...prev, { kind: "failed", text: e.error }]);
+      setEntries((prev) => [...prev, { kind: "failed", text: e.error, at: Date.now() }]);
       return;
     }
     setStatus("");
@@ -264,7 +267,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     setInput("");
     if (inputEl !== undefined) inputEl.style.height = "";
     setAttached([]);
-    setEntries((prev) => [...prev, { kind: "user", text, pictures: pictures.length }]);
+    setEntries((prev) => [...prev, { kind: "user", text, pictures: pictures.length, at: Date.now() }]);
     const message: ChatMessage = pictures.length === 0 ? { role: "user", content: text } : { role: "user", content: text, images: pictures };
     const next: ChatMessage[] = [...conversation(), message];
     setConversation(next);
@@ -293,6 +296,11 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
 
   const stop = (): void => {
     controller?.abort();
+  };
+
+  /** Copy a message or a tool's code (the turn-actions affordance). */
+  const copyText = (text: string): void => {
+    void navigator.clipboard?.writeText(text);
   };
 
   const newChat = (): void => {
@@ -388,20 +396,44 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 </div>
               </Match>
               <Match when={entry.kind === "assistant"}>
-                <div class="assistant-text">{entry.kind === "assistant" ? richText(entry.text) : ""}</div>
+                <For each={splitFences(entry.kind === "assistant" ? entry.text : "")}>
+                  {(part) =>
+                    part.kind === "code" ? (
+                      <div class="assistant-code-wrap">
+                        <pre class="assistant-code">{part.text}</pre>
+                        <span class="assistant-code-copy">
+                          <IconButton icon="copy" size="sm" title="Copy the code" onClick={() => copyText(part.text)} />
+                        </span>
+                      </div>
+                    ) : (
+                      <div class="assistant-text">{richText(part.text)}</div>
+                    )
+                  }
+                </For>
+                <div class="assistant-turn-actions">
+                  <IconButton icon="copy" size="sm" title="Copy" onClick={() => copyText(entry.kind === "assistant" ? entry.text : "")} />
+                  <time class="assistant-time">{relativeTime(entry.kind === "assistant" ? entry.at : Date.now(), Date.now())}</time>
+                </div>
               </Match>
               <Match when={entry.kind === "failed"}>
                 <div class="assistant-failed">{entry.kind === "failed" ? entry.text : ""}</div>
               </Match>
               <Match when={entry.kind === "tool"}>
                 <button class="assistant-tool" type="button" onClick={() => toggleTool(index())} aria-expanded={entry.kind === "tool" && entry.open}>
-                  <span class="assistant-tool-arrow">{entry.kind === "tool" && entry.open ? "▾" : "▸"}</span>
                   <span class="assistant-tool-name">{entry.kind === "tool" ? entry.name : ""}</span>
                   <span class="assistant-tool-note">{entry.kind === "tool" ? entry.note : ""}</span>
+                  <span class="assistant-tool-chevron">
+                    <ToolIcon id={entry.kind === "tool" && entry.open ? "chevron-down" : "chevron-right"} />
+                  </span>
                 </button>
                 <Show when={entry.kind === "tool" && entry.open}>
                   <div class="assistant-detail">
-                    <pre class="assistant-code">{entry.kind === "tool" ? entry.code : ""}</pre>
+                    <div class="assistant-code-wrap">
+                      <pre class="assistant-code">{entry.kind === "tool" ? entry.code : ""}</pre>
+                      <span class="assistant-code-copy">
+                        <IconButton icon="copy" size="sm" title="Copy the code" onClick={() => copyText(entry.kind === "tool" ? entry.code : "")} />
+                      </span>
+                    </div>
                     <Show when={entry.kind === "tool" && entry.report !== ""}>
                       <pre class="assistant-report">{entry.kind === "tool" ? entry.report : ""}</pre>
                     </Show>

@@ -86,7 +86,7 @@ Real uses, 3 call sites (`rg -c "<Field" src/components` → `src/components/Ass
   - Do: `<Field type="email" ariaLabel="Email" />`
 
 ### Content
-- `rule/field-placeholder-example`: When a placeholder is written, show a real example value rather than an instruction (0,0 — not "Enter a point"), because the placeholder is read as the value's shape, and the instruction belongs in a label. Evidence: single use `src/components/AssistantPane.tsx:506`, the provider popover's Base URL placeholder. Check: review `src/components/AssistantPane.tsx`.
+- `rule/field-placeholder-example`: When a placeholder is written, show a real example value rather than an instruction (0,0 — not "Enter a point"), because the placeholder is read as the value's shape, and the instruction belongs in a label. Evidence: single use `src/components/AssistantPane.tsx:524`, the provider popover's Base URL placeholder. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Field placeholder="Type your point here" />`
   - Do: `<Field ariaLabel="Base point" placeholder="0,0" />`
 
