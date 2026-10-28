@@ -13,9 +13,9 @@ Not applicable: hand-rolled — the recipe is the app's own `src/ui/ui.css`, mea
 ## Examples
 `<Button variant="primary">Save</Button>` — the one action of a dialog or a pane.
 
-Real uses, 2 call sites (`rg -c "<Button" src/components` → `src/components/AssistantPane.tsx:2`, the provider popover's Cancel and Save):
+Real uses, 3 call sites (`rg -c "<Button" src/components` → `src/components/AssistantPane.tsx:2`, `src/components/TopBar.tsx:1`):
 - `src/components/AssistantPane.tsx` — the composer pilot's call sites: the provider popover's Cancel (`variant="ghost"`) and Save (`variant="primary"`).
-- (planned) `src/components/TopBar.tsx:47` — `<button class="button">` for zoom extents moves onto `<Button size="sm">` when the surface migration reaches the top bar.
+- `src/components/TopBar.tsx:48` — Zoom extents (`size="sm"`), the bar's one action.
 
 ### Example files
 | File | Covers | Caption |
@@ -130,7 +130,7 @@ export default function VariantDanger() {
 ```
 
 ### size
-- `sm`: the 24px control, for a button beside a field or inside a row. Used at 0 call sites.
+- `sm`: the 24px control, for a button beside a field or inside a row. Used at 1 call site (the top bar's Zoom extents).
 - `md`: the 28px default, for a dialog footer or a pane header. Used at 2 call sites (the provider popover's Cancel and Save).
 
 Example: The 24px button that sits beside a field. (`docs/system/examples/button/size-sm.tsx`)
@@ -224,7 +224,7 @@ export default function Disabled() {
   - Do: `.ui-button--secondary:hover { background: var(--fill-active) }`
 
 ### Content
-- `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Zoom extents` — because the label is the action's name and the accessible name comes from it. Evidence: single use `src/components/TopBar.tsx:47`, the label "Zoom extents". Check: review `src/components/TopBar.tsx`.
+- `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Zoom extents` — because the label is the action's name and the accessible name comes from it. Evidence: single use `src/components/TopBar.tsx:48`, the label "Zoom extents". Check: review `src/components/TopBar.tsx`.
   - Don't: `<Button>SAVE</Button>`
   - Do: `<Button>Save</Button>`
 

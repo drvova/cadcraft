@@ -15,8 +15,8 @@ Not applicable: hand-rolled — the 24px height, the hairline stroke and the foc
 
 Real uses, 3 call sites (`rg -c "<Field" src/components` → `src/components/AssistantPane.tsx:3`, the provider popover's Base URL, Model and API key):
 - `src/components/AssistantPane.tsx` — the composer pilot: the provider popover's Base URL, Model and API key inputs; the composer's own multi-line editor stays a bespoke `<textarea>` (found-not-fixed).
-- (planned) `src/components/PropertiesPanel.tsx:152` — `class="prop-input"` (1 use) moves onto `<Field>` when the surface migration reaches the properties palette.
-- (planned) `src/components/CommandLine.tsx` — `class="cmd-input"` (1 use) moves onto `<Field type="search">` in the command line.
+- (planned) `src/components/PropertiesPanel.tsx:153` — `class="prop-input"` (1 use) moves onto `<Field>` in a later arc; the palette keeps its own input for now.
+- (planned) `src/components/CommandLine.tsx:112` — `class="cmd-input"` (1 use) moves onto `<Field type="search">` in a later arc; the command line keeps its own input for now.
 
 ### Example files
 | File | Covers | Caption |
@@ -175,7 +175,7 @@ export default function Disabled() {
   - Do: `<Field type="email" ariaLabel="Email" />`
 
 ### Content
-- `rule/field-placeholder-example`: When a placeholder is written, show a real example value rather than an instruction (0,0 — not "Enter a point"), because the placeholder is read as the value's shape, and the instruction belongs in a label. Evidence: single use `src/components/PropertiesPanel.tsx:152`, the value-style placeholder. Check: review `src/components/PropertiesPanel.tsx`.
+- `rule/field-placeholder-example`: When a placeholder is written, show a real example value rather than an instruction (0,0 — not "Enter a point"), because the placeholder is read as the value's shape, and the instruction belongs in a label. Evidence: single use `src/components/AssistantPane.tsx:506`, the provider popover's Base URL placeholder. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Field placeholder="Type your point here" />`
   - Do: `<Field ariaLabel="Base point" placeholder="0,0" />`
 

@@ -13,8 +13,9 @@ Not applicable: hand-rolled — the circle, the .08 hover fill and the 14px glyp
 ## Examples
 `<IconButton icon="close" title="Close the panel" />` — the panel's close control.
 
-Real uses, 4 call sites (`rg -c "<IconButton" src/components` → `src/components/AssistantPane.tsx:4`, the composer: attach, remove-attachment, stop and send):
+Real uses, 5 call sites (`rg -c "<IconButton" src/components` → `src/components/AssistantPane.tsx:4`, `src/components/ToolStrip.tsx:1`):
 - `src/components/AssistantPane.tsx` — the composer pilot: the toolbar's attach (`soft`), stop and send (`inverted`), and each attachment chip's remove circle (`sm`).
+- `src/components/ToolStrip.tsx:80` — every tool in the strip: the glyph from the tool's icon id, the title its label and shortcut, click to invoke it.
 
 ### Example files
 | File | Covers | Caption |
@@ -78,7 +79,7 @@ export default function InAssistantPane() {
 ## Variants
 
 ### variant
-- `ghost`: the transparent circle for a tool bar; the default. Used at 0 call sites.
+- `ghost`: the transparent circle for a tool bar; the default. Used at 2 call sites (an attachment chip's remove and every tool in the tool strip).
 - `soft`: the resting `.08` fill, for a tool that is currently on. Used at 1 call site (the composer's attach).
 - `inverted`: the ink-coloured circle with the accent-surface glyph, for the one primary action. Used at 2 call sites (the composer's stop and send).
 
@@ -114,7 +115,7 @@ export default function VariantInverted() {
 
 ### size
 - `sm`: the 20px circle with the 12px glyph, for a chip row. Used at 1 call site (an attachment chip's remove).
-- `md`: the 24px circle with the 14px glyph, the composer's size. Used at 3 call sites (the composer's attach, stop and send).
+- `md`: the 24px circle with the 14px glyph, the composer's size. Used at 4 call sites (the composer's attach, stop and send, and every tool in the tool strip).
 
 Example: The 20px circle with the 12px glyph. (`docs/system/examples/icon-button/size-sm.tsx`)
 
