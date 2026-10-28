@@ -11,7 +11,7 @@
 
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import type { CommandInfo } from "../facade";
-import { buildMenu, isMacPlatform, menuEntries, shortcutLabel, UI_ITEMS, type MenuEntry, type MenuNode } from "../commands";
+import { buildMenu, hoverPath, isMacPlatform, menuEntries, shortcutLabel, UI_ITEMS, type MenuEntry, type MenuNode } from "../commands";
 import "../chrome.css";
 
 export interface MenuBarProps {
@@ -65,7 +65,10 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
   const hover = (node: MenuNode, path: readonly string[]): void => {
     const index = entries().findIndex((entry) => entry.node === node);
     if (index >= 0) setActive(index);
-    setOpenPath(node.id === null ? [...path, node.label] : path);
+    // Only a real change: a fresh array per hover would re-create the rows under the pointer
+    // (each re-render fires pointerover again) and no mouse click could ever complete.
+    const next = hoverPath(openPath(), node, path);
+    if (next !== openPath()) setOpenPath(next);
   };
 
   const activate = (entry: MenuEntry): void => {

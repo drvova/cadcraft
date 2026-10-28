@@ -138,6 +138,23 @@ export interface MenuEntry {
  * submenu that is open. `openPath` is relative to the list being rendered — `openPath[0]` names
  * the first submenu on the open chain.
  */
+
+/** Whether two path arrays hold the same segments. */
+export function sameStrings(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+/**
+ * The open-path a pointer hover sets inside an open dropdown: a submenu appends its label, a leaf
+ * returns to the parent path (closing any submenu). Returns `current` **by reference** when the
+ * content would not change, so the caller's signal does not notify — a fresh array on every
+ * hover would re-create the rows under the pointer and the pointerover would fire again forever.
+ */
+export function hoverPath(current: readonly string[], node: MenuNode, path: readonly string[]): readonly string[] {
+  const next = node.id === null ? [...path, node.label] : path;
+  return sameStrings(next, current) ? current : next;
+}
+
 export function menuEntries(nodes: readonly MenuNode[], openPath: readonly string[]): MenuEntry[] {
   const out: MenuEntry[] = [];
   const walk = (list: readonly MenuNode[], path: readonly string[], open: readonly string[]): void => {

@@ -10,7 +10,7 @@
 
 import { describe, expect, test } from "bun:test";
 import type { CommandInfo } from "./facade";
-import { buildMenu, classify, isMacPlatform, menuEntries, MENU_TITLES, shortcutLabel, submenuIsOpen, UI_ITEMS } from "./commands";
+import { buildMenu, classify, hoverPath, isMacPlatform, menuEntries, MENU_TITLES, shortcutLabel, submenuIsOpen, UI_ITEMS } from "./commands";
 import { defaultFileName } from "./files";
 
 /** One engine command row, with its menu path joined the way `facade.ts` does. */
@@ -272,5 +272,39 @@ describe("defaultFileName", () => {
     expect(defaultFileName("a/b:c*d?e\"f<g>h|i")).toBe("a_b_c_d_e_f_g_h_i.dxf");
     expect(defaultFileName("  ")).toBe("Drawing.dxf");
     expect(defaultFileName("")).toBe("Drawing.dxf");
+  });
+});
+
+describe("hoverPath (the reference-stable hover)", () => {
+  const leaf = { label: "Save", id: "qsave", shortcut: "", enabled: true, children: [] };
+  const sub = { label: "Layout", id: null, shortcut: "", enabled: true, children: [] };
+
+  test("a leaf with nothing open returns the same reference (no signal change, no re-render)", () => {
+    const current: readonly string[] = [];
+    const next = hoverPath(current, leaf, []);
+    expect(next).toBe(current); // identity: a fresh array here would loop the pointerover
+  });
+
+  test("a submenu appends its label", () => {
+    const next = hoverPath([], sub, []);
+    expect([...next]).toEqual(["Layout"]);
+  });
+
+  test("hovering the same submenu again is reference-stable", () => {
+    const first = hoverPath([], sub, []);
+    const second = hoverPath(first, sub, []);
+    expect(second).toBe(first);
+  });
+
+  test("a leaf under an open submenu closes it (returns the parent path)", () => {
+    const open: readonly string[] = ["Layout"];
+    const next = hoverPath(open, leaf, []);
+    expect([...next]).toEqual([]);
+  });
+
+  test("a leaf inside a nested submenu keeps the parent path", () => {
+    const next = hoverPath(["Layout"], leaf, ["Layout"]);
+    expect(next).toBe(next); // same content: reference-stable against itself
+    expect([...hoverPath(["Layout"], leaf, ["Layout"])]).toEqual(["Layout"]);
   });
 });
