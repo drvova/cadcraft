@@ -5,6 +5,7 @@
 
 import { Show, type Accessor, type JSX } from "solid-js";
 import type { DrawingState, FacadeMode } from "../facade";
+import { Button } from "../ui/Button";
 
 export interface TopBarProps {
   drawing: Accessor<DrawingState | null>;
@@ -44,9 +45,9 @@ export function TopBar(props: TopBarProps): JSX.Element {
       <span class={props.mode.kind === "wasm" ? "chip mode is-wasm" : "chip mode is-mock"} title={props.mode.detail}>
         {props.mode.kind}
       </span>
-      <button class="button" type="button" onClick={() => props.onZoomExtents()}>
+      <Button size="sm" title="Zoom extents" onClick={() => props.onZoomExtents()}>
         Zoom extents
-      </button>
+      </Button>
     </header>
   );
 }

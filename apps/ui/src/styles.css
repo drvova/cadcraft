@@ -135,7 +135,7 @@ body {
   display: flex;
   align-items: center;
   gap: var(--gap-6);
-  height: 28px;
+  height: var(--control-h-button);
   padding: 0 var(--gap-8);
   background: var(--chrome-dark);
   border-bottom: var(--hairline) solid var(--border);
@@ -213,31 +213,6 @@ body {
 
 .chip.mode.is-mock::before {
   background: var(--warn);
-}
-
-/* The one action on the row. */
-.button {
-  display: inline-flex;
-  align-items: center;
-  height: 20px;
-  padding: 0 var(--gap-6);
-  border: var(--hairline) solid var(--border);
-  border-radius: var(--radius-small);
-  background: transparent;
-  color: var(--text-dim);
-  font-family: var(--font-family);
-  font-size: var(--font-small);
-  cursor: pointer;
-}
-
-.button:hover {
-  background: var(--control-hover);
-  color: var(--text);
-}
-
-.button:focus-visible {
-  outline: var(--focus-outline-w) solid var(--accent);
-  outline-offset: var(--focus-outline-offset);
 }
 
 /* ---- The layers palette ---- */
