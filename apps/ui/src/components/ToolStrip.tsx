@@ -8,8 +8,8 @@
  */
 
 import { For, Show, type JSX } from "solid-js";
-import { ToolIcon } from "../icons";
 import { isMacPlatform, shortcutLabel } from "../commands";
+import { IconButton } from "../ui/IconButton";
 
 /** One toolbar button: the icon id, the command id it invokes, the label, and the shortcut. */
 export interface ToolbarEntry {
@@ -77,15 +77,11 @@ export function ToolStrip(props: ToolStripProps): JSX.Element {
             </Show>
             <For each={group}>
               {(entry) => (
-                <button
-                  class="tool-button"
-                  type="button"
+                <IconButton
+                  icon={entry.icon}
                   title={entry.shortcut === "" ? entry.label : `${entry.label} (${shortcutLabel(entry.shortcut, isMacPlatform())})`}
-                  aria-label={entry.label}
                   onClick={() => props.onInvoke(entry.id)}
-                >
-                  <ToolIcon id={entry.icon} />
-                </button>
+                />
               )}
             </For>
           </>

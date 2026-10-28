@@ -52,7 +52,6 @@
 
 .menubar-title:focus-visible,
 .menu-row:focus-visible,
-.tool-button:focus-visible,
 .layout-tab:focus-visible,
 .status-toggle:focus-visible {
   outline: var(--focus-outline-w) solid var(--accent);
@@ -146,7 +145,7 @@
   display: flex;
   align-items: center;
   gap: 1px;
-  height: 30px;
+  height: var(--control-h-button);
   padding: 0 var(--gap-6);
   background: var(--chrome);
   border-bottom: var(--hairline) solid var(--border);
@@ -154,36 +153,15 @@
   overflow-y: hidden;
 }
 
-.tool-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+/* The strip's cells never squeeze: the band scrolls instead. */
+.toolstrip .ui-icon-button {
   flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--icon);
-  cursor: pointer;
-}
-
-.tool-button:hover {
-  background: var(--control-hover);
-  color: var(--text);
-}
-
-.tool-icon {
-  display: block;
-  width: 16px;
-  height: 16px;
 }
 
 .tool-divider {
   flex: 0 0 auto;
   width: var(--hairline);
-  height: 14px;
+  height: var(--icon-size-md);
   margin: 0 var(--gap-4);
   background: var(--border);
 }
