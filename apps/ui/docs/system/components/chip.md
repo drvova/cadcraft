@@ -12,8 +12,8 @@ Not applicable: hand-rolled — the pill radius, the 20px height and the accent 
 ## Examples
 `<Chip>26 objects</Chip>` — the selection count as a static fact.
 
-Real uses, 0 call sites (`rg -c "keyword-chip" src` → `src/components/CommandLine.tsx:1`, `src/interaction.css:3`):
-- (planned) `src/components/CommandLine.tsx:99` — `<button class="keyword-chip">` for each command keyword moves onto `<Chip tone="accent" onClick={...}>` when the surface migration reaches the command line.
+Real uses, 1 call site (`rg -c "<Chip" src/components` → `src/components/CommandLine.tsx:1`):
+- `src/components/CommandLine.tsx:100` — the command line's keyword row (`tone="accent"`): one chip per keyword the open command offers, click to submit it.
 
 ### Example files
 | File | Covers | Caption |
@@ -27,7 +27,7 @@ Real uses, 0 call sites (`rg -c "keyword-chip" src` → `src/components/CommandL
 
 ### tone
 - `neutral`: a quiet fact or a value; transparent, at the faint ink. Used at 0 call sites.
-- `accent`: a keyword or a suggestion the user can pick; the accent-tinted fill. Used at 0 call sites.
+- `accent`: a keyword or a suggestion the user can pick; the accent-tinted fill. Used at 1 call site (the command line's keyword chip).
 
 ## States
 | State | Trigger | What the user can do | Shown by, besides color | Checked by |
@@ -66,15 +66,15 @@ Real uses, 0 call sites (`rg -c "keyword-chip" src` → `src/components/CommandL
 - The value is editable. Use `Field` instead.
 
 ### Rules
-- `rule/chip-interactive-only-with-handler`: When a chip runs an action, pass `onClick` so it renders as a `<button>`; when it is a fact, pass nothing so it stays a `<span>`, because a fact in the tab order adds a stop that does nothing. Evidence: app 2/2 chip surfaces — 1 interactive and 1 static — `src/components/CommandLine.tsx:99` and `src/components/TopBar.tsx:30`. Check: test `src/ui/Chip.test.tsx`.
+- `rule/chip-interactive-only-with-handler`: When a chip runs an action, pass `onClick` so it renders as a `<button>`; when it is a fact, pass nothing so it stays a `<span>`, because a fact in the tab order adds a stop that does nothing. Evidence: app 2/2 chip surfaces — 1 interactive and 1 static — `src/components/CommandLine.tsx:100` and `src/components/TopBar.tsx:31`. Check: test `src/ui/Chip.test.tsx`.
   - Don't: `<Chip>26 objects</Chip>` inside an `onClick` wrapper `div`.
   - Do: `<Chip onClick={() => pick("line")}>line</Chip>`
-- `rule/chip-tone-meaning`: When a chip's tone is picked, use `accent` only for a keyword the user can pick and `neutral` for a value, because the accent tint is the app's signal for the accent role and 2 tinted chips in one row read as 2 selections. Evidence: app 2/2 chips, `accent` only on the keyword row, `src/components/CommandLine.tsx:99`. Check: review `src/ui/ui.css`.
+- `rule/chip-tone-meaning`: When a chip's tone is picked, use `accent` only for a keyword the user can pick and `neutral` for a value, because the accent tint is the app's signal for the accent role and 2 tinted chips in one row read as 2 selections. Evidence: app 2/2 chips, `accent` only on the keyword row, `src/components/CommandLine.tsx:100`. Check: review `src/ui/ui.css`.
   - Don't: `<Chip tone="accent">26 objects</Chip>`
   - Do: `<Chip>26 objects</Chip>`
 
 ### Content
-- `rule/chip-text-short`: When a chip's text is written, keep it to 1 word or a number plus its unit (26 objects, line, mm), because the pill is 20px tall and a third word starts wrapping the row. Evidence: single use `src/components/CommandLine.tsx:99`, the label "line". Check: review `src/components/CommandLine.tsx`.
+- `rule/chip-text-short`: When a chip's text is written, keep it to 1 word or a number plus its unit (26 objects, line, mm), because the pill is 20px tall and a third word starts wrapping the row. Evidence: single use `src/components/CommandLine.tsx:100`, the label "line". Check: review `src/components/CommandLine.tsx`.
   - Don't: `<Chip>The current drawing has 26 objects</Chip>`
   - Do: `<Chip>26 objects</Chip>`
 
