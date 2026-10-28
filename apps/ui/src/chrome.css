@@ -194,7 +194,7 @@
   display: flex;
   align-items: center;
   gap: 0;
-  height: 26px;
+  height: var(--control-h-button);
   padding: 0 var(--gap-6);
   background: var(--chrome);
   border-top: var(--hairline) solid var(--border);
@@ -239,7 +239,7 @@
 
 /* Micro toggles: a word, dim when off, lit when on — no pills, no borders. */
 .status-toggle {
-  height: 18px;
+  height: var(--control-h-chip);
   padding: 0 var(--gap-4);
   border: none;
   border-radius: var(--radius-small);
