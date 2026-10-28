@@ -577,14 +577,17 @@ let changelog = null;
 
 // ---------- write or check ----------
 let drift = 0;
+// CRLF: a fresh clone on a box with core.autocrlf=true checks generated files out with CRLF, and
+// an exact string compare would report every output stale. Compare normalised.
+const normEol = (s) => (s === null ? null : s.replace(/\r\n/g, "\n"));
 for (const [p, content] of [...outputs].sort()) {
-  const cur = existsSync(p) ? readFileSync(p, "utf8") : null;
+  const cur = normEol(existsSync(p) ? readFileSync(p, "utf8") : null);
   if (checkOnly) {
     if (cur === null) { console.log(`missing: ${rel(p)}`); drift++; }
     else if (cur !== content) { console.log(`stale: ${rel(p)} (differs from a fresh generation)`); drift++; }
   } else if (cur !== content) { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, content); }
 }
-if (!checkOnly && changelog !== null && (!existsSync(changelogPath) || readFileSync(changelogPath, "utf8") !== changelog)) writeFileSync(changelogPath, changelog);
+if (!checkOnly && changelog !== null && (!existsSync(changelogPath) || normEol(readFileSync(changelogPath, "utf8")) !== changelog)) writeFileSync(changelogPath, changelog);
 // generated files whose source is gone
 if (existsSync(outDir)) {
   const orphans = [];
