@@ -552,7 +552,7 @@ function agentsIndex() {
 const agentsPath = join(root, "AGENTS.md");
 {
   const block = agentsIndex();
-  const cur = existsSync(agentsPath) ? readFileSync(agentsPath, "utf8") : "";
+  const cur = existsSync(agentsPath) ? readFileSync(agentsPath, "utf8").replace(/\r\n/g, "\n") : "";
   const re = /<!-- ds-index:start -->[\s\S]*?<!-- ds-index:end -->/;
   outputs.set(agentsPath, re.test(cur) ? cur.replace(re, () => block) : `${cur}${cur && !cur.endsWith("\n") ? "\n" : ""}${cur ? "\n" : ""}${block}\n`);
 }
