@@ -315,6 +315,8 @@
   align-items: center;
   width: 100%;
   height: var(--control-h-row);
+  /* A row keeps its measured height in a squeezed column; the column scrolls instead. */
+  flex-shrink: 0;
   padding: 0 var(--gap-4);
   border: none;
   border-radius: var(--radius-card);
