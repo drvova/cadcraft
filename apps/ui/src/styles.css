@@ -11,6 +11,39 @@
   box-sizing: border-box;
 }
 
+/* Thin quiet scrollbars on the measured Cursor colours (a thumb that appears only against the
+   surface it scrolls, never a chunky grey bar). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: var(--radius-composer);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 html,
 body {
   margin: 0;
@@ -203,11 +236,15 @@ body {
 
 /* ---- The layers palette ---- */
 
+/* The panes size to their content: the layers list is as tall as its rows (up to a share of the
+   rail, then it scrolls) and the properties palette takes what is left. A 50/50 split left a
+   half-empty layers pane above a half-empty properties pane — the rail read as two voids. */
 .layers {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  flex: 1 1 50%;
+  flex: 0 1 auto;
+  max-height: 55%;
   background: transparent;
   border: none;
   border-radius: 0;
@@ -218,14 +255,16 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: var(--gap-6);
-  height: 26px;
+  height: 22px;
   padding: 0 var(--gap-8);
   border-bottom: var(--hairline) solid var(--border);
 }
 
+/* Cursor's pane header: 11px, 700, uppercase, on a 22px band. */
 .section-label {
-  font-size: 10px;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   color: var(--text-faint);
   text-transform: uppercase;
 }
@@ -299,12 +338,20 @@ body {
   outline-offset: var(--focus-outline-offset);
 }
 
+/* The status column, as the desktop draws it: a small diamond, bright when the layer has
+   objects and faint when it does not (`crates/ui-egui/src/layers.rs`, `status_icon`). */
 .layer-used {
   flex: 0 0 auto;
-  font-size: 9px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  width: 7px;
+  height: 7px;
+  border: var(--hairline) solid currentColor;
+  border-radius: 1px;
   color: var(--text-faint);
+  transform: rotate(45deg);
+}
+
+.layer-row .layer-used.is-used {
+  color: var(--icon);
 }
 
 .layer-toggles {

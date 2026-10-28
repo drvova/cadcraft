@@ -13,6 +13,7 @@
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { AppFacade, type CommandInfo, type DrawingState, type LayerInfo, type SettingsState } from "./facade";
 import type { DisplayList } from "./display";
+import { padView, regionCovers, regionOf, VIEW_PAD, type DisplayRegion } from "./display-cache";
 import { emptyPrompt, type PromptState } from "./prompt";
 import { padRect, UNIT_RECT, type Rect } from "./view";
 import { pickAperture, toggleHandle } from "./selection";
@@ -84,32 +85,74 @@ export function App(props: AppProps): JSX.Element {
   const [theme, setTheme] = createSignal<ThemeChoice>("dark");
   const [animations, setAnimations] = createSignal<AnimChoice>("on");
 
+  /**
+   * The window the current display list covers (the view the fetch was made for, padded) and the
+   * revision it was built at. Not reactive: it guards fetches, it does not drive the DOM.
+   */
+  let displayRegion: DisplayRegion | null = null;
+  /**
+   * The revision the engine last reported — the shell's idea of "the drawing changed". The held
+   * list's own revision cannot serve here: it never changes until a fetch, so a fetch could
+   * never be triggered by one.
+   */
+  let engineRevision = -1;
+
+  /**
+   * Fetch the display list for `rect`, asking the engine for a window [`VIEW_PAD`] wider than the
+   * view so a pan inside that window needs no further call. The engine's own view stays `rect`
+   * (the culling window is the margin argument), so view commands still read what the canvas
+   * shows.
+   */
+  const fetchDisplay = (rect: Rect): void => {
+    const env = props.facade.setView(rect);
+    if (!env.ok) setNotice(env.error);
+    const list = props.facade.displayList(VIEW_PAD);
+    // The region carries the revision of the list we now hold: a later edit makes the engine's
+    // revision differ from it, which is exactly what triggers the next fetch.
+    displayRegion = regionOf(padView(rect), list.revision);
+    setDisplay(list);
+  };
+
+  /** Fetch only when the cached window no longer answers for the view (or the drawing changed). */
+  const syncDisplay = (): void => {
+    const rect = view();
+    if (!regionCovers(displayRegion, rect, engineRevision)) fetchDisplay(rect);
+  };
+
   /** Pull everything the surfaces read from the facade, in one place. */
   const refresh = (): void => {
     const state = props.facade.drawingState();
+    engineRevision = state?.revision ?? engineRevision;
     const layerRows = props.facade.layers();
     setDrawing(state);
     setLayers(layerRows);
-    setDisplay(props.facade.displayList());
     setSettings(props.facade.settings());
     setSelection(props.facade.selection().handles);
     setProperties(parseProperties(props.facade.properties(), layerRows.map((l) => l.name)));
     setLayouts(props.facade.layouts().map((l) => l.name));
     setSpace(state?.space ?? "Model");
     setCommands(props.facade.commands());
+    syncDisplay();
   };
 
-  /** Re-read the view the facade is showing (a space switch or a zoom command moves it). */
+  /**
+   * Re-read the view the facade is showing (a space switch or a zoom command moves it) and fetch
+   * for it when the cached window no longer answers.
+   */
   const syncView = (): void => {
     const rect = props.facade.viewRect();
     if (rect !== null) setView(rect);
+    syncDisplay();
   };
 
   onMount(() => {
     const initial = props.facade.viewRect();
-    const list = props.facade.displayList();
+    const list = props.facade.displayList(VIEW_PAD);
     setDisplay(list);
-    setView(initial ?? padRect(list.bounds, 0.06));
+    const start = initial ?? padRect(list.bounds, 0.06);
+    setView(start);
+    engineRevision = list.revision;
+    displayRegion = regionOf(padView(start), list.revision);
     setPrompt(props.facade.currentPrompt());
     refresh();
     // The facade starts showing its own default view; keep the canvas on it.
@@ -161,12 +204,14 @@ export function App(props: AppProps): JSX.Element {
     }
   });
 
-  /** The canvas moved: push the view to the facade (so the engine culls) and take its list. */
+  /**
+   * The canvas moved. Panning inside the fetched window is a pure redraw — the display signal is
+   * untouched and the canvas effect re-runs on the view alone; only leaving the window (or a
+   * drawing change) fetches again.
+   */
   const onViewChange = (rect: Rect): void => {
     setView(rect);
-    const env = props.facade.setView(rect);
-    if (!env.ok) setNotice(env.error);
-    setDisplay(props.facade.displayList());
+    if (!regionCovers(displayRegion, rect, engineRevision)) fetchDisplay(rect);
   };
 
   const onCommand = (text: string): void => {
@@ -354,20 +399,15 @@ export function App(props: AppProps): JSX.Element {
     refresh();
   };
 
-  // Zoom extents: the facade's canvas view is the source of truth (its `view()` is what the
-  // canvas shows), and the engine's `zoom` command does not feed back into it — so the button
-  // sets the view to the drawing's own bounds (from the display list) with a small margin.
+  /**
+   * Zoom extents: the engine's own `zoom` command fits the drawing's extents to the canvas's
+   * aspect and the facade mirrors the result into the canvas view (`view()`), so adopting the
+   * view and fetching for it is the whole job.
+   */
   const zoomExtents = (): void => {
-    const rect = padRect(props.facade.displayList().bounds, 0.06);
-    const env = props.facade.setView(rect);
-    if (!env.ok) {
-      setNotice(env.error);
-      return;
-    }
-    setNotice(null);
-    setView(rect);
-    setDisplay(props.facade.displayList());
-    refresh();
+    const env = props.facade.zoomExtents();
+    setNotice(env.ok ? null : env.error);
+    syncView();
   };
 
   const currentLayer = createMemo(() => drawing()?.currentLayer ?? layers().find((l) => l.current)?.name ?? "0");

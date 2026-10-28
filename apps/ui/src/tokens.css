@@ -67,6 +67,10 @@
   /* Elevation: the shadow under floating surfaces (menus) */
   --shadow: rgba(0, 0, 0, 0.45);
 
+  /* Scrollbars: Cursor's theme values (scrollbarSlider.background #67676750, hover #676767) */
+  --scrollbar: rgba(103, 103, 103, 0.31);
+  --scrollbar-hover: rgba(103, 103, 103, 0.62);
+
   /* ---- Misc (on_accent, crosshair, paper) ---- */
   --on-accent: #141414;
   --crosshair: #e4e4e4;

@@ -621,7 +621,8 @@ export class MockFacade implements RawFacade {
     return envelope(true, { added });
   }
 
-  display(): string {
+  display(margin = 0): string {
+    void margin; // the mock has one drawing and no culling; the window never matters
     const verts: [number, number][] = [];
     const prims: Record<string, unknown>[] = [];
     const push = (points: readonly [number, number][], kind: string, color: Rgb, lw: number, alpha: number, handle: number, len?: number): void => {

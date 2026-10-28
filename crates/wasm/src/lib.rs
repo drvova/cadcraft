@@ -187,6 +187,20 @@ fn infinite_points(pts: &[Vec2], view: Bounds2, ray: bool) -> [Vec2; 2] {
     if ray { [base, base + dir * t] } else { [base - dir * t, base + dir * t] }
 }
 
+/// The view expanded by `margin` — a fraction of the view's span on each side (0.0 is the view
+/// itself). The display list is built for this window so a client can pan inside it without
+/// asking the engine again; the margin is clamped so a hostile value cannot build a list the
+/// byte guard would refuse.
+fn expand_view(view: Bounds2, margin: f64) -> Bounds2 {
+    let m = if margin.is_finite() { margin.clamp(0.0, 8.0) } else { 0.0 };
+    if m <= 0.0 || view.is_empty() {
+        return view;
+    }
+    let dx = view.width() * m;
+    let dy = view.height() * m;
+    Bounds2 { min: Vec2::new(view.min.x - dx, view.min.y - dy), max: Vec2::new(view.max.x + dx, view.max.y + dy) }
+}
+
 /// The `kind` string of a primitive (see the module documentation).
 fn kind_name(kind: Kind) -> &'static str {
     match kind {
@@ -440,22 +454,24 @@ impl Facade {
     }
 
     /// The active space's display list as JSON (see the module documentation), culled to the
-    /// current view. Replies `{"error":…}` when there is no drawing or the list would exceed
-    /// [`MAX_DISPLAY_BYTES`].
-    pub fn display(&mut self) -> String {
+    /// current view expanded by `margin` (a fraction of the view's span per side; 0.0 is the
+    /// view itself). A client that pans inside the returned window needs no further call. Replies
+    /// `{"error":…}` when there is no drawing or the list would exceed [`MAX_DISPLAY_BYTES`].
+    pub fn display(&mut self, margin: f64) -> String {
         let Ok(st) = self.session.state() else { return error_only("no drawing open") };
         let revision = st.revision;
-        let list = cadcraft_render::build(&st.doc, &st.space, &self.build_options());
+        let window = expand_view(self.view, margin);
+        let list = cadcraft_render::build(&st.doc, &st.space, &self.build_options_for(window));
         let mut verts: Vec<Value> = Vec::new();
         let mut prims: Vec<Value> = Vec::new();
         let mut estimate: usize = 0;
         for p in &list.prims {
             let pts = list.points(p);
-            if pts.is_empty() || !self.prim_visible(p, pts) {
+            if pts.is_empty() || !self.prim_visible(p, pts, window) {
                 continue;
             }
             let points: Vec<Vec2> = match p.kind {
-                Kind::Infinite { ray } => infinite_points(pts, self.view, ray).to_vec(),
+                Kind::Infinite { ray } => infinite_points(pts, window, ray).to_vec(),
                 _ => pts.to_vec(),
             };
             estimate = estimate.saturating_add(points.len().saturating_mul(VERTEX_BYTES)).saturating_add(PRIM_BYTES);
@@ -590,8 +606,11 @@ impl Facade {
     /// The build options for the current view: level of detail from the view's height (the canvas
     /// is assumed [`NOMINAL_CANVAS_PX`] tall), the view as the pattern-generation window, and
     /// transparency on so `alpha` is meaningful.
-    fn build_options(&self) -> Options {
-        let height = self.view.height().max(MIN_VIEW_SIZE);
+    /// The build options for a window: level of detail from the window's height (the canvas is
+    /// assumed [`NOMINAL_CANVAS_PX`] tall), the window as the pattern-generation window, and
+    /// transparency on so `alpha` is meaningful.
+    fn build_options_for(&self, window: Bounds2) -> Options {
+        let height = window.height().max(MIN_VIEW_SIZE);
         let px = (height / NOMINAL_CANVAS_PX).clamp(1e-9, 1e9);
         Options {
             tolerance: px * 0.5,
@@ -600,7 +619,7 @@ impl Facade {
             fill: true,
             lineweights: true,
             view_height: height,
-            view: Some(self.view),
+            view: Some(window),
             transparency: true,
             ..Options::default()
         }
@@ -608,11 +627,11 @@ impl Facade {
 
     /// Whether any of a primitive's geometry is inside the view. An infinite line or ray is never
     /// entirely outside (it always crosses the view or could be clipped to nothing by the canvas).
-    fn prim_visible(&self, p: &DPrim, pts: &[Vec2]) -> bool {
+    fn prim_visible(&self, p: &DPrim, pts: &[Vec2], window: Bounds2) -> bool {
         match p.kind {
             Kind::Infinite { .. } => true,
-            Kind::Point => pts.first().is_some_and(|q| self.view.contains(*q)),
-            _ => Bounds2::from_points(pts.iter().copied()).intersects(&self.view),
+            Kind::Point => pts.first().is_some_and(|q| window.contains(*q)),
+            _ => Bounds2::from_points(pts.iter().copied()).intersects(&window),
         }
     }
 
@@ -780,8 +799,8 @@ mod bindings {
         }
 
         #[wasm_bindgen(js_name = display)]
-        pub fn display(&mut self) -> String {
-            self.0.display()
+        pub fn display(&mut self, margin: f64) -> String {
+            self.0.display(margin)
         }
 
         #[wasm_bindgen(js_name = setView)]
@@ -838,7 +857,7 @@ mod tests {
     }
 
     fn bounds(f: &mut Facade) -> [f64; 4] {
-        let d = parse(&f.display());
+        let d = parse(&f.display(0.0));
         let b = d["bounds"].as_array().unwrap();
         [b[0].as_f64().unwrap(), b[1].as_f64().unwrap(), b[2].as_f64().unwrap(), b[3].as_f64().unwrap()]
     }
@@ -853,7 +872,7 @@ mod tests {
         assert_eq!(r["title"].as_str(), Some("Bracket"), "load_sample: {r}");
         assert!(r["entityCount"].as_u64().is_some_and(|n| n > 0), "load_sample: {r}");
         // The display list follows the sample, and the view was fitted to it.
-        let d = parse(&f.display());
+        let d = parse(&f.display(0.0));
         assert!(d["prims"].as_array().is_some_and(|p| !p.is_empty()), "display after load_sample: {d}");
         let v = parse(&f.view());
         assert!(v["min"].as_array().is_some_and(|m| m.len() == 2), "view after load_sample: {v}");
@@ -862,7 +881,7 @@ mod tests {
     #[test]
     fn sample_display_list_has_geometry() {
         let mut f = Facade::sample();
-        let text = f.display();
+        let text = f.display(0.0);
         // The sample must always render, and stay far under the cap (about 100 KB today). The
         // size and head are printed so `--nocapture` reports the real artifact:
         // `cargo test -p cadcraft-wasm sample_display_list_has_geometry -- --nocapture`.
@@ -995,7 +1014,7 @@ mod tests {
     #[test]
     fn display_is_deterministic() {
         let mut f = Facade::sample();
-        assert_eq!(f.display(), f.display());
+        assert_eq!(f.display(0.0), f.display(0.0));
         assert_eq!(f.digest(), f.digest());
         assert_eq!(f.state(), f.state());
     }
@@ -1003,13 +1022,35 @@ mod tests {
     #[test]
     fn display_culls_to_the_view() {
         let mut f = Facade::sample();
-        assert!(!parse(&f.display())["prims"].as_array().unwrap().is_empty());
+        assert!(!parse(&f.display(0.0))["prims"].as_array().unwrap().is_empty());
         assert_eq!(parse(&f.set_view(1.0e6, 1.0e6, 1.0e6 + 10.0, 1.0e6 + 10.0))["ok"], json!(true));
-        let d = parse(&f.display());
+        let d = parse(&f.display(0.0));
         assert!(d["prims"].as_array().unwrap().is_empty(), "culled: {d}");
         assert!(d["bounds"].as_array().is_some_and(|b| b.len() == 4), "bounds: {d}");
         assert_eq!(parse(&f.set_view(-100.0, -100.0, 100.0, 100.0))["ok"], json!(true));
-        assert!(!parse(&f.display())["prims"].as_array().unwrap().is_empty());
+        assert!(!parse(&f.display(0.0))["prims"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn display_margin_widens_the_culling_window() {
+        let mut f = Facade::sample();
+        // The sample's extents, read from a view that holds everything.
+        assert_eq!(parse(&f.set_view(-100.0, -100.0, 100.0, 100.0))["ok"], json!(true));
+        let b: Vec<f64> = parse(&f.display(0.0))["bounds"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect();
+        let (x0, y0, x1, y1) = (b[0], b[1], b[2], b[3]);
+        let w = (x1 - x0).max(1.0);
+        // A view one drawing-width to the right of the drawing: a tight cull sees nothing…
+        assert_eq!(parse(&f.set_view(x1 + w, y0, x1 + 2.0 * w, y1))["ok"], json!(true));
+        assert!(parse(&f.display(0.0))["prims"].as_array().unwrap().is_empty(), "the tight window is empty");
+        // …but a margin of 1.5 spans the width again, so the window reaches back into it.
+        assert!(!parse(&f.display(1.5))["prims"].as_array().unwrap().is_empty(), "the margin widens the window");
+        // A hostile margin is clamped, never a panic or an unbuildable list.
+        assert!(parse(&f.display(f64::NAN))["prims"].as_array().is_some());
+        assert!(parse(&f.display(1.0e9))["prims"].as_array().is_some());
+        // And the view itself is untouched by a margin read: the reply's view is what was set.
+        let v = parse(&f.view());
+        assert_eq!(v["min"][0], json!(x1 + w));
+        assert_eq!(v["max"][0], json!(x1 + 2.0 * w));
     }
 
     /// A facade with no drawing at all (the tolerant replies of `selection`/`format_point`).

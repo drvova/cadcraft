@@ -32,7 +32,8 @@ export interface RawFacade {
   commands(): string;
   source(): string;
   run_script(text: string): string;
-  display(): string;
+  /** The display list for the view expanded by `margin` (a fraction of the view's span). */
+  display(margin: number): string;
   set_view(x0: number, y0: number, x1: number, y1: number): string;
   view(): string;
   open_bytes(name: string, bytes: Uint8Array): string;
@@ -410,8 +411,13 @@ export class AppFacade {
     return parseCommands(this.call(() => this.raw.commands()));
   }
 
-  displayList(): DisplayList {
-    return parseDisplayList(this.call(() => this.raw.display())) ?? EMPTY_DISPLAY;
+  /**
+   * The display list, culled to the view expanded by `margin` of its span per side (0 fetches
+   * exactly the view). The shell asks for a padded window once and pans inside it
+   * (`display-cache.ts`), so a drag costs no engine call at all.
+   */
+  displayList(margin = 0): DisplayList {
+    return parseDisplayList(this.call(() => this.raw.display(margin))) ?? EMPTY_DISPLAY;
   }
 
   /** The view the facade is showing, or null when it does not answer a rectangle. */
@@ -439,8 +445,11 @@ export class AppFacade {
     return this.execute("layer.current", { name });
   }
 
-  /** The engine's own zoom command. Note: it does not move the facade's canvas view (`view()`),
-   *  which only `setView` changes — a UI that owns the canvas should set the view itself. */
+  /**
+   * The engine's own zoom command. The engine fits the drawing's extents to the canvas's aspect
+   * and the facade mirrors the result into the canvas view, so a UI adopts it by reading
+   * `viewRect()` afterwards (the shell's `syncView`).
+   */
   zoomExtents(): Envelope {
     return this.execute("zoom", { mode: "extents" });
   }

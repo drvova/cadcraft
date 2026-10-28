@@ -56,8 +56,12 @@ function resolveMethod(instance: WasmModule, names: readonly string[]): ((...arg
   return null;
 }
 
-/** Wrap the wasm object in a validated `RawFacade`; null when it does not carry the contract. */
-function wrap(instance: WasmModule): RawFacade | null {
+/**
+ * Wrap the wasm object in a validated `RawFacade`; null when it does not carry the contract.
+ * Exported for the argument pass-through test: a method listed here that forgets an argument
+ * typechecks (fewer parameters is assignable) and silently drops it at runtime.
+ */
+export function wrapWasmFacade(instance: WasmModule): RawFacade | null {
   const resolved = new Map<string, (...args: unknown[]) => unknown>();
   for (const names of REQUIRED) {
     const method = resolveMethod(instance, names);
@@ -82,7 +86,7 @@ function wrap(instance: WasmModule): RawFacade | null {
     commands: () => text("commands", []),
     source: () => text("source", []),
     run_script: (t) => text("run_script", [t]),
-    display: () => text("display", []),
+    display: (margin) => text("display", [margin]),
     set_view: (x0, y0, x1, y1) => text("set_view", [x0, y0, x1, y1]),
     view: () => text("view", []),
     open_bytes: (name, bytes) => text("open_bytes", [name, bytes]),
@@ -114,5 +118,5 @@ export async function loadWasmFacade(): Promise<RawFacade | null> {
   // the UI opens on the sample so the canvas has something to show, as the mock does.
   const sample = (ctor as unknown as Record<string, unknown>)["sample"];
   const instance = (typeof sample === "function" ? (sample as () => unknown)() : new ctor()) as WasmModule;
-  return wrap(instance);
+  return wrapWasmFacade(instance);
 }

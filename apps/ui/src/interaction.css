@@ -8,12 +8,16 @@
 
 /* ---- Properties palette ---- */
 
+/* Like the layers pane, the properties palette is as tall as its rows (up to a share of the
+   rail, then it scrolls); the rail's remaining surface stays empty rather than a pane stretching
+   over nothing. */
 .properties {
   width: auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  flex: 1 1 50%;
+  flex: 0 1 auto;
+  max-height: 60%;
   background: transparent;
   border: none;
   border-top: var(--hairline) solid var(--border);
@@ -25,7 +29,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--gap-6);
-  height: 26px;
+  height: 22px;
   padding: 0 var(--gap-8);
   border-bottom: var(--hairline) solid var(--border);
 }

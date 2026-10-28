@@ -369,7 +369,7 @@ describe("the extended facade contract over the mock", () => {
     expect(typeof mock.commands()).toBe("string");
     expect(typeof mock.source()).toBe("string");
     expect(typeof mock.run_script("")).toBe("string");
-    expect(typeof mock.display()).toBe("string");
+    expect(typeof mock.display(0.5)).toBe("string");
     expect(typeof mock.set_view(0, 0, 1, 1)).toBe("string");
     expect(typeof mock.view()).toBe("string");
     expect(typeof mock.open_bytes("x", new Uint8Array())).toBe("string");

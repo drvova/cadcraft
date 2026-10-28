@@ -4,7 +4,7 @@
  * invented here — the swatch paints the engine's own `colorRgb`.
  */
 
-import { For, Show, type Accessor, type JSX } from "solid-js";
+import { For, type Accessor, type JSX } from "solid-js";
 import type { LayerInfo } from "../facade";
 
 export interface LayersPanelProps {
@@ -38,11 +38,11 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
               >
                 {layer.name}
               </button>
-              <Show when={layer.used}>
-                <span class="layer-used" title="Has objects">
-                  used
-                </span>
-              </Show>
+              <span
+                class={layer.used ? "layer-used is-used" : "layer-used"}
+                title={layer.used ? "Has objects" : "No objects"}
+                aria-hidden="true"
+              />
               <span class="layer-toggles">
                 <button
                   class={layer.on ? "toggle is-on" : "toggle"}
@@ -77,7 +77,7 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
         </For>
       </div>
       <div class="layers-foot">
-        <span class="hint">Click a name to make it current; the dot, F and L toggle on, frozen and lock.</span>
+        <span class="hint">Click a name to make it current.</span>
       </div>
     </aside>
   );

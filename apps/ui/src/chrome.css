@@ -36,7 +36,7 @@
   background: transparent;
   color: var(--text-dim);
   font-family: var(--font-family);
-  font-size: var(--font-small);
+  font-size: var(--font-label);
   cursor: pointer;
 }
 
@@ -60,16 +60,18 @@
 }
 
 /* The one elevated surface in the interface: a menu. */
+/* Cursor's menu recipe: radius 4-5px, a soft 0 2px 8px shadow, 13px type, 2em rows. Ours sits
+   on the same scale with the UI's own tokens (radius-card 4px, font-label 12px, 24px rows). */
 .menu-drop {
   position: absolute;
   top: 100%;
   left: 0;
-  min-width: 224px;
+  min-width: 208px;
   padding: var(--gap-4);
   background: var(--list-bg);
   border: var(--hairline) solid var(--border);
-  border-radius: var(--radius-control);
-  box-shadow: 0 8px 20px var(--shadow);
+  border-radius: var(--radius-card);
+  box-shadow: 0 2px 8px var(--shadow);
   z-index: 40;
 }
 
@@ -89,14 +91,14 @@
   align-items: center;
   gap: var(--gap-8);
   width: 100%;
-  height: 22px;
+  height: 24px;
   padding: 0 var(--gap-6);
   border: none;
-  border-radius: var(--radius-small);
+  border-radius: var(--radius-card);
   background: transparent;
   color: var(--text);
   font-family: var(--font-family);
-  font-size: var(--font-small);
+  font-size: var(--font-label);
   text-align: left;
   cursor: pointer;
 }
@@ -161,7 +163,7 @@
   height: 24px;
   padding: 0;
   border: none;
-  border-radius: var(--radius-small);
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--icon);
   cursor: pointer;
