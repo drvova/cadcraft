@@ -1,0 +1,361 @@
+/*
+ * The canonical components: six native elements that carry the system's states, so no surface
+ * paints its own hover, focus or disabled treatment. Every value is a token from tokens.css.
+ *
+ * The recipes are the measured Cursor 3.27.22 ones
+ * (`.design-system/research/cursor-recipes-2026-10-28.md` §2 and §5): hover is a fill at .08,
+ * pressed/selected .14–.20, disabled ink .36, the focus ring 1px accent at offset -1, and the
+ * borders are alpha strokes. Hover styles sit behind `@media (hover: hover)` so a touch device
+ * never flashes a hover state (trap/touch-hover-flash). Reduced motion is the shell's:
+ * `:root[data-animations="off"] *` in styles.css kills every transition below.
+ */
+
+/* ---- Button: <button class="ui-button ui-button--{variant} ui-button--{size}"> ---- */
+
+.ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-4);
+  height: var(--control-h-button);
+  padding: var(--button-pad-y) var(--button-pad-x);
+  border: none;
+  border-radius: var(--radius-control);
+  font-family: var(--font-family);
+  font-size: var(--font-button);
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.ui-button--sm {
+  height: var(--control-h-input);
+  padding: var(--gap-2) var(--gap-6);
+  font-size: var(--font-chip);
+}
+
+.ui-button:focus-visible {
+  outline: var(--focus-outline-w) solid var(--accent);
+  outline-offset: var(--focus-outline-offset);
+}
+
+.ui-button:disabled {
+  cursor: default;
+}
+
+/* secondary — the default: the .08 fill, .14 on hover, .20 pressed */
+.ui-button--secondary {
+  background: var(--hover);
+  color: var(--text);
+}
+
+@media (hover: hover) {
+  .ui-button--secondary:hover:not(:disabled) {
+    background: var(--fill-active);
+  }
+}
+
+.ui-button--secondary:active:not(:disabled) {
+  background: var(--fill-pressed);
+}
+
+.ui-button--secondary:disabled {
+  background: var(--fill-disabled);
+  color: var(--text-disabled);
+}
+
+/* primary — the accent fill, mixed 10% toward white on hover, 20% pressed */
+.ui-button--primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+@media (hover: hover) {
+  .ui-button--primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+}
+
+.ui-button--primary:active:not(:disabled) {
+  background: var(--accent-pressed);
+}
+
+.ui-button--primary:disabled {
+  background: var(--fill-disabled);
+  color: var(--text-disabled);
+}
+
+/* ghost — no resting fill; the same ladder on hover and press */
+.ui-button--ghost {
+  background: transparent;
+  color: var(--text);
+}
+
+@media (hover: hover) {
+  .ui-button--ghost:hover:not(:disabled) {
+    background: var(--hover);
+  }
+}
+
+.ui-button--ghost:active:not(:disabled) {
+  background: var(--fill-active);
+}
+
+.ui-button--ghost:disabled {
+  color: var(--text-disabled);
+}
+
+/* danger — the error fill, mixed 10% toward white on hover, 20% pressed */
+.ui-button--danger {
+  background: var(--error);
+  color: var(--on-accent);
+}
+
+@media (hover: hover) {
+  .ui-button--danger:hover:not(:disabled) {
+    background: var(--error-hover);
+  }
+}
+
+.ui-button--danger:active:not(:disabled) {
+  background: var(--error-pressed);
+}
+
+.ui-button--danger:disabled {
+  background: var(--fill-disabled);
+  color: var(--text-disabled);
+}
+
+/* ---- IconButton: <button class="ui-icon-button ui-icon-button--{variant} ui-icon-button--{size}"> ---- */
+
+.ui-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h-input);
+  height: var(--control-h-input);
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--icon);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.ui-icon-button .tool-icon {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+}
+
+.ui-icon-button--sm {
+  width: var(--control-h-chip);
+  height: var(--control-h-chip);
+}
+
+.ui-icon-button--sm .tool-icon {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+}
+
+.ui-icon-button:focus-visible {
+  outline: var(--focus-outline-w) solid var(--accent);
+  outline-offset: var(--focus-outline-offset);
+}
+
+.ui-icon-button:disabled {
+  cursor: default;
+}
+
+/* selected — the .14 fill and the full ink, whatever the variant */
+.ui-icon-button[aria-pressed="true"] {
+  background: var(--fill-active);
+  color: var(--text);
+}
+
+/* ghost — transparent, the .08 fill on hover */
+@media (hover: hover) {
+  .ui-icon-button--ghost:hover:not(:disabled) {
+    background: var(--hover);
+    color: var(--text);
+  }
+}
+
+.ui-icon-button--ghost:active:not(:disabled) {
+  background: var(--fill-active);
+  color: var(--text);
+}
+
+.ui-icon-button--ghost:disabled {
+  color: var(--text-disabled);
+}
+
+/* soft — resting at the .08 fill, .14 on hover */
+.ui-icon-button--soft {
+  background: var(--hover);
+}
+
+@media (hover: hover) {
+  .ui-icon-button--soft:hover:not(:disabled) {
+    background: var(--fill-active);
+    color: var(--text);
+  }
+}
+
+.ui-icon-button--soft:active:not(:disabled) {
+  background: var(--fill-pressed);
+  color: var(--text);
+}
+
+.ui-icon-button--soft:disabled {
+  background: var(--fill-disabled);
+  color: var(--text-disabled);
+}
+
+/* inverted — the fill is the ink: --text resting, then down the ink ladder */
+.ui-icon-button--inverted {
+  background: var(--text);
+  color: var(--on-accent);
+}
+
+@media (hover: hover) {
+  .ui-icon-button--inverted:hover:not(:disabled) {
+    background: var(--text-dim);
+  }
+}
+
+.ui-icon-button--inverted:active:not(:disabled) {
+  background: var(--text-faint);
+}
+
+.ui-icon-button--inverted:disabled {
+  background: var(--fill-disabled);
+  color: var(--text-disabled);
+}
+
+/* ---- Chip: <button|span class="ui-chip ui-chip--{tone}"> ---- */
+
+.ui-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-4);
+  height: var(--control-h-chip);
+  padding: 0 var(--gap-8);
+  border: none;
+  border-radius: var(--radius-round);
+  background: transparent;
+  color: var(--text-faint);
+  font-family: var(--font-family);
+  font-size: var(--font-chip);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ui-chip--accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* The interactive form is a <button>: it takes the pointer and the focus ring. */
+.ui-chip--interactive {
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.ui-chip--interactive:focus-visible {
+  outline: var(--focus-outline-w) solid var(--accent);
+  outline-offset: var(--focus-outline-offset);
+}
+
+@media (hover: hover) {
+  .ui-chip--interactive:hover {
+    background: var(--hover);
+  }
+}
+
+.ui-chip--interactive:active {
+  background: var(--fill-active);
+}
+
+/* ---- Field: <input class="ui-field"> ---- */
+
+.ui-field {
+  height: var(--control-h-input);
+  padding: var(--field-pad-y) var(--field-pad-x);
+  border: var(--hairline) solid var(--border-soft);
+  border-radius: var(--radius-control);
+  background: var(--control);
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-body);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+
+.ui-field::placeholder {
+  color: var(--text-faint);
+}
+
+.ui-field:focus {
+  border-color: var(--accent);
+  outline: var(--focus-outline-w) solid var(--accent);
+  outline-offset: var(--focus-outline-offset);
+}
+
+.ui-field:disabled {
+  color: var(--text-disabled);
+}
+
+/* ---- Row: <button class="ui-row"> ---- */
+
+.ui-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: var(--control-h-row);
+  padding: 0 var(--gap-4);
+  border: none;
+  border-radius: var(--radius-card);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-family);
+  font-size: var(--font-body);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.ui-row:focus-visible {
+  outline: var(--focus-outline-w) solid var(--accent);
+  outline-offset: var(--focus-outline-offset);
+}
+
+@media (hover: hover) {
+  .ui-row:hover:not(:disabled):not([aria-current="true"]) {
+    background: var(--hover);
+  }
+}
+
+/* selected — the .14 fill and the full ink; it keeps the fill under the pointer */
+.ui-row[aria-current="true"] {
+  background: var(--fill-active);
+  color: var(--text);
+}
+
+.ui-row:disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+/* ---- SectionLabel: <h2 class="ui-section-label"> ---- */
+
+.ui-section-label {
+  margin: 0;
+  color: var(--text-faint);
+  font-family: var(--font-family);
+  font-size: var(--font-chip);
+  font-weight: 700;
+  text-transform: uppercase;
+}

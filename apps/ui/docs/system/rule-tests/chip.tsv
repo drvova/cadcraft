@@ -1,0 +1,6 @@
+rule_id	falsify	negation	two_agent	sweep	verdict	notes
+rule/chip-interactive-only-with-handler	pass	pass	n/a: falsify and sweep cover it	pass	ship	
+rule/chip-tone-meaning	pass	pass	n/a: falsify and sweep cover it	pass	ship	
+rule/chip-text-short	pass	pass	n/a: falsify and sweep cover it	pass	ship	
+rule/chip-canonical-element	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/chip-row-limit	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	

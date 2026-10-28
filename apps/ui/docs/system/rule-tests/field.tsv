@@ -1,0 +1,6 @@
+rule_id	falsify	negation	two_agent	sweep	verdict	notes
+rule/field-label-bound	pass	pass	n/a: falsify and sweep cover it	pass	ship	
+rule/field-type-native	pass	pass	n/a: falsify and sweep cover it	pass	ship	
+rule/field-placeholder-example	pass	pass	n/a: falsify and sweep cover it	pass	ship	
+rule/field-canonical-element	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/field-width-limit	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	

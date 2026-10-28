@@ -1,0 +1,3 @@
+# Tests only: the preload registers happy-dom and the Solid JSX seams (src/ui/test-preload.ts).
+[test]
+preload = ["./src/ui/test-preload.ts"]

@@ -1,0 +1,6 @@
+rule_id	falsify	negation	two_agent	sweep	verdict	notes
+rule/row-one-action	pass	pass	n/a: falsify and sweep cover it	pass	ship	
+rule/row-current-marked	pass	pass	n/a: falsify and sweep cover it	pass	ship	
+rule/row-trailing-quiet	pass	pass	n/a: falsify and sweep cover it	pass	ship	
+rule/row-canonical-element	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/row-label-limit	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	

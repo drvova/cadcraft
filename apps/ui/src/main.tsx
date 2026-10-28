@@ -7,6 +7,7 @@ import { render } from "solid-js/web";
 import { App } from "./app";
 import { createFacade } from "./facade";
 import "./tokens.css";
+import "./ui/ui.css";
 import "./styles.css";
 
 const root = document.getElementById("app");

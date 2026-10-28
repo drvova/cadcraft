@@ -33,21 +33,29 @@
   --text: #F0F0F0;
   --text-dim: rgba(240, 240, 240, 0.74);
   --text-faint: rgba(240, 240, 240, 0.60);
+  --text-disabled: rgba(240, 240, 240, 0.36); /* the disabled ink (Cursor §5) */
   --icon: rgba(240, 240, 240, 0.66);
   --icon-accent: #599CE7;
   --icon-point: #f1b467;
 
   /* ---- Action and selection (accent, selection, hover, fill_active, grip, grip_hot) ---- */
   --accent: #599CE7;
+  --accent-hover: #6AA6E9; /* the accent mixed 10% toward white: the primary button's hover */
+  --accent-pressed: #7AB0EC; /* the same at 20%: the primary button's pressed fill */
+  --accent-soft: rgba(89, 156, 231, 0.12); /* the accent-tinted chip fill (Chip tone=accent) */
   --selection: #599CE7;
   /* The one hover fill (Cursor §5: hover is a fill, never a colour change). */
   --hover: rgba(240, 240, 240, 0.08);
   --fill-active: rgba(240, 240, 240, 0.14); /* the pressed/selected fill */
+  --fill-pressed: rgba(240, 240, 240, 0.20); /* the pressed step of a .14-hover control */
+  --fill-disabled: rgba(240, 240, 240, 0.04); /* the disabled fill (Cursor §5: no fill change) */
   --grip-hot: #e34671;
 
   /* ---- Status (warn, error, snap, toggle_on) ---- */
   --warn: #f1b467;
   --error: #e34671;
+  --error-hover: #E6597F; /* the error fill mixed 10% toward white: the danger button's hover */
+  --error-pressed: #E96B8D; /* the same at 20% */
   --snap: #3fa266;
   --toggle-on: #3fa266;
 
@@ -94,6 +102,7 @@
   --radius-composer: 5px;
   --radius-elevated: 20px; /* the glass composer, menus and popovers (Cursor §2) */
   --radius-pill: 11px;
+  --radius-round: 9999px; /* the pill/circle radius (Chip, IconButton; Cursor §2) */
   --gap-2: 2px;
   --gap-3: 3px;
   --gap-4: 4px;
@@ -109,7 +118,12 @@
   --control-h-button: 28px;
   --control-h-input: 24px;
   --control-h-row: 22px;
+  --control-h-chip: 20px; /* the chip height (Cursor §2's 20px chip) */
   --control-h-tab: 35px;
+  /* The glyph steps, one per control size (the run's icon sizes). */
+  --icon-size-sm: 12px;
+  --icon-size-md: 14px;
+  --icon-size-lg: 16px;
   --button-pad-x: 8px;
   --button-pad-y: 4px;
   --field-pad-x: 6px;
@@ -162,10 +176,14 @@
   /* Cursor's tertiary ink (.60) misses 4.5 over the frozen #e8e8e8 control surface (4.49); the
      nearest measured step that passes is the icon ink .66 (5.45). */
   --text-faint: rgba(20, 20, 20, 0.66);
+  --text-disabled: rgba(20, 20, 20, 0.36); /* the disabled ink (Cursor §5) */
   --icon: rgba(20, 20, 20, 0.66);
   --icon-accent: #2678C1;
   --icon-point: #b8791f;
   --accent: #2678C1;
+  --accent-hover: #3C86C7; /* the accent mixed 10% toward white: the primary button's hover */
+  --accent-pressed: #5193CD; /* the same at 20%: the primary button's pressed fill */
+  --accent-soft: rgba(38, 120, 193, 0.12); /* the accent-tinted chip fill (Chip tone=accent) */
   --cmd-bg: #ebebeb;
   --cmd-border: #c9c9c9;
   --cmd-history: #f2f2f2;
@@ -178,9 +196,13 @@
   --list-row: var(--fill-active);
   --hover: rgba(20, 20, 20, 0.08);
   --fill-active: rgba(20, 20, 20, 0.14);
+  --fill-pressed: rgba(20, 20, 20, 0.20); /* the pressed step of a .14-hover control */
+  --fill-disabled: rgba(20, 20, 20, 0.04); /* the disabled fill (Cursor §5: no fill change) */
   --toggle-on: #007041;
   --warn: #A46701;
   --error: #BE1744;
+  --error-hover: #C52E57; /* the error fill mixed 10% toward white: the danger button's hover */
+  --error-pressed: #CB4569; /* the same at 20% */
   --layer-current: #d5dfe9;
   --grip-hot: #e34671;
   --scrollbar: rgba(20, 20, 20, 0.14);

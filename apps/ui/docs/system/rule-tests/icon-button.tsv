@@ -1,0 +1,6 @@
+rule_id	falsify	negation	two_agent	sweep	verdict	notes
+rule/icon-button-name	pass	pass	n/a: falsify and sweep cover it	pass	ship	
+rule/icon-button-one-inverted	pass	pass	n/a: falsify and sweep cover it	pass	ship	
+rule/icon-button-title-sentence	pass	pass	n/a: falsify and sweep cover it	pass	ship	
+rule/icon-button-canonical-element	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/icon-button-row-limit	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
