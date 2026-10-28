@@ -94,7 +94,7 @@
 .prop-select {
   width: 100%;
   min-width: 0;
-  height: 18px;
+  height: var(--control-h-chip);
   padding: 0 var(--gap-4);
   border: var(--hairline) solid transparent;
   border-radius: var(--radius-small);

@@ -62,7 +62,7 @@
       "variants": { "type": ["text", "email", "search", "password"] },
       "states": ["disabled"],
       "tokens": ["--control-h-input", "--radius-control", "--field-pad-y", "--field-pad-x", "--font-body", "--control", "--border-soft", "--hairline", "--accent", "--text", "--text-faint", "--text-disabled"],
-      "replaces": ["src/components/PropertiesPanel.tsx", "src/components/CommandLine.tsx"]
+      "replaces": ["src/components/CommandLine.tsx"]
     },
     {
       "id": "row",
@@ -78,7 +78,7 @@
       "variants": {},
       "states": ["selected", "disabled"],
       "tokens": ["--control-h-row", "--radius-card", "--gap-4", "--font-body", "--text-dim", "--hover", "--fill-active", "--text", "--text-disabled"],
-      "replaces": ["src/components/MenuBar.tsx", "src/components/PropertiesPanel.tsx", "src/components/AssistantPane.tsx"]
+      "replaces": ["src/components/MenuBar.tsx", "src/components/AssistantPane.tsx"]
     },
     {
       "id": "section-label",
@@ -94,7 +94,7 @@
       "variants": {},
       "states": [],
       "tokens": ["--font-chip", "--text-faint"],
-      "replaces": ["src/components/LayersPanel.tsx", "src/components/PropertiesPanel.tsx"]
+      "replaces": ["src/components/LayersPanel.tsx"]
     }
   ]
 }

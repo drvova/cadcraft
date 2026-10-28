@@ -9,6 +9,7 @@
 
 import { createEffect, createSignal, For, Index, Show, type Accessor, type JSX } from "solid-js";
 import { buildPatch, type PropRow, type PropertiesReply } from "../props";
+import { SectionLabel } from "../ui/SectionLabel";
 import "../interaction.css";
 
 export interface PropertiesPanelProps {
@@ -30,7 +31,7 @@ export function PropertiesPanel(props: PropertiesPanelProps): JSX.Element {
   return (
     <aside class="properties">
       <div class="properties-head">
-        <span class="section-label">Properties</span>
+        <SectionLabel>Properties</SectionLabel>
         <span class="properties-state">{title()}</span>
       </div>
       <div class="properties-body" role="list">
