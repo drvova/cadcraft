@@ -94,7 +94,7 @@
       "variants": {},
       "states": [],
       "tokens": ["--font-chip", "--text-faint"],
-      "replaces": ["src/components/LayersPanel.tsx"]
+      "replaces": []
     }
   ]
 }

@@ -236,18 +236,9 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: var(--gap-6);
-  height: 22px;
+  height: var(--control-h-row);
   padding: 0 var(--gap-8);
   border-bottom: var(--hairline) solid var(--border);
-}
-
-/* Cursor's pane header: 11px, 700, uppercase, on a 22px band. */
-.section-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  color: var(--text-faint);
-  text-transform: uppercase;
 }
 
 .layers-count {
@@ -266,12 +257,13 @@ body {
 }
 
 /* Rows are flush list lines: hover is the only decoration, the current layer is marked by an
-   accent edge rather than a filled block. */
+   accent edge rather than a filled block. A grid so the name's Row (width: 100%) fills its cell. */
 .layer-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--gap-6);
-  min-height: 22px;
+  min-height: var(--control-h-row);
   padding: 0 var(--gap-8);
   border-radius: 0;
   background: transparent;
@@ -294,29 +286,16 @@ body {
   border-radius: var(--radius-small);
 }
 
-.layer-name {
+.layer-name-text {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font-family: var(--font-family);
-  font-size: var(--font-small);
-  text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: pointer;
 }
 
-.layer-row.is-current .layer-name {
+.layer-row.is-current .ui-row {
   color: var(--layer-current);
-}
-
-.layer-name:focus-visible {
-  outline: var(--focus-outline-w) solid var(--accent);
-  outline-offset: var(--focus-outline-offset);
 }
 
 /* The status column, as the desktop draws it: a small diamond, bright when the layer has
@@ -347,8 +326,8 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: var(--icon-size-lg);
+  height: var(--icon-size-lg);
   padding: 0;
   border: none;
   border-radius: 0;

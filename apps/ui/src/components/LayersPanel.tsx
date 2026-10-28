@@ -6,6 +6,8 @@
 
 import { For, type Accessor, type JSX } from "solid-js";
 import type { LayerInfo } from "../facade";
+import { Row } from "../ui/Row";
+import { SectionLabel } from "../ui/SectionLabel";
 
 export interface LayersPanelProps {
   layers: Accessor<LayerInfo[]>;
@@ -22,7 +24,7 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
   return (
     <aside class="layers">
       <div class="layers-head">
-        <span class="section-label">Layers</span>
+        <SectionLabel>Layers</SectionLabel>
         <span class="layers-count">{props.layers().length}</span>
       </div>
       <div class="layers-list" role="list">
@@ -30,14 +32,12 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
           {(layer) => (
             <div class={layer.current ? "layer-row is-current" : "layer-row"} role="listitem">
               <span class="layer-swatch" style={{ background: rgb(layer.colorRgb) }} title={`${layer.colorName} ${layer.colorRgb.join(",")}`} />
-              <button
-                class="layer-name"
-                type="button"
+              <Row
                 title={layer.description !== "" ? layer.description : `Make ${layer.name} current`}
                 onClick={() => props.onMakeCurrent(layer.name)}
               >
-                {layer.name}
-              </button>
+                <span class="layer-name-text">{layer.name}</span>
+              </Row>
               <span
                 class={layer.used ? "layer-used is-used" : "layer-used"}
                 title={layer.used ? "Has objects" : "No objects"}
