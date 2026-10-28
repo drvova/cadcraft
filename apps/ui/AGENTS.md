@@ -25,7 +25,7 @@ Tokens by role (src/tokens.css):
 - space: --gap-2, --gap-3, --gap-4, --gap-5, --gap-6, --gap-8, --gap-10, --gap-12, --gap-14, --gap-16, --gap-default, --button-pad-x, --button-pad-y, --field-pad-x, --field-pad-y, --card-padding
 - radius: --radius-control, --radius-small, --radius-card, --radius-composer, --radius-elevated, --radius-popover, --radius-block, --radius-pill, --radius-round
 - motion: --ease-out, --ease-out-quint
-- size: --control-h-button, --control-h-input, --control-h-row, --control-h-chip, --control-h-tab, --icon-size-sm, --icon-size-md, --icon-size-lg, --composer-min-height, --composer-toolbar-height
+- size: --control-h-button, --control-h-input, --control-h-row, --control-h-chip, --control-h-tab, --control-h-suggestion, --icon-size-sm, --icon-size-md, --icon-size-lg, --composer-min-height, --composer-toolbar-height
 - other: --list-row, --dur-instant, --dur-fast, --dur-med, --dur-slow, --hairline, --focus-outline-w, --focus-outline-offset, --hover-opacity
 
 Components (import, job):

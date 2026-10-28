@@ -107,36 +107,77 @@
 .assistant-empty {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-6);
-  padding: var(--gap-4) 0;
+  gap: var(--gap-2);
+  padding: 0;
 }
 
 .assistant-empty p {
-  margin: 0;
+  margin: 0 0 var(--gap-6);
+  padding: 0 var(--gap-10);
   color: var(--text-faint);
-  font-size: var(--font-label);
+  font-size: var(--font-body);
   line-height: 1.5;
 }
 
-/* An example is a quiet row that fills the composer (the row recipe, at panel scale). */
+/* A suggestion is the measured 32px empty-state row (research §7b): the 14px icon at .66, the
+   13px label at full ink, the trailing chevron, and the .08 fill at radius 8 on hover. */
 .assistant-example {
-  padding: var(--gap-6) var(--gap-8);
-  border: var(--hairline) solid var(--border);
-  border-radius: var(--radius-card);
+  display: flex;
+  align-items: center;
+  gap: var(--gap-8);
+  width: 100%;
+  height: var(--control-h-suggestion);
+  padding: 0 var(--gap-10);
+  border: none;
+  border-radius: var(--radius-popover);
   background: transparent;
-  color: var(--text-dim);
+  color: var(--text);
   font-family: var(--font-family);
-  font-size: var(--font-label);
+  font-size: var(--font-body);
   text-align: left;
   cursor: pointer;
-  transition:
-    background-color var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out);
+  transition: background-color var(--dur-fast) var(--ease-out);
 }
 
-.assistant-example:hover {
-  background: var(--control-hover);
-  color: var(--text);
+@media (hover: hover) {
+  .assistant-example:hover {
+    background: var(--hover);
+  }
+}
+
+.assistant-example:focus-visible {
+  outline: var(--focus-outline-w) solid var(--accent);
+  outline-offset: var(--focus-outline-offset);
+}
+
+.assistant-example-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--icon);
+}
+
+.assistant-example-icon .tool-icon {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+}
+
+.assistant-example-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.assistant-example-chevron {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--text-disabled);
+}
+
+.assistant-example-chevron .tool-icon {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
 }
 
 /* The human message: the measured glass bubble — the elevated surface, radius 12, the .08

@@ -186,19 +186,21 @@
 }
 
 /* Layout tabs sit on the bar's own edge, the active one filled like AutoCAD's tab. */
+/* The measured editor tab (Cursor's `.tab`): 13px on a 10px inset, the active one is the pane's
+   fill (#181818), the inactive ones are transparent, hover is the .08 fill. */
 .layout-tab {
-  padding: 0 var(--gap-8);
+  padding: 0 var(--gap-10);
   border: none;
   border-radius: 0;
   background: transparent;
-  color: var(--text-dim);
+  color: var(--text-faint);
   font-family: var(--font-family);
-  font-size: var(--font-small);
+  font-size: var(--font-body);
   cursor: pointer;
 }
 
 .layout-tab:hover {
-  background: var(--control-hover);
+  background: var(--hover);
   color: var(--text);
 }
 

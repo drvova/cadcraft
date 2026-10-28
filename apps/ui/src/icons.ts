@@ -71,6 +71,8 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
   plus: "M12 5v14 M5 12h14",
   /** A cross: close the panel. */
   close: "M6 6l12 12 M18 6L6 18",
+  /** A ring: a circle suggestion. */
+  circle: "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18",
   /** A right chevron: a collapsed activity row (the transcript's trailing marker). */
   "chevron-right": "M9 6l6 6-6 6",
   /** A down chevron: an open activity row. */
@@ -86,7 +88,7 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
  * because it is the one icon set, and this list is what lets the icon test tell a used path from
  * an orphan one.
  */
-export const COMPOSER_ICONS: readonly string[] = ["send", "stop", "plus", "close", "chevron-right", "chevron-down", "copy", "retry"];
+export const COMPOSER_ICONS: readonly string[] = ["send", "stop", "plus", "close", "chevron-right", "chevron-down", "copy", "retry", "circle"];
 
 /** The path for a toolbar id, or null when there is none. */
 export function iconPath(id: string): string | null {

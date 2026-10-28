@@ -15,7 +15,7 @@
   --chrome: #141414;
   --chrome-dark: #0f0f0f;
   --panel: #141414;
-  --tab-active: #2d2d2d;
+  --tab-active: #181818; /* the measured active tab fill (Cursor's editor tab) */
   --control: #1c1c1c;
   --control-hover: #232323;
   --surface-elevated: #212121; /* Cursor's elevated surface: the composer, menus, popovers */
@@ -124,6 +124,7 @@
   --control-h-row: 22px;
   --control-h-chip: 20px; /* the chip height (Cursor §2's 20px chip) */
   --control-h-tab: 35px;
+  --control-h-suggestion: 32px; /* the empty-state suggestion row (measured) */
   /* The glyph steps, one per control size (the run's icon sizes). */
   --icon-size-sm: 12px;
   --icon-size-md: 14px;
@@ -175,7 +176,7 @@
   --chrome: #F8F8F8;
   --chrome-dark: #F3F3F3;
   --panel: #FCFCFC;
-  --tab-active: #FCFCFC;
+  --tab-active: #FCFCFC; /* the light active tab fill (the pane surface) */
   --control: #e8e8e8;
   --control-hover: #dedede;
   --surface-elevated: #FCFCFC;

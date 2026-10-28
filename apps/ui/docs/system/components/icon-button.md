@@ -93,7 +93,7 @@ Real uses, 8 call sites (`rg -c "<IconButton" src/components` → `src/component
   - Do: 1 `inverted` send and `ghost` for attach and stop.
 
 ### Content
-- `rule/icon-button-title-sentence`: When `title` is written, name the action in sentence case with no full stop (Close the panel, Send, Stop), because the same string is the tooltip and the accessible name. Evidence: single use `src/components/AssistantPane.tsx:472`, the "Attach a picture (or paste, or drop one)" label. Check: review `src/components/AssistantPane.tsx`.
+- `rule/icon-button-title-sentence`: When `title` is written, name the action in sentence case with no full stop (Close the panel, Send, Stop), because the same string is the tooltip and the accessible name. Evidence: single use `src/components/AssistantPane.tsx:496`, the "Attach a picture (or paste, or drop one)" label. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `title="close panel."`
   - Do: `title="Close the panel"`
 

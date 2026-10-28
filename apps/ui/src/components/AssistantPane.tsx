@@ -67,8 +67,12 @@ type Entry =
 
 const STORAGE_KEY = "cadcraft.assistant.provider";
 
-/** The empty state's examples: one click fills the composer. */
-const EXAMPLES: readonly string[] = ["Draw a 20 mm circle at 0,0", "What is the total length of the lines?", "List the layers and what is on them"];
+/** The empty state's suggestions: one click fills the composer (the measured 32px suggestion row). */
+const EXAMPLES: readonly { icon: string; text: string }[] = [
+  { icon: "circle", text: "Draw a 20 mm circle at 0,0" },
+  { icon: "dist", text: "What is the total length of the lines?" },
+  { icon: "ui.dialog.layers", text: "List the layers and what is on them" },
+];
 
 /** How many pictures one message may carry, and how large each may be. */
 const MAX_ATTACHMENTS = 4;
@@ -376,11 +380,17 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                   class="assistant-example"
                   type="button"
                   onClick={() => {
-                    setInput(example);
+                    setInput(example.text);
                     inputEl?.focus();
                   }}
                 >
-                  {example}
+                  <span class="assistant-example-icon">
+                    <ToolIcon id={example.icon} />
+                  </span>
+                  <span class="assistant-example-text">{example.text}</span>
+                  <span class="assistant-example-chevron">
+                    <ToolIcon id="chevron-right" />
+                  </span>
                 </button>
               )}
             </For>
