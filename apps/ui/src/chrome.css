@@ -13,7 +13,7 @@
   display: flex;
   align-items: center;
   gap: 0;
-  height: 24px;
+  height: var(--control-h-input);
   padding: 0 var(--gap-4);
   background: var(--chrome-dark);
   border-bottom: var(--hairline) solid var(--border);
@@ -29,7 +29,7 @@
 }
 
 .menubar-title {
-  height: 22px;
+  height: var(--control-h-row);
   padding: 0 var(--gap-8);
   border: none;
   border-radius: var(--radius-small);
@@ -91,7 +91,7 @@
   align-items: center;
   gap: var(--gap-8);
   width: 100%;
-  height: 24px;
+  height: var(--control-h-input);
   padding: 0 var(--gap-6);
   border: none;
   border-radius: var(--radius-card);
@@ -128,7 +128,7 @@
 .menu-shortcut {
   flex: 0 0 auto;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--font-chip);
 }
 
 .menu-arrow {

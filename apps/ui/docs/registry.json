@@ -78,7 +78,7 @@
       "variants": {},
       "states": ["selected", "disabled"],
       "tokens": ["--control-h-row", "--radius-card", "--gap-4", "--font-body", "--text-dim", "--hover", "--fill-active", "--text", "--text-disabled"],
-      "replaces": ["src/components/MenuBar.tsx", "src/components/AssistantPane.tsx"]
+      "replaces": ["src/components/AssistantPane.tsx"]
     },
     {
       "id": "section-label",
