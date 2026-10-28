@@ -273,6 +273,29 @@
 .assistant-tool-chevron .tool-icon {
   width: var(--icon-size-sm);
   height: var(--icon-size-sm);
+  transition: transform 0.2s var(--ease-collapse);
+}
+
+/* The measured expand: the chevron turns a quarter over 200ms on the ease-out quart curve
+   (research §8); the opened content fades and rises in 220ms linear. */
+.assistant-tool[aria-expanded="true"] .assistant-tool-chevron {
+  transform: rotate(90deg);
+  transition: transform 0.2s var(--ease-collapse);
+}
+
+@keyframes transcript-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.assistant-detail {
+  animation: transcript-reveal 0.22s linear;
 }
 
 .assistant-tool-arrow {
@@ -557,7 +580,7 @@
   background: var(--surface-elevated);
   border: var(--hairline) solid var(--border-soft);
   border-radius: var(--radius-popover);
-  box-shadow: 0 2px 8px var(--shadow);
+  box-shadow: var(--shadow-popover);
   z-index: 50;
   max-height: 340px;
   overflow-y: auto;

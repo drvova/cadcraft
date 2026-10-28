@@ -79,8 +79,13 @@
   --layer-current: #4cc25a;
   --swatch-border: #191919;
 
-  /* Elevation: the shadow under floating surfaces (menus) */
+  /* Elevation: the shadow under floating surfaces (menus). The popover's measured ladder is the
+     three-layer one from Cursor §8; --shadow stays the flat colour the other surfaces use. */
   --shadow: rgba(0, 0, 0, 0.45);
+  --shadow-popover: 0 3px 8px rgba(0, 0, 0, 0.12), 0 2px 5px rgba(0, 0, 0, 0.12), 0 1px 1px rgba(0, 0, 0, 0.12);
+  --tooltip-bg: #141414; /* the measured tooltip (Cursor §8) */
+  --tooltip-border: rgba(240, 240, 240, 0.15);
+  --tooltip-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 
   /* Scrollbars: the measured thumb ladder (Cursor §1: thumb .14, hover .22) */
   --scrollbar: rgba(240, 240, 240, 0.14);
@@ -102,7 +107,7 @@
   --radius-card: 4px;
   --radius-composer: 5px;
   --radius-elevated: 20px; /* the glass composer, menus and popovers (Cursor §2) */
-  --radius-popover: 8px; /* the provider menu's popover (the composer pilot) */
+  --radius-popover: 14px; /* the measured popover: the model menu (Cursor §8) */
   --radius-block: 12px; /* the transcript's message bubble and code block (measured) */
   --radius-pill: 11px;
   --radius-round: 9999px; /* the pill/circle radius (Chip, IconButton; Cursor §2) */
@@ -152,10 +157,13 @@
   --font-family: system-ui, "Segoe UI", -apple-system, sans-serif;
   /* ---- Motion (measured: durations 50/100/150/200ms, ease-out + out-quint) ---- */
   --dur-instant: 0.05s;
-  --dur-fast: 0.1s;
+  --dur-press: 0.05s; /* the measured transform channel: the icon button's press scale */
+  --dur-fast: 0.1s; /* the measured state-transition duration (Cursor §8: 0.1s ease) */
   --dur-med: 0.15s;
   --dur-slow: 0.2s;
+  --ease-standard: ease; /* the measured state easing: hover, press, focus (Cursor §8) */
   --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-collapse: cubic-bezier(0.165, 0.84, 0.44, 1); /* the measured 200ms chevron rotate (§8) */
   --ease-out-quint: cubic-bezier(0.16, 1, 0.3, 1);
 
   --font-family-mono: "Hack", ui-monospace, "Cascadia Mono", Consolas, monospace;
@@ -182,6 +190,9 @@
   --control-hover: #dedede;
   --surface-elevated: #FCFCFC;
   --surface-inset: #F3F3F3; /* the light recessed block (the pane surface) */
+  --tooltip-bg: #F8F8F8;
+  --tooltip-border: rgba(20, 20, 20, 0.15);
+  --tooltip-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
   --border: rgba(20, 20, 20, 0.12);
   --border-soft: rgba(20, 20, 20, 0.08);
   --text: #141414;

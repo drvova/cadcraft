@@ -34,6 +34,7 @@ import {
   type ProviderConfig,
 } from "../assistant";
 import { ToolIcon } from "../icons";
+import { Tooltip } from "../ui/Tooltip";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
 import { IconButton } from "../ui/IconButton";
@@ -361,12 +362,16 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
           {title()}
         </span>
         <div class="assistant-head-actions">
-          <button class="assistant-icon" type="button" title="New chat" aria-label="New chat" onClick={newChat}>
-            <ToolIcon id="plus" />
-          </button>
-          <button class="assistant-icon" type="button" title="Close" aria-label="Close" onClick={() => props.onClose()}>
-            <ToolIcon id="close" />
-          </button>
+          <Tooltip text="New chat">
+            <button class="assistant-icon" type="button" aria-label="New chat" onClick={newChat}>
+              <ToolIcon id="plus" />
+            </button>
+          </Tooltip>
+          <Tooltip text="Close the panel">
+            <button class="assistant-icon" type="button" aria-label="Close the panel" onClick={() => props.onClose()}>
+              <ToolIcon id="close" />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -433,7 +438,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                   <span class="assistant-tool-name">{entry.kind === "tool" ? entry.name : ""}</span>
                   <span class="assistant-tool-note">{entry.kind === "tool" ? entry.note : ""}</span>
                   <span class="assistant-tool-chevron">
-                    <ToolIcon id={entry.kind === "tool" && entry.open ? "chevron-down" : "chevron-right"} />
+                    <ToolIcon id="chevron-right" />
                   </span>
                 </button>
                 <Show when={entry.kind === "tool" && entry.open}>

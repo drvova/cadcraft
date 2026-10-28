@@ -127,3 +127,4 @@ Rests on the native `<button>` element: role, Enter and Space, `disabled` and fo
 - `Button`: when the control is an action rather than a list item.
 - `SectionLabel`: when the band is the heading above a list rather than a row in it.
 - `IconButton`: when the row's trailing control is a glyph action.
+- `Tooltip`: when a row's glyph control needs its hint on hover rather than in the row text.

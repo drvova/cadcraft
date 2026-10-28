@@ -26,7 +26,7 @@
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color var(--dur-fast) var(--ease-out);
+  transition: background-color var(--dur-fast) var(--ease-standard);
 }
 
 .ui-button--sm {
@@ -57,7 +57,8 @@
 }
 
 .ui-button--secondary:active:not(:disabled) {
-  background: var(--fill-pressed);
+  /* the measured glass press: no third step (hover .14 stays) */
+  background: var(--fill-active);
 }
 
 .ui-button--secondary:disabled {
@@ -142,8 +143,15 @@
   color: var(--icon);
   cursor: pointer;
   transition:
-    background-color var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out);
+    background-color var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard),
+    transform var(--dur-press) var(--ease-standard);
+}
+
+/* The measured press: an icon button scales to .98 for 50ms (Cursor §8); the quiet Button keeps
+   its fill and does not move. */
+.ui-icon-button:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .ui-icon-button .tool-icon {
@@ -262,7 +270,7 @@
 /* The interactive form is a <button>: it takes the pointer and the focus ring. */
 .ui-chip--interactive {
   cursor: pointer;
-  transition: background-color var(--dur-fast) var(--ease-out);
+  transition: background-color var(--dur-fast) var(--ease-standard);
 }
 
 .ui-chip--interactive:focus-visible {
@@ -326,7 +334,7 @@
   font-size: var(--font-body);
   text-align: left;
   cursor: pointer;
-  transition: background-color var(--dur-fast) var(--ease-out);
+  transition: background-color var(--dur-fast) var(--ease-standard);
 }
 
 .ui-row:focus-visible {
@@ -360,4 +368,56 @@
   font-size: var(--font-chip);
   font-weight: 700;
   text-transform: uppercase;
+}
+
+/* ---- Tooltip: <span class="ui-tooltip-host"><child/><span class="ui-tooltip">text</span></span> ---- */
+
+.ui-tooltip-host {
+  position: relative;
+  display: inline-flex;
+}
+
+/* The measured hover box (research §8): the chrome fill, radius 3, the .15 hairline, 2/8 shadow,
+   12px type, and the `fadein` arrival over 0.1s. Hidden from the pointer and from the reader
+   until it shows. */
+.ui-tooltip {
+  position: absolute;
+  bottom: calc(100% + var(--gap-6));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--gap-3) var(--gap-8);
+  border: var(--hairline) solid var(--tooltip-border);
+  border-radius: var(--radius-small);
+  background: var(--tooltip-bg);
+  box-shadow: var(--tooltip-shadow);
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-label);
+  line-height: var(--gap-16);
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 60;
+}
+
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+    visibility: visible;
+  }
+  to {
+    opacity: 1;
+    visibility: visible;
+  }
+}
+
+@media (hover: hover) {
+  .ui-tooltip-host:hover .ui-tooltip {
+    animation: tooltip-in var(--dur-fast) var(--ease-standard) forwards;
+  }
+}
+
+.ui-tooltip-host:focus-within .ui-tooltip {
+  animation: tooltip-in var(--dur-fast) var(--ease-standard) forwards;
 }

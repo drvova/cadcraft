@@ -158,7 +158,7 @@ export default function SizeMd() {
 |---|---|---|---|---|
 | Rest | Nothing is over the button. | Click it, or Tab to it. | The variant's resting fill and the label. | by hand |
 | Hover | The pointer is over the button, on a device with a hover pointer. | Click it. | The fill steps up one rung (`.08` to `.14`, `.14` to `.20`); the cursor is a pointer. | by hand |
-| Pressed | The pointer is held down on the button. | Release to run the action. | The fill takes the next rung up (`.20`, or the 20% mix on `primary` and `danger`). | by hand |
+| Pressed | The pointer is held down on the button. | Release to run the action. | The quiet fill stays on the hover rung (`.14`, measured); the accent variants take their measured press step. | by hand |
 | Focused | Keyboard focus arrives by Tab. | Enter or Space runs the action. | The 1px accent ring at offset -1, following the 2px radius. | by hand |
 | Disabled | The caller's condition is false. | Nothing: no click, no hover, no focus ring. | The ink drops to the disabled step and the fill to the disabled step. | test |
 
@@ -175,7 +175,7 @@ export default function Disabled() {
 ### State precedence
 - Hover and Focused: Focused wins. The ring stays drawn while the pointer is over the button; hover only steps the fill.
 - Hover and Disabled: Disabled wins. A disabled button keeps its resting fill under the pointer and takes no click.
-- Pressed and Focused: both show. The ring stays drawn while the button is held down; the fill steps up.
+- Pressed and Focused: both show. The ring stays drawn while the button is held down; the quiet fill stays on the hover rung.
 - Pressed and Disabled: Disabled wins. A disabled button never takes the pressed fill.
 
 ### Motion
@@ -219,7 +219,7 @@ export default function Disabled() {
 - `rule/button-variant-purpose`: When a surface needs a button, pick `variant` by the action's purpose — 1 `primary` per view, `secondary` for the default, `ghost` for a quiet action, `danger` for a destructive one — because two accent fills in one row leave no single action and Cursor's own default button is the quiet one. Evidence: app 4/4 variants, `docs/system/decisions.md`. Check: review `src/ui/ui.css`.
   - Don't: `<Button variant="primary">Cancel</Button>`
   - Do: `<Button>Cancel</Button>`
-- `rule/button-state-ladder`: When a button is hovered or pressed, step the fill one rung per state — `.08` to `.14` on hover, `.14` to `.20` on press — because a fill step reads as feedback without moving the label or the box. Evidence: measured .08/.14/.20, `docs/system/decisions.md`. Check: review `src/ui/ui.css`.
+- `rule/button-state-ladder`: When a button is hovered, step the fill one rung — `.08` to `.14` — and hold that rung while pressed, because the measured glass button adds no third step and a fill step reads as feedback without moving the label or the box. Evidence: measured .08/.14/.14, `docs/system/decisions.md`. Check: review `src/ui/ui.css`.
   - Don't: `.my-button:hover { color: var(--accent) }` — a colour change instead of a fill step.
   - Do: `.ui-button--secondary:hover { background: var(--fill-active) }`
 
@@ -261,7 +261,7 @@ Rests on the native `<button>` element: role, Enter and Space, `disabled`, and f
 | The box (`sm`) | all | `--control-h-input`, `--gap-6`, `--gap-2`, `--font-chip` |
 | The fill (`secondary`) | rest | `--hover` |
 | The fill (`secondary`) | hover | `--fill-active` |
-| The fill (`secondary`) | pressed | `--fill-pressed` |
+| The fill (`secondary`) | pressed | `--fill-active` (measured: no third step) |
 | The fill (`primary`) | rest | `--accent` |
 | The fill (`primary`) | hover | `--accent-hover` |
 | The fill (`primary`) | pressed | `--accent-pressed` |

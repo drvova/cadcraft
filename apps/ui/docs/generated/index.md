@@ -74,6 +74,7 @@ Ask only for an amount or a limit the task did not give (a new size, a new durat
 - [IconButton](docs/generated/components/icon-button.md): It runs one action drawn as a single glyph, and its tooltip is its accessible name.
 - [Row](docs/generated/components/row.md): It is the full-width clickable band of a list: a menu item, a property row or a layer, marked current when it is the selected one.
 - [SectionLabel](docs/generated/components/section-label.md): It names a panel's section as a real heading, so a screen reader can jump between the sections by heading.
+- [Tooltip](docs/generated/components/tooltip.md): It names a control on hover and on focus, in a small box near the control.
 
 ## Rules
 - [Rules](docs/generated/rules.md): every trap and rule ID, the page that answers it and the check that enforces it

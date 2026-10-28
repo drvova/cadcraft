@@ -61,7 +61,8 @@ Real uses, 8 call sites (`rg -c "<IconButton" src/components` → `src/component
 ### Motion
 | Trigger | Kind | Preset | Properties | Reduced motion |
 |---|---|---|---|---|
-| The pointer enters or leaves | input | hover / focus feedback (`--dur-fast` + `--ease-out`) | background-color, color | The fill and the ink change at once: the shell's `:root[data-animations="off"] *` rule removes the transition. |
+| The pointer enters or leaves | input | hover / focus feedback (`--dur-fast` + `--ease-standard`) | background-color, color | The fill and the ink change at once: the shell's `:root[data-animations="off"] *` rule removes the transition. |
+| The pointer is held down | input | the measured press (`--dur-press` + `--ease-standard`) | transform | The circle stays at rest: the shell's `:root[data-animations="off"] *` rule removes the transition. |
 | The pointer presses down | input | press (`--dur-instant` + `--ease-out`) | background-color | The fill changes at once. |
 
 ## Props
@@ -93,7 +94,7 @@ Real uses, 8 call sites (`rg -c "<IconButton" src/components` → `src/component
   - Do: 1 `inverted` send and `ghost` for attach and stop.
 
 ### Content
-- `rule/icon-button-title-sentence`: When `title` is written, name the action in sentence case with no full stop (Close the panel, Send, Stop), because the same string is the tooltip and the accessible name. Evidence: single use `src/components/AssistantPane.tsx:496`, the "Attach a picture (or paste, or drop one)" label. Check: review `src/components/AssistantPane.tsx`.
+- `rule/icon-button-title-sentence`: When `title` is written, name the action in sentence case with no full stop (Close the panel, Send, Stop), because the same string is the tooltip and the accessible name. Evidence: single use `src/components/AssistantPane.tsx:501`, the "Attach a picture (or paste, or drop one)" label. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `title="close panel."`
   - Do: `title="Close the panel"`
 
