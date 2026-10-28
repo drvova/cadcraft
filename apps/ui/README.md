@@ -72,14 +72,18 @@ src/components/      TopBar, MenuBar, ToolStrip, StatusBar, CanvasView, LayersPa
                      PropertiesPanel, CommandLine
 src/chrome.css       menu bar, tool strip, status bar
 src/interaction.css  properties rows and keyword chips
-src/tokens.css       the design tokens, copied from crates/ui-egui/src/theme.rs
+src/tokens.css       the design tokens, measured from Cursor 3.27.22 (2026-10-28)
 src/styles.css       the layout (flex/grid) and component chrome
 ```
 
 ## Tokens
 
-`src/tokens.css` is written by hand from `crates/ui-egui/src/theme.rs` (phase 1; phase 2 will
-generate it and check the two agree). The mapping, token for token:
+`src/tokens.css` carries the values measured from the running Cursor 3.27.22 desktop app
+(2026-10-28; `.design-system/research/cursor-recipes-2026-10-28.md`) — not a hand-copy of
+`crates/ui-egui/src/theme.rs`, which stays the frozen egui reference until the migration's phase 5
+retires it. The tables below keep their `theme.rs` column as the record of where each token's role
+came from; the colour values in them are superseded by the measured ladder in `tokens.css`. The
+mapping, token for token:
 
 | `tokens.css` | `theme.rs` (`Tokens::DARK`) | value |
 |---|---|---|

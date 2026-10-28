@@ -1,22 +1,26 @@
 /*
- * Design tokens, copied by hand from crates/ui-egui/src/theme.rs (phase 1; phase 2 generates
- * this file from theme.rs and checks the two agree — plan/solid-ui-migration.md). Values are
- * Tokens::DARK plus the recipe constants; the mapping is documented in apps/ui/README.md.
+ * Design tokens, measured from the running Cursor 3.27.22 desktop app (2026-10-28;
+ * .design-system/research/cursor-recipes-2026-10-28.md). The earlier hand-copy from
+ * crates/ui-egui/src/theme.rs is superseded — theme.rs stays the frozen egui reference until the
+ * migration's phase 5 retires it. The mapping is documented in apps/ui/README.md.
  *
- * Colours are one base colour (#E4E4E4) layered over a few opaque near-black surfaces; colour
- * is a signal, never decoration. No colour may be written anywhere else in apps/ui.
+ * Colours are one base colour (#F0F0F0 dark, #141414 light) layered at an alpha ladder over a
+ * few near-black / near-white surfaces; colour is a signal, never decoration. No colour may be
+ * written anywhere else in apps/ui.
  */
 :root {
   color-scheme: dark;
 
-  /* ---- Surfaces (Tokens::DARK: chrome, chrome_dark, panel, tab_active, control, control_hover, border) ---- */
+  /* ---- Surfaces (chrome, chrome_dark, panel, tab_active, control, control_hover, border) ---- */
   --chrome: #141414;
   --chrome-dark: #0f0f0f;
   --panel: #141414;
   --tab-active: #2d2d2d;
   --control: #1c1c1c;
   --control-hover: #232323;
-  --border: #232323;
+  --surface-elevated: #212121; /* Cursor's elevated surface: the composer, menus, popovers */
+  --border: rgba(240, 240, 240, 0.12);
+  --border-soft: rgba(240, 240, 240, 0.08); /* the hairline stroke */
 
   /* ---- The drawing area (canvas, grid_minor, grid_major, axis_x, axis_y) ---- */
   --canvas: #181818;
@@ -26,17 +30,19 @@
   --axis-y: #23412f;
 
   /* ---- Text and icons (text, text_dim, text_faint, icon, icon_accent, icon_point) ---- */
-  --text: #d4d4d4;
-  --text-dim: #888888;
-  --text-faint: #6b6b6b;
-  --icon: #b0b0b0;
-  --icon-accent: #81a1c1;
+  --text: #F0F0F0;
+  --text-dim: rgba(240, 240, 240, 0.74);
+  --text-faint: rgba(240, 240, 240, 0.60);
+  --icon: rgba(240, 240, 240, 0.66);
+  --icon-accent: #599CE7;
   --icon-point: #f1b467;
 
-  /* ---- Action and selection (accent, selection, hover, grip, grip_hot) ---- */
-  --accent: #81a1c1;
-  --selection: #81a1c1;
-  --hover: #b8cee6;
+  /* ---- Action and selection (accent, selection, hover, fill_active, grip, grip_hot) ---- */
+  --accent: #599CE7;
+  --selection: #599CE7;
+  /* The one hover fill (Cursor §5: hover is a fill, never a colour change). */
+  --hover: rgba(240, 240, 240, 0.08);
+  --fill-active: rgba(240, 240, 240, 0.14); /* the pressed/selected fill */
   --grip-hot: #e34671;
 
   /* ---- Status (warn, error, snap, toggle_on) ---- */
@@ -48,13 +54,13 @@
   /* ---- The command line (cmd_bg a=f0, cmd_border, cmd_keyword, cmd_keyword_hover, cmd_history a=170) ---- */
   --cmd-bg: rgba(28, 28, 28, 0.94);
   --cmd-border: #333333;
-  --cmd-keyword: #81a1c1;
-  --cmd-keyword-hover: #2a3037;
+  --cmd-keyword: #599CE7;
+  --cmd-keyword-hover: rgba(89, 156, 231, 0.12);
   --cmd-history: rgba(26, 26, 26, 0.667);
 
   /* ---- Lists (list_bg, list_row) ---- */
   --list-bg: #1c1c1c;
-  --list-row: #2d2d2d;
+  --list-row: var(--fill-active);
 
   /* ---- Layers (icon_layer_off, icon_layer_frozen, icon_locked, icon_current, layer_current, swatch_border) ---- */
   --icon-layer-off: #8a8a5a;
@@ -67,17 +73,17 @@
   /* Elevation: the shadow under floating surfaces (menus) */
   --shadow: rgba(0, 0, 0, 0.45);
 
-  /* Scrollbars: Cursor's theme values (scrollbarSlider.background #67676750, hover #676767) */
-  --scrollbar: rgba(103, 103, 103, 0.31);
-  --scrollbar-hover: rgba(103, 103, 103, 0.62);
+  /* Scrollbars: the measured thumb ladder (Cursor §1: thumb .14, hover .22) */
+  --scrollbar: rgba(240, 240, 240, 0.14);
+  --scrollbar-hover: rgba(240, 240, 240, 0.22);
 
-  /* The composer's border roles: Cursor's commandCenter.inactiveBorder/activeBorder (its
-     foreground at .25/.30 alpha; here the base colour at the same visual weight). */
-  --composer-border: rgba(228, 228, 228, 0.14);
-  --composer-border-active: rgba(228, 228, 228, 0.28);
+  /* The composer's border roles: the measured stroke ladder (Cursor §1/§5: default .12,
+     hairline .08), not an opaque grey. */
+  --composer-border: rgba(240, 240, 240, 0.08);
+  --composer-border-active: rgba(240, 240, 240, 0.12);
 
   /* ---- Misc (on_accent, crosshair, paper) ---- */
-  --on-accent: #141414;
+  --on-accent: #191C22;
   --crosshair: #e4e4e4;
   --paper: #fcfcfc;
 
@@ -86,6 +92,7 @@
   --radius-small: 3px;
   --radius-card: 4px;
   --radius-composer: 5px;
+  --radius-elevated: 20px; /* the glass composer, menus and popovers (Cursor §2) */
   --radius-pill: 11px;
   --gap-2: 2px;
   --gap-3: 3px;
@@ -117,11 +124,13 @@
   --font-body: 13px;
   --font-mono: 12px;
   --font-family: system-ui, "Segoe UI", -apple-system, sans-serif;
-  /* ---- Motion (crates/ui-egui/src/motion.rs: DUR_FAST/MED/SLOW + cubic-bezier(.4,0,.2,1)) ---- */
-  --dur-fast: 0.12s;
+  /* ---- Motion (measured: durations 50/100/150/200ms, ease-out + out-quint) ---- */
+  --dur-instant: 0.05s;
+  --dur-fast: 0.1s;
   --dur-med: 0.15s;
-  --dur-slow: 0.25s;
+  --dur-slow: 0.2s;
   --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out-quint: cubic-bezier(0.16, 1, 0.3, 1);
 
   --font-family-mono: "Hack", ui-monospace, "Cascadia Mono", Consolas, monospace;
 
@@ -132,41 +141,51 @@
   --hover-opacity: 0.8;
 }
 
-/* ---- The light palette (Tokens::LIGHT, crates/ui-egui/src/theme.rs): the same system, neutral
-   surfaces and one base colour at low alpha. Set by the shell as data-theme="light" on <html>;
-   the drawing area keeps its own colours, exactly as the Rust palette does. ---- */
+/* ---- The light palette (Cursor 3.27.22, measured): the same system mirrored — one base colour
+   (#141414) at an alpha ladder over near-white surfaces. The alpha roles are restated here because
+   the dark values are alpha-of-white and would vanish on light surfaces. Set by the shell as
+   data-theme="light" on <html>; the drawing area keeps its own colours. ---- */
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --chrome: #f1f1f1;
-  --chrome-dark: #e8e8e8;
-  --panel: #f6f6f6;
-  --tab-active: #ffffff;
+  --chrome: #F8F8F8;
+  --chrome-dark: #F3F3F3;
+  --panel: #FCFCFC;
+  --tab-active: #FCFCFC;
   --control: #e8e8e8;
   --control-hover: #dedede;
-  --border: #d6d6d6;
-  --text: #1f1f1f;
-  --text-dim: #5c5c5c;
-  --text-faint: #7a7a7a;
-  --icon: #3a3a3a;
-  --icon-accent: #4a6e96;
+  --surface-elevated: #FCFCFC;
+  --border: rgba(20, 20, 20, 0.12);
+  --border-soft: rgba(20, 20, 20, 0.08);
+  --text: #141414;
+  --text-dim: rgba(20, 20, 20, 0.74);
+  /* Cursor's tertiary ink (.60) misses 4.5 over the frozen #e8e8e8 control surface (4.49); the
+     nearest measured step that passes is the icon ink .66 (5.45). */
+  --text-faint: rgba(20, 20, 20, 0.66);
+  --icon: rgba(20, 20, 20, 0.66);
+  --icon-accent: #2678C1;
   --icon-point: #b8791f;
-  --accent: #4a6e96;
+  --accent: #2678C1;
   --cmd-bg: #ebebeb;
   --cmd-border: #c9c9c9;
   --cmd-history: #f2f2f2;
-  --cmd-keyword: #3a5f86;
-  --cmd-keyword-hover: #dde6ef;
+  --cmd-keyword: #2678C1;
+  --cmd-keyword-hover: rgba(38, 120, 193, 0.12);
   --shadow: rgba(0, 0, 0, 0.18);
-  --selection: #4a6e96;
-  --snap: #3fa266;
+  --selection: #2678C1;
+  --snap: #007041;
   --list-bg: #ffffff;
-  --hover: #d5dfe9;
-  --toggle-on: #3fa266;
-  --warn: #8a5300;
-  --error: #b3261e;
+  --list-row: var(--fill-active);
+  --hover: rgba(20, 20, 20, 0.08);
+  --fill-active: rgba(20, 20, 20, 0.14);
+  --toggle-on: #007041;
+  --warn: #A46701;
+  --error: #BE1744;
   --layer-current: #d5dfe9;
   --grip-hot: #e34671;
-  --composer-border: rgba(31, 31, 31, 0.14);
-  --composer-border-active: rgba(31, 31, 31, 0.28);
+  --scrollbar: rgba(20, 20, 20, 0.14);
+  --scrollbar-hover: rgba(20, 20, 20, 0.22);
+  --on-accent: #FCFCFC;
+  --composer-border: rgba(20, 20, 20, 0.08);
+  --composer-border-active: rgba(20, 20, 20, 0.12);
 }
