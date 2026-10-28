@@ -39,9 +39,11 @@ pub mod grip_dyn;
 pub mod i18n;
 pub mod icons;
 pub mod layers;
+pub mod layout;
 pub mod managers;
 pub mod menus;
 pub mod modal;
+pub mod motion;
 pub mod opening;
 pub mod options;
 pub mod palettes;
@@ -725,6 +727,7 @@ impl CadApp {
         let animate = self.shows_animations();
         if self.shown_animations != Some(animate) {
             animation::apply(ctx, animate);
+            motion::set_animations(animate);
             self.shown_animations = Some(animate);
         }
         if !animate {

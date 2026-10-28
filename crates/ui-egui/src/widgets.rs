@@ -7,6 +7,7 @@
 use egui::{Color32, FontId, Response, Sense, Stroke, StrokeKind, Ui};
 
 use crate::icons::Icon;
+use crate::motion;
 use crate::theme::{self, Tokens};
 
 /// A button kind: Cursor's `.cursor-button-primary`, the ghost `.cursor-button-tertiary` /
@@ -46,8 +47,12 @@ pub fn button(ui: &mut Ui, label: &str, kind: Kind) -> Response {
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     if ui.is_rect_visible(rect) {
         let lit = response.enabled() && (response.hovered() || response.is_pointer_button_down_on());
-        let (fill, border, text) = button_colors(&t, kind, lit);
-        let shade = |c: Color32| if response.enabled() { c } else { c.gamma_multiply(theme::DISABLED_OPACITY) };
+        // The lit state glides in over DUR_FAST, and a disabled button fades to its
+        // `opacity:.5`; with animations off both land on their target at once.
+        let hover = motion::hover(ui, response.id.with("hover"), lit);
+        let on = motion::hover(ui, response.id.with("enabled"), response.enabled());
+        let (fill, border, text) = button_colors(&t, kind, hover);
+        let shade = |c: Color32| c.gamma_multiply(motion::mix(theme::DISABLED_OPACITY, 1.0, on));
         if let Some(fill) = fill {
             ui.painter().rect_filled(rect, theme::RADIUS_CONTROL, shade(fill));
         }
@@ -63,19 +68,17 @@ pub fn button(ui: &mut Ui, label: &str, kind: Kind) -> Response {
     response
 }
 
-/// The colours of one button state: fill, border, label. A lit button (hover or press) takes the
-/// hover fill; `Ghost` fills and brightens its border, the filled kinds drop to `opacity:.8`.
-fn button_colors(t: &Tokens, kind: Kind, lit: bool) -> (Option<Color32>, Option<Color32>, Color32) {
+/// The colours of one button state, blended by `lit` (0: at rest, 1: lit): fill, border, label.
+/// A lit button (hover or press) takes the hover fill; `Ghost` fills and brightens its border,
+/// the filled kinds drop to `opacity:.8`.
+fn button_colors(t: &Tokens, kind: Kind, lit: f32) -> (Option<Color32>, Option<Color32>, Color32) {
     match kind {
-        Kind::Ghost => (lit.then_some(t.control_hover), Some(if lit { t.cmd_border } else { t.border }), t.text),
-        Kind::Primary => {
-            let fill = if lit { t.accent.gamma_multiply(theme::HOVER_OPACITY) } else { t.accent };
-            (Some(fill), None, t.on_accent)
+        Kind::Ghost => {
+            let fill = (lit > 0.0).then(|| motion::mix_color(Color32::TRANSPARENT, t.control_hover, lit));
+            (fill, Some(motion::mix_color(t.border, t.cmd_border, lit)), t.text)
         }
-        Kind::Danger => {
-            let fill = if lit { t.error.gamma_multiply(theme::HOVER_OPACITY) } else { t.error };
-            (Some(fill), None, t.on_accent)
-        }
+        Kind::Primary => (Some(t.accent.gamma_multiply(motion::mix(1.0, theme::HOVER_OPACITY, lit))), None, t.on_accent),
+        Kind::Danger => (Some(t.error.gamma_multiply(motion::mix(1.0, theme::HOVER_OPACITY, lit))), None, t.on_accent),
     }
 }
 
@@ -88,10 +91,12 @@ pub fn icon_button(ui: &mut Ui, icon: Icon, size: f32, tooltip: &str, selected: 
     let t = Tokens::get();
     let (rect, response) = ui.allocate_exact_size(egui::vec2(size, size), Sense::click());
     if ui.is_rect_visible(rect) {
+        // The hover tint fades in and out; selection stays the discrete fill that outranks it.
+        let hover = motion::hover(ui, response.id.with("hover"), !selected && response.enabled() && response.hovered());
         let fill = if selected {
             Some(t.select_bg)
-        } else if response.enabled() && response.hovered() {
-            Some(t.control_hover)
+        } else if hover > 0.0 {
+            Some(motion::mix_color(Color32::TRANSPARENT, t.control_hover, hover))
         } else {
             None
         };
@@ -171,15 +176,15 @@ pub fn row(ui: &mut Ui, selected: bool) -> Response {
     let t = Tokens::get();
     let (rect, response) = ui.allocate_exact_size(egui::vec2(ui.available_width(), theme::CONTROL_H_ROW), Sense::click());
     if ui.is_rect_visible(rect) {
-        let fill = if selected {
-            Some(t.select_bg)
-        } else if response.enabled() && response.hovered() {
-            Some(t.control_hover)
-        } else {
-            None
-        };
-        if let Some(fill) = fill {
-            ui.painter().rect_filled(rect, theme::RADIUS_CARD, fill);
+        // The hover fill and the selection fill each glide in and out; selection paints first,
+        // as the recipe's state precedence has it outrank hover.
+        let hover = motion::hover(ui, response.id.with("hover"), !selected && response.enabled() && response.hovered());
+        let select = motion::hover(ui, response.id.with("select"), selected);
+        if select > 0.0 {
+            ui.painter().rect_filled(rect, theme::RADIUS_CARD, motion::mix_color(Color32::TRANSPARENT, t.select_bg, select));
+        }
+        if hover > 0.0 {
+            ui.painter().rect_filled(rect, theme::RADIUS_CARD, motion::mix_color(Color32::TRANSPARENT, t.control_hover, hover));
         }
     }
     crate::control::record_widget(ui, &response, "", "row", Some(selected));
@@ -210,13 +215,17 @@ pub fn section_label(ui: &mut Ui, text: &str) -> Response {
 
 /// Cursor's focus ring: `outline:1px solid var(--vscode-focusBorder); outline-offset:-1px`
 /// (`.cursor-button.tab-focusable:focus` §3, `.monaco-inputbox` focus §4), drawn just inside the
-/// control's edge and following its radius (§8).
+/// control's edge and following its radius (§8), fading in and out over [`motion::DUR_FAST`].
 fn focus_ring(ui: &Ui, response: &Response, radius: f32) {
-    if !response.has_focus() || !response.rect.is_positive() {
+    if !response.rect.is_positive() {
+        return;
+    }
+    let focus = motion::hover(ui, response.id.with("focus"), response.has_focus());
+    if focus <= 0.0 {
         return;
     }
     let ring = response.rect.shrink(-theme::FOCUS_OUTLINE_OFFSET);
-    ui.painter().rect_stroke(ring, radius, Stroke::new(theme::FOCUS_OUTLINE_W, Tokens::get().accent), StrokeKind::Outside);
+    ui.painter().rect_stroke(ring, radius, Stroke::new(theme::FOCUS_OUTLINE_W, Tokens::get().accent.gamma_multiply(focus)), StrokeKind::Outside);
 }
 
 #[cfg(test)]
@@ -247,5 +256,47 @@ mod tests {
         assert_eq!(heights[3], theme::CHIP_MIN_H, "`.monaco-count-badge` is at least 18px tall");
         assert_eq!(heights[4], theme::CONTROL_H_ROW, "a list row is 22px tall");
         assert!(heights[5] > 0.0 && heights[6] > 0.0, "a card and a section label take space");
+    }
+
+    /// The button's hover fill glides: the frames while the pointer arrives show a blend of the
+    /// two states, and the settled states keep today's exact colours.
+    #[test]
+    fn button_hover_fill_glides_between_its_states() {
+        let ctx = egui::Context::default();
+        crate::motion::set_animations(true);
+        let t = Tokens::get();
+        let rest = t.accent;
+        let lit = t.accent.gamma_multiply(theme::HOVER_OPACITY);
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(200.0, 100.0));
+        let mut rect = egui::Rect::NOTHING;
+        let mut fills = Vec::new();
+        for index in 0..14 {
+            let events = if index == 0 { Vec::new() } else { vec![egui::Event::PointerMoved(rect.center())] };
+            let input = egui::RawInput { screen_rect: Some(screen), events, time: Some(index as f64 / 60.0), ..Default::default() };
+            let mut output = ctx.run_ui(input, |ui| rect = button(ui, "Save", Kind::Primary).rect);
+            output.textures_delta.clear();
+            fills.push(painted_fill(&output, rect));
+        }
+        assert_eq!(fills[0], Some(rest), "an unhovered button keeps today's fill");
+        assert_eq!(fills[13], Some(lit), "a settled hover keeps today's lit fill");
+        assert!(fills.iter().all(|f| f.is_some_and(|c| between(c, rest, lit))), "every frame interpolates between the two states: {fills:?}");
+        assert!(fills.iter().flatten().any(|c| *c != rest && *c != lit), "a frame mid-glide shows a blend: {fills:?}");
+    }
+
+    /// The fill the painter emitted for `rect` this frame, if any.
+    fn painted_fill(output: &egui::FullOutput, rect: egui::Rect) -> Option<Color32> {
+        output.shapes.iter().find_map(|clipped| match &clipped.shape {
+            egui::Shape::Rect(shape) if shape.rect == rect && shape.fill.a() > 0 => Some(shape.fill),
+            _ => None,
+        })
+    }
+
+    /// Whether `c` sits between `a` and `b` on every channel (inclusive).
+    fn between(c: Color32, a: Color32, b: Color32) -> bool {
+        let [cr, cg, cb, ca] = c.to_array();
+        let [ar, ag, ab, aa] = a.to_array();
+        let [br, bg, bb, ba] = b.to_array();
+        let inside = |x: u8, p: u8, q: u8| x >= p.min(q) && x <= p.max(q);
+        inside(cr, ar, br) && inside(cg, ag, bg) && inside(cb, ab, bb) && inside(ca, aa, ba)
     }
 }
