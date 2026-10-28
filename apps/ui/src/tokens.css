@@ -7,6 +7,8 @@
  * is a signal, never decoration. No colour may be written anywhere else in apps/ui.
  */
 :root {
+  color-scheme: dark;
+
   /* ---- Surfaces (Tokens::DARK: chrome, chrome_dark, panel, tab_active, control, control_hover, border) ---- */
   --chrome: #141414;
   --chrome-dark: #0f0f0f;
@@ -62,6 +64,9 @@
   --layer-current: #4cc25a;
   --swatch-border: #191919;
 
+  /* Elevation: the shadow under floating surfaces (menus) */
+  --shadow: rgba(0, 0, 0, 0.45);
+
   /* ---- Misc (on_accent, crosshair, paper) ---- */
   --on-accent: #141414;
   --crosshair: #e4e4e4;
@@ -103,6 +108,12 @@
   --font-body: 13px;
   --font-mono: 12px;
   --font-family: system-ui, "Segoe UI", -apple-system, sans-serif;
+  /* ---- Motion (crates/ui-egui/src/motion.rs: DUR_FAST/MED/SLOW + cubic-bezier(.4,0,.2,1)) ---- */
+  --dur-fast: 0.12s;
+  --dur-med: 0.15s;
+  --dur-slow: 0.25s;
+  --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+
   --font-family-mono: "Hack", ui-monospace, "Cascadia Mono", Consolas, monospace;
 
   /* ---- Lines (HAIRLINE, FOCUS_OUTLINE_W, FOCUS_OUTLINE_OFFSET, HOVER_OPACITY) ---- */
@@ -110,4 +121,41 @@
   --focus-outline-w: 1px;
   --focus-outline-offset: -1px;
   --hover-opacity: 0.8;
+}
+
+/* ---- The light palette (Tokens::LIGHT, crates/ui-egui/src/theme.rs): the same system, neutral
+   surfaces and one base colour at low alpha. Set by the shell as data-theme="light" on <html>;
+   the drawing area keeps its own colours, exactly as the Rust palette does. ---- */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --chrome: #f1f1f1;
+  --chrome-dark: #e8e8e8;
+  --panel: #f6f6f6;
+  --tab-active: #ffffff;
+  --control: #e8e8e8;
+  --control-hover: #dedede;
+  --border: #d6d6d6;
+  --text: #1f1f1f;
+  --text-dim: #5c5c5c;
+  --text-faint: #7a7a7a;
+  --icon: #3a3a3a;
+  --icon-accent: #4a6e96;
+  --icon-point: #b8791f;
+  --accent: #4a6e96;
+  --cmd-bg: #ebebeb;
+  --cmd-border: #c9c9c9;
+  --cmd-history: #f2f2f2;
+  --cmd-keyword: #3a5f86;
+  --cmd-keyword-hover: #dde6ef;
+  --shadow: rgba(0, 0, 0, 0.18);
+  --selection: #4a6e96;
+  --snap: #3fa266;
+  --list-bg: #ffffff;
+  --hover: #d5dfe9;
+  --toggle-on: #3fa266;
+  --warn: #8a5300;
+  --error: #b3261e;
+  --layer-current: #d5dfe9;
+  --grip-hot: #e34671;
 }

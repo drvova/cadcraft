@@ -39,8 +39,10 @@ const CYAN: Rgb = [136, 192, 208];
 const GREEN: Rgb = [63, 162, 102];
 const BLUE: Rgb = [129, 161, 193];
 
-function envelope(ok: boolean, payload: Record<string, unknown>): string {
-  return JSON.stringify(ok ? { ok: true, result: payload } : { ok: false, error: String(payload["error"] ?? "error") });
+function envelope(ok: boolean, payload: Record<string, unknown> | readonly unknown[]): string {
+  if (ok) return JSON.stringify({ ok: true, result: payload });
+  const error = Array.isArray(payload) ? "error" : String((payload as Record<string, unknown>)["error"] ?? "error");
+  return JSON.stringify({ ok: false, error });
 }
 
 /** A point `x,y` or `x y`; null when it does not parse. */
@@ -66,6 +68,10 @@ export class MockFacade implements RawFacade {
   private title = "sample.dxf";
   private currentView: Rect = { x0: -20, y0: -9, x1: 120, y1: 83 };
   private pending: { id: string; step: number; center?: { x: number; y: number }; first?: { x: number; y: number } } | null = null;
+  private selected: string[] = [];
+  private grid = true;
+  private snap = false;
+  private ortho = false;
 
   constructor() {
     this.reset();
@@ -378,6 +384,74 @@ export class MockFacade implements RawFacade {
         }
         return envelope(true, { view: this.currentView });
       }
+      case "select": {
+        if (params["clear"] === true) {
+          this.selected = [];
+          return envelope(true, { selected: 0, handles: [] });
+        }
+        const picked: string[] = [];
+        const hs = params["handles"];
+        if (Array.isArray(hs)) {
+          for (const h of hs) if (typeof h === "string") picked.push(h);
+        } else if (Array.isArray(params["at"])) {
+          const at = params["at"];
+          const x = typeof at[0] === "number" ? at[0] : null;
+          const y = typeof at[1] === "number" ? at[1] : null;
+          if (x === null || y === null) return envelope(false, { error: "select: `at` needs two numbers" });
+          const hit = this.handleAt(x, y);
+          if (hit !== null) picked.push(hit);
+        } else if (Array.isArray(params["window"])) {
+          const w = params["window"];
+          const a = Array.isArray(w[0]) ? w[0] : null;
+          const b = Array.isArray(w[1]) ? w[1] : null;
+          const ax = a !== null && typeof a[0] === "number" ? a[0] : null;
+          const ay = a !== null && typeof a[1] === "number" ? a[1] : null;
+          const bx = b !== null && typeof b[0] === "number" ? b[0] : null;
+          const by = b !== null && typeof b[1] === "number" ? b[1] : null;
+          if (ax === null || ay === null || bx === null || by === null) return envelope(false, { error: "select: `window` needs two corners" });
+          for (const h of this.handlesInWindow(ax, ay, bx, by)) picked.push(h);
+        } else {
+          return envelope(false, { error: "select: need `handles`, `at`, `window` or `clear`" });
+        }
+        this.selected = params["add"] === true ? [...this.selected, ...picked] : picked;
+        return envelope(true, { selected: this.selected.length, handles: [...this.selected] });
+      }
+      case "grid":
+      case "snap":
+      case "ortho": {
+        const key = id === "grid" ? "grid" : id === "snap" ? "snap" : "ortho";
+        const on = typeof params["on"] === "boolean" ? params["on"] : !this[key];
+        this[key] = on;
+        return envelope(true, { on, message: `<${id} ${on ? "on" : "off"}>` });
+      }
+      case "layout.list":
+        return envelope(true, [{ name: "Layout1", tabOrder: 0, current: false, page: { widthMm: 297, heightMm: 210, landscape: true }, viewports: [] }]);
+      case "layout.set": {
+        const name = typeof params["name"] === "string" ? params["name"] : null;
+        if (name === null) return envelope(false, { error: "layout.set: `name` is required" });
+        return envelope(true, { name });
+      }
+      case "properties": {
+        if (this.selected.length > 0) {
+          const objects = this.selected.map((handle) => ({ handle, type: "Line", layer: this.currentLayer, color: "ByLayer", linetype: "ByLayer", lineweight: "ByLayer", ltscale: 1, transparency: "ByLayer", thickness: 0, visible: true }));
+          return envelope(true, { count: objects.length, objects });
+        }
+        return envelope(true, {
+          selection: "No selection",
+          color: "ByLayer",
+          layer: this.currentLayer,
+          linetype: "ByLayer",
+          linetypeScale: 1,
+          lineweight: "ByLayer",
+          textStyle: "Standard",
+          dimStyle: "Standard",
+          textHeight: 0.2,
+        });
+      }
+      case "properties.set": {
+        if (this.selected.length === 0) return envelope(false, { error: "properties.set: nothing selected" });
+        return envelope(true, { changed: Object.keys(params).length });
+      }
       case "circle":
         return envelope(false, { error: "circle: use the command line (`cmdline`) or centre/radius params in the mock" });
       default:
@@ -385,8 +459,117 @@ export class MockFacade implements RawFacade {
     }
   }
 
+  /** The display handle of the first entity containing `(x, y)` — the mock's canned pick. */
+  private handleAt(x: number, y: number): string | null {
+    let handle = 1;
+    for (const e of this.entities) {
+      if (!this.visible(e)) continue;
+      const hit =
+        e.kind === "rect"
+          ? x >= e.x0 && x <= e.x1 && y >= e.y0 && y <= e.y1
+          : e.kind === "circle"
+            ? Math.hypot(x - e.cx, y - e.cy) <= e.r
+            : (() => {
+                const dx = e.x1 - e.x0;
+                const dy = e.y1 - e.y0;
+                const len2 = dx * dx + dy * dy;
+                if (len2 === 0) return false;
+                const t = Math.max(0, Math.min(1, ((x - e.x0) * dx + (y - e.y0) * dy) / len2));
+                return Math.hypot(x - (e.x0 + t * dx), y - (e.y0 + t * dy)) <= 0.5;
+              })();
+      if (hit) return String(handle);
+      handle += 1;
+    }
+    return null;
+  }
+
+  /** Every entity fully inside the window, the mock's canned window selection. */
+  private handlesInWindow(ax: number, ay: number, bx: number, by: number): string[] {
+    const x0 = Math.min(ax, bx);
+    const x1 = Math.max(ax, bx);
+    const y0 = Math.min(ay, by);
+    const y1 = Math.max(ay, by);
+    const out: string[] = [];
+    let handle = 1;
+    for (const e of this.entities) {
+      if (!this.visible(e)) continue;
+      if (e.kind === "rect") {
+        if (e.x0 >= x0 && e.x1 <= x1 && e.y0 >= y0 && e.y1 <= y1) out.push(String(handle));
+      } else if (e.kind === "circle") {
+        if (e.cx - e.r >= x0 && e.cx + e.r <= x1 && e.cy - e.r >= y0 && e.cy + e.r <= y1) out.push(String(handle));
+      } else if (e.x0 >= x0 && e.x0 <= x1 && e.y0 >= y0 && e.y0 <= y1 && e.x1 >= x0 && e.x1 <= x1 && e.y1 >= y0 && e.y1 <= y1) {
+        out.push(String(handle));
+      }
+      handle += 1;
+    }
+    return out;
+  }
+
   cmdline(text: string): string {
     return this.feed(text);
+  }
+
+  /**
+   * Start a command by id, as a menu click does: `circle`/`line`/`rectang` open their two-step
+   * prompt, a simple command echoes `Command: X` and answers with its own output, an unknown id
+   * is refused. The reply carries the same delta fields `cmdline` does (running, prompt,
+   * keywords, accept, output, error).
+   */
+  start(id: string): string {
+    const name = id.trim().toLowerCase();
+    if (name === "") return this.replyWith([], 'Unknown command "". Press F1 for a list of commands.');
+    if (name === "circle" || name === "line" || name === "rectang" || name === "rectangle") {
+      const promptId = name === "rectangle" ? "rectang" : name;
+      this.pending = { id: promptId, step: 0 };
+      return this.replyWith([`Command: ${promptId.toUpperCase()}`]);
+    }
+    if (name === "zoom") {
+      const b = this.bounds();
+      if (b !== null) {
+        const dx = (b.x1 - b.x0) * 0.05;
+        const dy = (b.y1 - b.y0) * 0.05;
+        this.currentView = { x0: b.x0 - dx, y0: b.y0 - dy, x1: b.x1 + dx, y1: b.y1 + dy };
+      }
+      return this.replyWith(["Command: ZOOM", "Regenerating model."]);
+    }
+    if (name === "layer") {
+      const lines = this.layers.map((l) => `${l.name.padEnd(12)} ${l.on ? "on " : "off"} ${l.frozen ? "frozen" : "thawed"} ${l.locked ? "locked" : "unlocked"}`);
+      return this.replyWith(["Command: LAYER", ...lines]);
+    }
+    if (name === "grid" || name === "snap" || name === "ortho") {
+      const key = name === "grid" ? "grid" : name === "snap" ? "snap" : "ortho";
+      const on = !this[key];
+      this[key] = on;
+      return this.replyWith([`Command: ${name.toUpperCase()}`, `<${name} ${on ? "on" : "off"}>`]);
+    }
+    return this.replyWith([], `Unknown command "${id}". Press F1 for a list of commands.`);
+  }
+
+  selection(): string {
+    return JSON.stringify({ count: this.selected.length, handles: [...this.selected] });
+  }
+
+  settings(): string {
+    return JSON.stringify({
+      grid: this.grid,
+      snap: this.snap,
+      ortho: this.ortho,
+      polar: false,
+      isodraft: false,
+      otrack: false,
+      osnap: true,
+      dynmode: true,
+      lwdisplay: false,
+      transparency: true,
+      qpmode: false,
+      osmode: 4133,
+      pickbox: 3,
+    });
+  }
+
+  format_point(x: number, y: number): string {
+    const f = (v: number): string => (Number.isFinite(v) ? v.toFixed(4) : "0.0000");
+    return JSON.stringify({ text: `${f(x)}, ${f(y)}, 0.0000` });
   }
 
   prompt(): string {
@@ -490,6 +673,12 @@ export class MockFacade implements RawFacade {
     this.title = name;
     this.touch();
     return envelope(true, { entities: this.entities.length });
+  }
+
+  load_sample(): string {
+    this.reset();
+    this.touch();
+    return envelope(true, { title: this.title, entityCount: this.entities.length });
   }
 
   save_bytes(): Uint8Array {

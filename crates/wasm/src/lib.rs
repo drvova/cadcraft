@@ -13,7 +13,11 @@
 //! |---|---|
 //! | [`Facade::execute`] | `{"ok":true,"result":…}` or `{"ok":false,"error":"…"}` |
 //! | [`Facade::cmdline`] / [`Facade::prompt`] | the command-line state: `prompt`, `running`, `keywords`, `accept`, `default`, `output`; `cmdline` adds `error` when the line was refused |
+//! | [`Facade::start`] | the command-line state plus `output` (and `error` for an unknown id): a command started **by id**, as a menu click does |
 //! | [`Facade::state`] | `{"title","dirty","revision","extents","layerCount","entityCount","currentLayer","space"}` (`extents` is `[minx,miny,maxx,maxy]` or `null`) |
+//! | [`Facade::selection`] | `{"count":n,"handles":["1A",…]}` |
+//! | [`Facade::settings`] | the drafting-toggle states the status bar shows (`grid`, `snap`, `ortho`, …, `osmode`, `pickbox`) |
+//! | [`Facade::format_point`] | `{"text":"6.0000, 4.0000, 0.0000"}` in the drawing's own units |
 //! | [`Facade::commands`] | every command as `{id,label,menu,shortcut,aliases,params,interactive,enabled[,disabledReason]}` (camelCase, as `engine.commands`) |
 //! | [`Facade::source`] | `{"ok":true,"text":"…"}` — the drawing as CadScript |
 //! | [`Facade::run_script`] | `{"ok","ran","output"[,error]}` |
@@ -302,6 +306,33 @@ impl Facade {
         v.to_string()
     }
 
+    /// Start a command **by its id**, exactly as a menu click does ([`Session::start`]): the
+    /// interactive commands (`line`, `circle`…) ask their questions through this reply and are
+    /// answered with [`Facade::cmdline`]. Like `cmdline`, the reply is the command-line state
+    /// plus the `output` lines the start produced; an unknown id replies the same `error` shape
+    /// `cmdline` does.
+    pub fn start(&mut self, id: &str) -> String {
+        let before = self.session.log.len();
+        let mut error = None;
+        if id.len() > MAX_COMMAND_BYTES {
+            error = Some(format!("the command name is too long: {} bytes (the limit is {MAX_COMMAND_BYTES})", id.len()));
+        } else if let Err(e) = self.session.start(id) {
+            let m = e.to_string();
+            self.session.echo(m.clone());
+            error = Some(m);
+        }
+        self.refresh();
+        let mut v = cmdline_state(&self.session);
+        let out: Vec<String> = self.session.log.iter().skip(before).take(MAX_OUTPUT).cloned().collect();
+        if let Some(o) = v.as_object_mut() {
+            o.insert("output".into(), json!(out));
+            if let Some(e) = error {
+                o.insert("error".into(), json!(e));
+            }
+        }
+        v.to_string()
+    }
+
     /// The command-line state: the prompt as shown, the running command, its keywords and
     /// accepted input kinds, and the output tail.
     pub fn prompt(&self) -> String {
@@ -330,6 +361,52 @@ impl Facade {
             "space": st.space.tab_name(),
         })
         .to_string()
+    }
+
+    /// The active drawing's selection: `{"count":n,"handles":["1A",…]}` (`Handle::hex`). No
+    /// drawing open → `{"count":0,"handles":[]}`.
+    pub fn selection(&self) -> String {
+        let handles: Vec<String> = self.session.state().map(|st| st.selection.iter().map(|h| h.hex()).collect()).unwrap_or_default();
+        json!({"count": handles.len(), "handles": handles}).to_string()
+    }
+
+    /// The drafting-toggle states the status bar shows, straight from [`Session::settings`]:
+    /// `{"grid","snap","ortho","polar","isodraft","otrack","osnap","dynmode","lwdisplay",
+    /// "transparency","qpmode","osmode","pickbox"}`. `osnap` is on while `osmode` is set and not
+    /// [`snap::mode::OFF`]; `transparency` is `transparency_display`.
+    pub fn settings(&self) -> String {
+        let s = &self.session.settings;
+        json!({
+            "grid": s.gridmode,
+            "snap": s.snapmode,
+            "ortho": s.orthomode,
+            "polar": s.polarmode,
+            "isodraft": s.isodraft,
+            "otrack": s.otrack,
+            "osnap": s.osmode & cadcraft_engine::snap::mode::OFF == 0 && s.osmode != 0,
+            "dynmode": s.dynmode,
+            "lwdisplay": s.lwdisplay,
+            "transparency": s.transparency_display,
+            "qpmode": s.qpmode,
+            "osmode": s.osmode,
+            "pickbox": s.pickbox,
+        })
+        .to_string()
+    }
+
+    /// A point in the drawing's own units (`LUNITS`/`LUPREC` header vars, the same formatting
+    /// the desktop status bar shows): `{"text":"6.0000, 4.0000, 0.0000"}`. No drawing → the
+    /// same formatting with the defaults (2, 4); a non-finite ordinate formats as 0.0, never
+    /// `NaN`.
+    pub fn format_point(&self, x: f64, y: f64) -> String {
+        let (lu, lp) = self.session.doc().map(|d| (d.header.i64("LUNITS", 2), d.header.i64("LUPREC", 4))).unwrap_or((2, 4));
+        let text = format!(
+            "{}, {}, {}",
+            cadcraft_engine::units::format_distance(finite(x), lu, lp),
+            cadcraft_engine::units::format_distance(finite(y), lu, lp),
+            cadcraft_engine::units::format_distance(0.0, lu, lp)
+        );
+        json!({"text": text}).to_string()
     }
 
     /// Every command: id, label, menu path, shortcut, aliases, params doc and enablement (the
@@ -437,6 +514,20 @@ impl Facade {
     /// The view the canvas is showing: `{"min":[x,y],"max":[x,y]}`.
     pub fn view(&self) -> String {
         view_json(self.view).to_string()
+    }
+
+    /// Load the sample drawing into the running session (the browser's File ▸ Open Sample
+    /// Drawing): the same drawing [`Facade::sample`] starts with, replacing what is open, fitted
+    /// to the view. Replies `{"ok":true,"title","entityCount"}`.
+    pub fn load_sample(&mut self) -> String {
+        self.session.open_drawing(cadcraft_engine::sample::default_sample(), "Bracket", None);
+        self.refresh();
+        self.fit_view();
+        let (title, entity_count) = match self.session.state() {
+            Ok(st) => (st.title.clone(), st.doc.entity_count()),
+            Err(_) => (String::new(), 0),
+        };
+        json!({"ok": true, "title": title, "entityCount": entity_count}).to_string()
     }
 
     /// Open a drawing from bytes (the browser has no file paths), through the engine's own open
@@ -643,6 +734,11 @@ mod bindings {
             self.0.cmdline(text)
         }
 
+        #[wasm_bindgen(js_name = start)]
+        pub fn start(&mut self, id: &str) -> String {
+            self.0.start(id)
+        }
+
         #[wasm_bindgen(js_name = prompt)]
         pub fn prompt(&self) -> String {
             self.0.prompt()
@@ -651,6 +747,21 @@ mod bindings {
         #[wasm_bindgen(js_name = state)]
         pub fn state(&self) -> String {
             self.0.state()
+        }
+
+        #[wasm_bindgen(js_name = selection)]
+        pub fn selection(&self) -> String {
+            self.0.selection()
+        }
+
+        #[wasm_bindgen(js_name = settings)]
+        pub fn settings(&self) -> String {
+            self.0.settings()
+        }
+
+        #[wasm_bindgen(js_name = formatPoint)]
+        pub fn format_point(&self, x: f64, y: f64) -> String {
+            self.0.format_point(x, y)
         }
 
         #[wasm_bindgen(js_name = commands)]
@@ -686,6 +797,11 @@ mod bindings {
         #[wasm_bindgen(js_name = openBytes)]
         pub fn open_bytes(&mut self, name: &str, bytes: &[u8]) -> String {
             self.0.open_bytes(name, bytes)
+        }
+
+        #[wasm_bindgen(js_name = loadSample)]
+        pub fn load_sample(&mut self) -> String {
+            self.0.load_sample()
         }
 
         #[wasm_bindgen(js_name = saveBytes)]
@@ -725,6 +841,22 @@ mod tests {
         let d = parse(&f.display());
         let b = d["bounds"].as_array().unwrap();
         [b[0].as_f64().unwrap(), b[1].as_f64().unwrap(), b[2].as_f64().unwrap(), b[3].as_f64().unwrap()]
+    }
+
+    #[test]
+    fn load_sample_replaces_the_drawing() {
+        let mut f = Facade::new();
+        let before = parse(&f.state());
+        assert_eq!(before["entityCount"].as_u64(), Some(0), "a new drawing is empty: {before}");
+        let r = parse(&f.load_sample());
+        assert_eq!(r["ok"].as_bool(), Some(true), "load_sample: {r}");
+        assert_eq!(r["title"].as_str(), Some("Bracket"), "load_sample: {r}");
+        assert!(r["entityCount"].as_u64().is_some_and(|n| n > 0), "load_sample: {r}");
+        // The display list follows the sample, and the view was fitted to it.
+        let d = parse(&f.display());
+        assert!(d["prims"].as_array().is_some_and(|p| !p.is_empty()), "display after load_sample: {d}");
+        let v = parse(&f.view());
+        assert!(v["min"].as_array().is_some_and(|m| m.len() == 2), "view after load_sample: {v}");
     }
 
     #[test]
@@ -878,5 +1010,90 @@ mod tests {
         assert!(d["bounds"].as_array().is_some_and(|b| b.len() == 4), "bounds: {d}");
         assert_eq!(parse(&f.set_view(-100.0, -100.0, 100.0, 100.0))["ok"], json!(true));
         assert!(!parse(&f.display())["prims"].as_array().unwrap().is_empty());
+    }
+
+    /// A facade with no drawing at all (the tolerant replies of `selection`/`format_point`).
+    fn empty_facade() -> Facade {
+        Facade { session: Session::empty(), view: default_view(), space: Space::Model, engine_view: cadcraft_engine::View::default() }
+    }
+
+    #[test]
+    fn start_circle_prompts_like_a_menu_click() {
+        let mut f = Facade::new();
+        let before = entity_count(&f);
+        let r = parse(&f.start("circle"));
+        assert!(r.get("error").is_none(), "{r}");
+        assert_eq!(r["running"], json!("circle"), "{r}");
+        assert!(r["prompt"].as_str().is_some_and(|p| p.to_lowercase().contains("center")), "{r}");
+        let r = parse(&f.cmdline("0,0"));
+        assert!(r.get("error").is_none(), "{r}");
+        assert_eq!(r["running"], json!("circle"), "{r}");
+        assert!(r["prompt"].as_str().is_some_and(|p| p.to_lowercase().contains("radius")), "{r}");
+        let r = parse(&f.cmdline("5"));
+        assert!(r.get("error").is_none(), "{r}");
+        assert_eq!(entity_count(&f), before + 1, "the two answers drew the circle: {r}");
+    }
+
+    #[test]
+    fn start_of_an_unknown_id_replies_an_error() {
+        let mut f = Facade::new();
+        let r = parse(&f.start("zzz-no-such-command"));
+        assert!(r["error"].as_str().is_some_and(|m| m.contains("zzz-no-such-command")), "{r}");
+        // The facade still works after it.
+        assert_eq!(parse(&f.execute("circle", r#"{"center":[0,0],"radius":5}"#))["ok"], json!(true));
+    }
+
+    #[test]
+    fn selection_reflects_the_select_command() {
+        assert_eq!(parse(&empty_facade().selection()), json!({"count": 0, "handles": []}));
+        let mut f = Facade::new();
+        assert_eq!(parse(&f.selection()), json!({"count": 0, "handles": []}));
+        assert_eq!(parse(&f.execute("line", r#"{"points":[[-10,0],[10,0]]}"#))["ok"], json!(true));
+        let r = parse(&f.execute("select", r#"{"at":[0,0],"aperture":0.5}"#));
+        assert_eq!(r["ok"], json!(true), "{r}");
+        let reported = r["result"]["handles"].as_array().cloned().unwrap_or_default();
+        assert_eq!(reported.len(), 1, "the line is picked: {r}");
+        let sel = parse(&f.selection());
+        assert_eq!(sel["count"], json!(1), "{sel}");
+        assert_eq!(sel["handles"], json!(reported), "{sel}");
+        // A clear leaves it empty again.
+        assert_eq!(parse(&f.execute("select", r#"{"clear":true}"#))["ok"], json!(true));
+        assert_eq!(parse(&f.selection()), json!({"count": 0, "handles": []}));
+    }
+
+    #[test]
+    fn settings_round_trips_a_grid_toggle() {
+        let mut f = Facade::new();
+        let s = parse(&f.settings());
+        for key in ["grid", "snap", "ortho", "polar", "isodraft", "otrack", "osnap", "dynmode", "lwdisplay", "transparency", "qpmode"] {
+            assert!(s[key].is_boolean(), "{key}: {s}");
+        }
+        assert!(s["osmode"].is_number(), "{s}");
+        assert!(s["pickbox"].is_number(), "{s}");
+        assert_eq!(parse(&f.execute("grid", r#"{"on":true}"#))["ok"], json!(true));
+        assert_eq!(parse(&f.settings())["grid"], json!(true));
+        assert_eq!(parse(&f.execute("grid", r#"{"on":false}"#))["ok"], json!(true));
+        assert_eq!(parse(&f.settings())["grid"], json!(false));
+    }
+
+    #[test]
+    fn format_point_matches_format_distance_and_survives_nan() {
+        let f = Facade::new();
+        let expected = format!(
+            "{}, {}, {}",
+            cadcraft_engine::units::format_distance(6.0, 2, 4),
+            cadcraft_engine::units::format_distance(4.0, 2, 4),
+            cadcraft_engine::units::format_distance(0.0, 2, 4)
+        );
+        let r = parse(&f.format_point(6.0, 4.0));
+        assert_eq!(r["text"], json!(expected), "{r}");
+        assert!(r["text"].as_str().is_some_and(|t| t.contains("6.0000")), "{r}");
+        // No drawing: the same formatting with the defaults (2, 4).
+        assert_eq!(parse(&empty_facade().format_point(6.0, 4.0))["text"], json!(expected));
+        // Hostile ordinates never reach the reply as NaN/inf.
+        let r = parse(&f.format_point(f64::NAN, f64::INFINITY));
+        let text = r["text"].as_str().unwrap_or_default();
+        assert!(!text.contains("NaN") && !text.contains("inf") && !text.contains("Inf"), "{r}");
+        assert!(text.starts_with("0.0000"), "{r}");
     }
 }

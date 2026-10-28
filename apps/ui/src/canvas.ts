@@ -13,10 +13,15 @@ export interface Palette {
   gridMajor: string;
   axisX: string;
   axisY: string;
+  /** The selection highlight stroke (the `--selection` token, Cursor's accent). */
+  selection: string;
 }
 
 /** Point markers are drawn this many CSS px across (the engine's marker, not world geometry). */
 export const POINT_SIZE = 4;
+
+/** The selection highlight's stroke width, in CSS px. */
+export const SELECTION_WIDTH = 1.5;
 
 /**
  * Lineweight display: the desktop canvas draws `lw` (mm) as `lw * 3.78` CSS px, clamped to
@@ -40,6 +45,7 @@ export function paletteFrom(element: Element): Palette {
     gridMajor: get("--grid-major", "#2a2a2a"),
     axisX: get("--axis-x", "#552633"),
     axisY: get("--axis-y", "#23412f"),
+    selection: get("--selection", "#81a1c1"),
   };
 }
 
@@ -51,6 +57,29 @@ export interface DrawOptions {
   palette: Palette;
   /** Draw the unit grid behind the primitives (helps read pan/zoom before the drawing is big). */
   grid: boolean;
+  /**
+   * Handles to highlight. A primitive whose `handle` is in the set is stroked again on top with
+   * the palette's selection colour at [`SELECTION_WIDTH`]; absent or empty draws nothing extra.
+   */
+  selection?: ReadonlySet<string>;
+}
+
+/**
+ * Whether a primitive takes the selection highlight. The engine's handles are hex strings
+ * (`Handle::hex`), and the shell builds the set from `selection()`; an absent handle never
+ * highlights.
+ */
+export function isHighlighted(handle: string, selection: ReadonlySet<string>): boolean {
+  return handle !== "" && selection.has(handle);
+}
+
+/**
+ * A display primitive's handle (the wire's raw `u64`) as the engine's own hex spelling
+ * (`Handle::hex`: upper case, no padding), which is what `selection()` replies with.
+ */
+export function handleHex(handle: number): string {
+  if (!Number.isFinite(handle) || handle <= 0) return "";
+  return Math.trunc(handle).toString(16).toUpperCase();
 }
 
 function rgb(c: readonly [number, number, number]): string {
@@ -94,7 +123,71 @@ export function drawDisplay(ctx: CanvasRenderingContext2D, list: DisplayList, vi
     if (b === null || !rectsOverlap(b, view)) continue;
     drawPrim(ctx, prim, list, proj.projectX, proj.projectY);
   }
+
+  // The selection highlight: the selected primitives are stroked again on top, in the accent,
+  // so the pick reads without changing the drawing's own colours.
+  const selection = options.selection;
+  if (selection !== undefined && selection.size > 0) {
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = palette.selection;
+    ctx.lineWidth = SELECTION_WIDTH;
+    ctx.setLineDash([]);
+    for (const prim of list.prims) {
+      if (!isHighlighted(handleHex(prim.handle), selection)) continue;
+      const b = boundsOfPrim(prim, list.verts);
+      if (b === null || !rectsOverlap(b, view)) continue;
+      highlightPrim(ctx, prim, list, proj.projectX, proj.projectY);
+    }
+  }
   ctx.globalAlpha = 1;
+}
+
+/** Stroke a primitive's own outline again for the selection highlight. */
+function highlightPrim(
+  ctx: CanvasRenderingContext2D,
+  prim: DisplayPrim,
+  list: DisplayList,
+  projectX: (x: number) => number,
+  projectY: (y: number) => number,
+): void {
+  const end = Math.min(prim.start + prim.len, list.verts.length);
+  if (prim.kind === "point") {
+    const p = list.verts[prim.start] as Point;
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
+    const sx = projectX(p.x);
+    const sy = projectY(p.y);
+    ctx.strokeRect(sx - POINT_SIZE / 2, sy - POINT_SIZE / 2, POINT_SIZE, POINT_SIZE);
+    return;
+  }
+  ctx.beginPath();
+  let started = false;
+  if (prim.kind === "tris") {
+    for (let i = prim.start; i + 2 < end; i += 3) {
+      const a = list.verts[i] as Point;
+      const b = list.verts[i + 1] as Point;
+      const c = list.verts[i + 2] as Point;
+      if (![a, b, c].every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))) continue;
+      ctx.moveTo(projectX(a.x), projectY(a.y));
+      ctx.lineTo(projectX(b.x), projectY(b.y));
+      ctx.lineTo(projectX(c.x), projectY(c.y));
+      ctx.closePath();
+      started = true;
+    }
+  } else {
+    for (let i = prim.start; i < end; i++) {
+      const p = list.verts[i] as Point;
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+      const sx = projectX(p.x);
+      const sy = projectY(p.y);
+      if (started) ctx.lineTo(sx, sy);
+      else {
+        ctx.moveTo(sx, sy);
+        started = true;
+      }
+    }
+    if (started && prim.kind === "image") ctx.closePath();
+  }
+  if (started) ctx.stroke();
 }
 
 function drawGrid(ctx: CanvasRenderingContext2D, view: Rect, w: number, h: number, palette: Palette): void {

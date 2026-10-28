@@ -7,7 +7,7 @@
 import { describe, expect, test } from "bun:test";
 import { AppFacade, layerColor, parseCommands, parseDrawingState, parseEnvelope, parseLayers, parseHexColor } from "./facade";
 import { MockFacade } from "./mock";
-import { promptText } from "./prompt";
+import { emptyPrompt, promptText } from "./prompt";
 
 function mockFacade(): AppFacade {
   return new AppFacade(new MockFacade(), { kind: "mock", detail: "test" });
@@ -178,8 +178,12 @@ describe("AppFacade over the mock", () => {
           throw new Error("trap");
         },
         cmdline: () => "",
+        start: () => "",
         prompt: () => "",
         state: () => "",
+        selection: () => "",
+        settings: () => "",
+        format_point: () => "",
         commands: () => "",
         source: () => "",
         run_script: () => "",
@@ -187,6 +191,7 @@ describe("AppFacade over the mock", () => {
         set_view: () => "",
         view: () => "",
         open_bytes: () => "",
+        load_sample: () => "",
         save_bytes: () => new Uint8Array(),
         digest: () => "",
       },
@@ -196,5 +201,180 @@ describe("AppFacade over the mock", () => {
     expect(env.ok).toBe(false);
     if (!env.ok) expect(env.error).toContain("trap");
     expect(facade.displayList().prims).toEqual([]);
+  });
+});
+
+describe("the extended facade contract over the mock", () => {
+  test("start('circle') prompts centre then radius, and the circle lands", () => {
+    const facade = mockFacade();
+    const before = facade.displayList().prims.length;
+
+    let state = facade.start("circle");
+    expect(state.running).toBe("circle");
+    expect(promptText(state)).toBe("Specify center point for circle:");
+    expect(state.output).toContain("Command: CIRCLE");
+
+    state = facade.cmdline("0,0", state);
+    expect(promptText(state)).toBe("Specify radius of circle:");
+    state = facade.cmdline("5", state);
+    expect(promptText(state)).toBe("Command:");
+    expect(state.error).toBeNull();
+
+    expect(facade.displayList().prims.length).toBe(before + 1);
+  });
+
+  test("start on an unknown id replies an error, and a simple command echoes", () => {
+    const facade = mockFacade();
+    const bad = facade.start("no-such-command");
+    expect(bad.error).toContain("no-such-command");
+    const zoom = facade.start("zoom");
+    expect(zoom.error).toBeNull();
+    expect(zoom.output).toContain("Command: ZOOM");
+  });
+
+  test("selection reflects a select command and a clear", () => {
+    const facade = mockFacade();
+    expect(facade.selection()).toEqual({ count: 0, handles: [] });
+    // The plate's lower-left corner (0,0) lies inside the 100x60 rect (handle 1 in the mock).
+    const env = facade.execute("select", { at: [0, 0] });
+    expect(env.ok).toBe(true);
+    const sel = facade.selection();
+    expect(sel.count).toBe(1);
+    expect(sel.handles.length).toBe(1);
+    expect(facade.execute("select", { clear: true }).ok).toBe(true);
+    expect(facade.selection()).toEqual({ count: 0, handles: [] });
+  });
+
+  test("settings round-trips a grid toggle", () => {
+    const facade = mockFacade();
+    const s = facade.settings();
+    expect(typeof s.grid).toBe("boolean");
+    expect(typeof s.osmode).toBe("number");
+    expect(typeof s.pickbox).toBe("number");
+    expect(facade.execute("grid", { on: true }).ok).toBe(true);
+    expect(facade.settings().grid).toBe(true);
+    expect(facade.execute("grid", { on: false }).ok).toBe(true);
+    expect(facade.settings().grid).toBe(false);
+  });
+
+  test("formatPoint returns the mock's own formatting", () => {
+    const facade = mockFacade();
+    expect(facade.formatPoint(6, 4)).toBe("6.0000, 4.0000, 0.0000");
+    expect(facade.formatPoint(NaN, Infinity)).toBe("0.0000, 0.0000, 0.0000");
+  });
+
+  test("layouts, setLayout, properties and setProperties work in mock mode", () => {
+    const facade = mockFacade();
+    const layouts = facade.layouts();
+    expect(layouts.length).toBe(1);
+    expect(layouts[0]?.name).toBe("Layout1");
+    expect(layouts[0]?.current).toBe(false);
+    expect(facade.setLayout("Layout1").ok).toBe(true);
+
+    const defaults = facade.properties();
+    expect(defaults).not.toBeNull();
+    if (defaults !== null && "selection" in defaults) {
+      expect(defaults.selection).toBe("No selection");
+      expect(defaults.defaults["layer"]).toBe("0");
+    }
+    expect(facade.setProperties({ color: "red" }).ok).toBe(false);
+    facade.execute("select", { at: [0, 0] });
+    const picked = facade.properties();
+    if (picked !== null && "objects" in picked) {
+      expect(picked.count).toBe(1);
+    }
+    expect(facade.setProperties({ color: "red" }).ok).toBe(true);
+  });
+
+  test("malformed replies yield the safe defaults", () => {
+    const raw = {
+      execute: () => "{",
+      cmdline: () => "[]",
+      start: () => "not json",
+      prompt: () => "null",
+      state: () => "{}",
+      selection: () => '{"count":"many","handles":[1,"A"]}',
+      settings: () => "42",
+      format_point: () => "raw-text",
+      commands: () => "x",
+      source: () => "",
+      run_script: () => "",
+      display: () => "",
+      set_view: () => "",
+      view: () => "",
+      open_bytes: () => "",
+      load_sample: () => "",
+      save_bytes: () => new Uint8Array(),
+      digest: () => "",
+    };
+    const facade = new AppFacade(raw, { kind: "wasm", detail: "test" });
+    // A non-numeric count falls back to the parsed handle list.
+    expect(facade.selection()).toEqual({ count: 1, handles: ["A"] });
+    expect(facade.settings()).toEqual({
+      grid: false,
+      snap: false,
+      ortho: false,
+      polar: false,
+      isodraft: false,
+      otrack: false,
+      osnap: false,
+      dynmode: false,
+      lwdisplay: false,
+      transparency: false,
+      qpmode: false,
+      osmode: 0,
+      pickbox: 3,
+    });
+    expect(facade.formatPoint(1, 2)).toBe("raw-text");
+    // A start reply that is not JSON keeps the previous state and raises the error line.
+    const state = facade.start("circle", emptyPrompt());
+    expect(state.error).toContain("unreadable");
+  });
+
+  test("MockFacade satisfies every RawFacade method the shim uses", () => {
+    const mock = new MockFacade();
+    const required = [
+      "execute",
+      "cmdline",
+      "start",
+      "prompt",
+      "state",
+      "selection",
+      "settings",
+      "format_point",
+      "commands",
+      "source",
+      "run_script",
+      "display",
+      "set_view",
+      "view",
+      "open_bytes",
+      "load_sample",
+      "save_bytes",
+      "digest",
+    ];
+    for (const name of required) {
+      const fn = (mock as unknown as Record<string, unknown>)[name];
+      expect(typeof fn, `MockFacade is missing \`${name}\``).toBe("function");
+    }
+    // The argument-taking methods answer a string when called with hostile-but-shaped input.
+    expect(typeof mock.execute("", "{}")).toBe("string");
+    expect(typeof mock.cmdline("")).toBe("string");
+    expect(typeof mock.start("circle")).toBe("string");
+    expect(typeof mock.prompt()).toBe("string");
+    expect(typeof mock.state()).toBe("string");
+    expect(typeof mock.selection()).toBe("string");
+    expect(typeof mock.settings()).toBe("string");
+    expect(typeof mock.format_point(1, 2)).toBe("string");
+    expect(typeof mock.commands()).toBe("string");
+    expect(typeof mock.source()).toBe("string");
+    expect(typeof mock.run_script("")).toBe("string");
+    expect(typeof mock.display()).toBe("string");
+    expect(typeof mock.set_view(0, 0, 1, 1)).toBe("string");
+    expect(typeof mock.view()).toBe("string");
+    expect(typeof mock.open_bytes("x", new Uint8Array())).toBe("string");
+    expect(typeof mock.load_sample()).toBe("string");
+    expect(mock.save_bytes()).toBeInstanceOf(Uint8Array);
+    expect(typeof mock.digest()).toBe("string");
   });
 });

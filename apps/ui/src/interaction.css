@@ -1,0 +1,166 @@
+/*
+ * The interaction surfaces' styles: the properties palette's rows and the command line's keyword
+ * chips. Everything comes from tokens.css — no literal colours, radii or sizes beyond the token
+ * ladder. The palette is a flush second section of the rail (the layers palette is the first);
+ * its rows read as list lines, and a value only shows its field when hovered or focused.
+ * Imported by PropertiesPanel.tsx (the driver does not import it elsewhere).
+ */
+
+/* ---- Properties palette ---- */
+
+.properties {
+  width: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 50%;
+  background: transparent;
+  border: none;
+  border-top: var(--hairline) solid var(--border);
+  border-radius: 0;
+}
+
+.properties-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-6);
+  height: 26px;
+  padding: 0 var(--gap-8);
+  border-bottom: var(--hairline) solid var(--border);
+}
+
+.properties-state {
+  font-size: var(--font-chip);
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.properties-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--gap-2) 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.properties-empty {
+  padding: var(--gap-6) var(--gap-8);
+  color: var(--text-faint);
+  font-size: var(--font-small);
+}
+
+.prop-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-6);
+  min-height: 22px;
+  padding: 0 var(--gap-8);
+  border-radius: 0;
+  background: transparent;
+}
+
+.prop-row:hover {
+  background: var(--control-hover);
+}
+
+.prop-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-faint);
+  font-size: var(--font-small);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prop-value {
+  flex: 0 0 118px;
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* A value is text until it is touched: transparent field, hairline on hover, accent on focus. */
+.prop-input,
+.prop-select {
+  width: 100%;
+  min-width: 0;
+  height: 18px;
+  padding: 0 var(--gap-4);
+  border: var(--hairline) solid transparent;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-small);
+}
+
+.prop-input:hover,
+.prop-select:hover {
+  border-color: var(--border);
+  background: var(--control);
+}
+
+.prop-input:focus-visible,
+.prop-select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--control);
+}
+
+.prop-select {
+  cursor: pointer;
+}
+
+.prop-check {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.prop-readonly {
+  min-width: 0;
+  color: var(--text);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-small);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- The command line's keyword chips ---- */
+
+.cmd-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-2);
+}
+
+/* Keywords read as words of the prompt, not as buttons. */
+.keyword-chip {
+  padding: 1px var(--gap-4);
+  border: none;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--cmd-keyword);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-chip);
+  cursor: pointer;
+}
+
+.keyword-chip:hover {
+  background: var(--cmd-keyword-hover);
+}
+
+.keyword-chip:focus-visible {
+  outline: var(--focus-outline-w) solid var(--accent);
+  outline-offset: var(--focus-outline-offset);
+}

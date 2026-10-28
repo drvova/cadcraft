@@ -23,8 +23,12 @@ import { parseRect, rectIsDegenerate, type Rect } from "./view";
 export interface RawFacade {
   execute(command: string, paramsJson: string): string;
   cmdline(text: string): string;
+  start(id: string): string;
   prompt(): string;
   state(): string;
+  selection(): string;
+  settings(): string;
+  format_point(x: number, y: number): string;
   commands(): string;
   source(): string;
   run_script(text: string): string;
@@ -32,6 +36,7 @@ export interface RawFacade {
   set_view(x0: number, y0: number, x1: number, y1: number): string;
   view(): string;
   open_bytes(name: string, bytes: Uint8Array): string;
+  load_sample(): string;
   save_bytes(): Uint8Array;
   digest(): string;
 }
@@ -97,6 +102,43 @@ export function parseDrawingState(raw: string): DrawingState | null {
     space: asString(first("space", "activeSpace")) ?? "model",
   };
 }
+
+/** The active drawing's selection (`Facade::selection`); handles are the engine's hex strings. */
+export interface SelectionState {
+  count: number;
+  handles: string[];
+}
+
+/** The drafting-toggle states the status bar reads (`Facade::settings`). */
+export interface SettingsState {
+  grid: boolean;
+  snap: boolean;
+  ortho: boolean;
+  polar: boolean;
+  isodraft: boolean;
+  otrack: boolean;
+  osnap: boolean;
+  dynmode: boolean;
+  lwdisplay: boolean;
+  transparency: boolean;
+  qpmode: boolean;
+  osmode: number;
+  pickbox: number;
+}
+
+/** One layout tab from `execute("layout.list", {})`. `current` is true when the layout's name
+ *  equals the drawing's active space (`state().space`), so callers do not need a second call. */
+export interface LayoutInfo {
+  name: string;
+  current: boolean;
+  tabOrder?: number;
+}
+
+/** `execute("properties", {})`'s result: the drawing's defaults with no selection, or the
+ *  selected objects' property rows. */
+export type PropertiesReply =
+  | { selection: "No selection"; defaults: Record<string, unknown> }
+  | { count: number; objects: Record<string, unknown>[] };
 
 /** One layer row from `execute("layer", {})`. */
 export interface LayerInfo {
@@ -254,6 +296,16 @@ export class AppFacade {
     return reducePrompt(prev, raw, text);
   }
 
+  /**
+   * Start a command **by its id**, as a menu click does (interactive commands ask their
+   * questions through this reply, answered with `cmdline`). Folded like `cmdline`: the reply is
+   * the command-line delta, including the `output` lines the start produced.
+   */
+  start(id: string, prev: PromptState = emptyPrompt()): PromptState {
+    const raw = this.call(() => this.raw.start(id));
+    return reducePrompt(prev, raw, id);
+  }
+
   /** The engine's prompt state without typing anything (seeds the log tail at boot). */
   currentPrompt(): PromptState {
     const raw = this.call(() => this.raw.prompt());
@@ -262,6 +314,96 @@ export class AppFacade {
 
   drawingState(): DrawingState | null {
     return parseDrawingState(this.call(() => this.raw.state()));
+  }
+
+  /** The active selection; tolerant of a malformed reply (an empty selection). */
+  selection(): SelectionState {
+    const parsed = parseJson(this.call(() => this.raw.selection()));
+    if (!isRecord(parsed)) return { count: 0, handles: [] };
+    const handles = Array.isArray(parsed["handles"]) ? parsed["handles"].filter((h): h is string => typeof h === "string") : [];
+    const count = asNumber(parsed["count"]);
+    return { count: count === null ? handles.length : Math.max(0, Math.round(count)), handles };
+  }
+
+  /** The status bar's drafting toggles; missing keys default to off, `pickbox` to 3. */
+  settings(): SettingsState {
+    const parsed = parseJson(this.call(() => this.raw.settings()));
+    const o = isRecord(parsed) ? parsed : {};
+    const b = (key: string): boolean => asBool(o[key]) ?? false;
+    return {
+      grid: b("grid"),
+      snap: b("snap"),
+      ortho: b("ortho"),
+      polar: b("polar"),
+      isodraft: b("isodraft"),
+      otrack: b("otrack"),
+      osnap: b("osnap"),
+      dynmode: b("dynmode"),
+      lwdisplay: b("lwdisplay"),
+      transparency: b("transparency"),
+      qpmode: b("qpmode"),
+      osmode: asNumber(o["osmode"]) ?? 0,
+      pickbox: asNumber(o["pickbox"]) ?? 3,
+    };
+  }
+
+  /** A point in the drawing's own units; falls back to the raw reply when it is not `{text}`. */
+  formatPoint(x: number, y: number): string {
+    const raw = this.call(() => this.raw.format_point(x, y));
+    const parsed = parseJson(raw);
+    return isRecord(parsed) && typeof parsed["text"] === "string" ? parsed["text"] : raw;
+  }
+
+  /**
+   * The drawing's layout tabs in tab order (`execute("layout.list", {})`). `current` is true
+   * when the layout's name equals the drawing's active space (`state().space`) — Model space is
+   * not one of these rows, so a status bar renders its Model tab itself, as the desktop does.
+   */
+  layouts(): LayoutInfo[] {
+    const env = this.execute("layout.list", {});
+    if (!env.ok) return [];
+    const rows = Array.isArray(env.result) ? env.result : [];
+    const space = this.drawingState()?.space ?? "";
+    const out: LayoutInfo[] = [];
+    for (const row of rows) {
+      if (!isRecord(row)) continue;
+      const name = asString(row["name"]);
+      if (name === null) continue;
+      const tabOrder = asNumber(row["tabOrder"]);
+      const info: LayoutInfo = { name, current: name === space };
+      if (tabOrder !== null) info.tabOrder = Math.round(tabOrder);
+      out.push(info);
+    }
+    return out;
+  }
+
+  setLayout(name: string): Envelope {
+    return this.execute("layout.set", { name });
+  }
+
+  /**
+   * The properties palette's data (`execute("properties", {})`): the drawing's defaults with no
+   * selection (the engine's flat defaults object, under `defaults`), or the selected objects.
+   * Null when the command fails or the reply is unreadable.
+   */
+  properties(): PropertiesReply | null {
+    const env = this.execute("properties", {});
+    if (!env.ok || !isRecord(env.result)) return null;
+    const result = env.result;
+    if (Array.isArray(result["objects"])) {
+      const objects = result["objects"].filter((o): o is Record<string, unknown> => isRecord(o));
+      const count = asNumber(result["count"]);
+      return { count: count === null ? objects.length : Math.max(0, Math.round(count)), objects };
+    }
+    const defaults: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(result)) {
+      if (key !== "selection") defaults[key] = value;
+    }
+    return { selection: "No selection", defaults };
+  }
+
+  setProperties(patch: Record<string, unknown>): Envelope {
+    return this.execute("properties.set", patch);
   }
 
   commands(): CommandInfo[] {
@@ -317,6 +459,12 @@ export class AppFacade {
   openBytes(name: string, bytes: Uint8Array): Envelope {
     const raw = this.call(() => this.raw.open_bytes(name, bytes));
     return parseEnvelope(raw) ?? { ok: false, error: "unreadable reply from open_bytes" };
+  }
+
+  /** Replace what is open with the sample drawing (File ▸ Open Sample Drawing). */
+  loadSample(): Envelope {
+    const raw = this.call(() => this.raw.load_sample());
+    return parseEnvelope(raw) ?? { ok: false, error: "unreadable reply from load_sample" };
   }
 
   saveBytes(): Uint8Array | null {

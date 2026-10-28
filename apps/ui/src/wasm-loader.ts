@@ -18,8 +18,12 @@ type WasmModule = Record<string, unknown>;
 const REQUIRED: readonly (readonly string[])[] = [
   ["execute"],
   ["cmdline"],
+  ["start"],
   ["prompt"],
   ["state"],
+  ["selection"],
+  ["settings"],
+  ["format_point", "formatPoint"],
   ["commands"],
   ["source"],
   ["run_script", "runScript"],
@@ -27,6 +31,7 @@ const REQUIRED: readonly (readonly string[])[] = [
   ["set_view", "setView"],
   ["view"],
   ["open_bytes", "openBytes"],
+  ["load_sample", "loadSample"],
   ["save_bytes", "saveBytes"],
   ["digest"],
 ];
@@ -68,8 +73,12 @@ function wrap(instance: WasmModule): RawFacade | null {
   return {
     execute: (command, paramsJson) => text("execute", [command, paramsJson]),
     cmdline: (t) => text("cmdline", [t]),
+    start: (id) => text("start", [id]),
     prompt: () => text("prompt", []),
     state: () => text("state", []),
+    selection: () => text("selection", []),
+    settings: () => text("settings", []),
+    format_point: (x, y) => text("format_point", [x, y]),
     commands: () => text("commands", []),
     source: () => text("source", []),
     run_script: (t) => text("run_script", [t]),
@@ -77,6 +86,7 @@ function wrap(instance: WasmModule): RawFacade | null {
     set_view: (x0, y0, x1, y1) => text("set_view", [x0, y0, x1, y1]),
     view: () => text("view", []),
     open_bytes: (name, bytes) => text("open_bytes", [name, bytes]),
+    load_sample: () => text("load_sample", []),
     save_bytes: () => {
       const out = call("save_bytes", []);
       return out instanceof Uint8Array ? out : new Uint8Array(out as ArrayBufferLike);

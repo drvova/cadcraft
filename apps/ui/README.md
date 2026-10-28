@@ -1,10 +1,19 @@
 # CADCraft UI (`apps/ui`)
 
 The interface: **SolidJS + TypeScript + Vite**, drawing through a `<canvas>` and talking to the
-Rust engine through the `crates/wasm` facade (`plan/solid-ui-migration.md`, phase 1). This is the
-first vertical slice — canvas with pan/zoom, a working command line, a layers panel, and the
-chrome skeleton. The engine stays pure Rust; this app contains no geometry logic (the canvas only
-maps world → screen and draws the primitives the engine's display list hands it).
+Rust engine through the `crates/wasm` facade (`plan/solid-ui-migration.md`, phases 1–2).
+
+Phase 1 was the vertical slice (canvas with pan/zoom, command line, layers panel, chrome
+skeleton). Phase 2 is the chrome: the **menu bar** (the full command registry tree, nested
+submenus, shortcuts, disabled states), the **tool strip**, the **status bar** (layout tabs,
+drafting toggles, coordinates, selection count), the **properties palette** (defaults, single and
+multiple selection, edits through `properties.set`), and the command line's **clickable keywords**
+and history. Selection works on the canvas (click to pick with the engine's pickbox aperture,
+Shift to add, Escape to clear) and the drawing's light theme is in `tokens.css` (View ▸ Interface
+Theme).
+
+The engine stays pure Rust; this app contains no geometry logic (the canvas only maps world →
+screen and draws the primitives the engine's display list hands it).
 
 ## Run it
 
@@ -53,8 +62,16 @@ src/view.ts          world↔screen mapping, pan, zoom-around-pointer (pure)
 src/display.ts       the display-list parser (the trust boundary for engine bytes)
 src/prompt.ts        the command line's prompt/output state machine (pure)
 src/canvas.ts        the canvas 2D renderer: polyline / tris / point / image
-src/app.tsx          the shell: state wiring for the four surfaces
-src/components/      TopBar, CanvasView, LayersPanel, CommandLine
+src/app.tsx          the shell: state wiring, invocation contract, visibility toggles, theme
+src/commands.ts      the menu tree from the command registry + the ui.* items the web shell honours
+src/icons.ts         the tool-strip icons, drawn in code (24×24 SVG paths — no image assets)
+src/files.ts         browser file I/O: pick a file to open, download what the engine saves
+src/selection.ts     the pick aperture and click selection semantics (pure)
+src/props.ts         the properties palette's parsing and patch building (pure)
+src/components/      TopBar, MenuBar, ToolStrip, StatusBar, CanvasView, LayersPanel,
+                     PropertiesPanel, CommandLine
+src/chrome.css       menu bar, tool strip, status bar
+src/interaction.css  properties rows and keyword chips
 src/tokens.css       the design tokens, copied from crates/ui-egui/src/theme.rs
 src/styles.css       the layout (flex/grid) and component chrome
 ```
