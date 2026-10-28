@@ -11,16 +11,16 @@ The web UI grows six canonical components under `src/ui/`, each a thin wrapper o
 element. The per-surface hand-rolled classes they replace are named below; a class loses because it
 is a one-off with no shared API and no states.
 
-- **Button** — pick `ui/Button.tsx` (native `<button>`). Loses: `.button` (TopBar — one call site), `.assistant-send` / `.assistant-save` / `.assistant-ghost` (assistant-only, their own colours), `.assistant-preset` (a suggestion chip wearing a button), `.tool-button` (ToolStrip — a grid cell, no variants), `.menu-row` (a menu item, not a general button).
-- **IconButton** — pick `ui/IconButton.tsx` (native `<button>`, a drawn icon + label). Loses: `.assistant-icon` (three uses, fixed 24px, no variant), `.assistant-attachment-x` (one-off), `.layer-toggles` buttons (LayersPanel — a toggle cluster with its own semantics), `.status-toggle` (StatusBar — tab-ish, keeps `role="tab"`).
+- **Button** — pick `ui/Button.tsx` (native `<button>`). Variants `primary | secondary | ghost | danger`, default `secondary` (Cursor's own default button). Loses: `.button` (TopBar — one call site), `.assistant-send` / `.assistant-save` / `.assistant-ghost` (assistant-only, their own colours), `.assistant-preset` (a suggestion chip wearing a button), `.tool-button` (ToolStrip — a grid cell, no variants), `.menu-row` (a menu item, not a general button).
+- **IconButton** — pick `ui/IconButton.tsx` (native `<button>`, a drawn icon + label). Variants `ghost | soft | inverted`; sizes `md` (24px) and `sm` (20px). Loses: `.assistant-icon` (three uses, fixed 24px, no variant), `.assistant-attachment-x` (one-off), `.layer-toggles` buttons (LayersPanel — a toggle cluster with its own semantics), `.status-toggle` (StatusBar — tab-ish, keeps `role="tab"`).
 - **Chip** — pick `ui/Chip.tsx` (native `<button>` when interactive, `<span>` when not). Loses: `.chip` (TopBar — a static fact, no interaction), `.keyword-chip` (CommandLine — interactive, no tone/size API), `.cmd-chips` (a container, not a chip).
-- **Field** — pick `ui/Field.tsx` (native `<input>` / `<select>` / `<textarea>`). Loses: `.assistant-input`, `.cmd-input`, `.prop-input`, `.prop-select` (each one surface's own padding and border), `.assistant-field` (a label wrapper, not the control).
-- **Row** — pick `ui/Row.tsx` (native `<div>`). Loses: `.prop-row`, `.menu-row`, `.assistant-row`, `.assistant-tool` (each repeats hover/selected padding by hand), `.layer-row` (its own grid).
-- **SectionLabel** — pick `ui/SectionLabel.tsx` (native `<span>`). Loses: `.section-label` (already shared but untyped — the pick is its typed home), `.properties-head` / `.layers-head` (the surrounding bar, not the label), `.assistant-title` (a pane title, a different role).
+- **Field** — pick `ui/Field.tsx` (native `<input>`, single-line). Loses: `.assistant-input`, `.cmd-input`, `.prop-input` (each one surface's own padding and border), `.assistant-field` (a label wrapper, not the control). The composer's auto-growing `<textarea>` and the properties palette's `<select>` stay bespoke for now (found-not-fixed).
+- **Row** — pick `ui/Row.tsx` (native `<button>`, the full-width clickable band). Loses: `.prop-row`, `.menu-row`, `.assistant-row`, `.assistant-tool` (each repeats hover/selected padding by hand). A grid row carrying nested controls of its own (`.layer-row` with its toggle cluster) stays bespoke — a button cannot nest buttons.
+- **SectionLabel** — pick `ui/SectionLabel.tsx` (native `<h2>` — a heading, so a screen reader can jump between panels). Loses: `.section-label` (already shared but untyped — the pick is its typed home), `.properties-head` / `.layers-head` (the surrounding bar, not the label), `.assistant-title` (a pane title, a different role).
 
 ## Prop vocabulary
 
-- `variant`: `primary | ghost | danger` (default `ghost`) — purpose, not appearance.
+- `variant`: `primary | secondary | ghost | danger` (default `secondary`) — purpose, not appearance.
 - `size`: `sm | md` (default `md`).
 - plus `disabled`, `selected`, `title`.
 - Chip `tone`: `neutral | accent`.
