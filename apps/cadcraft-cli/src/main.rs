@@ -5,6 +5,7 @@
 //! cadcraft-cli convert IN.dxf OUT.(dxf|svg|png) [--window x0,y0,x1,y1 | --view extents|current]
 //! cadcraft-cli run [FILE|--sample|--metric] [--script TEXT|--script-file F.scr] [--cmd 'id {json}']... [--save OUT] [--export OUT.png] [--window ... | --view ...]
 //! cadcraft-cli commands [FILTER]                   command catalog (JSON)
+//! cadcraft-cli digest A.dxf [B.dxf]                content hash, or two files compared
 //! cadcraft-cli mcp [--connect HOST:PORT [--lazy] [--launch]]  MCP server on stdio (headless or bridged to the app)
 //! cadcraft-cli perf [N]                            timing table on a synthetic N-entity drawing
 //! cadcraft-cli perf FILE                           canvas display-list build of a drawing, zoomed in step by step
@@ -28,6 +29,7 @@ macro_rules! outln {
 
 use std::process::ExitCode;
 
+use cadcraft_engine::doc::digest::{Digest, drawing_digest};
 use cadcraft_engine::doc::{Handle, Space};
 use cadcraft_engine::geom::{Bounds2, Vec2};
 use cadcraft_engine::{Session, View};
@@ -60,10 +62,17 @@ const USAGE: &str = "usage:
   cadcraft-cli convert IN.dxf OUT.(dxf|dwg|svg|png|pdf) [FRAMING]
   cadcraft-cli run [FILE | --sample | --metric] [--script TEXT] [--script-file F.scr] [--cmd 'id {json}']... [--save OUT.dxf] [--export OUT.(png|svg|pdf)] [FRAMING]
   cadcraft-cli commands [FILTER]
+  cadcraft-cli digest A.dxf [B.dxf]
   cadcraft-cli mcp [--connect HOST:PORT [--lazy] [--launch]]
   cadcraft-cli perf [N | FILE]
   cadcraft-cli sample (bracket|floorplan) OUT.(dxf|dwg|svg|png)
   cadcraft-cli --version
+
+digest:
+  prints one JSON object per file: its canonical content hash (what the drawing holds, not
+  where it sits), the entity count and the model-space bounds. With two files both digests
+  and the delta are printed, and the exit status is 0 when they match, 1 when they differ,
+  2 on a usage or read error.
 
 image framing (png 2400x1600, svg, pdf; always model space):
   default                  convert: fit the drawing extents.
@@ -296,6 +305,44 @@ fn convert(args: &[String]) -> Result<(), String> {
     }
     let window = export_window(&s, framing, None)?;
     export_framed(&s, o, window)
+}
+
+/// `digest A.dxf [B.dxf]`: the canonical content hash of a drawing (`cadcraft_doc::digest`), so
+/// two files can be proven identical or different. One file prints its digest as JSON; with a
+/// second file both digests and the delta are printed. `Ok(true)` means identical (or a single
+/// file); the exit status is mapped in [`cli`] (0 identical, 1 different, 2 usage/read error).
+fn digest(args: &[String]) -> Result<bool, String> {
+    validate_options("digest", args, NO_OPTIONS)?;
+    let files: Vec<&String> = args.iter().filter(|a| !a.starts_with("--")).collect();
+    let (Some(first), true) = (files.first(), files.len() <= 2) else {
+        return Err(USAGE.into());
+    };
+    let a = digest_of(first)?;
+    let Some(second) = files.get(1) else {
+        outln!("{}", json!({ "ok": true, "digest": a.hash, "entities": a.entities, "bounds": a.bounds }));
+        return Ok(true);
+    };
+    let b = digest_of(second)?;
+    let identical = a.hash == b.hash;
+    outln!(
+        "{}",
+        json!({
+            "ok": true,
+            "identical": identical,
+            "a": { "digest": a.hash, "entities": a.entities, "bounds": a.bounds },
+            "b": { "digest": b.hash, "entities": b.entities, "bounds": b.bounds },
+            "delta": { "entities": b.entities as i64 - a.entities as i64, "bounds_moved": a.bounds != b.bounds },
+        })
+    );
+    Ok(identical)
+}
+
+/// The digest of the drawing at `path`, read the way the other subcommands read one.
+fn digest_of(path: &str) -> Result<Digest, String> {
+    let mut s = Session::empty();
+    open(&mut s, path)?;
+    let d = s.doc().map_err(|e| e.to_string())?;
+    Ok(drawing_digest(d))
 }
 
 /// The warning for the model-space entities of `path` an image can't show, by type (those kept
@@ -828,6 +875,18 @@ fn cli() -> ExitCode {
     install_io();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let rest: Vec<String> = args.iter().skip(1).cloned().collect();
+    // `digest` has its own exit status (0 identical or one file, 1 different, 2 usage or read
+    // error), so it is handled before the shared Ok/Err mapping below, which is always 0 or 1.
+    if args.first().map(String::as_str) == Some("digest") {
+        return match digest(&rest) {
+            Ok(true) => ExitCode::SUCCESS,
+            Ok(false) => ExitCode::FAILURE,
+            Err(e) => {
+                eprintln!("{e}");
+                ExitCode::from(2)
+            }
+        };
+    }
     let r = match args.first().map(String::as_str) {
         Some("info") => validate_options("info", &rest, NO_OPTIONS).and_then(|_| rest.first().ok_or_else(|| USAGE.to_string())).and_then(|p| info(p)),
         Some("convert") => convert(&rest),
