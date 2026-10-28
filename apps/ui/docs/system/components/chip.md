@@ -7,7 +7,7 @@ It shows one compact fact, a keyword or a suggestion, and it only acts when the 
 Foundation: hand-rolled. Traps checked: trap/button-div, trap/role-button, trap/native-control, trap/control-height, trap/focus-ring-shape, trap/hover-beats-focus, trap/touch-hover-flash, trap/hover-unguarded, trap/touch-tap-highlight.
 
 ### Foundation
-Not applicable: hand-rolled — the pill radius, the 20px height and the accent tint are measured from the running Cursor 3.27.22 (`../../../../../.design-system/research/cursor-recipes-2026-10-28.md` §2 and §5), and no registry item ships it.
+Not applicable: hand-rolled — the pill radius, the 20px height and the accent tint are measured from the running Cursor 3.27.22 (`docs/system/decisions.md` and §5), and no registry item ships it.
 
 ## Examples
 `<Chip>26 objects</Chip>` — the selection count as a static fact.
@@ -84,7 +84,7 @@ Real uses, 1 call site (`rg -c "<Chip" src/components` → `src/components/Comma
   - Do: `<Chip tone="accent" onClick={() => pick("line")}>line</Chip>`
 
 ### Limits
-- `rule/chip-row-limit`: When a chip row holds more than 6 chips, wrap the row or move the rest behind a "More" chip, because the measured chip is 20px tall with 8px side padding and a 608px composer row fits 6 of them before the row wraps. Evidence: measured 20px chip and 608px composer, `../../../../../.design-system/research/cursor-recipes-2026-10-28.md` §2. Check: review `src/components/CommandLine.tsx`.
+- `rule/chip-row-limit`: When a chip row holds more than 6 chips, wrap the row or move the rest behind a "More" chip, because the measured chip is 20px tall with 8px side padding and a 608px composer row fits 6 of them before the row wraps. Evidence: measured 20px chip and 608px composer, `docs/system/decisions.md`. Check: review `src/components/CommandLine.tsx`.
   - Don't: 9 chips in one unwrapped row.
   - Do: 6 chips and a "More" chip that opens the rest.
 

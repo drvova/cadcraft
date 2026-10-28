@@ -7,7 +7,7 @@ It is the full-width clickable band of a list: a menu item, a property row or a 
 Foundation: hand-rolled. Traps checked: trap/button-div, trap/role-button, trap/native-control, trap/list-dead-gap, trap/current-unmarked, trap/menu-navigation, trap/control-height, trap/focus-ring-shape, trap/hover-beats-focus, trap/disabled-still-hovers, trap/touch-hover-flash, trap/hover-unguarded.
 
 ### Foundation
-Not applicable: hand-rolled — the 22px row, the 4px inset and the .14 selected fill are measured from the running Cursor 3.27.22 (`../../../../../.design-system/research/cursor-recipes-2026-10-28.md` §3 and §5), and no registry item ships it.
+Not applicable: hand-rolled — the 22px row, the 4px inset and the .14 selected fill are measured from the running Cursor 3.27.22 (`docs/system/decisions.md` and §5), and no registry item ships it.
 
 ## Examples
 `<Row onClick={pick}>Layer 1</Row>` — one layer in the layers list.
@@ -91,7 +91,7 @@ Not applicable: no variant axes — a row is one band; the selected and disabled
   - Do: `<Row onClick={pick}>Open</Row>`
 
 ### Limits
-- `rule/row-label-limit`: When a row's label runs past 40 characters at the 260px sidebar, clip it with an ellipsis and keep the full text in `title`, because the measured row is 22px tall and the sidebar 260px wide. Evidence: measured 22px row and 260px sidebar, `../../../../../.design-system/research/cursor-recipes-2026-10-28.md` §3. Check: review `src/styles.css`.
+- `rule/row-label-limit`: When a row's label runs past 40 characters at the 260px sidebar, clip it with an ellipsis and keep the full text in `title`, because the measured row is 22px tall and the sidebar 260px wide. Evidence: measured 22px row and 260px sidebar, `docs/system/decisions.md`. Check: review `src/styles.css`.
   - Don't: a 60-character layer name that overflows the row.
   - Do: a clipped label with the full name in `title`.
 

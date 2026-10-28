@@ -8,7 +8,7 @@ It names a panel's section as a real heading, so a screen reader can jump betwee
 Foundation: hand-rolled. Traps checked: trap/native-control.
 
 ### Foundation
-Not applicable: hand-rolled — the 11px uppercase header is measured from the running Cursor 3.27.22 (`../../../../../.design-system/research/cursor-recipes-2026-10-28.md` §3), and no registry item ships it.
+Not applicable: hand-rolled — the 11px uppercase header is measured from the running Cursor 3.27.22 (`docs/system/decisions.md`), and no registry item ships it.
 
 ## Examples
 `<SectionLabel>Layers</SectionLabel>` — the heading above the layers list.
@@ -103,7 +103,7 @@ Not applicable: no motion — the heading never changes state, and its ink comes
   - Do: `<SectionLabel>Properties</SectionLabel>`
 
 ### Limits
-- `rule/section-label-word-limit`: When a section's name runs past 2 words, shorten it to 1 or 2 words, because the measured header row is 22px at 11px type and a third word starts clipping in a 260px sidebar. Evidence: measured 22px header at 11px type, `../../../../../.design-system/research/cursor-recipes-2026-10-28.md` §3. Check: review `src/components/LayersPanel.tsx`.
+- `rule/section-label-word-limit`: When a section's name runs past 2 words, shorten it to 1 or 2 words, because the measured header row is 22px at 11px type and a third word starts clipping in a 260px sidebar. Evidence: measured 22px header at 11px type, `docs/system/decisions.md`. Check: review `src/components/LayersPanel.tsx`.
   - Don't: `<SectionLabel>Layer visibility and lock state</SectionLabel>`
   - Do: `<SectionLabel>Layers</SectionLabel>`
 

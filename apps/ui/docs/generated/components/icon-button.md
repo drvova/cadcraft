@@ -8,7 +8,7 @@ It runs one action drawn as a single glyph, and its tooltip is its accessible na
 Foundation: hand-rolled. Traps checked: trap/button-div, trap/role-button, trap/native-control, trap/button-icon-name, trap/icon-optical-size, trap/icon-optical-align, trap/control-height, trap/focus-ring-shape, trap/hover-beats-focus, trap/disabled-still-hovers, trap/touch-hover-flash, trap/hover-unguarded, trap/touch-tap-highlight.
 
 ### Foundation
-Not applicable: hand-rolled — the circle, the .08 hover fill and the 14px glyph are measured from the running Cursor 3.27.22 (`../../../../../.design-system/research/cursor-recipes-2026-10-28.md` §2), and the glyphs are the app's own `src/icons.ts` paths.
+Not applicable: hand-rolled — the circle, the .08 hover fill and the 14px glyph are measured from the running Cursor 3.27.22 (`docs/system/decisions.md`), and the glyphs are the app's own `src/icons.ts` paths.
 
 ## Examples
 `<IconButton icon="close" title="Close the panel" />` — the panel's close control.
@@ -216,7 +216,7 @@ export default function Selected() {
 - `rule/icon-button-name`: When an icon button is rendered, pass `title` for every use, because the glyph alone leaves the accessible name empty and a screen reader announces "button". Evidence: app 3/3 composer icon buttons, `src/components/AssistantPane.tsx`. Check: test `src/ui/IconButton.test.tsx`.
   - Don't: `<IconButton icon="close" />` — no name.
   - Do: `<IconButton icon="close" title="Close the panel" />`
-- `rule/icon-button-one-inverted`: When a toolbar row holds icon buttons, keep at most 1 `inverted` circle, because the ink-coloured circle is the row's primary action and a second one splits the eye. Evidence: measured 1 inverted send button in the composer toolbar, `../../../../../.design-system/research/cursor-recipes-2026-10-28.md` §2. Check: review `src/ui/ui.css`.
+- `rule/icon-button-one-inverted`: When a toolbar row holds icon buttons, keep at most 1 `inverted` circle, because the ink-coloured circle is the row's primary action and a second one splits the eye. Evidence: measured 1 inverted send button in the composer toolbar, `docs/system/decisions.md`. Check: review `src/ui/ui.css`.
   - Don't: two `variant="inverted"` circles in the composer row.
   - Do: 1 `inverted` send and `ghost` for attach and stop.
 
@@ -231,7 +231,7 @@ export default function Selected() {
   - Do: `<IconButton icon="stop" title="Stop" onClick={stop} />`
 
 ### Limits
-- `rule/icon-button-row-limit`: When a toolbar row holds more than 5 icon buttons, move the rest into a menu, because the measured composer row holds 3 at 24px each with 4px gaps and the row starts crowding the input past 5. Evidence: measured 3 actions at 24px with 4px gaps, `../../../../../.design-system/research/cursor-recipes-2026-10-28.md` §2. Check: review `src/components/AssistantPane.tsx`.
+- `rule/icon-button-row-limit`: When a toolbar row holds more than 5 icon buttons, move the rest into a menu, because the measured composer row holds 3 at 24px each with 4px gaps and the row starts crowding the input past 5. Evidence: measured 3 actions at 24px with 4px gaps, `docs/system/decisions.md`. Check: review `src/components/AssistantPane.tsx`.
   - Don't: 6 circles in the composer's toolbar row.
   - Do: 3 circles in the row and the rest inside a menu.
 

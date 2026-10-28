@@ -7,7 +7,7 @@ It runs one action the moment its label says so: it never navigates and never ho
 Foundation: hand-rolled. Traps checked: trap/button-div, trap/role-button, trap/native-control, trap/button-clone, trap/button-type, trap/control-height, trap/weight-shift, trap/button-label-wrap, trap/focus-ring-shape, trap/hover-beats-focus, trap/disabled-still-hovers, trap/touch-hover-flash, trap/hover-unguarded, trap/touch-tap-highlight.
 
 ### Foundation
-Not applicable: hand-rolled — the recipe is the app's own `src/ui/ui.css`, measured from the running Cursor 3.27.22 (`../../../../../.design-system/research/cursor-recipes-2026-10-28.md` §5), and no registry item ships it.
+Not applicable: hand-rolled — the recipe is the app's own `src/ui/ui.css`, measured from the running Cursor 3.27.22 (`docs/system/decisions.md`), and no registry item ships it.
 
 ## Examples
 `<Button variant="primary">Save</Button>` — the one action of a dialog or a pane.
@@ -83,10 +83,10 @@ Real uses, 3 call sites (`rg -c "<Button" src/components` → `src/components/As
 - The clickable band is a list item rather than an action. Use `Row` instead.
 
 ### Rules
-- `rule/button-variant-purpose`: When a surface needs a button, pick `variant` by the action's purpose — 1 `primary` per view, `secondary` for the default, `ghost` for a quiet action, `danger` for a destructive one — because two accent fills in one row leave no single action and Cursor's own default button is the quiet one. Evidence: app 4/4 variants, `../../../../../.design-system/research/cursor-recipes-2026-10-28.md` §5. Check: review `src/ui/ui.css`.
+- `rule/button-variant-purpose`: When a surface needs a button, pick `variant` by the action's purpose — 1 `primary` per view, `secondary` for the default, `ghost` for a quiet action, `danger` for a destructive one — because two accent fills in one row leave no single action and Cursor's own default button is the quiet one. Evidence: app 4/4 variants, `docs/system/decisions.md`. Check: review `src/ui/ui.css`.
   - Don't: `<Button variant="primary">Cancel</Button>`
   - Do: `<Button>Cancel</Button>`
-- `rule/button-state-ladder`: When a button is hovered or pressed, step the fill one rung per state — `.08` to `.14` on hover, `.14` to `.20` on press — because a fill step reads as feedback without moving the label or the box. Evidence: measured .08/.14/.20, `../../../../../.design-system/research/cursor-recipes-2026-10-28.md` §5. Check: review `src/ui/ui.css`.
+- `rule/button-state-ladder`: When a button is hovered or pressed, step the fill one rung per state — `.08` to `.14` on hover, `.14` to `.20` on press — because a fill step reads as feedback without moving the label or the box. Evidence: measured .08/.14/.20, `docs/system/decisions.md`. Check: review `src/ui/ui.css`.
   - Don't: `.my-button:hover { color: var(--accent) }` — a colour change instead of a fill step.
   - Do: `.ui-button--secondary:hover { background: var(--fill-active) }`
 
@@ -101,7 +101,7 @@ Real uses, 3 call sites (`rg -c "<Button" src/components` → `src/components/As
   - Do: `<Button variant="ghost" onClick={save}>Save</Button>`
 
 ### Limits
-- `rule/button-row-limit`: When one row or dialog footer holds more than 3 buttons, move the rest into a menu, because the measured composer toolbar holds 3 actions at 24px each and a fourth starts competing with the input. Evidence: measured 3 actions at 24px, `../../../../../.design-system/research/cursor-recipes-2026-10-28.md` §2. Check: review `src/components/AssistantPane.tsx`.
+- `rule/button-row-limit`: When one row or dialog footer holds more than 3 buttons, move the rest into a menu, because the measured composer toolbar holds 3 actions at 24px each and a fourth starts competing with the input. Evidence: measured 3 actions at 24px, `docs/system/decisions.md`. Check: review `src/components/AssistantPane.tsx`.
   - Don't: 5 buttons side by side in the pane's toolbar row.
   - Do: 2 buttons in the row and the rest inside a menu.
 

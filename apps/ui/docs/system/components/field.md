@@ -7,7 +7,7 @@ It takes one line of text and hands every keystroke back to the caller, who owns
 Foundation: hand-rolled. Traps checked: trap/native-control, trap/control-height, trap/field-label, trap/field-input-type, trap/touch-input-zoom, trap/focus-ring-shape, trap/hover-beats-focus, trap/disabled-still-hovers.
 
 ### Foundation
-Not applicable: hand-rolled — the 24px height, the hairline stroke and the focus border are measured from the running Cursor 3.27.22 (`../../../../../.design-system/research/cursor-recipes-2026-10-28.md` §5), and no registry item ships it.
+Not applicable: hand-rolled — the 24px height, the hairline stroke and the focus border are measured from the running Cursor 3.27.22 (`docs/system/decisions.md`), and no registry item ships it.
 
 ## Examples
 `<Field value={name} ariaLabel="Layer name" onInput={setName} />` — the layer name, owned by the panel.
@@ -96,7 +96,7 @@ Real uses, 3 call sites (`rg -c "<Field" src/components` → `src/components/Ass
   - Do: `<Field value={x} onInput={setX} ariaLabel="Name" />`
 
 ### Limits
-- `rule/field-width-limit`: When a field sits in a form row beside other controls, give it at least 96px or let it fill the row, because the measured palette input is 6px-padded inside a 260px sidebar and a narrower field clips a 4-character value like "0,0". Evidence: measured 6px padding and 260px sidebar, `../../../../../.design-system/research/cursor-recipes-2026-10-28.md` §3. Check: review `src/components/PropertiesPanel.tsx`.
+- `rule/field-width-limit`: When a field sits in a form row beside other controls, give it at least 96px or let it fill the row, because the measured palette input is 6px-padded inside a 260px sidebar and a narrower field clips a 4-character value like "0,0". Evidence: measured 6px padding and 260px sidebar, `docs/system/decisions.md`. Check: review `src/components/PropertiesPanel.tsx`.
   - Don't: a 40px-wide field in the properties row.
   - Do: a field that fills the row's remaining width.
 
