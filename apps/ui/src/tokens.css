@@ -101,6 +101,7 @@
   --radius-card: 4px;
   --radius-composer: 5px;
   --radius-elevated: 20px; /* the glass composer, menus and popovers (Cursor §2) */
+  --radius-popover: 8px; /* the provider menu's popover (the composer pilot) */
   --radius-pill: 11px;
   --radius-round: 9999px; /* the pill/circle radius (Chip, IconButton; Cursor §2) */
   --gap-2: 2px;
@@ -129,6 +130,12 @@
   --field-pad-x: 6px;
   --field-pad-y: 4px;
   --card-padding: 16px;
+
+  /* ---- The composer (Cursor §2): the glass box's editor and toolbar ---- */
+  --composer-font: 15px;
+  --composer-leading: 24px;
+  --composer-min-height: 64px;
+  --composer-toolbar-height: 40px;
 
   /* ---- Type (FONT_BUTTON, FONT_CHIP, FONT_LABEL, small()/body()/mono()) ---- */
   --font-button: 14px;

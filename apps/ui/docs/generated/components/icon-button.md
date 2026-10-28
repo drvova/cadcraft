@@ -13,8 +13,8 @@ Not applicable: hand-rolled — the circle, the .08 hover fill and the 14px glyp
 ## Examples
 `<IconButton icon="close" title="Close the panel" />` — the panel's close control.
 
-Real uses, 0 call sites (`rg -c "assistant-icon|assistant-attachment-x" src` → `src/assistant.css:6`, `src/components/AssistantPane.tsx:4`):
-- (planned) `src/components/AssistantPane.tsx` — `.assistant-icon` (3 uses: attach, stop, send) and `.assistant-attachment-x` (1 use) move onto IconButton in the composer pilot; the send circle is `variant="inverted"` (research §2).
+Real uses, 4 call sites (`rg -c "<IconButton" src/components` → `src/components/AssistantPane.tsx:4`, the composer: attach, remove-attachment, stop and send):
+- `src/components/AssistantPane.tsx` — the composer pilot: the toolbar's attach (`soft`), stop and send (`inverted`), and each attachment chip's remove circle (`sm`).
 
 ### Example files
 | File | Covers | Caption |
@@ -79,8 +79,8 @@ export default function InAssistantPane() {
 
 ### variant
 - `ghost`: the transparent circle for a tool bar; the default. Used at 0 call sites.
-- `soft`: the resting `.08` fill, for a tool that is currently on. Used at 0 call sites.
-- `inverted`: the ink-coloured circle with the accent-surface glyph, for the one primary action. Used at 0 call sites.
+- `soft`: the resting `.08` fill, for a tool that is currently on. Used at 1 call site (the composer's attach).
+- `inverted`: the ink-coloured circle with the accent-surface glyph, for the one primary action. Used at 2 call sites (the composer's stop and send).
 
 Example: The transparent circle with the .08 hover fill. (`docs/system/examples/icon-button/variant-ghost.tsx`)
 
@@ -113,8 +113,8 @@ export default function VariantInverted() {
 ```
 
 ### size
-- `sm`: the 20px circle with the 12px glyph, for a chip row. Used at 0 call sites.
-- `md`: the 24px circle with the 14px glyph, the composer's size. Used at 0 call sites.
+- `sm`: the 20px circle with the 12px glyph, for a chip row. Used at 1 call site (an attachment chip's remove).
+- `md`: the 24px circle with the 14px glyph, the composer's size. Used at 3 call sites (the composer's attach, stop and send).
 
 Example: The 20px circle with the 12px glyph. (`docs/system/examples/icon-button/size-sm.tsx`)
 
@@ -220,7 +220,7 @@ export default function Selected() {
   - Do: 1 `inverted` send and `ghost` for attach and stop.
 
 ### Content
-- `rule/icon-button-title-sentence`: When `title` is written, name the action in sentence case with no full stop (Close the panel, Send, Stop), because the same string is the tooltip and the accessible name. Evidence: single use `src/components/AssistantPane.tsx:456`, the "Attach a picture" label. Check: review `src/components/AssistantPane.tsx`.
+- `rule/icon-button-title-sentence`: When `title` is written, name the action in sentence case with no full stop (Close the panel, Send, Stop), because the same string is the tooltip and the accessible name. Evidence: single use `src/components/AssistantPane.tsx:454`, the "Attach a picture (or paste, or drop one)" label. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `title="close panel."`
   - Do: `title="Close the panel"`
 

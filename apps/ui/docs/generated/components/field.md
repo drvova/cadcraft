@@ -13,10 +13,10 @@ Not applicable: hand-rolled — the 24px height, the hairline stroke and the foc
 ## Examples
 `<Field value={name} ariaLabel="Layer name" onInput={setName} />` — the layer name, owned by the panel.
 
-Real uses, 0 call sites (`rg -c "assistant-input|cmd-input|prop-input" src` → `src/components/AssistantPane.tsx:1`, `src/components/CommandLine.tsx:1`, `src/components/PropertiesPanel.tsx:1`):
+Real uses, 3 call sites (`rg -c "<Field" src/components` → `src/components/AssistantPane.tsx:3`, the provider popover's Base URL, Model and API key):
+- `src/components/AssistantPane.tsx` — the composer pilot: the provider popover's Base URL, Model and API key inputs; the composer's own multi-line editor stays a bespoke `<textarea>` (found-not-fixed).
 - (planned) `src/components/PropertiesPanel.tsx:152` — `class="prop-input"` (1 use) moves onto `<Field>` when the surface migration reaches the properties palette.
 - (planned) `src/components/CommandLine.tsx` — `class="cmd-input"` (1 use) moves onto `<Field type="search">` in the command line.
-- (planned) `src/components/AssistantPane.tsx` — `class="assistant-input"` (1 use) is a multi-line textarea in the composer and stays bespoke; the single-line `Field` does not replace it (found-not-fixed).
 
 ### Example files
 | File | Covers | Caption |
@@ -57,10 +57,10 @@ export default function InPropertiesPanel() {
 ## Variants
 
 ### type
-- `text`: the default single-line field. Used at 0 call sites.
+- `text`: the default single-line field. Used at 2 call sites (the provider popover's Base URL and Model).
 - `email`: adds the email keyboard and autofill on phones. Used at 0 call sites.
 - `search`: adds the search keyboard and a clear affordance. Used at 0 call sites.
-- `password`: masks the value. Used at 0 call sites.
+- `password`: masks the value. Used at 1 call site (the provider popover's API key).
 
 Example: The plain text field. (`docs/system/examples/field/type-text.tsx`)
 

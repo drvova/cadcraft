@@ -1,12 +1,13 @@
 /**
- * The assistant panel: the agent docked to the right of the workspace, on Cursor's measured
- * recipes (`.design-system/cursor/recipes.md`). The part title is §2's (35px, padding 8px); the
- * composer is the full-input-box (§1.2: `input.background`, a 1px border that turns active on
- * focus, radius 5px, `padding: 6px`, `gap: 6px`, `box-shadow: 0 0 4px 1px`, the
- * `border-color .1s, box-shadow .1s` transition; input `min-height: 40px`, `max-height: 240px`);
- * its button row is §1.3 (flex, `gap: 4px`, right side pushed by `margin-left: auto`); the
- * control icon buttons are §1.7 (18px, `opacity .8` → `1`); the model chip is the ghost button
- * (§1.9); send is §1.5; the running dot carries §1.14's `ripple 1.2s` to `scale(1.7)`.
+ * The assistant panel: the agent docked to the right of the workspace. The part title is the
+ * classic recipe's (35px, padding 8px); the composer is the glass one measured on Cursor 3.27's
+ * composer (`.design-system/research/cursor-recipes-2026-10-28.md` §2): the elevated surface at
+ * radius 20, no shadow, a 1px border that turns active on focus, an editor at 15px/24px with a
+ * 64px min-height and 8px/12px padding, and a 40px toolbar row (padding 8px, `gap: 4px`) that
+ * holds 24px circles and the pill model chip; send and stop are the inverted circle. Its controls
+ * are the system's own: `ui/IconButton` (attach, remove-attachment, stop, send), `ui/Row` (the
+ * preset rows), `ui/Field` (the provider inputs) and `ui/Button` (Cancel, Save). The running dot
+ * carries §1.14's `ripple 1.2s` to `scale(1.7)`.
  *
  * The transcript is the agent-panel grammar: a prompt in a quiet inset block, the model's words
  * plain on the surface (with inline `code` and **bold** runs), and each tool call one dim line
@@ -31,6 +32,10 @@ import {
   type ProviderConfig,
 } from "../assistant";
 import { ToolIcon } from "../icons";
+import { Button } from "../ui/Button";
+import { Field } from "../ui/Field";
+import { IconButton } from "../ui/IconButton";
+import { Row } from "../ui/Row";
 import "../assistant.css";
 
 export interface AssistantPaneProps {
@@ -115,10 +120,10 @@ function readAsDataUrl(file: File): Promise<string> {
   return promise;
 }
 
-/** The textarea grows with its content between the recipe's min and max (40px … 240px). */
+/** The textarea grows with its content between the recipe's min and max (64px … 240px). */
 function grow(el: HTMLTextAreaElement): void {
   el.style.height = "auto";
-  el.style.height = `${Math.min(Math.max(el.scrollHeight, 40), 240)}px`;
+  el.style.height = `${Math.min(Math.max(el.scrollHeight, 64), 240)}px`;
 }
 
 export function AssistantPane(props: AssistantPaneProps): JSX.Element {
@@ -417,14 +422,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                   <span class="assistant-attachment">
                     <img src={picture.dataUrl} alt={picture.name} />
                     <span class="assistant-attachment-name">{picture.name}</span>
-                    <button
-                      class="assistant-attachment-x"
-                      type="button"
-                      title={`Remove ${picture.name}`}
-                      onClick={() => setAttached((prev) => prev.filter((_, i) => i !== index()))}
-                    >
-                      ×
-                    </button>
+                    <IconButton icon="close" size="sm" title={`Remove ${picture.name}`} onClick={() => setAttached((prev) => prev.filter((_, i) => i !== index()))} />
                   </span>
                 )}
               </For>
@@ -453,36 +451,30 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             aria-label="Ask the assistant"
           />
           <div class="assistant-row">
-            <button class="assistant-icon" type="button" title="Attach a picture (or paste, or drop one)" aria-label="Attach a picture" onClick={() => fileInput?.click()}>
-              <ToolIcon id="attach" />
-            </button>
-            <button
-              class="assistant-ghost"
-              type="button"
-              title={ready() ? `${provider().baseUrl} · ${provider().model}` : "Choose a provider and model"}
-              onClick={() => {
-                setDraft(provider());
-                setMenuOpen((v) => !v);
-              }}
-            >
-              <span class="assistant-ghost-label">{ready() ? provider().model : "Set up model"}</span>
-              <span class="assistant-ghost-caret">▾</span>
-            </button>
+            <IconButton icon="attach" variant="soft" title="Attach a picture (or paste, or drop one)" onClick={() => fileInput?.click()} />
             <div class="assistant-actions">
+              <button
+                class="assistant-ghost"
+                type="button"
+                title={ready() ? `${provider().baseUrl} · ${provider().model}` : "Choose a provider and model"}
+                onClick={() => {
+                  setDraft(provider());
+                  setMenuOpen((v) => !v);
+                }}
+              >
+                <span class="assistant-ghost-label">{ready() ? provider().model : "Set up model"}</span>
+                <span class="assistant-ghost-caret">▾</span>
+              </button>
               <span class="assistant-context" title={`${used()} characters of the ${MAX_REQUEST_CHARS} the model can be sent`}>
                 {used() === 0 ? "" : `${Math.round(used() / 100) / 10}k / ${Math.round(MAX_REQUEST_CHARS / 1000)}k`}
               </span>
               <Show
                 when={running()}
                 fallback={
-                  <button class="assistant-send" type="button" title="Send (Enter)" disabled={input().trim() === ""} onClick={() => void send()}>
-                    <ToolIcon id="send" />
-                  </button>
+                  <IconButton icon="send" variant="inverted" title="Send (Enter)" disabled={input().trim() === ""} onClick={() => void send()} />
                 }
               >
-                <button class="assistant-send" type="button" title="Stop" onClick={stop}>
-                  <ToolIcon id="stop" />
-                </button>
+                <IconButton icon="stop" variant="inverted" title="Stop" onClick={stop} />
               </Show>
             </div>
           </div>
@@ -503,31 +495,31 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               <div class="assistant-menu-title">Provider</div>
               <For each={PROVIDER_PRESETS}>
                 {(preset) => (
-                  <button class="assistant-preset" type="button" onClick={() => applyPreset(preset.id)}>
-                    <span>{preset.label}</span>
+                  <Row onClick={() => applyPreset(preset.id)}>
+                    <span class="assistant-preset-label">{preset.label}</span>
                     <span class="assistant-preset-url">{preset.baseUrl === "" ? "—" : preset.baseUrl.replace(/^https?:\/\//, "")}</span>
-                  </button>
+                  </Row>
                 )}
               </For>
-              <label class="assistant-field">
+              <div class="assistant-field">
                 <span>Base URL</span>
-                <input value={draft().baseUrl} onInput={(e) => setDraft({ ...draft(), baseUrl: e.currentTarget.value })} placeholder="http://127.0.0.1:11434/v1" />
-              </label>
-              <label class="assistant-field">
+                <Field value={draft().baseUrl} ariaLabel="Base URL" placeholder="http://127.0.0.1:11434/v1" onInput={(v) => setDraft({ ...draft(), baseUrl: v })} />
+              </div>
+              <div class="assistant-field">
                 <span>Model</span>
-                <input value={draft().model} onInput={(e) => setDraft({ ...draft(), model: e.currentTarget.value })} placeholder="llama3.2" />
-              </label>
-              <label class="assistant-field">
+                <Field value={draft().model} ariaLabel="Model" placeholder="llama3.2" onInput={(v) => setDraft({ ...draft(), model: v })} />
+              </div>
+              <div class="assistant-field">
                 <span>API key</span>
-                <input type="password" value={draft().apiKey} onInput={(e) => setDraft({ ...draft(), apiKey: e.currentTarget.value })} placeholder="left empty for a local server" />
-              </label>
+                <Field type="password" value={draft().apiKey} ariaLabel="API key" placeholder="left empty for a local server" onInput={(v) => setDraft({ ...draft(), apiKey: v })} />
+              </div>
               <div class="assistant-menu-actions">
-                <button class="assistant-ghost" type="button" onClick={() => setMenuOpen(false)}>
+                <Button variant="ghost" onClick={() => setMenuOpen(false)}>
                   Cancel
-                </button>
-                <button class="assistant-save" type="button" onClick={saveDraft}>
+                </Button>
+                <Button variant="primary" onClick={saveDraft}>
                   Save
-                </button>
+                </Button>
               </div>
             </div>
           </Show>

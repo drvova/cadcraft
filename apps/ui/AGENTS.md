@@ -21,11 +21,11 @@ Before writing UI, read the page for what you touch in `docs/generated/` and the
 
 Tokens by role (src/tokens.css):
 - color: --chrome, --chrome-dark, --panel, --tab-active, --control, --control-hover, --surface-elevated, --border, --border-soft, --canvas, --grid-minor, --grid-major, --axis-x, --axis-y, --text, --text-dim, --text-faint, --text-disabled, --icon, --icon-accent, --icon-point, --accent, --accent-hover, --accent-pressed, and 33 more
-- type: --font-button, --font-chip, --font-label, --font-small, --font-body, --font-mono, --font-family, --font-family-mono
+- type: --composer-font, --composer-leading, --font-button, --font-chip, --font-label, --font-small, --font-body, --font-mono, --font-family, --font-family-mono
 - space: --gap-2, --gap-3, --gap-4, --gap-5, --gap-6, --gap-8, --gap-10, --gap-12, --gap-16, --gap-default, --button-pad-x, --button-pad-y, --field-pad-x, --field-pad-y, --card-padding
-- radius: --radius-control, --radius-small, --radius-card, --radius-composer, --radius-elevated, --radius-pill, --radius-round
+- radius: --radius-control, --radius-small, --radius-card, --radius-composer, --radius-elevated, --radius-popover, --radius-pill, --radius-round
 - motion: --ease-out, --ease-out-quint
-- size: --control-h-button, --control-h-input, --control-h-row, --control-h-chip, --control-h-tab, --icon-size-sm, --icon-size-md, --icon-size-lg
+- size: --control-h-button, --control-h-input, --control-h-row, --control-h-chip, --control-h-tab, --icon-size-sm, --icon-size-md, --icon-size-lg, --composer-min-height, --composer-toolbar-height
 - other: --list-row, --dur-instant, --dur-fast, --dur-med, --dur-slow, --hairline, --focus-outline-w, --focus-outline-offset, --hover-opacity
 
 Components (import, job):

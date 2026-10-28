@@ -12,10 +12,11 @@ Not applicable: hand-rolled — the 22px row, the 4px inset and the .14 selected
 ## Examples
 `<Row onClick={pick}>Layer 1</Row>` — one layer in the layers list.
 
-Real uses, 0 call sites (`rg -c "prop-row|menu-row|assistant-row|assistant-tool" src` → `src/assistant.css:6`, `src/chrome.css:6`, `src/components/AssistantPane.tsx:5`, `src/components/MenuBar.tsx:1`, `src/components/PropertiesPanel.tsx:1`, `src/interaction.css:2`, `src/styles.css:2`):
+Real uses, 1 call site (`rg -c "<Row" src/components` → `src/components/AssistantPane.tsx:1`, the provider popover's preset list):
+- `src/components/AssistantPane.tsx` — the composer pilot: the provider popover's preset rows; the transcript's tool rows and the composer's toolbar row stay bespoke (the toolbar is a container, and the tool row carries a disclosure arrow and a note).
 - (planned) `src/components/MenuBar.tsx` — `.menu-row` (1 use) moves onto `<Row>` when the surface migration reaches the menus.
 - (planned) `src/components/PropertiesPanel.tsx:167` — `.prop-row` (1 use) moves onto `<Row>` when the properties palette is migrated.
-- (planned) `src/components/AssistantPane.tsx` — `.assistant-tool` (4 uses) and `.assistant-row` (1 use) move onto `<Row>` in the composer pilot; `.layer-row` (LayersPanel) stays bespoke because its row nests a toggle cluster, and a button cannot nest buttons.
+- `.layer-row` (LayersPanel) stays bespoke because its row nests a toggle cluster, and a button cannot nest buttons.
 
 ### Example files
 | File | Covers | Caption |

@@ -13,9 +13,9 @@ Not applicable: hand-rolled — the recipe is the app's own `src/ui/ui.css`, mea
 ## Examples
 `<Button variant="primary">Save</Button>` — the one action of a dialog or a pane.
 
-Real uses, 0 call sites (`rg -c "assistant-send|assistant-save|assistant-ghost|assistant-preset" src` → `src/assistant.css:13`, `src/components/AssistantPane.tsx:9`; `rg -n "class=\"button\"" src/components/TopBar.tsx` → 1 line):
+Real uses, 2 call sites (`rg -c "<Button" src/components` → `src/components/AssistantPane.tsx:2`, the provider popover's Cancel and Save):
+- `src/components/AssistantPane.tsx` — the composer pilot's call sites: the provider popover's Cancel (`variant="ghost"`) and Save (`variant="primary"`).
 - (planned) `src/components/TopBar.tsx:47` — `<button class="button">` for zoom extents moves onto `<Button size="sm">` when the surface migration reaches the top bar.
-- (planned) `src/components/AssistantPane.tsx` — `.assistant-save` (1 use), `.assistant-ghost` (4 uses) and `.assistant-preset` (2 uses) move onto Button in the composer pilot; `.assistant-send` (2 uses) is the `inverted` IconButton circle (research §2), not a Button.
 
 ### Example files
 | File | Covers | Caption |
@@ -84,9 +84,9 @@ export default function InTopBar() {
 ## Variants
 
 ### variant
-- `primary`: the one action of the pane or dialog; the accent fill. Used at 0 call sites.
+- `primary`: the one action of the pane or dialog; the accent fill. Used at 1 call site (the provider popover's Save).
 - `secondary`: the default action; the `.08` fill that Cursor's own default button draws. Used at 0 call sites.
-- `ghost`: a quiet action on a tool bar or in a list; no resting fill. Used at 0 call sites.
+- `ghost`: a quiet action on a tool bar or in a list; no resting fill. Used at 1 call site (the provider popover's Cancel).
 - `danger`: a destructive action; the error fill. Used at 0 call sites.
 
 Example: The accent fill, the one action of a pane. (`docs/system/examples/button/variant-primary.tsx`)
@@ -131,7 +131,7 @@ export default function VariantDanger() {
 
 ### size
 - `sm`: the 24px control, for a button beside a field or inside a row. Used at 0 call sites.
-- `md`: the 28px default, for a dialog footer or a pane header. Used at 0 call sites.
+- `md`: the 28px default, for a dialog footer or a pane header. Used at 2 call sites (the provider popover's Cancel and Save).
 
 Example: The 24px button that sits beside a field. (`docs/system/examples/button/size-sm.tsx`)
 

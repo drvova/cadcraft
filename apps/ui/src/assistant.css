@@ -1,24 +1,19 @@
 /*
- * The assistant panel: the agent docked to the right of the workspace, on Cursor's measured
- * recipes (`.design-system/cursor/recipes.md`). The numbers that matter and where they come from:
+ * The assistant panel: the agent docked to the right of the workspace. The numbers that matter
+ * and where they come from:
  *   - the part title: `height: 35px; padding-left/right: 8px`, flex, label 11px/700 uppercase
  *     (§2, `.monaco-workbench .part>.title` + `.title-label h2`);
- *   - the composer box: `background: input.background`, a 1px border that turns active on focus,
- *     radius 5px, `padding: 6px`, `gap: 6px`, `box-shadow: 0 0 4px 1px widget-shadow`, the
- *     `border-color .1s ease-in-out, box-shadow .1s ease-in-out` transition (§1.2);
- *   - the input: `min-height: 40px`, `max-height: 240px` (§1.2);
- *   - the button row: `display:flex; align-items:center; gap:4px`, right side by
- *     `margin-left:auto` (§1.3);
- *   - the control icon buttons: 18px square, `padding: 0`, transparent, `opacity: .8` → `1`
- *     (§1.7);
- *   - the ghost button (model chip): `transparent`, radius 3px, `padding: 2px 4px`, `gap: 2px`,
- *     `font-size: 12px`, `opacity: .8` → `1` (§1.9);
- *   - the send button: `toolbar-hoverBackground`, radius 4px, `padding: 0 4px`, `opacity .8` → `1`
- *     and `.5` with no pointer events when empty (§1.5);
+ *   - the composer box: the glass recipe
+ *     (`.design-system/research/cursor-recipes-2026-10-28.md` §2): the elevated surface, radius
+ *     20, no shadow, a 1px border that turns active on focus, the editor at 15px/24px with a 64px
+ *     min-height and 8px/12px padding, a 40px toolbar row (padding 8px, `gap: 4px`);
+ *   - the model chip: the pill (radius 9999px, 24px, `padding: 0 8px`, 13px), transparent at
+ *     rest, the `.08` hover fill (§2);
+ *   - send and stop: the inverted circle (fill `--text`, glyph `--on-accent`) (§2);
  *   - the status row: `font-size: 11px; gap: 4px`, placeholder colour (§1.3), and the running dot
  *     carries `ripple 1.2s cubic-bezier(.25,.8,.25,1)` to `scale(1.7)` (§1.14);
- *   - the popover: `border-radius: 4px`, `box-shadow: 0 2px 8px`, rows radius 4px,
- *     `padding: 3px 6px`, `font-size: 12px`, hover `list-hoverBackground` (§1.17).
+ *   - the provider popover: the elevated surface, the hairline stroke, radius 8, the shadow; its
+ *     preset rows are the system's `Row`, its inputs `Field`, its actions `Button`.
  * The transcript follows the agent-panel grammar: a prompt in a quiet inset block, the model's
  * words plain on the surface, and each tool call one dim line that opens on click.
  */
@@ -256,7 +251,7 @@
   color: var(--text);
 }
 
-/* ---- The composer (the full-input-box's recipe) ---- */
+/* ---- The composer (the glass composer's recipe, research §2) ---- */
 
 .assistant-composer {
   flex: 0 0 auto;
@@ -268,15 +263,10 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--gap-6);
-  padding: var(--gap-6);
-  background: var(--control);
+  background: var(--surface-elevated);
   border: var(--hairline) solid var(--composer-border);
-  border-radius: var(--radius-composer);
-  box-shadow: 0 0 4px 1px var(--shadow);
-  transition:
-    border-color 0.1s ease-in-out,
-    box-shadow 0.1s ease-in-out;
+  border-radius: var(--radius-elevated);
+  transition: border-color var(--dur-fast) var(--ease-out);
 }
 
 .assistant-box:focus-within {
@@ -287,16 +277,17 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--gap-4);
+  padding: var(--gap-8) var(--gap-12) 0;
 }
 
 .assistant-attachment {
   display: inline-flex;
   align-items: center;
   gap: var(--gap-4);
-  padding: 2px var(--gap-4);
-  border: var(--hairline) solid var(--border);
+  padding: var(--gap-2) var(--gap-4);
+  border: var(--hairline) solid var(--border-soft);
   border-radius: var(--radius-small);
-  background: var(--chrome-dark);
+  background: var(--control);
 }
 
 .assistant-attachment img {
@@ -315,24 +306,11 @@
   font-size: var(--font-chip);
 }
 
-.assistant-attachment-x {
-  padding: 0 2px;
-  border: none;
-  background: transparent;
-  color: var(--text-faint);
-  font-size: var(--font-label);
-  line-height: 1;
-  cursor: pointer;
-}
-
-.assistant-attachment-x:hover {
-  color: var(--text);
-}
-
 .assistant-status {
   display: flex;
   align-items: center;
   gap: var(--gap-4);
+  padding: var(--gap-8) var(--gap-12) 0;
   color: var(--text-faint);
   font-size: var(--font-chip);
 }
@@ -368,15 +346,15 @@
 
 .assistant-input {
   width: 100%;
-  min-height: 40px;
+  min-height: var(--composer-min-height);
   max-height: 240px;
-  padding: 2px;
+  padding: var(--gap-8) var(--gap-12);
   border: none;
   background: transparent;
   color: var(--text);
   font-family: var(--font-family);
-  font-size: var(--font-body);
-  line-height: 1.5;
+  font-size: var(--composer-font);
+  line-height: var(--composer-leading);
   resize: none;
   outline: none;
   overflow-y: auto;
@@ -390,6 +368,8 @@
   display: flex;
   align-items: center;
   gap: var(--gap-4);
+  height: var(--composer-toolbar-height);
+  padding: var(--gap-8);
 }
 
 .assistant-actions {
@@ -399,27 +379,32 @@
   gap: var(--gap-4);
 }
 
-/* The ghost button: the model chip (§1.9). */
+/* The model chip: the pill (research §2): transparent at rest, the `.08` hover fill. */
 .assistant-ghost {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--gap-2);
   max-width: 160px;
-  padding: 2px var(--gap-4);
+  height: var(--control-h-input);
+  padding: 0 var(--gap-8);
   border: none;
-  border-radius: var(--radius-small);
+  border-radius: var(--radius-round);
   background: transparent;
   color: var(--text-dim);
   font-family: var(--font-family);
-  font-size: var(--font-label);
-  opacity: var(--hover-opacity);
+  font-size: var(--font-body);
   cursor: pointer;
-  transition: opacity var(--dur-fast) var(--ease-out);
+  transition: background-color var(--dur-fast) var(--ease-out);
 }
 
-.assistant-ghost:hover {
-  background: var(--control-hover);
-  opacity: 1;
+@media (hover: hover) {
+  .assistant-ghost:hover {
+    background: var(--hover);
+  }
+}
+
+.assistant-ghost:active {
+  background: var(--fill-active);
 }
 
 .assistant-ghost-label {
@@ -434,43 +419,13 @@
   font-size: 10px;
 }
 
-/* The send button (§1.5): toolbar-hover fill, radius 4, dimmed until hover, inert when empty. */
-.assistant-send {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 22px;
-  padding: 0 var(--gap-4);
-  border: none;
-  border-radius: var(--radius-card);
-  background: var(--control-hover);
-  color: var(--text);
-  opacity: var(--hover-opacity);
-  cursor: pointer;
-  transition: opacity var(--dur-fast) var(--ease-out);
-}
-
-.assistant-send:hover {
-  opacity: 1;
-}
-
-.assistant-send:disabled {
-  opacity: 0.5;
-  pointer-events: none;
-}
-
-.assistant-send .tool-icon {
-  width: 14px;
-  height: 14px;
-}
-
 .assistant-context {
   color: var(--text-faint);
   font-family: var(--font-family-mono);
   font-size: var(--font-chip);
 }
 
-/* ---- The provider popover (the picker-menu recipe) ---- */
+/* ---- The provider popover (the elevated popover, research §2) ---- */
 
 .assistant-menu {
   position: absolute;
@@ -480,10 +435,10 @@
   padding: var(--gap-4);
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  background: var(--list-bg);
-  border: var(--hairline) solid var(--border);
-  border-radius: var(--radius-card);
+  gap: var(--gap-2);
+  background: var(--surface-elevated);
+  border: var(--hairline) solid var(--border-soft);
+  border-radius: var(--radius-popover);
   box-shadow: 0 2px 8px var(--shadow);
   z-index: 50;
   max-height: 340px;
@@ -491,35 +446,27 @@
 }
 
 .assistant-menu-title {
-  padding: 2px var(--gap-6);
+  padding: var(--gap-2) var(--gap-6);
   color: var(--text-faint);
   font-size: var(--font-chip);
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
-.assistant-preset {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--gap-6);
-  padding: 3px var(--gap-6);
-  border: none;
-  border-radius: var(--radius-card);
-  background: transparent;
-  color: var(--text);
-  font-family: var(--font-family);
+/* The preset rows are the system's `Row`; its children carry the two inks. */
+.assistant-preset-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--font-label);
-  text-align: left;
-  cursor: pointer;
-}
-
-.assistant-preset:hover {
-  background: var(--control-hover);
 }
 
 .assistant-preset-url {
+  flex: 0 1 auto;
   min-width: 0;
+  margin-left: var(--gap-6);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -527,29 +474,14 @@
   font-size: var(--font-chip);
 }
 
+/* The provider inputs are the system's `Field`; this is only their labelled wrapper. */
 .assistant-field {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 2px var(--gap-6);
+  gap: var(--gap-2);
+  padding: var(--gap-2) var(--gap-6);
   color: var(--text-faint);
   font-size: var(--font-chip);
-}
-
-.assistant-field input {
-  height: 22px;
-  padding: 0 var(--gap-6);
-  border: var(--hairline) solid var(--border);
-  border-radius: var(--radius-small);
-  background: var(--control);
-  color: var(--text);
-  font-family: var(--font-family);
-  font-size: var(--font-label);
-  outline: none;
-}
-
-.assistant-field input:focus {
-  border-color: var(--accent);
 }
 
 .assistant-menu-actions {
@@ -557,20 +489,4 @@
   justify-content: flex-end;
   gap: var(--gap-4);
   padding-top: var(--gap-4);
-}
-
-.assistant-save {
-  height: 22px;
-  padding: 0 var(--gap-8);
-  border: none;
-  border-radius: var(--radius-card);
-  background: var(--accent);
-  color: var(--on-accent);
-  font-family: var(--font-family);
-  font-size: var(--font-label);
-  cursor: pointer;
-}
-
-.assistant-save:hover {
-  opacity: var(--hover-opacity);
 }
