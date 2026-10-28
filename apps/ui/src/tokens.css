@@ -125,6 +125,7 @@
   --control-h-chip: 20px; /* the chip height (Cursor §2's 20px chip) */
   --control-h-tab: 35px;
   --control-h-suggestion: 32px; /* the empty-state suggestion row (measured) */
+  --block-max-height: 180px; /* the transcript's capped code and report blocks */
   /* The glyph steps, one per control size (the run's icon sizes). */
   --icon-size-sm: 12px;
   --icon-size-md: 14px;

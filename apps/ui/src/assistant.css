@@ -307,7 +307,7 @@
 .assistant-code {
   margin: 0;
   padding: var(--gap-6) var(--gap-10);
-  max-height: 180px;
+  max-height: var(--block-max-height);
   overflow: auto;
   background: var(--surface-inset);
   border: var(--hairline) solid var(--border);
@@ -345,7 +345,7 @@
 
 .assistant-report {
   margin: 0;
-  max-height: 180px;
+  max-height: var(--block-max-height);
   overflow: auto;
   color: var(--text-dim);
   font-family: var(--font-family-mono);
