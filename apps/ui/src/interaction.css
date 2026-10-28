@@ -29,7 +29,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--gap-6);
-  height: 22px;
+  height: var(--control-h-row);
   padding: 0 var(--gap-8);
   border-bottom: var(--hairline) solid var(--border);
 }
@@ -62,7 +62,7 @@
   display: flex;
   align-items: center;
   gap: var(--gap-6);
-  min-height: 22px;
+  min-height: var(--control-h-row);
   padding: 0 var(--gap-8);
   border-radius: 0;
   background: transparent;
