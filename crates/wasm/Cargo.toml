@@ -1,0 +1,31 @@
+[package]
+name = "cadcraft-wasm"
+description = "CADCraft facade for the JavaScript interface: JSON in, JSON out over the engine and renderer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version = "1.95"
+
+[lints]
+workspace = true
+
+[lib]
+# `cdylib` is what `cargo build --target wasm32-unknown-unknown` turns into the `.wasm` the
+# interface's `wasm-bindgen --target web` step wraps; `rlib` keeps the native test harness (and
+# any Rust consumer) working.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cadcraft-geom = { workspace = true }
+cadcraft-color = { workspace = true }
+cadcraft-doc = { workspace = true }
+cadcraft-render = { workspace = true }
+cadcraft-io = { workspace = true }
+cadcraft-engine = { workspace = true }
+serde_json = { workspace = true }
+
+# The JS-facing shim is the only wasm-specific part. The core `Facade` has no wasm-bindgen
+# dependency, so `cargo test -p cadcraft-wasm` runs natively without any wasm tooling; the
+# wasm32 check covers the shim.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"

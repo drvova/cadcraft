@@ -760,6 +760,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "cadcraft-wasm"
+version = "0.13.0"
+dependencies = [
+ "cadcraft-color",
+ "cadcraft-doc",
+ "cadcraft-engine",
+ "cadcraft-geom",
+ "cadcraft-io",
+ "cadcraft-render",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "cadcraft-web"
 version = "0.13.0"
 dependencies = [
