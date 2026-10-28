@@ -1,0 +1,179 @@
+{
+  "src/app.tsx": {
+    "rule/deprecated-import": {
+      "./components/AssistantPane": 1,
+      "./components/CommandLine": 1,
+      "./components/LayersPanel": 1,
+      "./components/MenuBar": 1,
+      "./components/PropertiesPanel": 1,
+      "./components/TopBar": 1
+    }
+  },
+  "src/assistant.css": {
+    "rule/css-px": {
+      "font-size: 10px": 1,
+      "gap: 2px": 4,
+      "height: 14px": 2,
+      "height: 18px": 1,
+      "height: 20px": 1,
+      "height: 22px": 3,
+      "height: 35px": 1,
+      "height: 7px": 1,
+      "max-height: 180px": 1,
+      "max-height: 240px": 1,
+      "max-height: 340px": 1,
+      "max-width: 120px": 1,
+      "max-width: 160px": 1,
+      "min-height: 40px": 1,
+      "padding: 0 2px": 1,
+      "padding: 0 3px": 1,
+      "padding: 2px": 1,
+      "padding: 2px var(--gap-4)": 3,
+      "padding: 2px var(--gap-6)": 2,
+      "padding: 3px var(--gap-6)": 1,
+      "width: 14px": 2,
+      "width: 18px": 1,
+      "width: 20px": 1,
+      "width: 340px": 1,
+      "width: 7px": 1
+    }
+  },
+  "src/canvas.test.ts": {
+    "rule/raw-value": {
+      "#181818": 1,
+      "#202020": 1,
+      "#23412f": 1,
+      "#2a2a2a": 1,
+      "#552633": 1,
+      "#81a1c1": 1,
+      "rgb(212,212,212)": 3
+    }
+  },
+  "src/canvas.ts": {
+    "rule/raw-value": {
+      "#181818": 1,
+      "#202020": 1,
+      "#23412f": 1,
+      "#2a2a2a": 1,
+      "#552633": 1,
+      "#81a1c1": 1,
+      "rgb(${c[0]},${c[1]},${c[2]})": 1
+    }
+  },
+  "src/chrome.css": {
+    "rule/css-px": {
+      "font-size: 10px": 1,
+      "font-size: 11px": 1,
+      "height: 12px": 1,
+      "height: 14px": 1,
+      "height: 16px": 1,
+      "height: 18px": 1,
+      "height: 22px": 1,
+      "height: 24px": 3,
+      "height: 26px": 1,
+      "height: 30px": 1,
+      "min-width: 176px": 1,
+      "min-width: 208px": 1,
+      "width: 16px": 1,
+      "width: 24px": 1
+    }
+  },
+  "src/components/AssistantPane.tsx": {
+    "trap/native-control": {
+      "<button> where the system has Button": 12
+    }
+  },
+  "src/components/CanvasView.tsx": {
+    "rule/raw-value": {
+      "#181818": 1,
+      "#202020": 1,
+      "#23412f": 1,
+      "#2a2a2a": 1,
+      "#552633": 1,
+      "#81a1c1": 1
+    },
+    "trap/button-div": {
+      "<canvas onPointerDown>": 1
+    }
+  },
+  "src/components/CommandLine.tsx": {
+    "trap/native-control": {
+      "<button> where the system has Button": 1
+    }
+  },
+  "src/components/LayersPanel.tsx": {
+    "rule/raw-value": {
+      "rgb(${c[0]},${c[1]},${c[2]})": 1
+    },
+    "trap/native-control": {
+      "<button> where the system has Button": 4
+    }
+  },
+  "src/components/MenuBar.tsx": {
+    "trap/native-control": {
+      "<button> where the system has Button": 2
+    }
+  },
+  "src/components/StatusBar.tsx": {
+    "trap/native-control": {
+      "<button> where the system has Button": 2
+    }
+  },
+  "src/components/ToolStrip.tsx": {
+    "trap/native-control": {
+      "<button> where the system has Button": 1
+    }
+  },
+  "src/components/TopBar.tsx": {
+    "trap/native-control": {
+      "<button> where the system has Button": 1
+    }
+  },
+  "src/facade.test.ts": {
+    "rule/named-color": {
+      "color: red": 2
+    },
+    "rule/raw-value": {
+      "#00ff00": 1,
+      "#88c0d0": 1,
+      "#d4d4d4": 1,
+      "#ff0000": 1
+    }
+  },
+  "src/interaction.css": {
+    "rule/css-px": {
+      "height: 13px": 1,
+      "height: 18px": 1,
+      "height: 22px": 1,
+      "min-height: 22px": 1,
+      "width: 13px": 1
+    }
+  },
+  "src/props.test.ts": {
+    "rule/named-color": {
+      "color: Red": 1
+    }
+  },
+  "src/styles.css": {
+    "rule/css-px": {
+      "font-size: 10px": 1,
+      "font-size: 11px": 1,
+      "height: 10px": 2,
+      "height: 16px": 1,
+      "height: 20px": 1,
+      "height: 22px": 2,
+      "height: 28px": 1,
+      "height: 5px": 1,
+      "height: 6px": 2,
+      "height: 7px": 1,
+      "max-height: 84px": 1,
+      "min-height: 22px": 1,
+      "width: 10px": 2,
+      "width: 16px": 1,
+      "width: 252px": 1,
+      "width: 5px": 1,
+      "width: 6px": 2,
+      "width: 7px": 1
+    }
+  }
+}

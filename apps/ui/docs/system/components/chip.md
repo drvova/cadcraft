@@ -120,3 +120,4 @@ Rests on the native element each form renders: a `<span>` for the static chip, a
 - `Button`: when the action needs a label and a full control height.
 - `IconButton`: when the action is a glyph.
 - `Field`: when the value is editable.
+- `SectionLabel`: when the text names a group rather than a value.

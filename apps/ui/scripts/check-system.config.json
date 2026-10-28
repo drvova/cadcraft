@@ -1,0 +1,14 @@
+{
+  "include": ["src"],
+  "exclude": ["src/wasm"],
+  "tokenSources": ["src/tokens.css"],
+  "uiDir": "src/ui",
+  "examplesDir": "docs/system/examples",
+  "registry": "docs/registry.json",
+  "driftList": "scripts/ui-drift.tsv",
+  "allowlist": "scripts/check-allowlist.json",
+  "nativeControls": {
+    "button": "Button"
+  },
+  "buttonFile": "src/ui/Button.tsx"
+}

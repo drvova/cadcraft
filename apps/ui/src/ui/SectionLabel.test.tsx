@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { SectionLabel } from "./SectionLabel";
-import { mount } from "./test-utils";
+import { mount } from "../test-utils";
 
 describe("SectionLabel", () => {
   test("renders an h2 heading with its text", () => {

@@ -146,3 +146,5 @@ Rests on the native `<button>` element: role, Enter and Space, `disabled`, and f
 - `IconButton`: when the action is one glyph with a tooltip and no label.
 - `Row`: when the clickable band is a list item rather than an action.
 - `Chip`: when the text is a fact or a value, not an action.
+- `Field`: when the control holds an editable value rather than performing an action.
+- `SectionLabel`: when the text names a group rather than performing an action.

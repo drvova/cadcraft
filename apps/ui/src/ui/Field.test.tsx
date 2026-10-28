@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { Field } from "./Field";
-import { inputIn, mount, type } from "./test-utils";
+import { inputIn, mount, type } from "../test-utils";
 
 describe("Field", () => {
   test("renders a named input with the caller's value", () => {

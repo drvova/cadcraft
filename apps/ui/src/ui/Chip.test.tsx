@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { Chip } from "./Chip";
-import { buttonIn, mount } from "./test-utils";
+import { buttonIn, mount } from "../test-utils";
 
 describe("Chip", () => {
   test("without a handler it is a static span", () => {

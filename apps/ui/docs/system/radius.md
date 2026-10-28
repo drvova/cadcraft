@@ -1,0 +1,56 @@
+# Radius
+
+## Description
+
+The corner ladder (2–5px for controls, 20px for floating surfaces, full round for pills), the one hairline width, the focus ring's stroke, and the single shadow: every box in the chrome takes its corner and stroke from these tokens. The values live in `src/tokens.css`; the roles are the measured Cursor 3.27.22 recipes.
+
+## Tokens
+
+### Radius
+
+| Token | Value | Role |
+| --- | --- | --- |
+| `--radius-control` | `2px` | Buttons and inputs: the measured control corner. |
+| `--radius-small` | `3px` | Chips and small wells: one step off the control. |
+| `--radius-card` | `4px` | Cards and list rows. |
+| `--radius-composer` | `5px` | The composer's box. |
+| `--radius-elevated` | `20px` | The glass composer, menus and popovers (Cursor §2). |
+| `--radius-pill` | `11px` | A tab or a pill-shaped chip. |
+| `--radius-round` | `9999px` | The pill/circle radius (Chip, IconButton; Cursor §2). |
+
+### Strokes and elevation
+
+| Token | Value | Role |
+| --- | --- | --- |
+| `--hairline` | `1px` | The one border width: every stroke in the chrome. |
+| `--focus-outline-w` | `1px` | The focus ring's stroke. |
+| `--focus-outline-offset` | `-1px` | The ring sits inside the control's box, so it never shifts the layout. |
+| `--shadow` | `rgba(0,0,0,.45)` dark / `rgba(0,0,0,.18)` light | The single shadow under floating surfaces (menus, the composer). |
+
+Surface levels (which surface a floating thing sits on) are the colour tokens `--chrome`, `--control`, `--panel` and `--surface-elevated`; their ladder is on the Colors page.
+
+## Specimens
+
+- Radius ladder: <span style="display:inline-block;width:64px;height:24px;background:var(--control);border:1px solid var(--border);border-radius:var(--radius-control);vertical-align:middle"></span> control 2 <span style="display:inline-block;width:64px;height:24px;background:var(--control);border:1px solid var(--border);border-radius:var(--radius-small);vertical-align:middle"></span> small 3 <span style="display:inline-block;width:64px;height:24px;background:var(--control);border:1px solid var(--border);border-radius:var(--radius-card);vertical-align:middle"></span> card 4 <span style="display:inline-block;width:64px;height:24px;background:var(--control);border:1px solid var(--border);border-radius:var(--radius-composer);vertical-align:middle"></span> composer 5
+- Elevated and round: <span style="display:inline-block;width:72px;height:28px;background:var(--surface-elevated);border:1px solid var(--border);border-radius:var(--radius-elevated);box-shadow:0 0 8px var(--shadow);vertical-align:middle"></span> elevated 20 <span style="display:inline-block;width:48px;height:20px;background:var(--control);border-radius:var(--radius-round);vertical-align:middle"></span> round <span style="display:inline-block;width:64px;height:20px;background:var(--control);border-radius:var(--radius-pill);vertical-align:middle"></span> pill 11
+- Focus ring: <span style="display:inline-block;padding:2px 10px;background:var(--control);border-radius:var(--radius-control);outline:var(--focus-outline-w) solid var(--accent);outline-offset:var(--focus-outline-offset)">focused</span>
+- The one shadow, on `--surface-elevated`: <span style="display:inline-block;padding:4px 12px;background:var(--surface-elevated);border-radius:var(--radius-card);box-shadow:0 0 8px var(--shadow)">floating</span>
+
+## Usage
+
+- Corners are ladder steps, never eyeballed: a control is `--radius-control`, a chip `--radius-small` or `--radius-round`, a card `--radius-card`, because mixed corners read as mixed components.
+- The composer and popovers are the only 20px corners (`--radius-elevated`), because the large radius is what marks a floating glass surface.
+- One stroke width: every border is `--hairline`; a heavier stroke is a different control, not a different border, because a 2px border reads as focus.
+- The focus ring is 1px, inset (`--focus-outline-offset: -1px`), in `--accent`, because an outset ring shifts a row and an inset ring never does.
+- One shadow, one direction: floating surfaces cast `--shadow`; nothing else does, because a second shadow level invents a third elevation.
+- A pill shape takes `--radius-round`, not `--radius-pill`, unless the measured 11px is the point (a tab), because at small heights 11px and full-round differ by pixels nobody sees.
+
+## Accessibility
+
+- The focus ring is `1px` in `--accent`, offset `-1px` (inset). Its contrast against every surface level is covered by the Colors page's measured grid: `--accent` measures 6.0:1 over `--control` in dark, 3.8:1 in light (above the 3:1 non-text threshold).
+- The ring is never removed without a replacement: the components' `:focus-visible` styles in `src/ui/ui.css` carry it, and the check cannot see focus behavior, so the browser review covers it.
+
+## Not tokens
+
+- SVG stroke widths inside icon paths are drawing values (`1.5` on the 24×24 grid in `src/icons.ts`), not box strokes, because an icon's stroke must stay proportional to its viewBox.
+- The canvas's selection stroke width is an engine constant, not chrome, for the same reason.

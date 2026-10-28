@@ -11,7 +11,11 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "build:wasm": "bun ../../scripts/build-ui-wasm.mjs",
-    "verify:facade": "bun scripts/verify-facade.mjs"
+    "verify:facade": "bun scripts/verify-facade.mjs",
+    "check:system": "node scripts/check-system.mjs --root . --ratchet scripts/check-ratchet.json",
+    "check:spec": "node scripts/check-spec.mjs --root . docs/system",
+    "check:docs": "node ../../scripts/gen-docs.mjs --root . --config docs/gen-docs.config.json --check",
+    "check": "bun run typecheck && bun run check:system && bun run check:spec && bun run check:docs"
   },
   "dependencies": {
     "solid-js": "^1.9.0"

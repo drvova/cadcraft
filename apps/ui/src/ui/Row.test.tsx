@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { Row } from "./Row";
-import { buttonIn, mount } from "./test-utils";
+import { buttonIn, mount } from "../test-utils";
 
 describe("Row", () => {
   test("renders a full-width native button with its content", () => {

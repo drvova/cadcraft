@@ -226,6 +226,7 @@ fn cmd_ui(strict: bool) -> Result<(), String> {
         (vec!["run", "typecheck"], "bun run typecheck (apps/ui)"),
         (vec!["test"], "bun test (apps/ui)"),
         (vec!["run", "build"], "bun run build (apps/ui)"),
+        (vec!["run", "check"], "bun run check (apps/ui)"),
     ] {
         let mut c = Command::new(&bun);
         c.current_dir(&ui).args(&args);

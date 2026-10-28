@@ -6,7 +6,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { IconButton } from "./IconButton";
-import { buttonIn, mount } from "./test-utils";
+import { buttonIn, mount } from "../test-utils";
 
 describe("IconButton", () => {
   test("renders a native button named by its title, with the drawn glyph", () => {

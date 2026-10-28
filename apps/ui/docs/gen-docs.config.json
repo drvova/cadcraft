@@ -1,0 +1,10 @@
+{
+  "src": "docs/system",
+  "out": "docs/generated",
+  "llms": "docs/generated/llms.txt",
+  "base": "docs/generated",
+  "name": "CADCraft web",
+  "registry": "docs/registry.json",
+  "checkCommand": "cd apps/ui && bun run check",
+  "examplesDir": "docs/system/examples"
+}

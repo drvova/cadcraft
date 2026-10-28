@@ -6,7 +6,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { Button } from "./Button";
-import { buttonIn, mount } from "./test-utils";
+import { buttonIn, mount } from "../test-utils";
 
 describe("Button", () => {
   test("renders a native button with its label and the secondary default", () => {

@@ -1,0 +1,67 @@
+# Spacing
+
+## Description
+
+One gap scale in even steps and one control-height ladder: every inset, gap and control size in the chrome is a token from these two ladders, so density stays constant across panels. The values live in `src/tokens.css`; the roles are the measured Cursor 3.27.22 recipes.
+
+## Tokens
+
+### Gaps and insets
+
+| Token | Value | Role |
+| --- | --- | --- |
+| `--gap-2` | `2px` | The hairline gap: an icon to its label's edge in a tight row. |
+| `--gap-3` | `3px` | A chip's internal gap, a badge's inset. |
+| `--gap-4` | `4px` | The default (`--gap-default`): a button row, a list row's inner gap. |
+| `--gap-5` | `5px` | A field's label to its input. |
+| `--gap-6` | `6px` | The composer's padding and gap (Cursor §1). |
+| `--gap-8` | `8px` | A panel's inner padding, a chip row's gap. |
+| `--gap-10` | `10px` | A section's gap between blocks. |
+| `--gap-12` | `12px` | The rail's padding, a dialog's inner gap. |
+| `--gap-16` | `16px` | The card padding's partner: a dialog's edge inset. |
+| `--gap-default` | `var(--gap-4)` | The default gap: use it when no row in this table names the case. |
+| `--button-pad-x` | `8px` | A button's horizontal padding. |
+| `--button-pad-y` | `4px` | A button's vertical padding. |
+| `--field-pad-x` | `6px` | A field's horizontal padding. |
+| `--field-pad-y` | `4px` | A field's vertical padding. |
+| `--card-padding` | `16px` | A card's or panel's inner padding. |
+
+### Control heights
+
+| Token | Value | Role |
+| --- | --- | --- |
+| `--control-h-button` | `28px` | A button's box height. |
+| `--control-h-input` | `24px` | An input's and an icon button's box height. |
+| `--control-h-row` | `22px` | A list row's height. |
+| `--control-h-chip` | `20px` | A chip's height (Cursor §2's 20px chip). |
+| `--control-h-tab` | `35px` | A tab's height in the tab strip. |
+
+## Specimens
+
+The scale as bars, each drawn with its own token:
+
+- <span style="display:inline-block;width:2px;height:14px;background:var(--accent);vertical-align:middle"></span> `--gap-2`
+- <span style="display:inline-block;width:4px;height:14px;background:var(--accent);vertical-align:middle"></span> `--gap-4`
+- <span style="display:inline-block;width:8px;height:14px;background:var(--accent);vertical-align:middle"></span> `--gap-8`
+- <span style="display:inline-block;width:12px;height:14px;background:var(--accent);vertical-align:middle"></span> `--gap-12`
+- <span style="display:inline-block;width:16px;height:14px;background:var(--accent);vertical-align:middle"></span> `--gap-16`
+
+Control ladder, each at its token height: <span style="display:inline-block;height:var(--control-h-chip);padding:0 8px;background:var(--control);border-radius:var(--radius-round);vertical-align:middle">chip 20</span> <span style="display:inline-block;height:var(--control-h-row);padding:0 8px;background:var(--control);vertical-align:middle">row 22</span> <span style="display:inline-block;height:var(--control-h-input);padding:0 8px;background:var(--control);border-radius:var(--radius-control);vertical-align:middle">input 24</span> <span style="display:inline-block;height:var(--control-h-button);padding:0 8px;background:var(--control);border-radius:var(--radius-control);vertical-align:middle">button 28</span> <span style="display:inline-block;height:var(--control-h-tab);padding:0 8px;background:var(--control);vertical-align:middle">tab 35</span>
+
+## Usage
+
+- Pick the step, never the pixel: a gap is one of the scale's values, because a one-off `7px` is how two panels drift apart.
+- `--gap-4` is the default; reach past it only when this page's table names the case, because an unnamed gap is a missing decision.
+- Insets come from the padding tokens, not the gap tokens, because a padding is part of a control's box and must survive a border change.
+- Controls stand on the height ladder (`20/22/24/28/35`), because two controls in one row align by their boxes, not their text.
+- Density never changes with the viewport; the canvas takes the space, because a chrome that scales steals the drawing's room.
+
+## Accessibility
+
+- Target sizes: the ladder's smallest box is the `20px` chip; the button is `28px` tall and the icon button `24px`, all measured from `src/tokens.css`. The 24px minimum recommended by WCAG 2.5.8 is met by buttons and icon buttons; chips are not interactive targets on their own.
+- Reflow at 320px: not measured this run. The fixed 260px rail and the toolbar are the risk this review should cover first.
+
+## Not tokens
+
+- The canvas's own metrics (world units, line widths) are engine values, not chrome spacing; `src/canvas.ts` maps them, and they never appear as chrome gaps.
+- One-off optical nudges inside an icon's own SVG viewBox stay raw in `src/icons.ts`, because they are drawing coordinates, not layout.
