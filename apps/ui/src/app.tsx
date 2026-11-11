@@ -27,7 +27,7 @@ import { ToolStrip } from "./components/ToolStrip";
 import { LayoutTabs, StatusBar } from "./components/StatusBar";
 import { CommandPalette } from "./components/CommandPalette";
 import { AssistantPane } from "./components/AssistantPane";
-import { createAssistantSession } from "./assistant-session";
+import { createAssistantSession, type AssistantSession } from "./assistant-session";
 import { CanvasView } from "./components/CanvasView";
 import { LayersPanel } from "./components/LayersPanel";
 import { PropertiesPanel } from "./components/PropertiesPanel";
@@ -172,9 +172,27 @@ export function App(props: AppProps): JSX.Element {
     document.title = d === null ? "CADCraft" : `${d.title}${d.dirty ? " (modified)" : ""} - CADCraft`;
   });
 
-  // The assistant's session outlives its panel: closing the panel hides the view, not the chat.
-  const assistant = createAssistantSession({ facade: props.facade, onChanged: () => refresh() });
-  onCleanup(() => assistant.stop());
+  // The assistant's chats outlive its panel: closing the panel hides the view, not the chats.
+  // Each chat is its own session (its conversation, draft and running turn); a new chat is added
+  // beside the others, as the editor keeps its chats in tabs, and never wipes one.
+  const newChat = (): AssistantSession => createAssistantSession({ facade: props.facade, onChanged: () => refresh() });
+  const [chats, setChats] = createSignal<readonly AssistantSession[]>([newChat()]);
+  const [chatIndex, setChatIndex] = createSignal(0);
+  const assistant = createMemo(() => chats()[Math.min(chatIndex(), chats().length - 1)]);
+  onCleanup(() => chats().forEach((chat) => chat.stop()));
+  /** Open a new chat, unless the one in front is still empty (then it is the new chat). */
+  const onNewChat = (): void => {
+    if ((assistant()?.entries.length ?? 0) === 0) return;
+    setChats([...chats(), newChat()]);
+    setChatIndex(chats().length - 1);
+  };
+  /** Close a chat: stop its turn and drop it; the last one is replaced by a fresh chat. */
+  const onCloseChat = (index: number): void => {
+    chats()[index]?.stop();
+    const rest = chats().filter((_, i) => i !== index);
+    setChats(rest.length === 0 ? [newChat()] : rest);
+    setChatIndex(Math.max(0, Math.min(chatIndex() > index ? chatIndex() - 1 : chatIndex(), rest.length - 1)));
+  };
 
   /**
    * Re-read the view the facade is showing (a space switch or a zoom command moves it) and fetch
@@ -529,8 +547,19 @@ export function App(props: AppProps): JSX.Element {
             <CommandLine prompt={prompt} notice={notice} onSubmit={onCommand} />
           </Show>
         </div>
-        <Show when={showAssistant()}>
-          <AssistantPane session={assistant} selection={selection} onClose={() => setShowAssistant(false)} />
+        <Show when={showAssistant() ? assistant() : undefined} keyed>
+          {(chat) => (
+            <AssistantPane
+              session={chat}
+              selection={selection}
+              chats={() => chats().map((c) => c.title())}
+              chatIndex={chatIndex}
+              onSelectChat={setChatIndex}
+              onNewChat={onNewChat}
+              onCloseChat={onCloseChat}
+              onClose={() => setShowAssistant(false)}
+            />
+          )}
         </Show>
       </div>
       <Show when={showStatusbar()}>

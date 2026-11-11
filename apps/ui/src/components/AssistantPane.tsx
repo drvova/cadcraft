@@ -39,6 +39,13 @@ export interface AssistantPaneProps {
   session: AssistantSession;
   /** The canvas selection's handles (the shell's signal); drives the context chip. */
   selection: () => readonly string[];
+  /** Every open chat's title, in tab order, and which one this panel shows. */
+  chats: () => readonly string[];
+  chatIndex: () => number;
+  onSelectChat: (index: number) => void;
+  /** Open a chat beside the others (the shell keeps this one). */
+  onNewChat: () => void;
+  onCloseChat: (index: number) => void;
   /** The panel's close button. */
   onClose: () => void;
 }
@@ -211,9 +218,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   };
 
   const newChat = (): void => {
-    s.clear();
-    if (inputEl !== undefined) inputEl.style.height = "";
-    setFollowing(true);
+    props.onNewChat();
     inputEl?.focus();
   };
 
@@ -316,9 +321,29 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         onKeyDown={onResizeKey}
       />
       <div class="assistant-head">
-        <span class="assistant-title" title={s.title()}>
-          {s.title()}
-        </span>
+        <Show
+          when={props.chats().length > 1}
+          fallback={
+            <span class="assistant-title" title={s.title()}>
+              {s.title()}
+            </span>
+          }
+        >
+          <div class="assistant-tabs" role="tablist" aria-label="Chats">
+            <For each={props.chats()}>
+              {(title, index) => (
+                <div class={index() === props.chatIndex() ? "assistant-tab is-active" : "assistant-tab"}>
+                  <div class="assistant-tab-row">
+                    <Row selected={index() === props.chatIndex()} title={title} onClick={() => props.onSelectChat(index())}>
+                      <span class="assistant-tab-text">{title}</span>
+                    </Row>
+                  </div>
+                  <IconButton icon="close" size="sm" title={`Close ${title}`} onClick={() => props.onCloseChat(index())} />
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
         <div class="assistant-head-actions">
           <Tooltip text="New chat" placement="bottom">
             <button class="assistant-icon" type="button" aria-label="New chat" onClick={newChat}>
