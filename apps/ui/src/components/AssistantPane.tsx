@@ -24,7 +24,7 @@
  */
 
 import { createEffect, createMemo, createSignal, For, Index, Match, on, onCleanup, onMount, Show, Switch, type JSX } from "solid-js";
-import { activityLine, atEnd, MAX_REQUEST_CHARS, parseInline, PROVIDER_PRESETS, relativeTime, splitFences, type ChatImage, type ProviderConfig } from "../assistant";
+import { activityLine, atEnd, MAX_REQUEST_CHARS, parseBlocks, parseInline, PROVIDER_PRESETS, relativeTime, splitFences, type ChatImage, type ProseBlock, type ProviderConfig } from "../assistant";
 import type { AssistantSession } from "../assistant-session";
 import { ToolIcon } from "../icons";
 import { Tooltip } from "../ui/Tooltip";
@@ -69,6 +69,11 @@ function grow(el: HTMLTextAreaElement): void {
   el.style.height = "auto";
   el.style.height = `${Math.min(Math.max(el.scrollHeight, 64), 240)}px`;
 }
+
+const headingLevel = (b: ProseBlock): number => (b.kind === "heading" ? b.level : 0);
+const textOf = (b: ProseBlock): string => (b.kind === "list" ? "" : b.text);
+const itemsOf = (b: ProseBlock): readonly string[] => (b.kind === "list" ? b.items : []);
+const orderedList = (b: ProseBlock): boolean => b.kind === "list" && b.ordered;
 
 export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   const s = props.session;
@@ -212,6 +217,32 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     </For>
   );
 
+  /** A reply's prose as its blocks: headings, lists and paragraphs, each with its inline runs. */
+  const prose = (text: string): JSX.Element => (
+    <Index each={parseBlocks(text)}>
+      {(block) => (
+        <Switch>
+          <Match when={block().kind === "heading"}>
+            <h3 class={headingLevel(block()) <= 2 ? "assistant-heading" : "assistant-heading assistant-heading--minor"}>{richText(textOf(block()))}</h3>
+          </Match>
+          <Match when={block().kind === "list" && orderedList(block())}>
+            <ol class="assistant-list">
+              <For each={itemsOf(block())}>{(item) => <li>{richText(item)}</li>}</For>
+            </ol>
+          </Match>
+          <Match when={block().kind === "list"}>
+            <ul class="assistant-list">
+              <For each={itemsOf(block())}>{(item) => <li>{richText(item)}</li>}</For>
+            </ul>
+          </Match>
+          <Match when={block().kind === "para"}>
+            <div class="assistant-text">{richText(textOf(block()))}</div>
+          </Match>
+        </Switch>
+      )}
+    </Index>
+  );
+
   return (
     <aside
       class="assistant-panel"
@@ -281,7 +312,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               <Match when={entry.kind === "assistant"}>
                 <Index each={splitFences(entry.kind === "assistant" ? entry.text : "")}>
                   {(part) => (
-                    <Show when={part().kind === "code"} fallback={<div class="assistant-text">{richText(part().text)}</div>}>
+                    <Show when={part().kind === "code"} fallback={prose(part().text)}>
                       <div class="assistant-code-wrap">
                         <pre class="assistant-code">{part().text}</pre>
                         <span class="assistant-code-copy">
@@ -391,7 +422,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
           <Show when={selectionShown() || s.attached().length > 0}>
             <div class="assistant-attachments">
               <Show when={selectionShown()}>
-                <span class="assistant-attachment">
+                <span class="assistant-attachment assistant-attachment--context">
                   <span class="assistant-attachment-icon">
                     <ToolIcon id="pick" />
                   </span>
@@ -414,7 +445,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             class="assistant-input"
             ref={inputEl}
             rows={1}
-            placeholder={s.running() ? "Queue a follow-up" : "Ask the assistant…"}
+            placeholder={s.running() ? "Queue a follow-up" : "Ask, or say what to draw"}
             value={s.input()}
             onInput={(e) => {
               s.setInput(e.currentTarget.value);

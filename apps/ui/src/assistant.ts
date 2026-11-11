@@ -593,6 +593,73 @@ export function activityLine(code: string): string {
   return lines.length > 1 ? `${first}  +${lines.length - 1}` : first;
 }
 
+/** One block of a reply's prose: a heading, a list, or a paragraph. */
+export type ProseBlock =
+  | { kind: "heading"; level: number; text: string }
+  | { kind: "list"; ordered: boolean; items: string[] }
+  | { kind: "para"; text: string };
+
+const HEADING_RE = /^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/;
+const BULLET_RE = /^\s*[-*•]\s+(.*)$/;
+const ORDERED_RE = /^\s*\d{1,9}[.)]\s+(.*)$/;
+
+/**
+ * Split a reply's prose (what `splitFences` left outside the code) into the blocks models write:
+ * `#` headings, `-`/`*` and `1.` lists, and paragraphs divided by blank lines (a port of the
+ * desktop pane's `parse_markdown_lite`, without its tables). Lines of one paragraph keep their
+ * breaks; a line that continues a list item is folded into it. Nothing is HTML: the pane maps
+ * blocks to elements and runs `parseInline` over each text.
+ */
+export function parseBlocks(text: string): ProseBlock[] {
+  const blocks: ProseBlock[] = [];
+  let para: string[] = [];
+  let list: { ordered: boolean; items: string[] } | null = null;
+  const endPara = (): void => {
+    if (para.length > 0) blocks.push({ kind: "para", text: para.join("\n") });
+    para = [];
+  };
+  const endList = (): void => {
+    if (list !== null) blocks.push({ kind: "list", ordered: list.ordered, items: list.items });
+    list = null;
+  };
+  for (const line of text.split("\n")) {
+    if (line.trim() === "") {
+      endPara();
+      endList();
+      continue;
+    }
+    const heading = HEADING_RE.exec(line);
+    if (heading !== null) {
+      endPara();
+      endList();
+      blocks.push({ kind: "heading", level: (heading[1] ?? "#").length, text: heading[2] ?? "" });
+      continue;
+    }
+    const bullet = BULLET_RE.exec(line);
+    const ordered = bullet === null ? ORDERED_RE.exec(line) : null;
+    const item = bullet ?? ordered;
+    if (item !== null) {
+      endPara();
+      const isOrdered = bullet === null;
+      if (list !== null && list.ordered !== isOrdered) endList();
+      if (list === null) list = { ordered: isOrdered, items: [] };
+      list.items.push(item[1] ?? "");
+      continue;
+    }
+    if (list !== null && /^\s+\S/.test(line)) {
+      // An indented line under an item continues it.
+      const last = list.items.length - 1;
+      list.items[last] = `${list.items[last] ?? ""} ${line.trim()}`;
+      continue;
+    }
+    endList();
+    para.push(line);
+  }
+  endPara();
+  endList();
+  return blocks;
+}
+
 /** How close to the end counts as "at the end" of the transcript, in CSS pixels. */
 export const FOLLOW_SLACK = 24;
 

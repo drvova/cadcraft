@@ -3,6 +3,7 @@ import {
   activityLine,
   apiErrorText,
   atEnd,
+  parseBlocks,
   checkRunArgs,
   MAX_ROUNDS,
   noteOf,
@@ -440,6 +441,39 @@ describe("activityLine", () => {
   test("empty code asks for the manual", () => {
     expect(activityLine("")).toBe("Read the manual");
     expect(activityLine(["", "  ", ""].join("\n"))).toBe("Read the manual");
+  });
+});
+
+describe("parseBlocks", () => {
+  test("paragraphs are divided by blank lines and keep their own line breaks", () => {
+    expect(parseBlocks(["one", "two", "", "three"].join("\n"))).toEqual([
+      { kind: "para", text: "one\ntwo" },
+      { kind: "para", text: "three" },
+    ]);
+  });
+  test("headings carry their level and lose the marks", () => {
+    expect(parseBlocks(["## Fixes implemented ##", "body"].join("\n"))).toEqual([
+      { kind: "heading", level: 2, text: "Fixes implemented" },
+      { kind: "para", text: "body" },
+    ]);
+    expect(parseBlocks("#hashtag")).toEqual([{ kind: "para", text: "#hashtag" }]);
+  });
+  test("bullets and numbers become lists, and a change of kind starts a new one", () => {
+    expect(parseBlocks(["- a", "* b", "1. c", "2) d"].join("\n"))).toEqual([
+      { kind: "list", ordered: false, items: ["a", "b"] },
+      { kind: "list", ordered: true, items: ["c", "d"] },
+    ]);
+  });
+  test("an indented line continues its item; a flush line ends the list", () => {
+    expect(parseBlocks(["- first", "  and more", "after"].join("\n"))).toEqual([
+      { kind: "list", ordered: false, items: ["first and more"] },
+      { kind: "para", text: "after" },
+    ]);
+  });
+  test("emphasis marks and negative numbers are not bullets", () => {
+    expect(parseBlocks("**bold** start")).toEqual([{ kind: "para", text: "**bold** start" }]);
+    expect(parseBlocks("-5 mm offset")).toEqual([{ kind: "para", text: "-5 mm offset" }]);
+    expect(parseBlocks("")).toEqual([]);
   });
 });
 

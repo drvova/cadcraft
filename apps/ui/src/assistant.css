@@ -228,7 +228,42 @@
   word-break: break-word;
 }
 
-.assistant-text code {
+/* A reply's headings: the same size as its prose, set apart by weight and a little air above
+   (more above than below, so a heading belongs to what follows it). */
+.assistant-heading {
+  margin: var(--gap-4) 0 calc(-1 * var(--gap-6));
+  color: var(--text);
+  font-size: var(--composer-font);
+  font-weight: 600;
+  line-height: var(--composer-leading);
+  text-wrap: balance;
+}
+
+.assistant-heading--minor {
+  font-size: var(--font-body);
+}
+
+/* A reply's lists: the prose's own type, hung on quiet markers. */
+.assistant-list {
+  margin: 0;
+  padding-left: var(--gap-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-4);
+  color: var(--text);
+  font-size: var(--composer-font);
+  line-height: var(--composer-leading);
+  word-break: break-word;
+}
+
+.assistant-list li::marker {
+  color: var(--text-disabled);
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-text code,
+.assistant-heading code,
+.assistant-list code {
   padding: 0 3px;
   border-radius: var(--radius-control);
   background: var(--control);
@@ -237,7 +272,8 @@
   font-size: var(--font-mono);
 }
 
-.assistant-text strong {
+.assistant-text strong,
+.assistant-list strong {
   color: var(--text);
   font-weight: 600;
 }
@@ -515,6 +551,18 @@
   border-radius: var(--radius-control);
 }
 
+/* The canvas selection is context, not a file: it takes the accent tint (the reference
+   board's context chips), so it reads apart from the pictures beside it. */
+.assistant-attachment--context {
+  border-color: transparent;
+  background: var(--accent-soft);
+}
+
+.assistant-attachment--context .assistant-attachment-name,
+.assistant-attachment--context .assistant-attachment-icon {
+  color: var(--accent);
+}
+
 .assistant-attachment-icon {
   flex: 0 0 auto;
   display: inline-flex;
@@ -579,6 +627,10 @@
   resize: none;
   outline: none;
   overflow-y: auto;
+}
+
+.assistant-input {
+  caret-color: var(--accent);
 }
 
 .assistant-input::placeholder {

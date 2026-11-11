@@ -11,6 +11,12 @@
   box-sizing: border-box;
 }
 
+/* Selected text takes the accent's tint and keeps its own ink, in every surface. */
+::selection {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
 /* Thin quiet scrollbars on the measured Cursor colours (a thumb that appears only against the
    surface it scrolls, never a chunky grey bar). */
 * {
