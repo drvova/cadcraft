@@ -91,7 +91,7 @@ Real uses, 8 call sites (`rg -c "<Button" src/components` → `src/components/As
   - Do: `.ui-button--secondary:hover { background: var(--fill-active) }`
 
 ### Content
-- `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Undo all` — because the label is the action's name and the accessible name comes from it. Evidence: app 5/6 labels are verbs or verb phrases, `src/components/AssistantPane.tsx:628`, the label "Undo all" (the sixth, the command centre, is labelled with the drawing's name and names its action in its `title`). Check: review `src/components/AssistantPane.tsx`.
+- `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Undo all` — because the label is the action's name and the accessible name comes from it. Evidence: app 5/6 labels are verbs or verb phrases, `src/components/AssistantPane.tsx:662`, the label "Undo all" (the sixth, the command centre, is labelled with the drawing's name and names its action in its `title`). Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Button>SAVE</Button>`
   - Do: `<Button>Save</Button>`
 

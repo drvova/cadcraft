@@ -792,6 +792,36 @@
   font-size: var(--font-chip);
 }
 
+/* The slash list: the commands a `/word` draft matches, on the stack's surface, flush on the
+   card. Its rows are the system's Row; the stack's own inset gives way to the rows' own. */
+.assistant-slash {
+  padding: var(--gap-4);
+}
+
+.assistant-slash-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.assistant-slash-hit {
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.assistant-slash-id {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: var(--gap-12);
+  color: var(--text-faint);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-chip);
+}
+
 /* ---- The setup sheet ---- */
 
 /* Setting a model up is a sheet over the transcript, not a popover in the composer: the three

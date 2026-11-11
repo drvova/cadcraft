@@ -130,6 +130,18 @@ export function rankCommands(query: string, items: readonly PaletteItem[], recen
   return matches.sort((a, b) => b.score - a.score || a.item.label.localeCompare(b.item.label)).slice(0, limit);
 }
 
+/** How many commands the composer's slash list shows. */
+export const SLASH_LIMIT = 6;
+
+/**
+ * What a composer draft asks the slash list for: the text after a leading `/`, while the draft is
+ * still one word (`/`, `/zo`, `/zoom.extents`). `null` once it is anything else: a message that
+ * merely starts with a slash and goes on ("/ is the root"), or no slash at all.
+ */
+export function slashQuery(draft: string): string | null {
+  return /^\/[^\s/]*$/.test(draft) ? draft.slice(1) : null;
+}
+
 /** A label cut into runs, the matched letters marked, for the list to draw. */
 export function highlight(label: string, indices: readonly number[]): { text: string; hit: boolean }[] {
   const hits = new Set(indices);

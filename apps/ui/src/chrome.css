@@ -231,7 +231,7 @@
   min-width: 0;
 }
 
-/* Micro toggles: a word, dim when off, lit when on — no pills, no borders. */
+/* Micro toggles: a word, faint when off, the on-green when on. No pills, no borders, no fills. */
 .status-toggle {
   height: var(--control-h-chip);
   padding: 0 var(--gap-4);
@@ -251,8 +251,8 @@
   color: var(--text);
 }
 
+/* On is said by the ink alone: a row of lit boxes made the bar the loudest thing on screen. */
 .status-toggle.is-on {
-  background: var(--control);
   color: var(--toggle-on);
 }
 

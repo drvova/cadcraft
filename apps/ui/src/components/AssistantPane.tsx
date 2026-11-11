@@ -26,6 +26,7 @@
 import { createEffect, createMemo, createSignal, For, Index, Match, on, onCleanup, onMount, Show, Switch, type JSX } from "solid-js";
 import { activityLine, atEnd, clampPanelWidth, MAX_REQUEST_CHARS, PANEL_WIDTH, listModels, parseBlocks, parseInline, presetFor, PROVIDER_PRESETS, relativeTime, splitFences, type ChatImage, type ProseBlock, type ProviderConfig } from "../assistant";
 import type { AssistantSession } from "../assistant-session";
+import { highlight, rankCommands, slashQuery, SLASH_LIMIT, type PaletteItem } from "../palette";
 import { ToolIcon } from "../icons";
 import { Tooltip } from "../ui/Tooltip";
 import { Button } from "../ui/Button";
@@ -44,6 +45,10 @@ export interface AssistantPaneProps {
   /** The canvas selection's handles (the shell's signal); drives the context chip. */
   selection: () => readonly string[];
   /** Every open chat's title, in tab order, and which one this panel shows. */
+  /** Every command the shell can run: a draft that starts with `/` searches them. */
+  commands: () => readonly PaletteItem[];
+  /** Run a command the reader picked from the slash list. */
+  onRunCommand: (id: string) => void;
   chats: () => readonly string[];
   chatIndex: () => number;
   onSelectChat: (index: number) => void;
@@ -228,7 +233,36 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     inputEl?.focus();
   };
 
+  /** The slash list: a draft that is one `/word` searches the shell's commands instead of asking. */
+  const slash = createMemo(() => slashQuery(s.input()));
+  const slashMatches = createMemo(() => {
+    const query = slash();
+    return query === null ? [] : rankCommands(query, props.commands(), [], SLASH_LIMIT);
+  });
+  const [slashIndex, setSlashIndex] = createSignal(0);
+  createEffect(on(slash, () => setSlashIndex(0)));
+
+  const runSlash = (index: number): void => {
+    const item = slashMatches()[index]?.item;
+    if (item === undefined || !item.enabled) return;
+    s.setInput("");
+    if (inputEl !== undefined) inputEl.style.height = "";
+    props.onRunCommand(item.id);
+  };
+
   const onKeyDown = (e: KeyboardEvent): void => {
+    const count = slashMatches().length;
+    if (slash() !== null && count > 0) {
+      if (e.key === "ArrowDown") setSlashIndex((i) => (i + 1) % count);
+      else if (e.key === "ArrowUp") setSlashIndex((i) => (i - 1 + count) % count);
+      else if (e.key === "Enter" || e.key === "Tab") runSlash(slashIndex());
+      else if (e.key === "Escape") {
+        s.setInput("");
+        e.stopPropagation();
+      } else return;
+      e.preventDefault();
+      return;
+    }
     if (e.key !== "Enter" || e.shiftKey) return;
     e.preventDefault();
     send();
@@ -651,6 +685,25 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             </Show>
           </div>
         </Show>
+        <Show when={slash() !== null}>
+          <div class="assistant-stack assistant-slash" role="listbox" aria-label="Commands">
+            <For each={slashMatches()}>
+              {(match, index) => (
+                <Row selected={index() === slashIndex()} disabled={!match.item.enabled} onClick={() => runSlash(index())}>
+                  <span class="assistant-slash-label">
+                    <For each={highlight(match.item.label, match.indices)}>{(part) => (part.hit ? <mark class="assistant-slash-hit">{part.text}</mark> : part.text)}</For>
+                  </span>
+                  <span class="assistant-slash-id">{match.item.id}</span>
+                </Row>
+              )}
+            </For>
+            <Show when={slashMatches().length === 0}>
+              <div class="assistant-stack-row">
+                <span class="assistant-stack-text">No command matches. Keep typing to send it as a message.</span>
+              </div>
+            </Show>
+          </div>
+        </Show>
         <div class="assistant-box">
           <Show when={selectionShown() || s.attached().length > 0}>
             <div class="assistant-attachments">
@@ -678,7 +731,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             class="assistant-input"
             ref={inputEl}
             rows={1}
-            placeholder={s.running() ? "Queue a follow-up" : "Ask, or say what to draw"}
+            placeholder={s.running() ? "Queue a follow-up" : "Ask, or / for commands"}
             value={s.input()}
             onInput={(e) => {
               s.setInput(e.currentTarget.value);

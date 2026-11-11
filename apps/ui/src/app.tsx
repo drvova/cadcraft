@@ -552,6 +552,8 @@ export function App(props: AppProps): JSX.Element {
             <AssistantPane
               session={chat}
               selection={selection}
+              commands={palette}
+              onRunCommand={onPaletteRun}
               chats={() => chats().map((c) => c.title())}
               chatIndex={chatIndex}
               onSelectChat={setChatIndex}

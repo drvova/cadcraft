@@ -100,7 +100,9 @@
   border-radius: var(--radius-small);
   background: transparent;
   color: var(--text);
-  font-family: var(--font-family-mono);
+  /* Values are words and numbers, not code: the interface's own face, with figures that line up. */
+  font-family: var(--font-family);
+  font-variant-numeric: tabular-nums;
   font-size: var(--font-small);
 }
 
@@ -129,10 +131,12 @@
   cursor: pointer;
 }
 
+/* A value that cannot be edited reads a step quieter than one that can. */
 .prop-readonly {
   min-width: 0;
-  color: var(--text);
-  font-family: var(--font-family-mono);
+  color: var(--text-dim);
+  font-family: var(--font-family);
+  font-variant-numeric: tabular-nums;
   font-size: var(--font-small);
   text-align: right;
   white-space: nowrap;

@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 import type { CommandInfo } from "./facade";
-import { fuzzy, highlight, paletteItems, rankCommands, rememberCommand, RECENT_LIMIT, type PaletteItem } from "./palette";
+import { fuzzy, highlight, paletteItems, rankCommands, rememberCommand, RECENT_LIMIT, slashQuery, type PaletteItem } from "./palette";
 
 const command = (id: string, label: string, menu = "", extra: Partial<CommandInfo> = {}): CommandInfo => ({ id, label, menu, shortcut: "", aliases: [], params: "", enabled: true, ...extra });
 
@@ -83,6 +83,22 @@ describe("highlight", () => {
       { text: "xtents", hit: false },
     ]);
     expect(highlight("Line", [])).toEqual([{ text: "Line", hit: false }]);
+  });
+});
+
+describe("slashQuery", () => {
+  test("a draft that is one slash word asks for commands", () => {
+    expect(slashQuery("/")).toBe("");
+    expect(slashQuery("/zo")).toBe("zo");
+    expect(slashQuery("/zoom.extents")).toBe("zoom.extents");
+  });
+  test("a message is not a command search", () => {
+    expect(slashQuery("")).toBeNull();
+    expect(slashQuery("draw / a line")).toBeNull();
+    expect(slashQuery("/ is the root")).toBeNull();
+    expect(slashQuery("/zoom now")).toBeNull();
+    expect(slashQuery("//comment")).toBeNull();
+    expect(slashQuery(["/zoom", "more"].join(String.fromCharCode(10)))).toBeNull();
   });
 });
 
