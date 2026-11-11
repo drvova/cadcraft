@@ -20,17 +20,14 @@ Every icon is drawn in code as an SVG path on a 24×24 grid and takes its colour
 | Token | Value | Role |
 | --- | --- | --- |
 | `--icon` | dark `rgba(240,240,240,.66)` / light `rgba(20,20,20,.66)` | The default glyph ink. |
-| `--icon-accent` | `#599CE7` / `#2678C1` | A glyph carrying the accent: the current tool, a link. |
-| `--icon-point` | `#f1b467` / `#b8791f` | A glyph calling for attention: a snap or a marker. |
 | `--icon-layer-off` | `#8a8a5a` | A layer switched off. |
 | `--icon-layer-frozen` | `#9fd4ff` | A frozen layer. |
 | `--icon-locked` | `#e6b43c` | A locked layer. |
-| `--icon-current` | `#6fe06f` | The current layer's glyph. |
 
 ## Specimens
 
 - Sizes, drawn with the tokens: <span style="display:inline-block;width:var(--icon-size-sm);height:var(--icon-size-sm);background:var(--icon);vertical-align:middle"></span> sm 12 <span style="display:inline-block;width:var(--icon-size-md);height:var(--icon-size-md);background:var(--icon);vertical-align:middle"></span> md 14 <span style="display:inline-block;width:var(--icon-size-lg);height:var(--icon-size-lg);background:var(--icon);vertical-align:middle"></span> lg 16
-- Ink on `--chrome`: <span style="background:var(--chrome);color:var(--icon);padding:2px 6px">icon</span> <span style="background:var(--chrome);color:var(--icon-accent);padding:2px 6px">accent</span> <span style="background:var(--chrome);color:var(--icon-point);padding:2px 6px">point</span> <span style="background:var(--chrome);color:var(--icon-layer-off);padding:2px 6px">layer-off</span> <span style="background:var(--chrome);color:var(--icon-layer-frozen);padding:2px 6px">frozen</span> <span style="background:var(--chrome);color:var(--icon-locked);padding:2px 6px">locked</span> <span style="background:var(--chrome);color:var(--icon-current);padding:2px 6px">current</span>
+- Ink on `--chrome`: <span style="background:var(--chrome);color:var(--icon);padding:2px 6px">icon</span> <span style="background:var(--chrome);color:var(--icon-layer-off);padding:2px 6px">layer-off</span> <span style="background:var(--chrome);color:var(--icon-layer-frozen);padding:2px 6px">frozen</span> <span style="background:var(--chrome);color:var(--icon-locked);padding:2px 6px">locked</span>
 
 The drawn set (`ICON_PATHS` in `src/icons.ts`, 24×24, `stroke-width: 1.5`, round caps and joins):
 
@@ -42,15 +39,21 @@ The drawn set (`ICON_PATHS` in `src/icons.ts`, 24×24, `stroke-width: 1.5`, roun
 | View | `zoom.window`, `pan`, `3dorbit`, `zoom.extents` |
 | Panels | `ui.toggle.palettes`, `ui.dialog.layers`, `ui.dialog.blocks`, `ui.dialog.about` |
 | Tools | `dist`, `list`, `area` |
-| Composer | `send`, `stop`, `plus`, `close` |
+| Assistant | `send`, `stop`, `plus`, `close`, `chevron-right`, `chevron-down`, `copy`, `retry`, `circle`, `pick`, `assistant`, `eye`, `eye-off` |
+| Shell | `layer.on`, `layer.off`, `layer.frozen`, `layer.thawed`, `layer.locked`, `layer.unlocked`, `search`, `layout.bottom` |
+
+The newest pair, each drawn at both control sizes in the default ink (`eye`: a pointed lens of two arcs with a ring for the pupil, a masked value is showing; `eye-off`: the empty lens struck through, the value is masked):
+
+- `eye`: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:var(--icon-size-md);height:var(--icon-size-md);color:var(--icon);vertical-align:middle"><path d="M3 12a10.5 10.5 0 0 1 18 0a10.5 10.5 0 0 1-18 0z M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z"/></svg> md 14 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:var(--icon-size-sm);height:var(--icon-size-sm);color:var(--icon);vertical-align:middle"><path d="M3 12a10.5 10.5 0 0 1 18 0a10.5 10.5 0 0 1-18 0z M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z"/></svg> sm 12
+- `eye-off`: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:var(--icon-size-md);height:var(--icon-size-md);color:var(--icon);vertical-align:middle"><path d="M3 12a10.5 10.5 0 0 1 18 0a10.5 10.5 0 0 1-18 0z M5.5 4.5l13 15"/></svg> md 14 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:var(--icon-size-sm);height:var(--icon-size-sm);color:var(--icon);vertical-align:middle"><path d="M3 12a10.5 10.5 0 0 1 18 0a10.5 10.5 0 0 1-18 0z M5.5 4.5l13 15"/></svg> sm 12
 
 ## Usage
 
-- A glyph is `currentColor`; its container sets the ink (`--icon`, `--icon-accent`, `--icon-point`), because an icon must follow the state its control is in.
+- A glyph is `currentColor`; its container sets the ink (`--icon` at rest, `--text` hovered or selected, `--text-disabled` blocked, `--text-accent` or `--warn` for a signal), because an icon must follow the state its control is in.
 - Three sizes only (`12/14/16`), matched to the control ladder, because a fourth size is a different control.
 - Icons are drawn, never imported: every path is original code on the 24×24 grid, because third-party icon sets carry licences and a foreign stroke grammar.
-- A glyph that means the same thing keeps its id everywhere (`save` is the floppy, `zoom.extents` the four corners), because two drawings for one action is a bug a reader reads as two actions.
-- Status glyphs keep their fixed layer colours (`--icon-layer-*`, `--icon-current`) in both themes, because a layer's state must survive the chrome's theme.
+- A glyph that means the same thing keeps its id everywhere (`save` is the floppy, `zoom.extents` the four corners), because two drawings for one action is a bug a reader reads as two actions. The three eyes are three meanings, so three ids: `preview` is the plot preview, `layer.on` and `layer.off` a layer's visibility, `eye` and `eye-off` a masked value shown and hidden.
+- Status glyphs keep their fixed layer colours (`--icon-layer-*`, `--icon-locked`) in both themes, because a layer's state must survive the chrome's theme.
 
 ## Accessibility
 
@@ -61,4 +64,4 @@ The drawn set (`ICON_PATHS` in `src/icons.ts`, 24×24, `stroke-width: 1.5`, roun
 ## Not tokens
 
 - The 24×24 viewBox and `stroke-width: 1.5` are drawing constants in `src/icons.ts`, not tokens, because they are the glyphs' own geometry rather than chrome scale.
-- The composer's `COMPOSER_ICONS` list (`send`, `stop`, `plus`, `close`) is a subset marker for that pane, not a second icon set.
+- The assistant's `COMPOSER_ICONS` list and the shell's `PANEL_ICONS` list are subset markers (the ids no toolbar entry draws, which `src/icons.test.ts` checks against the map), not a second icon set.

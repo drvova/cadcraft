@@ -12,19 +12,16 @@ One gap scale in even steps and one control-height ladder: every inset, gap and 
 | --- | --- | --- |
 | `--gap-2` | `2px` | The hairline gap: an icon to its label's edge in a tight row. |
 | `--gap-3` | `3px` | A chip's internal gap, a badge's inset. |
-| `--gap-4` | `4px` | The default (`--gap-default`): a button row, a list row's inner gap. |
-| `--gap-5` | `5px` | A field's label to its input. |
+| `--gap-4` | `4px` | The default gap: a button row, a list row's inner gap. Use it when no row in this table names the case. |
 | `--gap-6` | `6px` | The composer's padding and gap (Cursor §1). |
 | `--gap-8` | `8px` | A panel's inner padding, a chip row's gap. |
 | `--gap-10` | `10px` | A section's gap between blocks. |
 | `--gap-12` | `12px` | The rail's padding, a dialog's inner gap. |
-| `--gap-16` | `16px` | The card padding's partner: a dialog's edge inset. |
-| `--gap-default` | `var(--gap-4)` | The default gap: use it when no row in this table names the case. |
+| `--gap-16` | `16px` | A dialog's edge inset, a card's or a panel's inner padding. |
 | `--button-pad-x` | `8px` | A button's horizontal padding. |
 | `--button-pad-y` | `4px` | A button's vertical padding. |
 | `--field-pad-x` | `6px` | A field's horizontal padding. |
 | `--field-pad-y` | `4px` | A field's vertical padding. |
-| `--card-padding` | `16px` | A card's or panel's inner padding. |
 
 ### Control heights
 

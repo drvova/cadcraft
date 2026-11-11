@@ -1,12 +1,12 @@
-// Caption: The hint over an icon button.
+// Caption: The hint over a text button.
 import { Tooltip } from "../../../../src/ui/Tooltip";
-import { IconButton } from "../../../../src/ui/IconButton";
+import { Button } from "../../../../src/ui/Button";
 
-/** The hover hint over an icon-only control (the tooltip host keeps the button a button). */
+/** The hint over a control that is not an icon button (that one shows the hint by itself). */
 export default function Example() {
   return (
-    <Tooltip text="Close the panel">
-      <IconButton icon="close" title="Close the panel" />
+    <Tooltip text="Check the address and the key">
+      <Button>Check connection</Button>
     </Tooltip>
   );
 }

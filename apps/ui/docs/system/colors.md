@@ -43,8 +43,6 @@ Dark is the default (`:root`); light restates only the roles that change, under 
 | `--text-disabled` | `rgba(240,240,240,.36)` | `rgba(20,20,20,.36)` | Disabled ink (Cursor §5); exempt from contrast as an inactive control. |
 | `--text-accent` | `#599CE7` | `#005DA4` | The accent as a text or glyph ink: the label of an accent chip, the palette's matched letters, the command line's prompt mark, a frozen layer's key in light. Dark's is the accent itself; light's is the accent's hue and chroma at OKLCH L .47 (the accent is .56), because `#2678C1` measures 3.28 on its own tint over the `#e8e8e8` control. |
 | `--icon` | `rgba(240,240,240,.66)` | `rgba(20,20,20,.66)` | The default glyph ink. |
-| `--icon-accent` | `#599CE7` | `#2678C1` | A glyph carrying the accent: the current tool, a link. |
-| `--icon-point` | `#f1b467` | `#A46701` | A glyph calling for attention without error: snap, warning-adjacent. The warning ink in both themes; light's earlier `#b8791f` measured 3.0 over the control and 2.7 over its hover. |
 
 ### Action and selection
 
@@ -60,7 +58,6 @@ Dark is the default (`:root`); light restates only the roles that change, under 
 | `--fill-active` | `rgba(240,240,240,.14)` | `rgba(20,20,20,.14)` | The pressed/selected fill. |
 | `--fill-pressed` | `rgba(240,240,240,.20)` | `rgba(20,20,20,.20)` | The pressed step of a `.14`-hover control. |
 | `--fill-disabled` | `rgba(240,240,240,.04)` | `rgba(20,20,20,.04)` | The disabled fill (Cursor §5: no fill change). |
-| `--grip-hot` | `#e34671` | `#e34671` | A grip under the pointer: the resize handle lights up. |
 
 ### Status
 
@@ -70,7 +67,6 @@ Dark is the default (`:root`); light restates only the roles that change, under 
 | `--error` | `#e34671` | `#BE1744` | An error: the danger button's fill, an error message. |
 | `--error-hover` | `#E6597F` | `#AB153D` | The danger button's hover: the error fill stepped 10% away from the surface (toward white in dark, toward black in light). |
 | `--error-pressed` | `#E96B8D` | `#981236` | The same at 20%. |
-| `--snap` | `#3fa266` | `#007041` | The snap indicator on the canvas. |
 | `--toggle-on` | `#3fa266` | `#007041` | A switch in its on position. |
 
 ### Command line
@@ -79,7 +75,6 @@ Dark is the default (`:root`); light restates only the roles that change, under 
 | --- | --- | --- | --- |
 | `--cmd-bg` | `rgba(28,28,28,.94)` | `#ebebeb` | The command line's own surface over the chrome. |
 | `--cmd-border` | `#333333` | `#c9c9c9` | Its border. |
-| `--cmd-history` | `rgba(26,26,26,.667)` | `#f2f2f2` | A recalled history row. |
 
 ### Lists
 
@@ -95,7 +90,6 @@ Dark is the default (`:root`); light restates only the roles that change, under 
 | `--icon-layer-off` | `#8a8a5a` | `#8a8a5a` | A layer switched off. |
 | `--icon-layer-frozen` | `#9fd4ff` | `#9fd4ff` | A frozen layer. |
 | `--icon-locked` | `#e6b43c` | `#e6b43c` | A locked layer. |
-| `--icon-current` | `#6fe06f` | `#6fe06f` | The current layer's glyph. |
 | `--layer-current` | `#4cc25a` | `#d5dfe9` | The current layer's row fill. |
 | `--swatch-border` | `#191919` | `#191919` | The hairline around a colour swatch. |
 
@@ -103,15 +97,12 @@ Dark is the default (`:root`); light restates only the roles that change, under 
 
 | Token | Dark | Light | Role |
 | --- | --- | --- | --- |
-| `--shadow` | `rgba(0,0,0,.45)` | `rgba(0,0,0,.18)` | The shadow under floating surfaces (menus, the composer). |
 | `--scrollbar` | `rgba(240,240,240,.14)` | `rgba(20,20,20,.14)` | The scrollbar thumb (Cursor §1). |
 | `--scrollbar-hover` | `rgba(240,240,240,.22)` | `rgba(20,20,20,.22)` | The thumb under the pointer. |
 | `--composer-border` | `rgba(240,240,240,.08)` | `rgba(20,20,20,.08)` | The composer's hairline (Cursor §1/§5). |
 | `--composer-border-active` | `rgba(240,240,240,.12)` | `rgba(20,20,20,.12)` | The composer's border once focused. |
 | `--on-accent` | `#191C22` | `#FCFCFC` | The ink on an action fill (the primary button's label). |
 | `--on-error` | `#121418` | `#FCFCFC` | The ink on the error fill (the danger button's label): `--on-accent` measures 4.37 there in dark. |
-| `--crosshair` | `#e4e4e4` | `#e4e4e4` | The crosshair cursor on the canvas. |
-| `--paper` | `#fcfcfc` | `#fcfcfc` | Paper white for previews and print-like surfaces. |
 
 ## Specimens
 
@@ -119,16 +110,16 @@ Each specimen is drawn with the token itself, never a copied value.
 
 - Surface ladder: <span style="display:inline-block;width:56px;height:18px;background:var(--chrome-dark);vertical-align:middle"></span> <span style="display:inline-block;width:56px;height:18px;background:var(--chrome);vertical-align:middle"></span> <span style="display:inline-block;width:56px;height:18px;background:var(--control);vertical-align:middle"></span> <span style="display:inline-block;width:56px;height:18px;background:var(--control-hover);vertical-align:middle"></span> <span style="display:inline-block;width:56px;height:18px;background:var(--surface-elevated);vertical-align:middle"></span> — `--chrome-dark`, `--chrome`, `--control`, `--control-hover`, `--surface-elevated`.
 - Text ladder on `--chrome`: <span style="background:var(--chrome);color:var(--text);padding:2px 8px">Text</span> <span style="background:var(--chrome);color:var(--text-dim);padding:2px 8px">Text dim</span> <span style="background:var(--chrome);color:var(--text-faint);padding:2px 8px">Text faint</span> <span style="background:var(--chrome);color:var(--text-disabled);padding:2px 8px">Disabled</span>.
-- Icons on `--chrome`: <span style="background:var(--chrome);color:var(--icon);padding:2px 8px">icon</span> <span style="background:var(--chrome);color:var(--icon-accent);padding:2px 8px">icon-accent</span> <span style="background:var(--chrome);color:var(--icon-point);padding:2px 8px">icon-point</span>.
+- Icons on `--chrome`: <span style="background:var(--chrome);color:var(--icon);padding:2px 8px">icon</span>.
 - Action fills: <span style="display:inline-block;width:72px;height:20px;background:var(--accent);vertical-align:middle"></span> <span style="display:inline-block;width:72px;height:20px;background:var(--accent-hover);vertical-align:middle"></span> <span style="display:inline-block;width:72px;height:20px;background:var(--accent-pressed);vertical-align:middle"></span> <span style="display:inline-block;width:72px;height:20px;background:var(--accent-soft);vertical-align:middle"></span> — accent, hover, pressed, soft.
 - On accent: <span style="background:var(--accent);color:var(--on-accent);padding:2px 10px">Primary</span> <span style="background:var(--error);color:var(--on-error);padding:2px 10px">Danger</span>.
-- Status: <span style="color:var(--warn)">warn</span> <span style="color:var(--error)">error</span> <span style="color:var(--snap)">snap</span> <span style="color:var(--toggle-on)">toggle-on</span>.
+- Status: <span style="color:var(--warn)">warn</span> <span style="color:var(--error)">error</span> <span style="color:var(--toggle-on)">toggle-on</span>.
 - State fills over `--control`: <span style="background:var(--control);padding:2px 10px">rest <span style="background:var(--hover);padding:1px 6px">hover</span> <span style="background:var(--fill-active);padding:1px 6px">active</span> <span style="background:var(--fill-pressed);padding:1px 6px">pressed</span> <span style="background:var(--fill-disabled);padding:1px 6px">disabled</span></span>.
 - Borders: <span style="border:1px solid var(--border);padding:2px 10px">border</span> <span style="border:1px solid var(--border-soft);padding:2px 10px">border-soft</span>.
 
 ## Usage
 
-- Reach for a role, never a hue: `--accent` for the one action, `--error` for a failure, `--warn` for a caution, `--snap` for a snap indicator, because a second meaning per hue makes the interface unreadable at a glance.
+- Reach for a role, never a hue: `--accent` for the one action, `--error` for a failure, `--warn` for a caution, `--toggle-on` for a setting that is on, because a second meaning per hue makes the interface unreadable at a glance.
 - Hover and selection are fills, not colour changes — `--hover`, `--fill-active`, `--fill-pressed` over whatever surface the control sits on — because a hue swap changes a control's meaning, while a fill step only moves it.
 - Disabled is a lighter ink (`--text-disabled`) on an unchanged fill (`--fill-disabled`), because a disabled control should read as unavailable, not as a different control.
 - On an accent fill the label is `--on-accent`, never `--text`, because the fill is the same in both themes' buttons and the ink must stay readable on it; on the error fill it is `--on-error`, because the dark error fill is darker than the dark accent and the accent's ink misses 4.5 on it.
@@ -152,13 +143,10 @@ Contrast, measured by `node scripts/contrast-report.mjs` (run from the app folde
 | `--text-disabled` | 3.1 · | 3.0 · | 3.1 · | 3.1 · | 3.1 · | 3.0 · | 3.0 · | 3.1 · | 3.1 · | 3.1 · |
 | `--text-accent` | 6.4 ✓ | 6.7 ✓ | 6.4 ✓ | 6.2 ✓ | 6.0 ✓ | 5.5 ✓ | 5.6 ✓ | 6.2 ✓ | 6.0 ✓ | 6.0 ✓ |
 | `--icon` | 7.5 ✓ | 7.6 ✓ | 7.5 ✓ | 7.3 ✓ | 7.2 ✓ | 6.8 ✓ | 6.9 ✓ | 7.3 ✓ | 7.2 ✓ | 7.2 ✓ |
-| `--icon-accent` | 6.4 ✓ | 6.7 ✓ | 6.4 ✓ | 6.2 ✓ | 6.0 ✓ | 5.5 ✓ | 5.6 ✓ | 6.2 ✓ | 6.0 ✓ | 6.0 ✓ |
-| `--icon-point` | 10.1 ✓ | 10.5 ✓ | 10.1 ✓ | 9.7 ✓ | 9.3 ✓ | 8.6 ✓ | 8.8 ✓ | 9.7 ✓ | 9.3 ✓ | 9.3 ✓ |
 | `--accent` | 6.4 ✓ | 6.7 ✓ | 6.4 ✓ | 6.2 ✓ | 6.0 ✓ | 5.5 ✓ | 5.6 ✓ | 6.2 ✓ | 6.0 ✓ | 6.0 ✓ |
 | `--focus-ring` | 6.4 ✓ | 6.7 ✓ | 6.4 ✓ | 6.2 ✓ | 6.0 ✓ | 5.5 ✓ | 5.6 ✓ | 6.2 ✓ | 6.0 ✓ | 6.0 ✓ |
 | `--warn` | 10.1 ✓ | 10.5 ✓ | 10.1 ✓ | 9.7 ✓ | 9.3 ✓ | 8.6 ✓ | 8.8 ✓ | 9.7 ✓ | 9.3 ✓ | 9.3 ✓ |
 | `--error` | 4.7 ✓ | 4.9 ✓ | 4.7 ✓ | 4.5 ✓ | 4.4 ✓ | 4.0 ✓ | 4.1 ✓ | 4.5 ✓ | 4.4 ✓ | 4.4 ✓ |
-| `--snap` | 5.8 ✓ | 6.0 ✓ | 5.8 ✓ | 5.6 ✓ | 5.3 ✓ | 4.9 ✓ | 5.0 ✓ | 5.6 ✓ | 5.3 ✓ | 5.3 ✓ |
 | `--toggle-on` | 5.8 ✓ | 6.0 ✓ | 5.8 ✓ | 5.6 ✓ | 5.3 ✓ | 4.9 ✓ | 5.0 ✓ | 5.6 ✓ | 5.3 ✓ | 5.3 ✓ |
 | `--hover` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.3 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · |
 | `--fill-active` (fill) | 1.5 · | 1.4 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · |
@@ -171,7 +159,6 @@ Contrast, measured by `node scripts/contrast-report.mjs` (run from the app folde
 | `--scrollbar-hover` (fill) | 1.9 · | 1.9 · | 1.9 · | 1.9 · | 1.9 · | 2.0 · | 2.0 · | 1.9 · | 1.9 · | 1.9 · |
 | `--composer-border` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.3 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · |
 | `--composer-border-active` (fill) | 1.4 · | 1.3 · | 1.4 · | 1.4 · | 1.4 · | 1.4 · | 1.4 · | 1.4 · | 1.4 · | 1.4 · |
-| `--cmd-history` (fill) | 1.0 · | 1.1 · | 1.0 · | 1.0 · | 1.0 · | 1.1 · | 1.1 · | 1.0 · | 1.0 · | 1.0 · |
 
 `--on-accent` on its action fills: `--accent` 6.0 ✓; `--accent-hover` 6.7 ✓; `--accent-pressed` 7.5 ✓.
 
@@ -195,13 +182,10 @@ Every ink pair is at or above its threshold.
 | `--text-disabled` | 2.3 · | 2.3 · | 2.3 · | 2.3 · | 2.2 · | 2.2 · | 2.3 · | 2.3 · | 2.3 · | 2.3 · |
 | `--text-accent` | 6.4 ✓ | 6.1 ✓ | 6.6 ✓ | 6.6 ✓ | 5.5 ✓ | 5.0 ✓ | 6.6 ✓ | 6.1 ✓ | 6.8 ✓ | 5.7 ✓ |
 | `--icon` | 5.8 ✓ | 5.7 ✓ | 5.9 ✓ | 5.9 ✓ | 5.5 ✓ | 5.2 ✓ | 5.9 ✓ | 5.7 ✓ | 5.9 ✓ | 5.5 ✓ |
-| `--icon-accent` | 4.4 ✓ | 4.2 ✓ | 4.5 ✓ | 4.5 ✓ | 3.8 ✓ | 3.4 ✓ | 4.5 ✓ | 4.2 ✓ | 4.6 ✓ | 3.9 ✓ |
-| `--icon-point` | 4.4 ✓ | 4.2 ✓ | 4.5 ✓ | 4.5 ✓ | 3.8 ✓ | 3.5 ✓ | 4.5 ✓ | 4.2 ✓ | 4.6 ✓ | 3.9 ✓ |
 | `--accent` | 4.4 ✓ | 4.2 ✓ | 4.5 ✓ | 4.5 ✓ | 3.8 ✓ | 3.4 ✓ | 4.5 ✓ | 4.2 ✓ | 4.6 ✓ | 3.9 ✓ |
 | `--focus-ring` | 6.4 ✓ | 6.1 ✓ | 6.6 ✓ | 6.6 ✓ | 5.5 ✓ | 5.0 ✓ | 6.6 ✓ | 6.1 ✓ | 6.8 ✓ | 5.7 ✓ |
 | `--warn` | 4.4 ✓ | 4.2 ✓ | 4.5 ✓ | 4.5 ✓ | 3.8 ✓ | 3.5 ✓ | 4.5 ✓ | 4.2 ✓ | 4.6 ✓ | 3.9 ✓ |
 | `--error` | 5.8 ✓ | 5.6 ✓ | 6.0 ✓ | 6.0 ✓ | 5.0 ✓ | 4.6 ✓ | 6.0 ✓ | 5.6 ✓ | 6.2 ✓ | 5.2 ✓ |
-| `--snap` | 5.8 ✓ | 5.6 ✓ | 6.0 ✓ | 6.0 ✓ | 5.0 ✓ | 4.6 ✓ | 6.0 ✓ | 5.6 ✓ | 6.2 ✓ | 5.2 ✓ |
 | `--toggle-on` | 5.8 ✓ | 5.6 ✓ | 6.0 ✓ | 6.0 ✓ | 5.0 ✓ | 4.6 ✓ | 6.0 ✓ | 5.6 ✓ | 6.2 ✓ | 5.2 ✓ |
 | `--hover` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · |
 | `--fill-active` (fill) | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · |
@@ -214,7 +198,6 @@ Every ink pair is at or above its threshold.
 | `--scrollbar-hover` (fill) | 1.6 · | 1.6 · | 1.6 · | 1.6 · | 1.6 · | 1.6 · | 1.6 · | 1.6 · | 1.6 · | 1.6 · |
 | `--composer-border` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · |
 | `--composer-border-active` (fill) | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · |
-| `--cmd-history` (fill) | 1.1 · | 1.0 · | 1.1 · | 1.1 · | 1.1 · | 1.2 · | 1.1 · | 1.0 · | 1.1 · | 1.1 · |
 
 `--on-accent` on its action fills: `--accent` 4.5 ✓; `--accent-hover` 5.4 ✓; `--accent-pressed` 6.4 ✓.
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import {
   activityLine,
   apiErrorText,
@@ -18,6 +18,16 @@ import {
   reachedNote,
   saveBlocker,
   withoutKey,
+  MAX_CALL_ARGS_CHARS,
+  MAX_CALLS_PER_REPLY,
+  MAX_LISTED_MODELS,
+  MAX_MODEL_LIST_CHARS,
+  MAX_REPLY_CHARS,
+  MAX_STREAM_CHARS,
+  modelIds,
+  PROVIDER_LIMITS,
+  providerFault,
+  redact,
   modelsEndpoint,
   presetFor,
   providerEndpoint,
@@ -138,7 +148,7 @@ describe("setting a provider up", () => {
 
   test("a refusal, an unreachable server and a strange answer each say so", async () => {
     const refused = fetchOf(new Response(JSON.stringify({ error: { message: "bad key" } }), { status: 401 }));
-    await expect(listModels(PROVIDER, signal, refused.fetch)).rejects.toThrow("The provider refused the request (401). Check the API key in the model setup. The provider said: bad key.");
+    await expect(listModels(PROVIDER, signal, refused.fetch)).rejects.toThrow("The provider refused the request (401). Check the API key above. The provider said: bad key.");
     const down = fetchOf(new TypeError("Failed to fetch"));
     await expect(listModels(PROVIDER, signal, down.fetch)).rejects.toThrow("The provider at http://127.0.0.1:11434/v1/models could not be reached. Check that the server is running and accepts requests from this page.");
     const odd = fetchOf(new Response("<html>", { status: 200 }));
@@ -651,5 +661,372 @@ describe("splitFences", () => {
   });
   test("a bare fence with no language keeps its first line", () => {
     expect(splitFences("```\na\nb\n```")).toEqual([{ kind: "code", text: "a\nb" }]);
+  });
+});
+
+describe("a setup that can be sent", () => {
+  test("the address, the key and the model are each judged, in the sheet's order", () => {
+    const ok = { baseUrl: "https://x.test/v1", model: "m", apiKey: "sk-1" };
+    expect(providerFault(ok)).toBeNull();
+    expect(providerFault({ ...ok, baseUrl: " " })).toBe("no-url");
+    expect(providerFault({ ...ok, baseUrl: `https://x.test/${"a".repeat(PROVIDER_LIMITS.baseUrl)}` })).toBe("long-url");
+    expect(providerFault({ ...ok, baseUrl: "ftp://x.test/v1" })).toBe("scheme");
+    expect(providerFault({ ...ok, baseUrl: "javascript:alert(1)" })).toBe("scheme");
+    expect(providerFault({ ...ok, baseUrl: "https://user:pass@x.test/v1" })).toBe("credentials");
+    expect(providerFault({ ...ok, baseUrl: "https://user@x.test/v1" })).toBe("credentials");
+    expect(providerFault({ ...ok, baseUrl: "https://x.test/v1/users/a@b" })).toBeNull();
+    expect(providerFault({ ...ok, apiKey: "k".repeat(PROVIDER_LIMITS.apiKey + 1) })).toBe("long-key");
+    expect(providerFault({ ...ok, apiKey: "sk-1\nx-injected: 1" })).toBe("odd-key");
+    expect(providerFault({ ...ok, apiKey: "sk 1" })).toBe("odd-key");
+    expect(providerFault({ ...ok, apiKey: "" })).toBeNull();
+    expect(providerFault({ ...ok, model: "" })).toBe("no-model");
+    expect(providerFault({ ...ok, model: "m".repeat(PROVIDER_LIMITS.model + 1) })).toBe("long-model");
+  });
+
+  test("the turn's message never quotes a name and password, and clips a long address", () => {
+    expect(providerReady({ baseUrl: "https://user:hunter2@x.test/v1", model: "m", apiKey: "" })).toBe("The base URL must not carry a user name or a password. Put the key in the API key field.");
+    const long = providerReady({ baseUrl: `ftp://${"a".repeat(500)}`, model: "m", apiKey: "" }) ?? "";
+    expect(long.length).toBeLessThan(200);
+    expect(providerReady({ baseUrl: "https://x.test/v1", model: "m", apiKey: "a b" })).toBe("The API key has a space, a line break or another character a key cannot hold. Paste it again.");
+  });
+
+  test("the sheet says each of them as a reason Save is off", () => {
+    expect(saveBlocker({ baseUrl: "https://user:pass@x.test/v1", model: "m", apiKey: "" }, false, 0)).toBe("To save, take the user name and password out of the base URL. The key goes in the API key field.");
+    expect(saveBlocker({ baseUrl: `https://x.test/${"a".repeat(3000)}`, model: "m", apiKey: "" }, false, 0)).toBe("To save, shorten the base URL to 2048 characters or fewer.");
+    expect(saveBlocker({ baseUrl: "https://x.test/v1", model: "m", apiKey: "sk\n1" }, true, 0)).toBe("To save, paste the API key again: it has a space, a line break or another character a key cannot hold.");
+    expect(saveBlocker({ baseUrl: "https://x.test/v1", model: "m", apiKey: "k".repeat(5000) }, true, 0)).toBe("To save, shorten the API key to 4096 characters or fewer.");
+    expect(saveBlocker({ baseUrl: "https://x.test/v1", model: "m".repeat(201), apiKey: "k" }, true, 0)).toBe("To save, shorten the model name to 200 characters or fewer.");
+  });
+
+  test("the setup sheet says where the key is in its own words", () => {
+    expect(apiErrorText(401, "", "sheet")).toBe("The provider refused the request (401). Check the API key above.");
+    expect(apiErrorText(403, "", "sheet")).toBe("The provider refused the request (403). Check the API key above.");
+    expect(apiErrorText(401, "")).toBe("The provider refused the request (401). Check the API key in the model setup.");
+    // Every other status reads the same in both places.
+    for (const status of [404, 429, 500, 400, 200]) expect(apiErrorText(status, "x", "sheet")).toBe(apiErrorText(status, "x"));
+  });
+});
+
+describe("the key never reaches a message", () => {
+  const SECRET = "sk-secret-1";
+  const PASSWORD = "hunter2";
+  const leaky: ProviderConfig = { ...PROVIDER, apiKey: SECRET };
+  const WITH_CREDENTIALS = `Request cannot be constructed from a URL that includes credentials: https://admin:${PASSWORD}@127.0.0.1:11434/v1/chat/completions?key=${SECRET}`;
+
+  /** Every way a provider can answer with the key in its words (a Response is read once, so each call makes its own). */
+  const answers: ReadonlyArray<[string, () => Response | Error]> = [
+    ["an error body in JSON", () => new Response(JSON.stringify({ error: { message: `Incorrect API key provided: ${SECRET}` } }), { status: 401 })],
+    ["an error body that is not JSON", () => new Response(`<html>bad token ${SECRET} at https://admin:${PASSWORD}@proxy.test/</html>`, { status: 502 })],
+    ["an error inside a streamed 200", () => sseResponse([`data: ${JSON.stringify({ error: { message: `key ${SECRET} is over its quota` } })}\n\n`])],
+    ["an error inside a one-shot 200", () => new Response(JSON.stringify({ error: { message: `key ${SECRET} is over its quota` } }), { status: 200, headers: { "content-type": "application/json" } })],
+    ["an error that is not an object", () => sseResponse([`data: ${JSON.stringify({ error: `denied for Bearer ${SECRET}` })}\n\n`])],
+    ["a network error that names the address", () => new TypeError(WITH_CREDENTIALS)],
+    ["a network error that is only the key", () => new Error(SECRET)],
+  ];
+
+  const fetchOf = (answer: Response | Error): typeof fetch =>
+    (async () => {
+      if (answer instanceof Error) throw answer;
+      return answer;
+    }) as unknown as typeof fetch;
+
+  const turnFailure = async (provider: ProviderConfig, answer: Response | Error): Promise<string> => {
+    const events: AssistantEvent[] = [];
+    await runTurn({ provider, briefing: BRIEFING, conversation: [{ role: "user", content: "hi" }], execute: () => ({ ok: true, result: {} }), onEvent: (e) => events.push(e), signal: new AbortController().signal, fetchImpl: fetchOf(answer) });
+    const failed = events.find((e) => e.type === "failed");
+    // The whole event list is what the transcript and the status line are drawn from.
+    expect(JSON.stringify(events)).not.toContain(SECRET);
+    return failed?.type === "failed" ? failed.error : "";
+  };
+
+  test("redact takes out the key and any name and password in an address", () => {
+    const withLogin: ProviderConfig = { baseUrl: `https://admin:${PASSWORD}@x.test/v1`, model: "m", apiKey: SECRET };
+    expect(redact(`401 for ${SECRET} at https://admin:${PASSWORD}@x.test/v1/models`, withLogin)).toBe("401 for (your key) at https://x.test/v1/models");
+    expect(redact(`the password ${PASSWORD} was refused`, withLogin)).toBe("the password (your password) was refused");
+    expect(redact("see http://other:secret@proxy.test/a and mail a@b.test", PROVIDER)).toBe("see http://proxy.test/a and mail a@b.test");
+    expect(redact("nothing to hide", PROVIDER)).toBe("nothing to hide");
+  });
+
+  test("a turn's failure never holds the key, whichever way the provider answers", async () => {
+    for (const [name, answer] of answers) {
+      const error = await turnFailure(leaky, answer());
+      expect(`${name}: ${error}`).not.toBe(`${name}: `);
+      expect(error).not.toContain(SECRET);
+      expect(error).not.toContain(PASSWORD);
+    }
+    expect(await turnFailure(leaky, new Response(JSON.stringify({ error: { message: `Incorrect API key provided: ${SECRET}` } }), { status: 401 }))).toBe(
+      "The provider refused the request (401). Check the API key in the model setup. The provider said: Incorrect API key provided: (your key).",
+    );
+    expect(await turnFailure(leaky, sseResponse([`data: ${JSON.stringify({ error: { message: `key ${SECRET} is over its quota` } })}\n\n`]))).toBe(
+      "The provider reported an error. The provider said: key (your key) is over its quota.",
+    );
+  });
+
+  test("the connection check's note never holds the key either", async () => {
+    const signal = new AbortController().signal;
+    for (const [name, answer] of answers) {
+      const note = await listModels(leaky, signal, fetchOf(answer())).then(
+        () => "",
+        (e: unknown) => failedNote(e).text,
+      );
+      expect(`${name}: ${note}`).not.toBe(`${name}: `);
+      expect(note).not.toContain(SECRET);
+      expect(note).not.toContain(PASSWORD);
+    }
+  });
+
+  test("an address with a name and password in it is refused before any request, without quoting them", async () => {
+    const withLogin: ProviderConfig = { baseUrl: `https://admin:${PASSWORD}@x.test/v1`, model: "m", apiKey: SECRET };
+    let asked = 0;
+    const counting = (async () => {
+      asked += 1;
+      return new Response("{}");
+    }) as unknown as typeof fetch;
+    const events: AssistantEvent[] = [];
+    await runTurn({ provider: withLogin, briefing: BRIEFING, conversation: [], execute: () => ({ ok: true, result: {} }), onEvent: (e) => events.push(e), signal: new AbortController().signal, fetchImpl: counting });
+    const note = await listModels(withLogin, new AbortController().signal, counting).then(
+      () => "",
+      (e: unknown) => failedNote(e).text,
+    );
+    expect(asked).toBe(0);
+    expect(JSON.stringify(events) + note).not.toContain(PASSWORD);
+    expect(note).toBe("The base URL must not carry a user name or a password. Put the key in the API key field.");
+    // A scheme the turn quotes back is quoted without them.
+    const quoted: AssistantEvent[] = [];
+    await runTurn({ provider: { ...withLogin, baseUrl: `ftp://admin:${PASSWORD}@x.test` }, briefing: BRIEFING, conversation: [], execute: () => ({ ok: true, result: {} }), onEvent: (e) => quoted.push(e), signal: new AbortController().signal, fetchImpl: counting });
+    expect(quoted[0]).toEqual({ type: "failed", error: 'The base URL must start with http:// or https://, not "ftp://x.test".' });
+  });
+
+  test("the key travels in the authorization header and nowhere else, and nothing is logged", async () => {
+    const logs = [spyOn(console, "log"), spyOn(console, "info"), spyOn(console, "warn"), spyOn(console, "error"), spyOn(console, "debug")].map((spy) => spy.mockImplementation(() => undefined));
+    const seen: Array<{ url: string; body: string; headers: Record<string, string> }> = [];
+    const replies = [toolCallStream(), new Response(JSON.stringify({ error: { message: `no: ${SECRET}` } }), { status: 500 }), new Response(JSON.stringify({ data: [{ id: "a" }, { id: `model-${SECRET}` }] }), { status: 200 })];
+    const recording = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      seen.push({ url: String(input), body: String(init?.body ?? ""), headers: Object.fromEntries(new Headers(init?.headers).entries()) });
+      return replies.shift() ?? new Response("", { status: 500 });
+    }) as typeof fetch;
+    const events: AssistantEvent[] = [];
+    const conversation: ChatMessage[] = [{ role: "user", content: "draw" }];
+    await runTurn({ provider: leaky, briefing: BRIEFING, conversation, execute: () => ({ ok: true, result: { value: "T" } }), onEvent: (e) => events.push(e), signal: new AbortController().signal, fetchImpl: recording });
+    const ids = await listModels(leaky, new AbortController().signal, recording);
+    expect(seen).toHaveLength(3);
+    for (const request of seen) {
+      expect(request.url).not.toContain(SECRET);
+      expect(request.body).not.toContain(SECRET);
+      expect(request.headers["authorization"]).toBe(`Bearer ${SECRET}`);
+    }
+    // A model name that holds the key is not offered.
+    expect(ids).toEqual(["a"]);
+    expect(JSON.stringify(events) + JSON.stringify(conversation)).not.toContain(SECRET);
+    for (const spy of logs) {
+      expect(JSON.stringify(spy.mock.calls)).not.toContain(SECRET);
+      spy.mockRestore();
+    }
+  });
+});
+
+describe("a hostile provider", () => {
+  /** A body that enqueues `chunks` and then stays open, as a server that stops answering does. */
+  const openStream = (chunks: readonly string[], contentType = "text/event-stream"): Response =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        start(c) {
+          for (const chunk of chunks) c.enqueue(new TextEncoder().encode(chunk));
+        },
+      }),
+      { status: 200, headers: { "content-type": contentType } },
+    );
+  const content = (text: string): string => `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: text }, finish_reason: null }] })}\n\n`;
+  const call = (index: number, args: string): string =>
+    `data: ${JSON.stringify({ choices: [{ index: 0, delta: { tool_calls: [{ index, id: `c${index}`, function: { name: "run", arguments: args } }] }, finish_reason: null }] })}\n\n`;
+  const DONE = "data: [DONE]\n\n";
+
+  const turn = async (response: Response | (() => Promise<Response>), options: { idleMs?: number; controller?: AbortController } = {}): Promise<{ events: AssistantEvent[]; ran: string[]; conversation: ChatMessage[] }> => {
+    const events: AssistantEvent[] = [];
+    const ran: string[] = [];
+    const conversation: ChatMessage[] = [{ role: "user", content: "hi" }];
+    const fetchImpl = (typeof response === "function" ? response : async () => response) as unknown as typeof fetch;
+    await runTurn({
+      provider: PROVIDER,
+      briefing: BRIEFING,
+      conversation,
+      execute: (code) => {
+        ran.push(code);
+        return { ok: true, result: { value: "T" } };
+      },
+      onEvent: (e) => events.push(e),
+      signal: (options.controller ?? new AbortController()).signal,
+      fetchImpl,
+      ...(options.idleMs === undefined ? {} : { idleMs: options.idleMs }),
+    });
+    return { events, ran, conversation };
+  };
+  const failure = (events: readonly AssistantEvent[]): string => {
+    const last = events[events.length - 1];
+    return last?.type === "failed" ? last.error : `(ended with ${last?.type ?? "nothing"})`;
+  };
+  const shown = (events: readonly AssistantEvent[]): number => events.reduce((n, e) => n + (e.type === "text" ? e.text.length : 0), 0);
+
+  test("a model list is capped, and only names a model field could hold are kept", () => {
+    const rows: unknown[] = [{ id: "<b>bold</b><img src=x onerror=alert(1)>" }, { id: "line\nbreak" }, { id: "tab\there" }, { id: "x".repeat(2_000) }, 7, null, [], { id: 3 }, { id: "  padded  " }, { id: "twice" }, { id: "twice" }, { name: "by-name" }, "bare"];
+    for (let i = 0; i < 5_000; i++) rows.push({ id: `model-${i}` });
+    const ids = modelIds(rows);
+    expect(ids).toHaveLength(MAX_LISTED_MODELS);
+    // Markup is kept as the text it is: the sheet draws text, never HTML.
+    expect(ids.slice(0, 5)).toEqual(["<b>bold</b><img src=x onerror=alert(1)>", "padded", "twice", "by-name", "bare"]);
+    expect(ids.every((id) => id.length <= PROVIDER_LIMITS.model && !/[\n\t]/.test(id))).toBe(true);
+    expect(modelIds([{ id: "y".repeat(PROVIDER_LIMITS.model) }])).toHaveLength(1);
+  });
+
+  test("the connection check reads a 5,000-row list as its first 200 names", async () => {
+    const rows = Array.from({ length: 5_000 }, (_, i) => ({ id: `model-${i}` }));
+    const ids = await listModels(PROVIDER, new AbortController().signal, (async () => new Response(JSON.stringify({ data: rows }))) as unknown as typeof fetch);
+    expect(ids).toHaveLength(MAX_LISTED_MODELS);
+    expect(reachedNote(ids, "").text).toBe("Connected. 200 models.");
+  });
+
+  test("a model list too large to read says so, and the check does not read on", async () => {
+    let pulled = 0;
+    const megabyte = new TextEncoder().encode("a".repeat(1_000_000));
+    const endless = new Response(
+      new ReadableStream<Uint8Array>({
+        pull(c) {
+          pulled += 1;
+          c.enqueue(megabyte);
+        },
+      }),
+      { status: 200 },
+    );
+    await expect(listModels(PROVIDER, new AbortController().signal, (async () => endless) as unknown as typeof fetch)).rejects.toThrow("The provider's model list is too large to read. Type the model's name and save.");
+    expect(pulled * 1_000_000).toBeLessThan(MAX_MODEL_LIST_CHARS + 3_000_000);
+  });
+
+  test("a connection check that gets no answer ends by itself", async () => {
+    const never = (() => new Promise<Response>(() => undefined)) as unknown as typeof fetch;
+    const note = await listModels(PROVIDER, new AbortController().signal, never, 20).then(
+      () => null,
+      (e: unknown) => failedNote(e),
+    );
+    expect(note).toEqual({ state: "unreachable", text: "The provider sent nothing for 1 second, so the request was stopped. Check that the server is running, then ask again." });
+    const stalled = await listModels(PROVIDER, new AbortController().signal, (async () => openStream(['{"data":['], "application/json")) as unknown as typeof fetch, 20).then(
+      () => null,
+      (e: unknown) => failedNote(e).state,
+    );
+    expect(stalled).toBe("unreachable");
+  });
+
+  test("a 2 MB streamed reply is kept to its first 200,000 characters, with a line that says so", async () => {
+    const piece = "word ".repeat(2_000);
+    const { events, conversation } = await turn(openStream(Array.from({ length: 200 }, () => content(piece))));
+    expect(shown(events)).toBe(MAX_REPLY_CHARS);
+    expect(failure(events)).toBe("The reply passed 200,000 characters and was stopped there. Ask for a shorter answer.");
+    const kept = conversation[conversation.length - 1];
+    expect(kept?.role).toBe("assistant");
+    expect(kept?.content?.length).toBe(MAX_REPLY_CHARS);
+  });
+
+  test("a reply cut at the limit runs none of the code that came with it", async () => {
+    const { events, ran } = await turn(sseResponse([call(0, '{"code":"(erase-all)"}'), content("x".repeat(MAX_REPLY_CHARS + 1)), DONE]));
+    expect(ran).toEqual([]);
+    expect(failure(events)).toContain("was stopped there");
+    const whole = oneShot(JSON.stringify({ choices: [{ message: { content: "x".repeat(MAX_REPLY_CHARS + 10), tool_calls: [{ id: "c", function: { name: "run", arguments: "{}" } }] } }] }), () => {});
+    expect(whole).toEqual({ text: "x".repeat(MAX_REPLY_CHARS), toolCalls: [], finish: "length", clipped: true });
+  });
+
+  test("a reply of exactly the limit is not cut", async () => {
+    const { events } = await turn(sseResponse([content("x".repeat(MAX_REPLY_CHARS)), DONE]));
+    expect(events[events.length - 1]).toEqual({ type: "done", reason: "stop" });
+  });
+
+  test("500 tool calls in one reply run nothing", async () => {
+    const { events, ran } = await turn(sseResponse([...Array.from({ length: 500 }, (_, i) => call(i, '{"code":"(+ 1 2)"}')), DONE]));
+    expect(ran).toEqual([]);
+    expect(failure(events)).toBe("The model asked to run code more than 32 times in one reply, so none of it was run. Ask for the work in smaller steps.");
+    const many = Array.from({ length: 500 }, (_, i) => ({ id: `c${i}`, function: { name: "run", arguments: "{}" } }));
+    expect(() => oneShot(JSON.stringify({ choices: [{ message: { tool_calls: many } }] }), () => {})).toThrow("more than 32 times");
+  });
+
+  test("as many calls as the limit allows still run", async () => {
+    const calls = Array.from({ length: MAX_CALLS_PER_REPLY }, (_, i) => call(i, '{"code":"(+ 1 2)"}'));
+    const fetchImpl = scriptedFetch([sseResponse([...calls, DONE]), textStream("Done, 32 steps.")]).fetch;
+    const { events, ran } = await turn(() => fetchImpl("", {}));
+    expect(ran).toHaveLength(MAX_CALLS_PER_REPLY);
+    expect(events[events.length - 1]?.type).toBe("done");
+  });
+
+  test("a tool call with 1 MB of arguments is not run", async () => {
+    const fragments = [call(0, '{"code":"'), ...Array.from({ length: 100 }, () => call(0, "x".repeat(10_000))), call(0, '"}')];
+    const { events, ran } = await turn(sseResponse([...fragments, DONE]));
+    expect(ran).toEqual([]);
+    expect(failure(events)).toBe("The model sent more than 100,000 characters of code in one request, so it was not run. Ask for the work in smaller steps.");
+    const big = JSON.stringify({ choices: [{ message: { tool_calls: [{ id: "c", function: { name: "run", arguments: JSON.stringify({ code: "x".repeat(MAX_CALL_ARGS_CHARS) }) } }] } }] });
+    expect(() => oneShot(big, () => {})).toThrow("100,000 characters of code");
+    // A name no tool has is a call that cannot be read, not a name to quote back.
+    const a = new StreamAssembler();
+    expect(() => a.feed(JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, function: { name: "r".repeat(65) } }] } }] }))).toThrow("its request could not be read");
+  });
+
+  test("a stream that stops answering ends the turn after the silence limit", async () => {
+    const { events } = await turn(openStream([content("partial")]), { idleMs: 20 });
+    expect(events[0]).toEqual({ type: "text", text: "partial" });
+    expect(failure(events)).toBe("The provider sent nothing for 1 second, so the request was stopped. Check that the server is running, then ask again.");
+  });
+
+  test("a request that is never answered ends the same way, and its fetch is told to stop", async () => {
+    let aborted = false;
+    const never = (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      init?.signal?.addEventListener("abort", () => (aborted = true));
+      return new Promise<Response>(() => undefined);
+    };
+    const { events } = await turn(never as unknown as () => Promise<Response>, { idleMs: 20 });
+    expect(failure(events)).toContain("sent nothing for 1 second");
+    expect(aborted).toBe(true);
+  });
+
+  test("Stop ends a stream that would never end, even one that ignores the abort", async () => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 10);
+    const { events } = await turn(openStream([content("partial")]), { controller, idleMs: 60_000 });
+    expect(events[events.length - 1]).toEqual({ type: "done", reason: "stopped" });
+  });
+
+  test("a stream that keeps arriving is not taken for silence", async () => {
+    let sent = 0;
+    const dripping = new Response(
+      new ReadableStream<Uint8Array>({
+        async pull(c) {
+          await new Promise((r) => setTimeout(r, 15));
+          sent += 1;
+          c.enqueue(new TextEncoder().encode(sent < 6 ? content("a") : DONE));
+          if (sent >= 6) c.close();
+        },
+      }),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    );
+    const { events } = await turn(dripping, { idleMs: 40 });
+    expect(shown(events)).toBe(5);
+    expect(events[events.length - 1]?.type).toBe("done");
+  });
+
+  test("a 200 answered with HTML is said plainly, at any size", async () => {
+    const page = await turn(new Response("<html><body>It works</body></html>", { status: 200, headers: { "content-type": "text/html" } }));
+    expect(failure(page.events)).toBe("The provider's reply could not be read. The base URL may not point to an OpenAI-compatible server.");
+    const huge = await turn(new Response(`<html>${"a".repeat(MAX_STREAM_CHARS + 10)}</html>`, { status: 200, headers: { "content-type": "text/html" } }));
+    expect(failure(huge.events)).toBe("The provider sent more than can be read, so the request was stopped. The base URL may not point to an OpenAI-compatible server.");
+    const asStream = await turn(sseResponse(["data: <html><body>It works</body></html>\n\n"]));
+    expect(failure(asStream.events)).toBe("The provider's reply could not be read. The base URL may not point to an OpenAI-compatible server.");
+  });
+
+  test("a stream of something else is stopped at the size limit", async () => {
+    const junk = "j".repeat(1_000_000);
+    const { events } = await turn(openStream(Array.from({ length: 6 }, () => junk)));
+    expect(failure(events)).toBe("The provider sent more than can be read, so the request was stopped. The base URL may not point to an OpenAI-compatible server.");
+  });
+
+  test("a long error body is shown clipped", async () => {
+    const { events } = await turn(new Response(JSON.stringify({ error: { message: "e".repeat(50_000) } }), { status: 500 }));
+    expect(failure(events).length).toBeLessThan(600);
+    const raw = await turn(new Response("e".repeat(3_000_000), { status: 500 }));
+    expect(failure(raw.events).length).toBeLessThan(600);
   });
 });

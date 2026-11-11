@@ -1,12 +1,12 @@
-// Caption: The hint in the pane's header.
+// Caption: The full text of a clipped chat title.
 import { Tooltip } from "../../../../src/ui/Tooltip";
-import { IconButton } from "../../../../src/ui/IconButton";
 
-/** The pane's header: the icon button with its own name, wrapped for the hover hint. */
+/** The pane's header: a title that clips keeps its full text in the hint, on hover and on focus. */
 export default function InAssistantHead() {
+  const title = "Summarise the layers and count the objects on each";
   return (
-    <Tooltip text="New chat">
-      <IconButton icon="plus" aria-label="New chat" />
+    <Tooltip text={title} placement="bottom">
+      <span class="assistant-title">{title}</span>
     </Tooltip>
   );
 }

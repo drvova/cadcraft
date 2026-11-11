@@ -4,3 +4,4 @@ rule/tooltip-never-blocks	pass	pass	n/a: falsify and sweep cover it	pass	ship
 rule/tooltip-text-fragment	pass	pass	n/a: falsify and sweep cover it	pass	ship	
 rule/tooltip-length-limit	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
 rule/tooltip-one-hint	pass	pass	n/a: falsify and sweep cover it	pass	ship	
+rule/tooltip-no-touch	pass	pass	n/a: falsify and sweep cover it	pass	ship	

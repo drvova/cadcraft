@@ -22,13 +22,13 @@
  * each title's menu is a submenu, drawn by the same rows and walked by the same keys. Enter, Space
  * or Down on the key open the menu on its first row and Up on its last, Escape closes one level
  * and, from the titles, returns the focus to the key. Left and Right only open and close
- * submenus: there is no bar to move along. Where a submenu has no room beside its parent (560px
- * and under) it opens in place, as an indented group under its row in a menu that scrolls: the
+ * submenus: there is no bar to move along. Where a submenu has no room beside its parent (700px
+ * and under, or a short window) it opens in place, as an indented group under its row in a menu that scrolls: the
  * row that opened it stays in view above it, so nothing has to be added to get back, and the
  * roles and the keys are the ones of the menus that open beside.
  */
 
-import { createEffect, createMemo, createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, createUniqueId, Index, onCleanup, Show, type Accessor, type JSX } from "solid-js";
 import type { CommandInfo } from "../facade";
 import { buildMenu, hoverPath, isMacPlatform, sameStrings, shortcutLabel, UI_ITEMS, type MenuNode } from "../commands";
 import { ToolIcon } from "../icons";
@@ -88,12 +88,15 @@ const rowsOf = (menu: HTMLElement): HTMLElement[] => Array.from(menu.querySelect
 const COMPACT = -1;
 
 /**
- * The widths under which the bar gives way to the menu key (the title bar folds the bar away
- * there) and under which the compact menu's submenus open in place. chrome.css shows and hides
- * the bar and the key at the first; the second is decided here alone (`is-stacked`).
+ * The width under which the bar gives way to the menu key (the title bar folds the bar away
+ * there), and the window in which the compact menu's submenus open in place. chrome.css shows and
+ * hides the bar and the key at the first; the second is decided here alone (`is-stacked`). A
+ * submenu opens in place wherever the longest menus (Draw and Modify, two columns wide) have no
+ * room beside the titles: a window 700px wide or less, or one so short that they would need a
+ * third column.
  */
 const COMPACT_QUERY = "(max-width: 900px)";
-const STACKED_QUERY = "(max-width: 560px)";
+const STACKED_QUERY = "(max-width: 700px), (max-width: 900px) and (max-height: 520px)";
 
 export interface MenuBarProps {
   commands: CommandInfo[];
@@ -113,6 +116,13 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
   const [tabStop, setTabStop] = createSignal(0);
 
   const tree = createMemo(() => buildMenu(props.commands, UI_ITEMS));
+  /**
+   * The submenu the pointer's hover opened and no click has touched yet, as its path's labels. A
+   * click that lands on its row is the end of the gesture that opened it, not a wish to close it.
+   */
+  let hoverOpened: readonly string[] | null = null;
+  /** Whether the last focus event the menus saw left the focus inside them. */
+  let focusInside = false;
 
   const compactMedia = window.matchMedia(COMPACT_QUERY);
   const stackedMedia = window.matchMedia(STACKED_QUERY);
@@ -125,8 +135,11 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
   const opener = (): HTMLElement | null => (openIndex() === COMPACT ? menuKey() : (titles[openIndex() ?? -1] ?? null));
 
   const close = (): void => {
+    hoverOpened = null;
     setOpenIndex(null);
     setOpenPath([]);
+    // A row that had the focus is gone with its menu, and no event said so.
+    focusInside = root?.contains(document.activeElement) === true;
   };
   const open = (index: number): void => {
     setOpenIndex(index);
@@ -155,9 +168,19 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
 
   // A window resized across either width swaps the bar for the key, or the submenus' placement:
   // a menu open at that moment was placed for the other arrangement, so it closes.
-  const onCompactChange = (): void => close();
-  const onStackedChange = (): void => {
+  // The focus, if it was in the menu or on the control that has just been folded away, goes to
+  // the control that now stands for the menus: the menu key, or the bar's Tab stop. The browser
+  // takes the focus from a control that stops being drawn before this runs, so what is asked is
+  // where the focus last was (`focusInside`) and that nothing else has taken it since.
+  const closeForResize = (): void => {
+    const active = document.activeElement;
+    const held = root?.contains(active) === true || (focusInside && (active === null || active === document.body));
     close();
+    if (held) queueMicrotask(() => (compactMedia.matches ? menuKey() : titles[tabStop()])?.focus());
+  };
+  const onCompactChange = (): void => closeForResize();
+  const onStackedChange = (): void => {
+    closeForResize();
     setStacked(stackedMedia.matches);
   };
   compactMedia.addEventListener("change", onCompactChange);
@@ -166,9 +189,6 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
     compactMedia.removeEventListener("change", onCompactChange);
     stackedMedia.removeEventListener("change", onStackedChange);
   });
-  // The system's icon button says whether it is expanded; that what it opens is a menu is said
-  // here.
-  onMount(() => menuKey()?.setAttribute("aria-haspopup", "menu"));
 
   // A click anywhere outside closes the open menu, and so does Escape pressed outside the bar (a
   // menu opened by the pointer leaves the focus where it was). Inside the bar Escape belongs to
@@ -183,11 +203,25 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === "Escape" && outside(event)) close();
     };
+    // A window resized under an open menu moves the edges the menu was placed against (the
+    // window's own, and the status bar, which grows by a line when its toggles wrap): the menus
+    // that are placed (not the groups opened in place) are placed again.
+    const onResize = (): void => {
+      for (const drop of root?.querySelectorAll<HTMLElement>(".menu-drop") ?? []) {
+        if (getComputedStyle(drop).position === "static") continue;
+        drop.classList.remove("is-flipped");
+        drop.style.removeProperty("--menu-shift-x");
+        drop.style.removeProperty("--menu-shift-y");
+        keepOnScreen(drop);
+      }
+    };
     document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", onResize);
     onCleanup(() => {
       document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", onResize);
     });
   });
 
@@ -204,7 +238,9 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
     // Only a real change: a signal that notified on every hover would redo the work under the
     // pointer for nothing.
     const next = hoverPath(openPath(), node, path);
-    if (next !== openPath()) setOpenPath(next);
+    if (next === openPath()) return;
+    hoverOpened = node.id === null ? next : null;
+    setOpenPath(next);
   };
 
   const clickRow = (event: MouseEvent, row: HTMLElement, node: MenuNode, path: readonly string[]): void => {
@@ -222,7 +258,14 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
       enter(row);
       return;
     }
-    setOpenPath(isOpen(path, node.label) ? path : [...path, node.label]);
+    // A pointer's click opens or closes the submenu, except the click that follows the hover
+    // which has just opened it: that one leaves it open, and the next closes it. A finger does
+    // not hover, so its tap always opens or closes.
+    const own = [...path, node.label];
+    const byHover = hoverOpened !== null && sameStrings(hoverOpened, own);
+    hoverOpened = null;
+    if (byHover && isOpen(path, node.label)) return;
+    setOpenPath(isOpen(path, node.label) ? path : own);
   };
 
   const onTitleKey = (event: KeyboardEvent, index: number): void => {
@@ -260,7 +303,7 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
     }
   };
 
-  const onRowKey = (event: KeyboardEvent, row: HTMLElement, node: MenuNode, path: readonly string[], siblings: readonly MenuNode[]): void => {
+  const onRowKey = (event: KeyboardEvent, row: HTMLElement, node: MenuNode, path: readonly string[], siblings: readonly MenuNode[], at: number): void => {
     const top = openIndex();
     const menu = row.closest<HTMLElement>('[role="menu"]');
     if (top === null || menu === null) return;
@@ -301,7 +344,6 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
       }
       return;
     }
-    const at = siblings.indexOf(node);
     const next = isTypeaheadKey(event)
       ? typeaheadIndex(
           siblings.map((sibling) => sibling.label),
@@ -316,41 +358,48 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
     rowsOf(menu)[next]?.focus();
   };
 
-  const renderList = (nodes: readonly MenuNode[], path: readonly string[]): JSX.Element => <For each={nodes}>{(node) => renderNode(node, path, nodes)}</For>;
+  // The titles and the rows are kept by their place, not by their node: the tree is built anew
+  // whenever the command list is refreshed (after every command, and when a command changes what
+  // is available), and a title or a row made anew then would drop the focus it holds onto the page.
+  const renderList = (nodes: Accessor<readonly MenuNode[]>, path: readonly string[]): JSX.Element => (
+    <Index each={nodes()}>{(node, at) => renderNode(node, at, path, nodes)}</Index>
+  );
 
-  const renderNode = (node: MenuNode, path: readonly string[], siblings: readonly MenuNode[]): JSX.Element => {
-    const submenu = node.id === null;
-    const unavailable = !submenu && !node.enabled;
+  const renderNode = (node: Accessor<MenuNode>, at: number, path: readonly string[], siblings: Accessor<readonly MenuNode[]>): JSX.Element => {
+    const submenu = (): boolean => node().id === null;
+    const unavailable = (): boolean => !submenu() && !node().enabled;
     return (
-      <div class={submenu ? "menu-item menu-sub" : "menu-item menu-leaf"} role="none">
+      <div class={submenu() ? "menu-item menu-sub" : "menu-item menu-leaf"} role="none">
         <button
-          class={unavailable ? "menu-row is-disabled" : "menu-row"}
+          class={unavailable() ? "menu-row is-disabled" : "menu-row"}
           type="button"
           role="menuitem"
           tabIndex={-1}
-          aria-disabled={unavailable ? "true" : undefined}
-          aria-haspopup={submenu ? "menu" : undefined}
-          aria-expanded={submenu ? isOpen(path, node.label) : undefined}
+          aria-disabled={unavailable() ? "true" : undefined}
+          aria-haspopup={submenu() ? "menu" : undefined}
+          aria-expanded={submenu() ? isOpen(path, node().label) : undefined}
           onPointerEnter={(event) => {
-            if (hovers(event)) hover(node, path);
+            if (hovers(event)) hover(node(), path);
           }}
-          onKeyDown={(event) => onRowKey(event, event.currentTarget, node, path, siblings)}
-          onClick={(event) => clickRow(event, event.currentTarget, node, path)}
+          onKeyDown={(event) => onRowKey(event, event.currentTarget, node(), path, siblings(), at)}
+          onClick={(event) => clickRow(event, event.currentTarget, node(), path)}
         >
-          <span class="menu-label">{node.label}</span>
-          <Show when={node.shortcut !== ""}>
-            <span class="menu-shortcut">{shortcutLabel(node.shortcut, isMacPlatform())}</span>
+          <span class="menu-label">{node().label}</span>
+          <Show when={node().shortcut !== ""}>
+            <span class="menu-shortcut">{shortcutLabel(node().shortcut, isMacPlatform())}</span>
           </Show>
-          <Show when={submenu}>
+          <Show when={submenu()}>
             <span class="menu-arrow" aria-hidden="true">
               <ToolIcon id="chevron-right" />
             </span>
           </Show>
         </button>
-        <Show when={submenu && isOpen(path, node.label)}>
-          <div class="menu-drop menu-drop-sub" role="menu" aria-label={node.label} ref={placeMenu}>
-            {renderList(node.children, [...path, node.label])}
-          </div>
+        <Show when={submenu() && isOpen(path, node().label) ? node().label : false} keyed>
+          {(label) => (
+            <div class="menu-drop menu-drop-sub" role="menu" aria-label={label} ref={placeMenu}>
+              {renderList(() => node().children, [...path, label])}
+            </div>
+          )}
         </Show>
       </div>
     );
@@ -360,54 +409,61 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
     <div
       class="menus"
       ref={root}
+      onFocusIn={() => {
+        focusInside = true;
+      }}
       onFocusOut={(event) => {
+        // The focus taken from a control because it is no longer drawn (the bar folded away by a
+        // resize) has gone nowhere: it still counts as the menus' until they are asked.
+        focusInside = event.relatedTarget === null && event.target instanceof HTMLElement && event.target.getClientRects().length === 0;
         // The focus going to something outside the menus (Tab, a click on another control) closes
         // the menu; the focus merely dropped (a row taken away, the window left) does not.
         if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) close();
       }}
     >
       <nav class="menubar" role="menubar" aria-label="Main menu">
-        <For each={tree()}>
+        <Index each={tree()}>
           {(title, index) => (
             <div class="menubar-item" role="none">
               <button
-                class={openIndex() === index() ? "menubar-title is-open" : "menubar-title"}
+                class={openIndex() === index ? "menubar-title is-open" : "menubar-title"}
                 type="button"
                 role="menuitem"
-                tabIndex={tabStop() === index() ? 0 : -1}
+                tabIndex={tabStop() === index ? 0 : -1}
                 aria-haspopup="menu"
-                aria-expanded={openIndex() === index()}
+                aria-expanded={openIndex() === index}
                 ref={(element) => {
-                  titles[index()] = element;
+                  titles[index] = element;
                 }}
-                onFocus={() => setTabStop(index())}
-                onKeyDown={(event) => onTitleKey(event, index())}
+                onFocus={() => setTabStop(index)}
+                onKeyDown={(event) => onTitleKey(event, index)}
                 onPointerEnter={(event) => {
                   // While a menu is open, pointing at another title opens that one (switch_on_hover).
-                  if (hovers(event) && openIndex() !== null && openIndex() !== index()) open(index());
+                  if (hovers(event) && openIndex() !== null && openIndex() !== index) open(index);
                 }}
                 onClick={(event) => {
                   // Enter or Space: open it and move into it. A pointer's click opens or closes it.
-                  if (keyed(event)) openInto(index());
-                  else if (openIndex() === index()) close();
-                  else open(index());
+                  if (keyed(event)) openInto(index);
+                  else if (openIndex() === index) close();
+                  else open(index);
                 }}
               >
-                {title.label}
+                {title().label}
               </button>
-              <Show when={openIndex() === index()}>
-                <div class="menu-drop" role="menu" aria-label={title.label} ref={placeMenu}>
-                  {renderList(title.children, [])}
+              <Show when={openIndex() === index}>
+                <div class="menu-drop" role="menu" aria-label={title().label} ref={placeMenu}>
+                  {renderList(() => title().children, [])}
                 </div>
               </Show>
             </div>
           )}
-        </For>
+        </Index>
       </nav>
       <div class="menu-compact" role="none" ref={keyHost} onKeyDown={onMenuKey}>
         <IconButton
           icon="list"
           title="Main menu"
+          popup="menu"
           expanded={openIndex() === COMPACT}
           controls={compactId}
           onClick={(event) => {
@@ -419,7 +475,7 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
         />
         <Show when={openIndex() === COMPACT}>
           <div id={compactId} class={stacked() ? "menu-drop is-stacked" : "menu-drop"} role="menu" aria-label="Main menu" ref={placeMenu}>
-            {renderList(tree(), [])}
+            {renderList(tree, [])}
           </div>
         </Show>
       </div>

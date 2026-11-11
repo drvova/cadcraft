@@ -978,6 +978,18 @@
   flex-direction: column;
   gap: var(--gap-8);
   padding: 0 var(--assistant-inset);
+  /* A group keeps its height in a short sheet; only the provider list gives way. */
+  flex: 0 0 auto;
+}
+
+/* The provider group is the one that gives way: in a sheet too short for all of it, its list
+   shrinks and scrolls by itself, so the decision (which provider) and the fields it fills stay in
+   view together. It keeps at least four and a half rows: the cut row says the list goes on, and
+   the line under the list says it in words. Past that the sheet itself scrolls. */
+.assistant-setup-group--providers {
+  flex: 0 1 auto;
+  /* The heading, the rows, and the line that says more lie below, each a 16px line 8px apart. */
+  min-height: calc(2 * (var(--gap-16) + var(--gap-8)) + 4.5 * var(--control-h-row));
 }
 
 /* The system's Row carries 4px of its own inset: the list steps out by it, so the names sit on
@@ -985,6 +997,9 @@
 .assistant-setup-list {
   display: flex;
   flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   margin: 0 calc(-1 * var(--gap-4));
 }
 
@@ -1038,7 +1053,7 @@
   min-width: 0;
 }
 
-.assistant-key .ui-button {
+.assistant-key .ui-icon-button {
   flex: 0 0 auto;
 }
 
@@ -1060,6 +1075,16 @@
   margin: calc(-1 * var(--gap-2)) calc(-1 * var(--gap-8)) 0;
   /* Brought into view after a check, it keeps the sheet's own inset under it. */
   scroll-margin-bottom: var(--gap-12);
+}
+
+/* A model's name is the provider's text and can be any length: a chip never grows past the row,
+   and the name gives way inside it. */
+.assistant-setup-models .ui-chip {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: var(--control-h-chip);
 }
 
 /* The sheet's foot stays put: what the check found, then Check on the left and the two answers

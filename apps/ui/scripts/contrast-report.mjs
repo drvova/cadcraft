@@ -62,8 +62,8 @@ const fmt = (x) => (Math.round(x * 10) / 10).toFixed(1);
 // against the surface (perceptibility of a hover or selected step).
 const SURFACES = ["chrome", "chrome-dark", "panel", "tab-active", "control", "control-hover", "surface-elevated", "surface-inset", "list-bg", "cmd-bg"];
 const INK = {
-  text: 4.5, "text-dim": 4.5, "text-faint": 4.5, "text-disabled": null, "text-accent": 4.5, icon: 3, "icon-accent": 3, "icon-point": 3,
-  accent: 3, "focus-ring": 3, warn: 3, error: 3, snap: 3, "toggle-on": 3,
+  text: 4.5, "text-dim": 4.5, "text-faint": 4.5, "text-disabled": null, "text-accent": 4.5, icon: 3,
+  accent: 3, "focus-ring": 3, warn: 3, error: 3, "toggle-on": 3,
 };
 // The action fills and the ink each one carries: a label pair (4.5:1), not a surface pair.
 const ON = { "on-accent": ["accent", "accent-hover", "accent-pressed"], "on-error": ["error", "error-hover", "error-pressed"] };

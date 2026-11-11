@@ -99,13 +99,13 @@ Real uses, 2 call sites (`rg -c "<Tab" src/components` → `src/components/Assis
   - Do: `<Tab selected>Model</Tab>`
 
 ### Limits
-- `rule/tab-label-limit`: When an `sm` tab's label runs past 18 characters, keep the full text in `title`, because the tab clips at `max-width: 18ch` with an ellipsis and the 20-character "Summarise the layers" shows as "Summarise the la…". Evidence: measured 111.6px clipped `sm` tab at 1280px, `src/ui/ui.css:432`. Check: review `src/components/AssistantPane.tsx`.
+- `rule/tab-label-limit`: When an `sm` tab's label runs past 18 characters, keep the full text in `title`, because the tab clips at `max-width: 18ch` with an ellipsis and the 20-character "Summarise the layers" shows as "Summarise the la…". Evidence: measured 111.6px clipped `sm` tab at 1280px, `src/ui/ui.css:443`. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Tab size="sm">Summarise the layers</Tab>` — the clipped label has no full text anywhere.
   - Do: `<Tab size="sm" title="Summarise the layers">Summarise the layers</Tab>`
-- `rule/tab-md-label-limit`: When an `md` tab's label runs past 24 characters, keep the full text in `title`, because the tab clips at `max-width: 24ch` with an ellipsis, and uncapped the 56-character "A1 Ground floor general arrangement plan, sheet 12 of 40" draws a 357.8px tab that pushes the other layouts out of the strip. Evidence: measured 168.2px clipped `md` tab at 1280px, `src/ui/ui.css:421`. Check: review `src/components/StatusBar.tsx`.
+- `rule/tab-md-label-limit`: When an `md` tab's label runs past 24 characters, keep the full text in `title`, because the tab clips at `max-width: 24ch` with an ellipsis, and uncapped the 56-character "A1 Ground floor general arrangement plan, sheet 12 of 40" draws a 357.8px tab that pushes the other layouts out of the strip. Evidence: measured 168.2px clipped `md` tab at 1280px, `src/ui/ui.css:432`. Check: review `src/components/StatusBar.tsx`.
   - Don't: `<Tab>A1 Ground floor general arrangement plan, sheet 12 of 40</Tab>` — the clipped label has no full text anywhere.
   - Do: `<Tab title="A1 Ground floor general arrangement plan, sheet 12 of 40">A1 Ground floor general arrangement plan, sheet 12 of 40</Tab>`
-- `rule/tab-touch-target`: When `sm` tabs are laid out in a pane header, leave the header room for a 24px tab, because under a coarse pointer the 22px tab grows to the 24px control height (it clips its own overflow for the ellipsis, so it cannot take an overhanging target) and a header fixed at 22px would cut it. Evidence: measured 22px `sm` tab, 24px under a coarse pointer, `src/ui/ui.css:587`. Check: review `src/ui/ui.css`.
+- `rule/tab-touch-target`: When `sm` tabs are laid out in a pane header, leave the header room for a 24px tab, because under a coarse pointer the 22px tab grows to the 24px control height (it clips its own overflow for the ellipsis, so it cannot take an overhanging target) and a header fixed at 22px would cut it. Evidence: measured 22px `sm` tab, 24px under a coarse pointer, `src/ui/ui.css:574`. Check: review `src/ui/ui.css`.
   - Don't: `.my-head { height: var(--control-h-row); overflow: hidden }`
   - Do: `.my-head { min-height: var(--control-h-button); align-items: center }`
 

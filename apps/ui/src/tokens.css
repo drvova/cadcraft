@@ -33,17 +33,15 @@
      ring is the dark accent in both: the light --focus-ring measures 2.62 against it. */
   --canvas-focus-ring: #599CE7;
 
-  /* ---- Text and icons (text, text_dim, text_faint, icon, icon_accent, icon_point) ---- */
+  /* ---- Text and icons (text, text_dim, text_faint, icon) ---- */
   --text: #F0F0F0;
   --text-dim: rgba(240, 240, 240, 0.74);
   --text-faint: rgba(240, 240, 240, 0.60);
   --text-disabled: rgba(240, 240, 240, 0.36); /* the disabled ink (Cursor §5) */
   --text-accent: #599CE7; /* the accent as a text ink (Chip tone=accent); the accent itself here */
   --icon: rgba(240, 240, 240, 0.66);
-  --icon-accent: #599CE7;
-  --icon-point: #f1b467;
 
-  /* ---- Action and selection (accent, selection, hover, fill_active, grip, grip_hot) ---- */
+  /* ---- Action and selection (accent, selection, hover, fill_active) ---- */
   --accent: #599CE7;
   --accent-hover: #6AA6E9; /* the accent mixed 10% toward white: the primary button's hover */
   --accent-pressed: #7AB0EC; /* the same at 20%: the primary button's pressed fill */
@@ -56,36 +54,31 @@
   --fill-active: rgba(240, 240, 240, 0.14); /* the pressed/selected fill */
   --fill-pressed: rgba(240, 240, 240, 0.20); /* the pressed step of a .14-hover control */
   --fill-disabled: rgba(240, 240, 240, 0.04); /* the disabled fill (Cursor §5: no fill change) */
-  --grip-hot: #e34671;
 
-  /* ---- Status (warn, error, snap, toggle_on) ---- */
+  /* ---- Status (warn, error, toggle_on) ---- */
   --warn: #f1b467;
   --error: #e34671;
   --error-hover: #E6597F; /* the error fill mixed 10% toward white: the danger button's hover */
   --error-pressed: #E96B8D; /* the same at 20% */
-  --snap: #3fa266;
   --toggle-on: #3fa266;
 
-  /* ---- The command line (cmd_bg a=f0, cmd_border, cmd_history a=170) ---- */
+  /* ---- The command line (cmd_bg a=f0, cmd_border) ---- */
   --cmd-bg: rgba(28, 28, 28, 0.94);
   --cmd-border: #333333;
-  --cmd-history: rgba(26, 26, 26, 0.667);
 
   /* ---- Lists (list_bg, list_row) ---- */
   --list-bg: #1c1c1c;
   --list-row: var(--fill-active);
 
-  /* ---- Layers (icon_layer_off, icon_layer_frozen, icon_locked, icon_current, layer_current, swatch_border) ---- */
+  /* ---- Layers (icon_layer_off, icon_layer_frozen, icon_locked, layer_current, swatch_border) ---- */
   --icon-layer-off: #8a8a5a;
   --icon-layer-frozen: #9fd4ff;
   --icon-locked: #e6b43c;
-  --icon-current: #6fe06f;
   --layer-current: #4cc25a;
   --swatch-border: #191919;
 
-  /* Elevation: the shadow under floating surfaces (menus). The popover's measured ladder is the
-     three-layer one from Cursor §8; --shadow stays the flat colour the other surfaces use. */
-  --shadow: rgba(0, 0, 0, 0.45);
+  /* Elevation: the shadow under floating surfaces. The popover's measured ladder is the
+     three-layer one from Cursor §8; the tooltip's is its own single layer. */
   --shadow-popover: 0 3px 8px rgba(0, 0, 0, 0.12), 0 2px 5px rgba(0, 0, 0, 0.12), 0 1px 1px rgba(0, 0, 0, 0.12);
   --tooltip-bg: #141414; /* the measured tooltip (Cursor §8) */
   --tooltip-border: rgba(240, 240, 240, 0.15);
@@ -100,35 +93,29 @@
   --composer-border: rgba(240, 240, 240, 0.08);
   --composer-border-active: rgba(240, 240, 240, 0.12);
 
-  /* ---- Misc (on_accent, crosshair, paper) ---- */
+  /* ---- Misc (on_accent) ---- */
   --on-accent: #191C22;
   --on-error: #121418; /* the ink on the error fill: --on-accent measures 4.37 there, this 4.72 */
-  --crosshair: #e4e4e4;
-  --paper: #fcfcfc;
 
   /* ---- Geometry (RADIUS_*, GAP_*) ---- */
   --radius-control: 2px;
   --radius-small: 3px;
   --radius-card: 4px;
   --radius-composer: 5px;
-  --radius-elevated: 20px; /* the glass composer, menus and popovers (Cursor §2) */
   --radius-popover: 14px; /* the measured popover: the model menu (Cursor §8) */
   --radius-block: 12px; /* the transcript's message bubble and code block (measured) */
-  --radius-pill: 11px;
   --radius-round: 9999px; /* the pill/circle radius (Chip, IconButton; Cursor §2) */
   --gap-2: 2px;
   --gap-3: 3px;
   --gap-4: 4px;
-  --gap-5: 5px;
   --gap-6: 6px;
   --gap-8: 8px;
   --gap-10: 10px;
   --gap-12: 12px;
   --gap-14: 14px; /* the transcript's row pitch (measured 14px between rows) */
   --gap-16: 16px;
-  --gap-default: var(--gap-4);
 
-  /* ---- Control sizes (CONTROL_H_*, BUTTON_PAD_*, FIELD_PAD_*, CHIP_*, CARD_PADDING) ---- */
+  /* ---- Control sizes (CONTROL_H_*, BUTTON_PAD_*, FIELD_PAD_*, CHIP_*) ---- */
   --control-h-button: 28px;
   --control-h-input: 24px;
   --control-h-row: 22px;
@@ -144,7 +131,6 @@
   --button-pad-y: 4px;
   --field-pad-x: 6px;
   --field-pad-y: 4px;
-  --card-padding: 16px;
 
   /* ---- The composer (Cursor §2): the glass box's editor and toolbar ---- */
   --composer-font: 15px;
@@ -161,23 +147,20 @@
   --font-mono: 12px;
   --font-family: system-ui, "Segoe UI", -apple-system, sans-serif;
   /* ---- Motion (measured: durations 50/100/150/200ms, ease-out + out-quint) ---- */
-  --dur-instant: 0.05s;
   --dur-press: 0.05s; /* the measured transform channel: the icon button's press scale */
   --dur-fast: 0.1s; /* the measured state-transition duration (Cursor §8: 0.1s ease) */
   --dur-med: 0.15s;
-  --dur-slow: 0.2s;
+  --dur-slow: 0.2s; /* reserved: the "panel / larger change" preset (decisions.md); no panel moves yet */
   --ease-standard: ease; /* the measured state easing: hover, press, focus (Cursor §8) */
   --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-collapse: cubic-bezier(0.165, 0.84, 0.44, 1); /* the measured 200ms chevron rotate (§8) */
   --ease-out-quint: cubic-bezier(0.16, 1, 0.3, 1);
 
   --font-family-mono: "Hack", ui-monospace, "Cascadia Mono", Consolas, monospace;
 
-  /* ---- Lines (HAIRLINE, FOCUS_OUTLINE_W, FOCUS_OUTLINE_OFFSET, HOVER_OPACITY) ---- */
+  /* ---- Lines (HAIRLINE, FOCUS_OUTLINE_W, FOCUS_OUTLINE_OFFSET) ---- */
   --hairline: 1px;
   --focus-outline-w: 1px;
   --focus-outline-offset: -1px;
-  --hover-opacity: 0.8;
 }
 
 /* ---- The light palette (Cursor 3.27.22, measured): the same system mirrored — one base colour
@@ -211,10 +194,6 @@
      first step that holds 4.5 there and over the .08 hover fill (4.80 and 4.71). */
   --text-accent: #005DA4;
   --icon: rgba(20, 20, 20, 0.66);
-  --icon-accent: #2678C1;
-  /* The attention glyph is the warning ink, as it is in dark: the paler #b8791f measured 3.0 over
-     the control and 2.7 over its hover. */
-  --icon-point: #A46701;
   --accent: #2678C1;
   /* On light surfaces the action fills step toward black, not white: the --on-accent label
      measured 3.77 and 3.20 on the white-mixed steps, and holds 5.35 and 6.41 on these. */
@@ -223,13 +202,10 @@
   --accent-soft: rgba(38, 120, 193, 0.12); /* the accent-tinted chip fill (Chip tone=accent) */
   --cmd-bg: #ebebeb;
   --cmd-border: #c9c9c9;
-  --cmd-history: #f2f2f2;
-  --shadow: rgba(0, 0, 0, 0.18);
   --selection: #2678C1;
   /* The accent ring measures 2.83 against the .14 selected fill over the control; the accent's
      text step holds 4.14 there. */
   --focus-ring: #005DA4;
-  --snap: #007041;
   --list-bg: #ffffff;
   --list-row: var(--fill-active);
   --hover: rgba(20, 20, 20, 0.08);
@@ -242,7 +218,6 @@
   --error-hover: #AB153D; /* the error fill mixed 10% toward black: the danger button's hover */
   --error-pressed: #981236; /* the same at 20% (the white-mixed step measured 4.46 under the label) */
   --layer-current: #d5dfe9;
-  --grip-hot: #e34671;
   --scrollbar: rgba(20, 20, 20, 0.14);
   --scrollbar-hover: rgba(20, 20, 20, 0.22);
   --on-accent: #FCFCFC;

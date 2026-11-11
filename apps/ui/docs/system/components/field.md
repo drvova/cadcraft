@@ -26,6 +26,7 @@ Real uses, 3 call sites (`rg -c "<Field" src/components` → `src/components/Ass
 | `docs/system/examples/field/type-search.tsx` | type=search | The search field, for the command line. |
 | `docs/system/examples/field/type-password.tsx` | type=password | The password field. |
 | `docs/system/examples/field/disabled.tsx` | state:disabled | A locked field at the disabled ink. |
+| `docs/system/examples/field/invalid.tsx` | state:invalid | A refused address at the error stroke, with the line that says why. |
 | `docs/system/examples/field/in-properties-panel.tsx` | composition:PropertiesPanel | The name row of the properties palette. |
 
 ## Variants
@@ -43,6 +44,7 @@ Real uses, 3 call sites (`rg -c "<Field" src/components` → `src/components/Ass
 | Hover | The pointer is over the field, on a device with a hover pointer. | Click to place the caret. | Nothing beyond the text cursor: the stroke stays at the hairline. | by hand |
 | Focused | The field takes focus by click or Tab. | Type; Tab away. | The stroke takes the focus ink and the 1px ring draws in it at offset -1. | by hand |
 | Filled | The value is not empty. | Edit it. | The value at the full ink; the placeholder is gone. | test |
+| Invalid | The caller passes `invalid`: it refuses the value. | Correct the value; the caller clears `invalid` when it accepts it. | `aria-invalid="true"`, and the caller's error line, tied to the input by `describedBy`; the stroke takes the error ink. | test |
 | Disabled | The caller passes `disabled`. | Nothing: no typing, no focus. | The value at the disabled ink; no focus ring. | test |
 
 ### State precedence
@@ -50,6 +52,10 @@ Real uses, 3 call sites (`rg -c "<Field" src/components` → `src/components/Ass
 - Filled and Focused: both show. The accent stroke and ring draw over the filled value.
 - Disabled and Hover: Disabled wins. A disabled field takes no hover and no ring.
 - Disabled and Filled: Disabled wins. The value stays visible at the disabled ink.
+- Invalid and Focused: both show. The stroke keeps the error ink and the ring draws in the focus ink one line inside it.
+- Invalid and Filled: both show. The refused value stays at the full ink inside the error stroke.
+- Invalid and Hover: Invalid wins. The stroke keeps the error ink under the pointer.
+- Invalid and Disabled: Disabled wins. A disabled field cannot be corrected, so the caller clears `invalid` before it locks the field.
 
 ### Motion
 | Trigger | Kind | Preset | Properties | Reduced motion |
@@ -65,6 +71,10 @@ Real uses, 3 call sites (`rg -c "<Field" src/components` → `src/components/Ass
 - `disabled`: blocks typing and drops the ink to the disabled step.
 - `title`: a tooltip.
 - `autoFocus`: focuses the field when it mounts.
+- `autocomplete`: the native autofill hint; `off` for a value no form should remember, or a token the platform knows (`email`, `url`, `current-password`). Unset leaves it to the platform.
+- `spellcheck`: switches the platform's spelling checker. Unset leaves it to the platform, except `type="password"`, which is never checked.
+- `invalid`: the value is refused; sets `aria-invalid="true"` and the error stroke.
+- `describedBy`: the `id` of the help line or the error line under the field (several, space-separated); sets `aria-describedby`.
 
 ## Usage
 
@@ -84,6 +94,13 @@ Real uses, 3 call sites (`rg -c "<Field" src/components` → `src/components/Ass
 - `rule/field-type-native`: When a field takes an email, a search term or a password, pass `type` so the native keyboard and autofill follow, because `type="text"` on an email field shows the wrong phone keyboard and blocks autofill. Evidence: app 4/4 types defined in `src/ui/Field.tsx`. Check: test `src/ui/Field.test.tsx`.
   - Don't: `<Field type="text" ariaLabel="Email" />`
   - Do: `<Field type="email" ariaLabel="Email" />`
+
+- `rule/field-described-by`: When a line of help or an error sits under a field, give the line an `id` and pass it as `describedBy`, and pass `invalid` while the value is refused, because a line that only sits near the input is read 0 times by a screen reader that lands on the input by Tab. Evidence: single use `src/components/AssistantPane.tsx:732`, the API key's "Stored in this browser" line, untied today. Check: test `src/ui/Field.test.tsx`.
+  - Don't: `<Field ariaLabel="API key" /><span class="hint">Stored in this browser, not encrypted.</span>`
+  - Do: `<Field ariaLabel="API key" describedBy="key-help" /><span id="key-help">Stored in this browser, not encrypted.</span>`
+- `rule/field-secret-not-remembered`: When a field holds a key, a token or a password, pass `autocomplete="off"` and `spellcheck={false}` for every `type` it takes, because a secret shown with `type="text"` is 1 ordinary text value to the platform, which offers it to autofill and sends it to the spelling checker. Evidence: single use `src/components/AssistantPane.tsx:717`, the API key field, which sets `autocomplete` from outside through a wrapper `ref`. Check: test `src/ui/Field.test.tsx`.
+  - Don't: `<Field type={shown() ? "text" : "password"} ariaLabel="API key" />`
+  - Do: `<Field type={shown() ? "text" : "password"} ariaLabel="API key" autocomplete="off" spellcheck={false} />`
 
 ### Content
 - `rule/field-placeholder-example`: When a placeholder is written, show a real example value rather than an instruction (0,0 — not "Enter a point"), because the placeholder is read as the value's shape, and the instruction belongs in a label. Evidence: single use `src/components/AssistantPane.tsx:615`, the provider popover's Base URL placeholder. Check: review `src/components/AssistantPane.tsx`.
@@ -113,7 +130,7 @@ Rests on the native `<input>` element: typing, selection, IME and autofill come 
 ### ARIA
 | Part | Role | Accessible name from | States and properties | Announced | Checked by |
 |---|---|---|---|---|---|
-| The input | `textbox` (native) | `aria-label`, or the label tied to it | `disabled` when blocked; the native `type` | "Base point, edit text" | test |
+| The input | `textbox` (native) | `aria-label`, or the label tied to it | `disabled` when blocked; the native `type`; `aria-invalid="true"` while the value is refused; `aria-describedby` naming the help line or the error line | "Base point, edit text" / "Base URL, invalid entry, edit text, Start the address with http:// or https://" | test |
 
 ## Tokens
 | Part | State | Token |
@@ -122,10 +139,11 @@ Rests on the native `<input>` element: typing, selection, IME and autofill come 
 | The fill | all | `--control` |
 | The stroke | rest | `--border-soft`, `--hairline` |
 | The stroke | focus | `--focus-ring` |
+| The stroke | invalid | `--error` |
 | The text | all | `--text` |
 | The placeholder | all | `--text-faint` |
 | The text | disabled | `--text-disabled` |
-| The ring | focus | `--focus-outline-w`, `--focus-ring`, `--focus-outline-offset` |
+| The ring | focus | `--focus-outline-w`, `--focus-ring`, `--focus-outline-offset` (twice the offset while invalid, so the ring clears the error stroke) |
 | The motion | focus | `--dur-fast`, `--ease-standard` |
 
 ## Related

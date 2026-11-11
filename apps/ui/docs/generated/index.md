@@ -62,8 +62,8 @@ Ask only for an amount or a limit the task did not give (a new size, a new durat
 ## Foundations
 - [Colors](docs/generated/colors.md): One base colour at an alpha ladder over a few near-black surfaces in dark, mirrored in light: colour is a signal, never decoration.
 - [Icons](docs/generated/icons.md): Every icon is drawn in code as an SVG path on a 24×24 grid and takes its colour from the surrounding ink (currentColor); no icon font, sp...
-- [Motion](docs/generated/motion.md): Four durations and four easings, plus the one fade endpoint for hover: motion is fast, short and never decorative — it confirms a state c...
-- [Radius](docs/generated/radius.md): The corner ladder (2–5px for controls, 20px for floating surfaces, full round for pills), the one hairline width, the focus ring's stroke...
+- [Motion](docs/generated/motion.md): Four durations and three easings: motion is fast, short and never decorative — it confirms a state change and gets out of the way.
+- [Radius](docs/generated/radius.md): The corner ladder (2–5px for controls, 12 and 14px for the assistant's blocks and popovers, full round for pills), the one hairline width...
 - [Spacing](docs/generated/spacing.md): One gap scale in even steps and one control-height ladder: every inset, gap and control size in the chrome is a token from these two ladd...
 - [Typography](docs/generated/typography.md): Two families (the system UI stack and the mono stack) and six fixed sizes, one per control and one per reading role: text never takes a s...
 
@@ -71,12 +71,12 @@ Ask only for an amount or a limit the task did not give (a new size, a new durat
 - [Button](docs/generated/components/button.md): It runs one action the moment its label says so: it never navigates and never holds a value.
 - [Chip](docs/generated/components/chip.md): It shows one compact fact, a keyword or a suggestion, and it only acts when the caller gives it a handler.
 - [Field](docs/generated/components/field.md): It takes one line of text and hands every keystroke back to the caller, who owns the value.
-- [IconButton](docs/generated/components/icon-button.md): It runs one action drawn as a single glyph, and its tooltip is its accessible name.
+- [IconButton](docs/generated/components/icon-button.md): It runs one action drawn as a single glyph, and its title is both its accessible name and the hint a sighted person reads.
 - [Kbd](docs/generated/components/kbd.md): It shows the key or shortcut that runs the action beside it, as a fact to read and never as a control.
 - [Row](docs/generated/components/row.md): It is the full-width clickable band of a list: a menu item, a property row or a layer, marked current when it is the selected one.
 - [SectionLabel](docs/generated/components/section-label.md): It names a panel's section as a real heading, so a screen reader can jump between the sections by heading.
 - [Tab](docs/generated/components/tab.md): It brings one view of a strip to the front: a layout over the drawing or a chat in the assistant, marked selected when it is the one show...
-- [Tooltip](docs/generated/components/tooltip.md): It names a control on hover and on focus, in a small box near the control.
+- [Tooltip](docs/generated/components/tooltip.md): It is the layer's one hint: a small box that names a control under the pointer or under keyboard focus.
 
 ## Rules
 - [Rules](docs/generated/rules.md): every trap and rule ID, the page that answers it and the check that enforces it

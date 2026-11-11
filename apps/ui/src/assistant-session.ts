@@ -15,7 +15,7 @@
 import { createSignal } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import type { AppFacade } from "./facade";
-import { activityLine, runTurn, type AssistantEvent, type Briefing, type ChatImage, type ChatMessage, type ProviderConfig, type TurnOptions } from "./assistant";
+import { activityLine, PROVIDER_LIMITS, providerFault, runTurn, type AssistantEvent, type Briefing, type ChatImage, type ChatMessage, type ProviderConfig, type TurnOptions } from "./assistant";
 
 export interface ToolEntry {
   kind: "tool";
@@ -63,26 +63,54 @@ export interface SessionOptions {
   onChanged: () => void;
   /** Injectable for tests; the real one is `fetch`. */
   fetchImpl?: typeof fetch;
+  /** How long a request may stay silent before it is stopped (tests shorten it). */
+  idleMs?: number;
 }
 
-const STORAGE_KEY = "cadcraft.assistant.provider";
+/** The one place the setup (and the key in it) is kept: this entry of the browser's storage. */
+export const STORAGE_KEY = "cadcraft.assistant.provider";
+
+/** "Not set up": what a missing, unreadable or unusable stored setup becomes. */
+const NO_PROVIDER: ProviderConfig = { baseUrl: "", model: "", apiKey: "" };
+
+/** The longest stored text worth parsing: the three values at their limits, with room for the JSON around them. */
+const MAX_STORED_CHARS = 2 * (PROVIDER_LIMITS.baseUrl + PROVIDER_LIMITS.model + PROVIDER_LIMITS.apiKey);
+
+/**
+ * Read a stored setup. The text is whatever the browser's storage holds, which someone may have
+ * edited or another build may have written, so nothing in it is trusted: it must be JSON for a
+ * plain object whose `baseUrl` and `model` are strings (and `apiKey`, when present), without
+ * control characters, and together a setup `providerFault` passes (an http or https address
+ * without a name or password in it, every value inside its limit). Anything else is "not set up";
+ * a setup is never half-read, and this never throws.
+ */
+export function parseStoredProvider(raw: string | null): ProviderConfig {
+  if (raw === null || raw.length > MAX_STORED_CHARS) return { ...NO_PROVIDER };
+  let v: unknown;
+  try {
+    v = JSON.parse(raw);
+  } catch {
+    return { ...NO_PROVIDER };
+  }
+  if (v === null || typeof v !== "object" || Array.isArray(v)) return { ...NO_PROVIDER };
+  const { baseUrl, model, apiKey = "" } = v as Record<string, unknown>;
+  if (typeof baseUrl !== "string" || typeof model !== "string" || typeof apiKey !== "string") return { ...NO_PROVIDER };
+  const provider: ProviderConfig = { baseUrl: baseUrl.trim(), model: model.trim(), apiKey: apiKey.trim() };
+  if (/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(provider.baseUrl + provider.model + provider.apiKey)) return { ...NO_PROVIDER };
+  return providerFault(provider) === null ? provider : { ...NO_PROVIDER };
+}
 
 /** The provider settings the session keeps: the last one saved in this browser. */
 export function loadProvider(): ProviderConfig {
-  const empty: ProviderConfig = { baseUrl: "", model: "", apiKey: "" };
-  if (typeof localStorage === "undefined") return empty;
+  if (typeof localStorage === "undefined") return { ...NO_PROVIDER };
+  let raw: string | null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === null) return empty;
-    const v = JSON.parse(raw) as Record<string, unknown>;
-    return {
-      baseUrl: typeof v["baseUrl"] === "string" ? v["baseUrl"] : "",
-      model: typeof v["model"] === "string" ? v["model"] : "",
-      apiKey: typeof v["apiKey"] === "string" ? v["apiKey"] : "",
-    };
+    raw = localStorage.getItem(STORAGE_KEY);
   } catch {
-    return empty;
+    // a blocked storage is a browser without a saved setup
+    return { ...NO_PROVIDER };
   }
+  return parseStoredProvider(raw);
 }
 
 export function saveProvider(p: ProviderConfig): void {
@@ -130,7 +158,8 @@ export function createAssistantSession(opts: SessionOptions) {
   let ranSince: string[] = [];
 
   const used = (): number => contextUsed(conversation());
-  const ready = (): boolean => provider().baseUrl !== "" && provider().model !== "";
+  /** A setup that can be sent: the same check the turn itself makes, not only "something is typed". */
+  const ready = (): boolean => providerFault(provider()) === null;
   const title = (): string => {
     const first = entries.find((e) => e.kind === "user");
     if (first === undefined || first.kind !== "user") return "New chat";
@@ -213,6 +242,7 @@ export function createAssistantSession(opts: SessionOptions) {
       signal: controller.signal,
     };
     if (opts.fetchImpl !== undefined) options.fetchImpl = opts.fetchImpl;
+    if (opts.idleMs !== undefined) options.idleMs = opts.idleMs;
     try {
       await runTurn(options);
     } finally {

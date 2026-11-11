@@ -24,7 +24,7 @@
  */
 
 import { createEffect, createMemo, createSignal, For, Index, Match, on, onCleanup, onMount, Show, Switch, type JSX } from "solid-js";
-import { activityLine, atEnd, clampPanelWidth, failedNote, MAX_REQUEST_CHARS, PANEL_WIDTH, listModels, parseBlocks, parseInline, presetFor, PROVIDER_PRESETS, providerReady, reachedNote, relativeTime, saveBlocker, splitFences, type ChatImage, type ConnectionNote, type ProseBlock, type ProviderConfig } from "../assistant";
+import { activityLine, atEnd, clampPanelWidth, failedNote, MAX_REQUEST_CHARS, PANEL_WIDTH, listModels, parseBlocks, parseInline, presetFor, PROVIDER_PRESETS, providerReady, reachedNote, relativeTime, saveBlocker, splitFences, type ChatImage, type ConnectionNote, type ProseBlock, type ProviderConfig, type ReplyPart } from "../assistant";
 import type { AssistantSession } from "../assistant-session";
 import { highlight, rankCommands, slashQuery, SLASH_LIMIT, type PaletteItem } from "../palette";
 import { ToolIcon } from "../icons";
@@ -94,6 +94,14 @@ const textOf = (b: ProseBlock): string => (b.kind === "list" ? "" : b.text);
 const itemsOf = (b: ProseBlock): readonly string[] => (b.kind === "list" ? b.items : []);
 const orderedList = (b: ProseBlock): boolean => b.kind === "list" && b.ordered;
 
+/** Whether two parsed blocks say the same thing (a reply is parsed again on every fragment). */
+function sameBlock(a: ProseBlock, b: ProseBlock): boolean {
+  if (a.kind === "list" || b.kind === "list") {
+    return a.kind === "list" && b.kind === "list" && a.ordered === b.ordered && a.items.length === b.items.length && a.items.every((item, i) => item === b.items[i]);
+  }
+  return a.kind === b.kind && headingLevel(a) === headingLevel(b) && a.text === b.text;
+}
+
 /** A message in the provider's or the engine's words, shown as a sentence: its first letter capital. */
 const sentence = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
@@ -151,6 +159,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   let body: HTMLDivElement | undefined;
   let inputEl: HTMLTextAreaElement | undefined;
   let fileInput: HTMLInputElement | undefined;
+  /** The pending move to the transcript's end, or 0. */
+  let followFrame = 0;
 
   const tick = setInterval(() => setNow(Date.now()), 30_000);
   onCleanup(() => clearInterval(tick));
@@ -160,10 +170,15 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     void s.entries.length;
     const last = s.entries[s.entries.length - 1];
     if (last !== undefined && last.kind !== "tool") void last.text;
-    if (!following() || body === undefined) return;
+    if (!following() || body === undefined || followFrame !== 0) return;
     const el = body;
-    queueMicrotask(() => (el.scrollTop = el.scrollHeight));
+    // Once a frame, however many fragments arrived in it: each move measures the whole transcript.
+    followFrame = requestAnimationFrame(() => {
+      followFrame = 0;
+      el.scrollTop = el.scrollHeight;
+    });
   });
+  onCleanup(() => cancelAnimationFrame(followFrame));
 
   // A new selection is context again, even if the last one was left out. The shell hands a fresh
   // array after every command, so what is selected is compared, not the array.
@@ -308,6 +323,12 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   let setupEl: HTMLElement | undefined;
   let fieldsEl: HTMLDivElement | undefined;
   let modelsEl: HTMLDivElement | undefined;
+  let listEl: HTMLDivElement | undefined;
+  /** The provider list scrolls by itself in a short panel; while rows lie under its fold, a line says so. */
+  const [moreBelow, setMoreBelow] = createSignal(false);
+  const measureList = (): void => {
+    if (listEl !== undefined) setMoreBelow(listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight > 1);
+  };
   /** What had the focus when the sheet opened: it gets the focus back when the sheet closes. */
   let opener: HTMLElement | null = null;
   onCleanup(() => checkAbort?.abort());
@@ -337,7 +358,12 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     setMenuOpen(true);
     // A first setup starts at the first decision, the provider; a return visit at the model.
     const first = s.ready() ? "input[aria-label='Model']" : ".assistant-setup-list button";
-    queueMicrotask(() => setupEl?.querySelector<HTMLElement>(first)?.focus());
+    queueMicrotask(() => {
+      // The chosen provider is in view in its list before anything takes the focus.
+      listEl?.querySelector("[aria-current='true']")?.scrollIntoView({ block: "nearest" });
+      setupEl?.querySelector<HTMLElement>(first)?.focus();
+      measureList();
+    });
   };
 
   const closeSetup = (): void => {
@@ -432,10 +458,17 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     </For>
   );
 
-  /** A reply's prose as its blocks: headings, lists and paragraphs, each with its inline runs. */
-  const prose = (text: string): JSX.Element => (
-    <Index each={parseBlocks(text)}>
-      {(block) => (
+  /**
+   * A reply's prose as its blocks: headings, lists and paragraphs, each with its inline runs. A
+   * reply grows by one fragment at a time and is parsed again each time, so a block is compared by
+   * what it says, not by its object: only the block that changed (the last one) is drawn again. A
+   * long reply drawn whole on every fragment held the page for seconds.
+   */
+  const Prose = (p: { text: string }): JSX.Element => (
+    <Index each={parseBlocks(p.text)}>
+      {(parsed) => {
+        const block = createMemo(parsed, undefined, { equals: sameBlock });
+        return (
         <Switch>
           <Match when={block().kind === "heading"}>
             <h3 class={headingLevel(block()) <= 2 ? "assistant-heading" : "assistant-heading assistant-heading--minor"}>{richText(textOf(block()))}</h3>
@@ -454,9 +487,27 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             <div class="assistant-text">{richText(textOf(block()))}</div>
           </Match>
         </Switch>
-      )}
+        );
+      }}
     </Index>
   );
+
+  /** One part of a reply, prose or fenced code. Its kind and its text are compared as values, so
+   *  the parts before the one being written stay as they are while the reply grows. */
+  const ReplyPartView = (p: { part: ReplyPart }): JSX.Element => {
+    const isCode = createMemo(() => p.part.kind === "code");
+    const text = createMemo(() => p.part.text);
+    return (
+      <Show when={isCode()} fallback={<Prose text={text()} />}>
+        <div class="assistant-code-wrap">
+          <pre class="assistant-code">{text()}</pre>
+          <span class="assistant-code-copy">
+            <IconButton icon="copy" size="sm" title="Copy the code" onClick={() => copyText(text())} />
+          </span>
+        </div>
+      </Show>
+    );
+  };
 
   return (
     <aside
@@ -565,16 +616,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               </Match>
               <Match when={entry.kind === "assistant"}>
                 <Index each={splitFences(entry.kind === "assistant" ? entry.text : "")}>
-                  {(part) => (
-                    <Show when={part().kind === "code"} fallback={prose(part().text)}>
-                      <div class="assistant-code-wrap">
-                        <pre class="assistant-code">{part().text}</pre>
-                        <span class="assistant-code-copy">
-                          <IconButton icon="copy" size="sm" title="Copy the code" onClick={() => copyText(part().text)} />
-                        </span>
-                      </div>
-                    </Show>
-                  )}
+                  {(part) => <ReplyPartView part={part()} />}
                 </Index>
                 <div class="assistant-turn-actions">
                   <IconButton icon="copy" size="sm" title="Copy the reply" onClick={() => copyText(entry.kind === "assistant" ? entry.text : "")} />
@@ -630,9 +672,19 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         <Show when={menuOpen()}>
           <section class="assistant-setup" id="assistant-setup" aria-label="Model setup" ref={setupEl}>
             <div class="assistant-setup-scroll">
-              <div class="assistant-setup-group">
+              <div class="assistant-setup-group assistant-setup-group--providers">
                 <SectionLabel>Provider</SectionLabel>
-                <div class="assistant-setup-list" onKeyDown={onPresetKey}>
+                <div
+                  class="assistant-setup-list"
+                  onKeyDown={onPresetKey}
+                  onScroll={measureList}
+                  ref={(el) => {
+                    listEl = el;
+                    const watcher = new ResizeObserver(measureList);
+                    watcher.observe(el);
+                    onCleanup(() => watcher.disconnect());
+                  }}
+                >
                   <For each={PROVIDER_PRESETS}>
                     {(preset) => (
                       <Row selected={presetId() === preset.id} onClick={() => applyPreset(preset.id)}>
@@ -642,13 +694,18 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                     )}
                   </For>
                 </div>
+                <Show when={moreBelow()}>
+                  <span class="assistant-field-hint" aria-hidden="true">
+                    More providers below
+                  </span>
+                </Show>
               </div>
               <div class="assistant-setup-group" ref={fieldsEl}>
                 <SectionLabel>Connection</SectionLabel>
                 <div class="assistant-field">
                   <span>Base URL</span>
-                  <Field value={draft().baseUrl} ariaLabel="Base URL" placeholder="e.g. http://127.0.0.1:11434/v1" onInput={setBaseUrl} />
-                  <span class="assistant-field-hint">
+                  <Field value={draft().baseUrl} ariaLabel="Base URL" describedBy="assistant-url-hint" spellcheck={false} placeholder="e.g. http://127.0.0.1:11434/v1" onInput={setBaseUrl} />
+                  <span class="assistant-field-hint" id="assistant-url-hint">
                     {picked()?.key === false && picked()?.id !== "custom"
                       ? "A server on this machine. It needs no key, but it must accept requests from this page."
                       : "The address requests go to: the root of an OpenAI-compatible API, usually ending in /v1."}
@@ -657,27 +714,33 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 <Show when={keyWanted()}>
                   <div class="assistant-field">
                     <span>API key</span>
-                    <div class="assistant-key" ref={(el) => queueMicrotask(() => el.querySelector("input")?.setAttribute("autocomplete", "off"))}>
+                    <div class="assistant-key">
                       <Field
                         type={keyVisible() ? "text" : "password"}
                         value={draft().apiKey}
                         ariaLabel="API key"
+                        autocomplete="off"
+                        spellcheck={false}
+                        describedBy="assistant-key-hint"
                         placeholder="e.g. sk-..."
                         onInput={(v) => {
                           setDraft({ ...draft(), apiKey: v });
                           forgetCheck();
                         }}
                       />
-                      <Button variant="ghost" size="sm" title={keyVisible() ? "Hide the key" : "Show the key"} onClick={() => setKeyVisible(!keyVisible())}>
-                        {keyVisible() ? "Hide" : "Show"}
-                      </Button>
+                      <IconButton
+                        icon={keyVisible() ? "eye" : "eye-off"}
+                        size="sm"
+                        title={keyVisible() ? "Hide the key" : "Show the key"}
+                        onClick={() => setKeyVisible(!keyVisible())}
+                      />
                     </div>
-                    <span class="assistant-field-hint">Stored in this browser, not encrypted. Sent only to the base URL above.</span>
+                    <span class="assistant-field-hint" id="assistant-key-hint">Stored in this browser, not encrypted. Sent only to the base URL above.</span>
                   </div>
                 </Show>
                 <div class="assistant-field">
                   <span>Model</span>
-                  <Field value={draft().model} ariaLabel="Model" placeholder="e.g. llama3.2" onInput={setModel} />
+                  <Field value={draft().model} ariaLabel="Model" spellcheck={false} placeholder="e.g. llama3.2" onInput={setModel} />
                   <Show when={models().length === 0}>
                     <span class="assistant-field-hint">The model's name as the provider spells it. Check connection lists the ones it serves.</span>
                   </Show>

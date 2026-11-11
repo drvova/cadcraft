@@ -134,9 +134,6 @@ describe("the layer's contrast, from the tokens", () => {
       expect(lowest(theme, "canvas-focus-ring", [], ["canvas"])).toBeGreaterThanOrEqual(3);
       expect(lowest(theme, "selection", [], ["canvas"])).toBeGreaterThanOrEqual(3);
     });
-    test(`${name}: the attention glyph holds 3:1 on every surface and on the control's hover`, () => {
-      expect(lowest(theme, "icon-point", [], [...SURFACES, "control-hover"])).toBeGreaterThanOrEqual(3);
-    });
   }
 
   test("light: a frozen layer's key, the accent ink, holds 3:1 hovered on the current row of the sidebar", () => {

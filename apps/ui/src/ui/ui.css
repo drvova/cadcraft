@@ -342,6 +342,17 @@
   outline-offset: var(--focus-outline-offset);
 }
 
+/* A value the caller refuses: the error hairline, resting and focused alike, until the value is
+   corrected. Focused, the ring steps one line inside the stroke it otherwise covers, so the error
+   and the focus both show. The caller's error line says why (`describedBy`). */
+.ui-field[aria-invalid="true"] {
+  border-color: var(--error);
+}
+
+.ui-field[aria-invalid="true"]:focus {
+  outline-offset: calc(var(--focus-outline-offset) * 2);
+}
+
 .ui-field:disabled {
   color: var(--text-disabled);
 }
@@ -496,21 +507,23 @@
   text-transform: uppercase;
 }
 
-/* ---- Tooltip: <span class="ui-tooltip-host"><child/><span class="ui-tooltip">text</span></span> ---- */
+/* ---- Tooltip: one <div class="ui-tooltip"> on <body>, placed beside the control that carries
+        data-hint (IconButton, or a <span class="ui-tooltip-host"> around another control) ---- */
 
 .ui-tooltip-host {
-  position: relative;
   display: inline-flex;
 }
 
 /* The measured hover box (research §8): the chrome fill, radius 3, the .15 hairline, 2/8 shadow,
-   12px type, and the `fadein` arrival over 0.1s. Hidden from the pointer and from the reader
-   until it shows. */
+   12px type. It sits in the viewport's own coordinates (the script sets `left` and `top`), so no
+   pane clips it and it never widens the page; a hint longer than the window clips with an
+   ellipsis. Hidden from the pointer always, and from the eye until it shows. */
 .ui-tooltip {
-  position: absolute;
-  bottom: calc(100% + var(--gap-6));
-  left: 50%;
-  transform: translateX(-50%);
+  position: fixed;
+  top: 0;
+  left: 0;
+  max-width: calc(100% - var(--gap-6) * 2);
+  overflow: hidden;
   padding: var(--gap-3) var(--gap-8);
   border: var(--hairline) solid var(--tooltip-border);
   border-radius: var(--radius-small);
@@ -520,6 +533,7 @@
   font-family: var(--font-family);
   font-size: var(--font-label);
   line-height: var(--gap-16);
+  text-overflow: ellipsis;
   white-space: nowrap;
   opacity: 0;
   visibility: hidden;
@@ -527,39 +541,12 @@
   z-index: 60;
 }
 
-/* A control at the top edge flips the box below itself, as Cursor's hover does. */
-.ui-tooltip--bottom {
-  top: calc(100% + var(--gap-6));
-  bottom: auto;
-}
-
-/* A control at the right edge lines the box up with its own right edge, so the box (shown or
-   hidden) never reaches past the window and widens the page. */
-.ui-tooltip--end {
-  left: auto;
-  right: 0;
-  transform: none;
-}
-
-@keyframes tooltip-in {
-  from {
-    opacity: 0;
-    visibility: visible;
-  }
-  to {
-    opacity: 1;
-    visibility: visible;
-  }
-}
-
-@media (hover: hover) {
-  .ui-tooltip-host:hover .ui-tooltip {
-    animation: tooltip-in var(--dur-fast) var(--ease-standard) forwards;
-  }
-}
-
-.ui-tooltip-host:focus-within .ui-tooltip {
-  animation: tooltip-in var(--dur-fast) var(--ease-standard) forwards;
+/* The measured arrival: the box fades in over 0.1s. It leaves at once (the base rule carries no
+   transition), so a hint never trails the pointer to the next key. */
+.ui-tooltip--shown {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity var(--dur-fast) var(--ease-standard);
 }
 
 /* ---- Touch: a coarse pointer gets a target of at least 24 by 24 (WCAG 2.5.8) ---- */

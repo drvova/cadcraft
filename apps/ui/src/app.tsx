@@ -65,6 +65,15 @@ const REGIONS: readonly { root: string; first: string | null }[] = [
 /** Where a key belongs to what has the focus: fields, the palette, the assistant, the menus. */
 const OWN_KEYS = "input, textarea, select, [contenteditable], dialog, .assistant-panel, [role='menubar'], [role='menu']";
 
+/** What takes Escape before the shell does while it is open: a menu, the palette, the assistant's setup sheet. */
+const SHEET = ".assistant-setup";
+const OVERLAYS = `.menu-drop, dialog[open], ${SHEET}`;
+
+/** Whether a key went down on the drawing, or with the keyboard on nothing at all. */
+function onDrawing(target: Element | null): boolean {
+  return target === null || target === document.body || target.closest(".canvas-stage") !== null;
+}
+
 /** Whether an element is drawn (a region folded away or hidden by the window's width is not). */
 function isShown(el: Element): boolean {
   return el.getClientRects().length > 0;
@@ -116,7 +125,7 @@ export function App(props: AppProps): JSX.Element {
   const [layers, setLayers] = createSignal<LayerInfo[]>([]);
   const [display, setDisplay] = createSignal<DisplayList>({ revision: 0, bounds: UNIT_RECT, verts: [], prims: [] });
   const [view, setView] = createSignal<Rect>(UNIT_RECT);
-  const [notice, setNotice] = createSignal<string | null>(null);
+  const [notice, putNotice] = createSignal<string | null>(null);
   const [commands, setCommands] = createSignal<CommandInfo[]>([]);
   const [settings, setSettings] = createSignal<SettingsState>({
     grid: false,
@@ -152,6 +161,19 @@ export function App(props: AppProps): JSX.Element {
   const [showProperties, setShowProperties] = createSignal(true);
   const [theme, setTheme] = createSignal<ThemeChoice>("dark");
   const [animations, setAnimations] = createSignal<AnimChoice>("on");
+
+  /**
+   * Say something beside the command field, or (null) end what is said there. There is one notice
+   * at a time: the engine's last refusal, which the prompt carries, ends with it, so an error is
+   * never left standing over an action that went through. A notice ends at the next command or
+   * input sent, a change that succeeds (a property, a layer, a setting, a pick), and Escape.
+   */
+  const setNotice = (message: string | null): void => {
+    if (prompt().error !== null) setPrompt({ ...prompt(), error: null });
+    putNotice(message);
+  };
+  /** A refusal was said during the key being handled (the Properties rows commit on Enter). */
+  let saidOnKey = false;
 
   /**
    * The window the current display list covers (the view the fetch was made for, padded) and the
@@ -254,11 +276,13 @@ export function App(props: AppProps): JSX.Element {
     // The facade starts showing its own default view; keep the canvas on it.
     if (initial !== null) props.facade.setView(initial);
 
-    // A menu or the palette that is open when Escape goes down takes that Escape; by the time the
-    // key reaches the shell's handler it has already closed, so the fact is read on the way in.
+    // A menu, the palette or the assistant's setup sheet that is open when Escape goes down takes
+    // that Escape; by the time the key reaches the shell's handler it may have closed already, so
+    // the fact is read on the way in.
     let overlayTookEscape = false;
     const onKeyCapture = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") overlayTookEscape = document.querySelector(".menu-drop, dialog[open]") !== null;
+      saidOnKey = false;
+      if (e.key === "Escape") overlayTookEscape = document.querySelector(OVERLAYS) !== null;
     };
     // The shell's keys. A key that is not handled here is left alone (no preventDefault).
     const onKey = (e: KeyboardEvent): void => {
@@ -287,8 +311,31 @@ export function App(props: AppProps): JSX.Element {
         focusRegion(e.shiftKey ? -1 : 1);
         return;
       }
-      if (e.defaultPrevented) return;
       const target = e.target instanceof Element ? e.target : null;
+      // The setup sheet closes on its own Escape while the keyboard is in the assistant. From
+      // anywhere else the key is handed to it, so the press that closes the sheet does nothing more.
+      if (e.key === "Escape" && e.isTrusted) {
+        const sheet = document.querySelector(SHEET);
+        if (sheet !== null && !sheet.contains(target)) {
+          e.preventDefault();
+          sheet.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+          return;
+        }
+      }
+      // Enter in a Properties field is a commit. One that went through, or changed nothing, ends
+      // the notice; one refused during this key (or still marked on its row) keeps what was said.
+      if (e.key === "Enter" && !saidOnKey && target?.closest(".prop-row") != null && target.closest(".prop-row")?.querySelector("[aria-invalid='true']") == null) {
+        setNotice(null);
+      }
+      if (e.defaultPrevented) return;
+      // Enter and Space on the drawing (or with the keyboard nowhere) are the command line's empty
+      // Enter: they repeat the last command, or accept the running command's default. A control
+      // that has the focus keeps both keys, and so does whatever is open over the window.
+      if ((e.key === "Enter" || e.key === " ") && !mod && !e.altKey && !e.shiftKey && !e.isComposing && onDrawing(target) && document.querySelector(OVERLAYS) === null) {
+        e.preventDefault();
+        if (!e.repeat) onCommand("");
+        return;
+      }
       // Typing with the drawing (or nothing editable) in focus starts at the command line: the
       // focus moves during the keydown, so the character itself lands in the field.
       if (typesCharacter(e) && target?.closest(OWN_KEYS) == null) {
@@ -296,6 +343,7 @@ export function App(props: AppProps): JSX.Element {
         return;
       }
       if (e.key !== "Escape" || overlayTookEscape) return;
+      setNotice(null);
       // Escape cancels the running command; with none running it clears the selection (PLAN.md C6).
       if (prompt().running !== null) {
         e.preventDefault();
@@ -586,8 +634,15 @@ export function App(props: AppProps): JSX.Element {
 
   const onSetProperties = (patch: Record<string, unknown>): void => {
     const env = props.facade.setProperties(patch);
+    saidOnKey = !env.ok;
     setNotice(env.ok ? null : env.error);
     refresh();
+  };
+
+  /** A Properties row refused what was typed before it reached the engine. */
+  const onPropertyNotice = (message: string): void => {
+    saidOnKey = true;
+    setNotice(message);
   };
 
   const onLayout = (name: string): void => {
@@ -638,7 +693,7 @@ export function App(props: AppProps): JSX.Element {
               <LayersPanel layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} />
             </Show>
             <Show when={showProperties()}>
-              <PropertiesPanel properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={setNotice} />
+              <PropertiesPanel properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={onPropertyNotice} />
             </Show>
           </aside>
         </Show>

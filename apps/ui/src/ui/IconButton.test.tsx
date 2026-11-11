@@ -1,7 +1,8 @@
 /**
- * IconButton's contract: a native button whose accessible name is the `title`, the code-drawn
- * glyph inside, the size/variant classes, `aria-pressed` when selected, `aria-expanded` and
- * `aria-controls` on a fold key, and no click when disabled.
+ * IconButton's contract: a native button whose accessible name is the `title`, the same string
+ * as the layer's hint and no native `title` beside it, the code-drawn glyph inside, the
+ * size/variant classes, `aria-pressed` when selected, `aria-expanded` and `aria-controls` on a
+ * fold key, `aria-haspopup` on a key that opens a popup, and no click when disabled.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -13,7 +14,6 @@ describe("IconButton", () => {
     const button = buttonIn(mount(() => <IconButton icon="close" title="Close the panel" />));
     expect(button.tagName).toBe("BUTTON");
     expect(button.getAttribute("aria-label")).toBe("Close the panel");
-    expect(button.getAttribute("title")).toBe("Close the panel");
     expect(button.querySelector("svg.tool-icon")).not.toBeNull();
     expect(button.classList.contains("ui-icon-button--ghost")).toBe(true);
     expect(button.classList.contains("ui-icon-button--md")).toBe(true);
@@ -66,5 +66,30 @@ describe("IconButton", () => {
     const plain = buttonIn(mount(() => <IconButton icon="close" title="Close" />));
     expect(plain.hasAttribute("aria-expanded")).toBe(false);
     expect(plain.hasAttribute("aria-controls")).toBe(false);
+  });
+
+  test("the title is the layer's hint, and no native title doubles it", () => {
+    const button = buttonIn(mount(() => <IconButton icon="close" title="Close the panel" />));
+    expect(button.getAttribute("data-hint")).toBe("Close the panel");
+    expect(button.hasAttribute("title")).toBe(false);
+  });
+
+  test("a key that opens a popup says which kind, and whether it is open", () => {
+    const menu = buttonIn(mount(() => <IconButton icon="list" title="Main menu" popup="menu" expanded={false} />));
+    expect(menu.getAttribute("aria-haspopup")).toBe("menu");
+    expect(menu.getAttribute("aria-expanded")).toBe("false");
+    expect(menu.hasAttribute("aria-pressed")).toBe(false);
+    const open = buttonIn(mount(() => <IconButton icon="list" title="Main menu" popup="menu" expanded controls="main-menu" />));
+    expect(open.getAttribute("aria-expanded")).toBe("true");
+    expect(open.getAttribute("aria-controls")).toBe("main-menu");
+    const dialog = buttonIn(mount(() => <IconButton icon="plus" title="Provider settings" popup="dialog" expanded={false} />));
+    expect(dialog.getAttribute("aria-haspopup")).toBe("dialog");
+    const listbox = buttonIn(mount(() => <IconButton icon="chevron-down" title="Pick a model" popup="listbox" expanded={false} />));
+    expect(listbox.getAttribute("aria-haspopup")).toBe("listbox");
+  });
+
+  test("a key that opens nothing carries no popup attribute", () => {
+    const plain = buttonIn(mount(() => <IconButton icon="close" title="Close" />));
+    expect(plain.hasAttribute("aria-haspopup")).toBe(false);
   });
 });

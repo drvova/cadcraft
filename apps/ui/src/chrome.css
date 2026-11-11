@@ -379,13 +379,11 @@
   overflow: hidden;
 }
 
-/* The left of the bar: what the window is working on, as one quiet run of small items. */
+/* The left of the bar: what the window is working on, as one quiet run of small items. The run
+   has no box of its own: its items stand in the bar's own row (the bar's gap is the run's), so
+   the layer's name can give its width back to the toggles. */
 .status-left {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: var(--gap-12);
-  min-width: 0;
+  display: contents;
 }
 
 .status-item {
@@ -395,8 +393,13 @@
   white-space: nowrap;
 }
 
-/* A long layer name clips with an ellipsis; its full text stays in the layer list. */
+/* A long layer name clips with an ellipsis; its full text is its tooltip and in the layer list.
+   It is the first thing in the bar to give way: when the bar is short it narrows to its first
+   letters (`--layer-floor`, StatusBar.tsx: six characters, or the name's own length when it has
+   fewer) before the toggles' run loses a single word. */
 .status-layer {
+  flex: 0 1000 auto;
+  min-width: calc(var(--layer-floor, 6) * 1ch);
   max-width: 24ch;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -564,6 +567,11 @@
   .statusbar {
     height: auto;
     min-height: var(--status-h);
+  }
+
+  /* The toggles wrap here, so the layer's name has nothing to give way to. */
+  .status-layer {
+    flex-shrink: 0;
   }
 
   .status-toggles {

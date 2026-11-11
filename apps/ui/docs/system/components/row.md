@@ -95,7 +95,7 @@ Not applicable: no variant axes — a row is one band; the selected and disabled
 - `rule/row-label-limit`: When a row's label runs past 40 characters at the 260px sidebar, clip it with an ellipsis and keep the full text in `title`, because the measured row is 22px tall and the sidebar 260px wide. Evidence: measured 22px row and 260px sidebar, `docs/system/decisions.md`. Check: review `src/styles.css`.
   - Don't: a 60-character layer name that overflows the row.
   - Do: a clipped label with the full name in `title`.
-- `rule/row-touch-target`: When rows stack in a list, let the list's height follow its rows rather than fixing it to a multiple of 22px, because under a coarse pointer each row grows from 22px to the 24px control height (rows stack with 0 gap, so an overhanging target would only overlap the next row) and a fixed list would cut its last rows. Evidence: measured 22px row, 24px under a coarse pointer, `src/ui/ui.css:587`. Check: review `src/ui/ui.css`.
+- `rule/row-touch-target`: When rows stack in a list, let the list's height follow its rows rather than fixing it to a multiple of 22px, because under a coarse pointer each row grows from 22px to the 24px control height (rows stack with 0 gap, so an overhanging target would only overlap the next row) and a fixed list would cut its last rows. Evidence: measured 22px row, 24px under a coarse pointer, `src/ui/ui.css:574`. Check: review `src/ui/ui.css`.
   - Don't: `.my-list { height: calc(var(--control-h-row) * 8); overflow: hidden }`
   - Do: `.my-list { max-height: calc(var(--control-h-input) * 8); overflow-y: auto }`
 

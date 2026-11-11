@@ -49,14 +49,53 @@ export function providerEndpoint(baseUrl: string): string {
   return base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
 }
 
+/** The longest a setup's values may be: what is typed, what is stored and what is sent all keep to these. */
+export const PROVIDER_LIMITS = { baseUrl: 2_048, model: 200, apiKey: 4_096 } as const;
+
+/** What is wrong with a setup, as one word; the callers put it in their own sentences. */
+export type ProviderFault = "no-url" | "long-url" | "scheme" | "credentials" | "long-key" | "odd-key" | "no-model" | "long-model";
+
+/** The name and password an address carries before its host (`user:pass` of `https://user:pass@host`), or "". */
+function userInfo(baseUrl: string): string {
+  const authority = (baseUrl.trim().split("://")[1] ?? "").split(/[/?#]/)[0] ?? "";
+  const at = authority.lastIndexOf("@");
+  return at < 0 ? "" : authority.slice(0, at);
+}
+
+/**
+ * The first thing wrong with a setup, or null when it can be sent: the one check the turn, the
+ * connection check, the setup sheet and the stored setup all share. The address is http or https,
+ * carries no name or password (a browser refuses to ask such an address, and its error would
+ * quote them), and every value keeps to [`PROVIDER_LIMITS`]. A key is printable ASCII: anything
+ * else cannot travel in a header.
+ */
+export function providerFault(provider: ProviderConfig): ProviderFault | null {
+  const base = provider.baseUrl.trim();
+  if (base === "") return "no-url";
+  if (base.length > PROVIDER_LIMITS.baseUrl) return "long-url";
+  if (!base.startsWith("http://") && !base.startsWith("https://")) return "scheme";
+  if (((base.split("://")[1] ?? "").split(/[/?#]/)[0] ?? "").includes("@")) return "credentials";
+  const key = provider.apiKey.trim();
+  if (key.length > PROVIDER_LIMITS.apiKey) return "long-key";
+  if (/[^\x21-\x7e]/.test(key)) return "odd-key";
+  const model = provider.model.trim();
+  if (model === "") return "no-model";
+  if (model.length > PROVIDER_LIMITS.model) return "long-model";
+  return null;
+}
+
 /** Whether the provider is configured enough to send; the message names what is missing. */
 export function providerReady(provider: ProviderConfig): string | null {
-  if (provider.baseUrl.trim() === "") return "Set a base URL in the model setup.";
-  if (!provider.baseUrl.trim().startsWith("http://") && !provider.baseUrl.trim().startsWith("https://")) {
-    return `The base URL must start with http:// or https://, not "${provider.baseUrl.trim()}".`;
-  }
-  if (provider.model.trim() === "") return "Set a model name in the model setup.";
-  return null;
+  const fault = providerFault(provider);
+  if (fault === null) return null;
+  if (fault === "no-url") return "Set a base URL in the model setup.";
+  if (fault === "long-url") return `The base URL is longer than ${PROVIDER_LIMITS.baseUrl} characters.`;
+  if (fault === "scheme") return `The base URL must start with http:// or https://, not "${clip(provider.baseUrl.trim(), 80)}".`;
+  if (fault === "credentials") return "The base URL must not carry a user name or a password. Put the key in the API key field.";
+  if (fault === "long-key") return `The API key is longer than ${PROVIDER_LIMITS.apiKey} characters.`;
+  if (fault === "odd-key") return "The API key has a space, a line break or another character a key cannot hold. Paste it again.";
+  if (fault === "no-model") return "Set a model name in the model setup.";
+  return `The model name is longer than ${PROVIDER_LIMITS.model} characters.`;
 }
 
 /** The preset a base URL belongs to, or the "Other" preset when it matches none. */
@@ -85,6 +124,41 @@ const UNREADABLE_CALL = "The model asked to run code, but its request could not 
 
 /** The most model names a provider's list contributes (some hosts list thousands). */
 export const MAX_LISTED_MODELS = 200;
+
+/** How long the connection check waits for the model list, and a turn for the next piece of a reply. */
+export const CHECK_TIMEOUT_MS = 20_000;
+export const REPLY_IDLE_MS = 120_000;
+
+/** The bounds on what a provider may send. Past one, the request is stopped and the reason said. */
+export const MAX_REPLY_CHARS = 200_000;
+export const MAX_CALLS_PER_REPLY = 32;
+export const MAX_CALL_ARGS_CHARS = 100_000;
+export const MAX_CALL_NAME_CHARS = 64;
+export const MAX_STREAM_CHARS = 4_000_000;
+export const MAX_MODEL_LIST_CHARS = 8_000_000;
+const MAX_ERROR_BODY_CHARS = 16_000;
+
+const count = (n: number): string => n.toLocaleString("en-US");
+
+/** A reply that passed [`MAX_REPLY_CHARS`]: what arrived stays, and the reader is told where it ends. */
+const REPLY_CUT = `The reply passed ${count(MAX_REPLY_CHARS)} characters and was stopped there. Ask for a shorter answer.`;
+
+/** An answer past [`MAX_STREAM_CHARS`] that never became a reply. */
+const REPLY_TOO_LARGE = "The provider sent more than can be read, so the request was stopped. The base URL may not point to an OpenAI-compatible server.";
+
+/** More tool calls in one reply than [`MAX_CALLS_PER_REPLY`]: none of them is run. */
+const TOO_MANY_CALLS = `The model asked to run code more than ${MAX_CALLS_PER_REPLY} times in one reply, so none of it was run. Ask for the work in smaller steps.`;
+
+/** One tool call past [`MAX_CALL_ARGS_CHARS`]: it is not run. */
+const CALL_TOO_LARGE = `The model sent more than ${count(MAX_CALL_ARGS_CHARS)} characters of code in one request, so it was not run. Ask for the work in smaller steps.`;
+
+/** A model list past [`MAX_MODEL_LIST_CHARS`]. */
+const LIST_TOO_LARGE = "The provider's model list is too large to read. Type the model's name and save.";
+
+const silentText = (ms: number): string => {
+  const seconds = Math.max(1, Math.round(ms / 1000));
+  return `The provider sent nothing for ${seconds === 1 ? "1 second" : `${seconds} seconds`}, so the request was stopped. Check that the server is running, then ask again.`;
+};
 
 /**
  * How a connection check ended. `reached` and `no-list` are answers from the server (the second
@@ -116,6 +190,26 @@ export function withoutKey(text: string, apiKey: string): string {
   return key === "" ? text : text.split(key).join("(your key)");
 }
 
+/** A name and password before a host, in any address: `https://user:pass@host` reads `https://host`. */
+const URL_CREDENTIALS_RE = /([a-z][a-z0-9+.-]*:\/\/)[^/\s?#@"'<>]*@/gi;
+
+/**
+ * The one place every message about a provider passes before a person reads it (the transcript's
+ * failure rows, the setup sheet's status): the key becomes "(your key)", and a name and password
+ * in an address (the base URL's own, or any other) are taken out. `listModels` and `runTurn` call
+ * it on everything they report, so no path of theirs can show a secret.
+ */
+export function redact(text: string, provider: ProviderConfig): string {
+  let out = withoutKey(text, provider.apiKey);
+  const info = userInfo(provider.baseUrl);
+  if (info !== "") {
+    out = out.split(`${info}@`).join("");
+    const password = info.includes(":") ? info.slice(info.indexOf(":") + 1) : "";
+    if (password !== "") out = out.split(password).join("(your password)");
+  }
+  return out.replace(URL_CREDENTIALS_RE, "$1");
+}
+
 /** The note for a check the server answered: how many models it lists, and whether the typed one is there. */
 export function reachedNote(ids: readonly string[], model: string): ConnectionNote {
   if (ids.length === 0) return { state: "no-list", text: "Connected. The provider lists no models. Type the model's name." };
@@ -138,53 +232,96 @@ export function failedNote(e: unknown): ConnectionNote {
  * models the last check found, so the sentence can point at the list.
  */
 export function saveBlocker(provider: ProviderConfig, needsKey: boolean, listed: number): string | null {
-  const base = provider.baseUrl.trim();
-  if (base === "") return "To save, choose a provider or type a base URL.";
-  if (!base.startsWith("http://") && !base.startsWith("https://")) return "To save, start the base URL with http:// or https://.";
-  if (needsKey && provider.apiKey.trim() === "") return "To save, add the API key this provider needs.";
-  if (provider.model.trim() === "") return listed > 0 ? "To save, pick a model from the list or type its name." : "To save, type a model name.";
-  return null;
+  // The address and the key are judged first, as the sheet lists them; the model is the last field.
+  const fault = providerFault({ ...provider, model: "any" }) ?? (needsKey && provider.apiKey.trim() === "" ? "no-key" : providerFault(provider));
+  if (fault === null) return null;
+  if (fault === "no-url") return "To save, choose a provider or type a base URL.";
+  if (fault === "long-url") return `To save, shorten the base URL to ${PROVIDER_LIMITS.baseUrl} characters or fewer.`;
+  if (fault === "scheme") return "To save, start the base URL with http:// or https://.";
+  if (fault === "credentials") return "To save, take the user name and password out of the base URL. The key goes in the API key field.";
+  if (fault === "long-key") return `To save, shorten the API key to ${PROVIDER_LIMITS.apiKey} characters or fewer.`;
+  if (fault === "odd-key") return "To save, paste the API key again: it has a space, a line break or another character a key cannot hold.";
+  if (fault === "no-key") return "To save, add the API key this provider needs.";
+  if (fault === "no-model") return listed > 0 ? "To save, pick a model from the list or type its name." : "To save, type a model name.";
+  return `To save, shorten the model name to ${PROVIDER_LIMITS.model} characters or fewer.`;
 }
 
 /**
  * Ask the provider which models it serves: the setup's connection check. Resolves with the model
  * ids (possibly none: some servers answer the route with an empty list); rejects with a message
- * in the pane's own words when the server cannot be reached, refuses the key, or answers with
- * something that is not a model list.
+ * in the sheet's own words when the server cannot be reached, does not answer in `timeoutMs`,
+ * refuses the key, or answers with something that is not a model list. Every message it rejects
+ * with has passed [`redact`].
  */
-export async function listModels(provider: ProviderConfig, signal: AbortSignal, fetchImpl: typeof fetch = fetch): Promise<string[]> {
+export async function listModels(provider: ProviderConfig, signal: AbortSignal, fetchImpl: typeof fetch = fetch, timeoutMs: number = CHECK_TIMEOUT_MS): Promise<string[]> {
+  try {
+    const ids = await askModels(provider, signal, fetchImpl, timeoutMs);
+    // A name that holds the key is not a name to show.
+    return ids.filter((id) => redact(id, provider) === id);
+  } catch (e) {
+    if (signal.aborted) throw new Error("stopped");
+    throw new ConnectionError(e instanceof ConnectionError ? e.state : "failed", redact(message(e), provider));
+  }
+}
+
+async function askModels(provider: ProviderConfig, signal: AbortSignal, fetchImpl: typeof fetch, timeoutMs: number): Promise<string[]> {
   const missing = providerReady({ ...provider, model: provider.model.trim() === "" ? "any" : provider.model });
   if (missing !== null) throw new ConnectionError("invalid", missing);
   const url = modelsEndpoint(provider.baseUrl);
   const headers: Record<string, string> = {};
   if (provider.apiKey.trim() !== "") headers["authorization"] = `Bearer ${provider.apiKey.trim()}`;
-  let resp: Response;
+  const watch = watchRequest(signal, timeoutMs);
   try {
-    resp = await fetchImpl(url, { method: "GET", headers, signal });
-  } catch (e) {
-    if (signal.aborted) throw new Error("stopped");
-    throw new ConnectionError("unreachable", unreachableText(e, url));
+    let resp: Response;
+    try {
+      resp = await watch.race(fetchImpl(url, { method: "GET", headers, signal: watch.signal }));
+    } catch (e) {
+      throw new ConnectionError("unreachable", e instanceof SilentError ? e.message : unreachableText(e, url));
+    }
+    if (!resp.ok) {
+      const refused = resp.status === 401 || resp.status === 403;
+      const body = await readCapped(resp, MAX_ERROR_BODY_CHARS, watch).catch(() => ({ text: "", clipped: false }));
+      throw new ConnectionError(refused ? "refused" : "failed", apiErrorText(resp.status, body.text, "sheet"));
+    }
+    let listing: { text: string; clipped: boolean };
+    try {
+      listing = await readCapped(resp, MAX_MODEL_LIST_CHARS, watch);
+    } catch (e) {
+      throw new ConnectionError("unreachable", e instanceof SilentError ? e.message : unreachableText(e, url));
+    }
+    if (listing.clipped) throw new ConnectionError("no-list", LIST_TOO_LARGE);
+    let body: unknown;
+    try {
+      body = JSON.parse(listing.text);
+    } catch {
+      throw new ConnectionError("no-list", NOT_A_MODEL_LIST);
+    }
+    const root = asRecord(body);
+    const rows = Array.isArray(root["data"]) ? root["data"] : Array.isArray(root["models"]) ? root["models"] : Array.isArray(body) ? body : null;
+    if (rows === null) throw new ConnectionError("no-list", NOT_A_MODEL_LIST);
+    return modelIds(rows);
+  } finally {
+    watch.done();
   }
-  if (!resp.ok) {
-    const refused = resp.status === 401 || resp.status === 403;
-    throw new ConnectionError(refused ? "refused" : "failed", withoutKey(apiErrorText(resp.status, await resp.text().catch(() => "")), provider.apiKey));
-  }
-  let body: unknown;
-  try {
-    body = JSON.parse(await resp.text());
-  } catch {
-    throw new ConnectionError("no-list", NOT_A_MODEL_LIST);
-  }
-  const root = asRecord(body);
-  const rows = Array.isArray(root["data"]) ? root["data"] : Array.isArray(root["models"]) ? root["models"] : Array.isArray(body) ? body : null;
-  if (rows === null) throw new ConnectionError("no-list", NOT_A_MODEL_LIST);
-  const ids: string[] = [];
-  for (const row of rows.slice(0, MAX_LISTED_MODELS)) {
+}
+
+/**
+ * The model names in a provider's list: at most [`MAX_LISTED_MODELS`], each once. A row that is
+ * not a name is skipped, and so is a name no model field could hold (longer than the limit, or
+ * with a line break or another control character in it). Markup in a name is only text: the
+ * sheet never renders HTML.
+ */
+export function modelIds(rows: readonly unknown[]): string[] {
+  const ids = new Set<string>();
+  for (const row of rows) {
+    if (ids.size >= MAX_LISTED_MODELS) break;
     const r = asRecord(row);
-    const id = typeof row === "string" ? row : typeof r["id"] === "string" ? r["id"] : typeof r["name"] === "string" ? r["name"] : "";
-    if (id !== "") ids.push(id);
+    const raw = typeof row === "string" ? row : typeof r["id"] === "string" ? r["id"] : typeof r["name"] === "string" ? r["name"] : "";
+    const id = raw.trim();
+    if (id === "" || id.length > PROVIDER_LIMITS.model || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(id)) continue;
+    ids.add(id);
   }
-  return ids;
+  return [...ids];
 }
 
 // ---- The tool: one, and only one -----------------------------------------------------------------
@@ -455,6 +592,8 @@ export interface Reply {
   text: string;
   toolCalls: ToolCall[];
   finish: string;
+  /** The text passed [`MAX_REPLY_CHARS`] and ends there; what the model asked to run is dropped. */
+  clipped?: boolean;
 }
 
 /** The OpenAI SSE stream, accumulated: text deltas pass through, tool-call fragments join by index. */
@@ -462,8 +601,18 @@ export class StreamAssembler {
   private text = "";
   private calls = new Map<number, PartialCall>();
   private finish = "";
+  private clipped = false;
 
-  /** Read one `data:` payload; returns a text fragment when the payload carried one. */
+  /** The text reached [`MAX_REPLY_CHARS`]: nothing more is read. */
+  get full(): boolean {
+    return this.clipped;
+  }
+
+  /**
+   * Read one `data:` payload; returns a text fragment when the payload carried one. Throws on a
+   * payload that is not the protocol, an error the provider reports, more than
+   * [`MAX_CALLS_PER_REPLY`] tool calls, or one call past [`MAX_CALL_ARGS_CHARS`].
+   */
   feed(payload: string): string | null {
     let v: unknown;
     try {
@@ -473,7 +622,7 @@ export class StreamAssembler {
     }
     const root = asRecord(v);
     const err = root["error"];
-    if (err !== undefined && err !== null) throw new Error(apiErrorText(200, JSON.stringify(err)));
+    if (err !== undefined && err !== null) throw new Error(apiErrorText(200, JSON.stringify({ error: err })));
     const choices = root["choices"];
     const choice = Array.isArray(choices) ? asRecord(choices[0]) : {};
     const reason = choice["finish_reason"];
@@ -482,8 +631,11 @@ export class StreamAssembler {
     let fragment: string | null = null;
     const content = part["content"];
     if (typeof content === "string" && content !== "") {
-      this.text += content;
-      fragment = content;
+      const room = MAX_REPLY_CHARS - this.text.length;
+      const kept = content.length > room ? content.slice(0, room) : content;
+      if (kept.length < content.length) this.clipped = true;
+      this.text += kept;
+      if (kept !== "") fragment = kept;
     }
     const calls = part["tool_calls"];
     if (Array.isArray(calls)) {
@@ -492,6 +644,7 @@ export class StreamAssembler {
         const index = typeof call["index"] === "number" ? call["index"] : 0;
         let entry = this.calls.get(index);
         if (entry === undefined) {
+          if (this.calls.size >= MAX_CALLS_PER_REPLY) throw new Error(TOO_MANY_CALLS);
           entry = { id: "", name: "", args: "" };
           this.calls.set(index, entry);
         }
@@ -502,6 +655,7 @@ export class StreamAssembler {
         if (typeof name === "string") entry.name += name;
         const args = f["arguments"];
         if (typeof args === "string") entry.args += args;
+        checkCallSize(entry.id, entry.name, entry.args);
       }
     }
     return fragment;
@@ -509,6 +663,7 @@ export class StreamAssembler {
 
   /** The assembled reply. */
   finishReply(): Reply {
+    if (this.clipped) return { text: this.text, toolCalls: [], finish: "length", clipped: true };
     const toolCalls: ToolCall[] = [];
     for (const [index, p] of [...this.calls.entries()].sort((a, b) => a[0] - b[0])) {
       if (p.name === "") throw new Error(UNREADABLE_CALL);
@@ -516,6 +671,12 @@ export class StreamAssembler {
     }
     return { text: this.text, toolCalls, finish: this.finish };
   }
+}
+
+/** One tool call's bounds: a name or an id no real call has is unreadable; too much code is said so. */
+function checkCallSize(id: string, name: string, args: string): void {
+  if (name.length > MAX_CALL_NAME_CHARS || id.length > PROVIDER_LIMITS.model) throw new Error(UNREADABLE_CALL);
+  if (args.length > MAX_CALL_ARGS_CHARS) throw new Error(CALL_TOO_LARGE);
 }
 
 /** A tool call's arguments: empty means `{}`; malformed JSON is an error, not a crash. */
@@ -550,11 +711,17 @@ export interface TurnOptions {
   signal: AbortSignal;
   /** Injectable for tests; the real one is `fetch`. */
   fetchImpl?: typeof fetch;
+  /** How long a request may stay silent before it is stopped; [`REPLY_IDLE_MS`] when left out. */
+  idleMs?: number;
 }
 
-/** Run one turn to completion: ask the model, run what it asks for, feed the results back, repeat. */
+/**
+ * Run one turn to completion: ask the model, run what it asks for, feed the results back, repeat.
+ * Every failure it reports has passed [`redact`].
+ */
 export async function runTurn(opts: TurnOptions): Promise<void> {
-  const { provider, conversation, onEvent, signal } = opts;
+  const { provider, conversation, signal } = opts;
+  const onEvent = (event: AssistantEvent): void => opts.onEvent(event.type === "failed" ? { type: "failed", error: redact(event.error, provider) } : event);
   const ready = providerReady(provider);
   if (ready !== null) {
     onEvent({ type: "failed", error: ready });
@@ -569,13 +736,18 @@ export async function runTurn(opts: TurnOptions): Promise<void> {
     const sent = [system, ...trimToBudget(conversation, MAX_REQUEST_CHARS)];
     let reply: Reply;
     try {
-      reply = await requestChat(provider, sent, signal, (t) => onEvent({ type: "text", text: t }), opts.fetchImpl);
+      reply = await requestChat(provider, sent, signal, (t) => onEvent({ type: "text", text: t }), opts.fetchImpl, opts.idleMs);
     } catch (e) {
       if (signal.aborted) {
         onEvent({ type: "done", reason: "stopped" });
         return;
       }
       onEvent({ type: "failed", error: message(e) });
+      return;
+    }
+    if (reply.clipped === true) {
+      conversation.push({ role: "assistant", content: reply.text });
+      onEvent({ type: "failed", error: REPLY_CUT });
       return;
     }
     if (reply.toolCalls.length === 0) {
@@ -830,13 +1002,87 @@ export function parseInline(text: string): InlinePart[] {
 
 // ---- The request ----------------------------------------------------------------------------------
 
-/** Send a conversation and stream the answer; `onText` sees each fragment as it arrives. */
+/** A request that stayed silent past its limit. */
+class SilentError extends Error {}
+
+/** What a wait needs of the watch over its request. */
+interface RequestWatch {
+  /** The signal the request itself is sent with. */
+  signal: AbortSignal;
+  /** Settle a wait early when the request is stopped or has gone silent. */
+  race: <T>(wait: Promise<T>) => Promise<T>;
+  /** Something arrived: the silence clock starts again. */
+  touch: () => void;
+  /** The request is over: put the clock and the listener away. */
+  done: () => void;
+}
+
+/**
+ * The watch over one request: it ends the request when the person stops it, or when nothing has
+ * arrived for `idleMs` (a server that accepts the connection and never answers, a stream that
+ * stops mid-reply). `race` settles a wait early in either case, so a body that ignores the abort
+ * cannot hold the turn.
+ */
+function watchRequest(outer: AbortSignal, idleMs: number): RequestWatch {
+  const inner = new AbortController();
+  const tripped = Promise.withResolvers<never>();
+  // Nothing may be waiting when it trips: that is not an error of its own.
+  tripped.promise.catch(() => undefined);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const trip = (reason: Error): void => {
+    tripped.reject(reason);
+    inner.abort();
+  };
+  const onStop = (): void => trip(new Error("stopped"));
+  const touch = (): void => {
+    clearTimeout(timer);
+    timer = setTimeout(() => trip(new SilentError(silentText(idleMs))), idleMs);
+  };
+  if (outer.aborted) onStop();
+  else outer.addEventListener("abort", onStop, { once: true });
+  touch();
+  return {
+    signal: inner.signal,
+    race: (wait) => Promise.race([wait, tripped.promise]),
+    touch,
+    done: () => {
+      clearTimeout(timer);
+      outer.removeEventListener("abort", onStop);
+    },
+  };
+}
+
+/** A response's body as text, read no further than `max` characters (`clipped` says it was longer). */
+async function readCapped(resp: Response, max: number, watch: RequestWatch): Promise<{ text: string; clipped: boolean }> {
+  if (resp.body === null) return { text: "", clipped: false };
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  try {
+    for (;;) {
+      const { done, value } = await watch.race(reader.read());
+      if (done) return { text, clipped: false };
+      watch.touch();
+      text += decoder.decode(value, { stream: true });
+      if (text.length > max) return { text: text.slice(0, max), clipped: true };
+    }
+  } finally {
+    void reader.cancel().catch(() => undefined);
+  }
+}
+
+/**
+ * Send a conversation and stream the answer; `onText` sees each fragment as it arrives. The
+ * request is bounded: silence past `idleMs` ends it, as does an answer past
+ * [`MAX_STREAM_CHARS`]; a reply past [`MAX_REPLY_CHARS`] comes back `clipped`.
+ */
 export async function requestChat(
   provider: ProviderConfig,
   messages: readonly ChatMessage[],
   signal: AbortSignal,
   onText: (fragment: string) => void,
   fetchImpl: typeof fetch = fetch,
+  idleMs: number = REPLY_IDLE_MS,
 ): Promise<Reply> {
   const body: Record<string, unknown> = {
     model: provider.model.trim(),
@@ -847,52 +1093,69 @@ export async function requestChat(
   };
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (provider.apiKey.trim() !== "") headers["authorization"] = `Bearer ${provider.apiKey.trim()}`;
-  let resp: Response;
+  const watch = watchRequest(signal, idleMs);
   try {
-    resp = await fetchImpl(providerEndpoint(provider.baseUrl), { method: "POST", headers, body: JSON.stringify(body), signal });
-  } catch (e) {
-    if (signal.aborted) throw new Error("stopped");
-    throw new Error(unreachableText(e, providerEndpoint(provider.baseUrl)));
-  }
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => "");
-    throw new Error(withoutKey(apiErrorText(resp.status, text), provider.apiKey));
-  }
-  const contentType = resp.headers.get("content-type") ?? "";
-  if (!contentType.includes("event-stream") || resp.body === null) {
-    // A provider that ignored `stream: true` (or a proxy that buffered it) still answers with one
-    // JSON object; read it as one.
-    const text = await resp.text();
-    return oneShot(text, onText);
-  }
-  const asm = new StreamAssembler();
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  const feedLine = (line: string): boolean => {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("data:")) return false;
-    const payload = trimmed.slice("data:".length).trim();
-    if (payload === "") return false;
-    if (payload === "[DONE]") return true;
-    const fragment = asm.feed(payload);
-    if (fragment !== null) onText(fragment);
-    return false;
-  };
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let idx = buffer.indexOf("\n");
-    while (idx >= 0) {
-      const line = buffer.slice(0, idx).replace(/\r$/, "");
-      buffer = buffer.slice(idx + 1);
-      if (feedLine(line)) return asm.finishReply();
-      idx = buffer.indexOf("\n");
+    let resp: Response;
+    try {
+      resp = await watch.race(fetchImpl(providerEndpoint(provider.baseUrl), { method: "POST", headers, body: JSON.stringify(body), signal: watch.signal }));
+    } catch (e) {
+      if (signal.aborted) throw new Error("stopped");
+      if (e instanceof SilentError) throw e;
+      throw new Error(unreachableText(e, providerEndpoint(provider.baseUrl)));
     }
+    watch.touch();
+    if (!resp.ok) {
+      const failed = await readCapped(resp, MAX_ERROR_BODY_CHARS, watch).catch(() => ({ text: "", clipped: false }));
+      throw new Error(apiErrorText(resp.status, failed.text));
+    }
+    const contentType = resp.headers.get("content-type") ?? "";
+    if (!contentType.includes("event-stream") || resp.body === null) {
+      // A provider that ignored `stream: true` (or a proxy that buffered it) still answers with one
+      // JSON object; read it as one.
+      const whole = await readCapped(resp, MAX_STREAM_CHARS, watch);
+      if (whole.clipped) throw new Error(REPLY_TOO_LARGE);
+      return oneShot(whole.text, onText);
+    }
+    const asm = new StreamAssembler();
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let read = 0;
+    const feedLine = (line: string): boolean => {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) return false;
+      const payload = trimmed.slice("data:".length).trim();
+      if (payload === "") return false;
+      if (payload === "[DONE]") return true;
+      const fragment = asm.feed(payload);
+      if (fragment !== null) onText(fragment);
+      return asm.full;
+    };
+    try {
+      for (;;) {
+        const { done, value } = await watch.race(reader.read());
+        if (done) break;
+        watch.touch();
+        const chunk = decoder.decode(value, { stream: true });
+        read += chunk.length;
+        if (read > MAX_STREAM_CHARS) throw new Error(REPLY_TOO_LARGE);
+        buffer += chunk;
+        let idx = buffer.indexOf("\n");
+        while (idx >= 0) {
+          const line = buffer.slice(0, idx).replace(/\r$/, "");
+          buffer = buffer.slice(idx + 1);
+          if (feedLine(line)) return asm.finishReply();
+          idx = buffer.indexOf("\n");
+        }
+      }
+    } finally {
+      void reader.cancel().catch(() => undefined);
+    }
+    if (buffer !== "") feedLine(buffer);
+    return asm.finishReply();
+  } finally {
+    watch.done();
   }
-  if (buffer !== "" && feedLine(buffer)) return asm.finishReply();
-  return asm.finishReply();
 }
 
 /** A reply that arrived as one JSON object instead of a stream. */
@@ -905,34 +1168,42 @@ export function oneShot(body: string, onText: (fragment: string) => void): Reply
   }
   const root = asRecord(v);
   const err = root["error"];
-  if (err !== undefined && err !== null) throw new Error(apiErrorText(200, JSON.stringify(err)));
+  if (err !== undefined && err !== null) throw new Error(apiErrorText(200, JSON.stringify({ error: err })));
   const choices = root["choices"];
   const choice = Array.isArray(choices) ? asRecord(choices[0]) : {};
   const msg = asRecord(choice["message"]);
-  const content = typeof msg["content"] === "string" ? msg["content"] : "";
+  const whole = typeof msg["content"] === "string" ? msg["content"] : "";
+  const content = whole.slice(0, MAX_REPLY_CHARS);
   if (content !== "") onText(content);
+  if (content.length < whole.length) return { text: content, toolCalls: [], finish: "length", clipped: true };
   const toolCalls: ToolCall[] = [];
   const calls = msg["tool_calls"];
   if (Array.isArray(calls)) {
+    if (calls.length > MAX_CALLS_PER_REPLY) throw new Error(TOO_MANY_CALLS);
     calls.forEach((raw, i) => {
       const call = asRecord(raw);
       const f = asRecord(call["function"]);
       const name = typeof f["name"] === "string" ? f["name"] : "";
       if (name === "") return;
       const id = typeof call["id"] === "string" ? call["id"] : `call_${i}`;
-      toolCalls.push({ id, name, args: parseToolArgs(typeof f["arguments"] === "string" ? f["arguments"] : "") });
+      const args = typeof f["arguments"] === "string" ? f["arguments"] : "";
+      checkCallSize(id, name, args);
+      toolCalls.push({ id, name, args: parseToolArgs(args) });
     });
   }
   const finish = typeof choice["finish_reason"] === "string" ? choice["finish_reason"] : "";
   return { text: content, toolCalls, finish };
 }
 
+/** Where a message is read: the transcript (the setup is elsewhere), or the setup sheet itself. */
+export type MessagePlace = "panel" | "sheet";
+
 /**
  * What a status means, and the way out, in the pane's own words. A 2xx status is an error the
  * provider reported inside an answer that otherwise arrived, so there is no number worth naming.
  */
-function statusText(status: number): string {
-  if (status === 401 || status === 403) return `The provider refused the request (${status}). Check the API key in the model setup.`;
+function statusText(status: number, where: MessagePlace): string {
+  if (status === 401 || status === 403) return `The provider refused the request (${status}). Check the API key ${where === "sheet" ? "above" : "in the model setup"}.`;
   if (status === 404) return `The provider did not find what was asked for (${status}). The base URL or the model name may be wrong.`;
   if (status === 429) return `The provider is limiting requests (${status}). Wait a moment, then ask again.`;
   if (status >= 500) return `The provider is having trouble (${status}). Ask again in a moment.`;
@@ -941,19 +1212,19 @@ function statusText(status: number): string {
 }
 
 /** The message a failed answer carries: what the status means, then the provider's own message. */
-export function apiErrorText(status: number, body: string): string {
+export function apiErrorText(status: number, body: string, where: MessagePlace = "panel"): string {
   const trimmed = body.trim();
   let detail = trimmed === "" ? "" : clip(trimmed, 400);
   try {
     const v = asRecord(JSON.parse(trimmed));
-    const e = asRecord(v["error"]);
-    const m = e["message"];
-    if (typeof m === "string") detail = m.trim();
+    // The error is an object with a message, or (some servers) the message itself.
+    const m = typeof v["error"] === "string" ? v["error"] : asRecord(v["error"])["message"];
+    if (typeof m === "string") detail = clip(m.trim(), 400);
   } catch {
     // not JSON; the clipped body stands
   }
-  if (detail === "") return statusText(status);
-  return `${statusText(status)} The provider said: ${/[.!?…]$/.test(detail) ? detail : `${detail}.`}`;
+  if (detail === "") return statusText(status, where);
+  return `${statusText(status, where)} The provider said: ${/[.!?…]$/.test(detail) ? detail : `${detail}.`}`;
 }
 
 /**

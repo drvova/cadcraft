@@ -2,7 +2,7 @@
 # IconButton
 
 ## Description
-It runs one action drawn as a single glyph, and its tooltip is its accessible name.
+It runs one action drawn as a single glyph, and its `title` is both its accessible name and the hint a sighted person reads.
 
 `import { IconButton } from "../../../../src/ui/IconButton";`, source `src/ui/IconButton.tsx`, status `ready`.
 Foundation: hand-rolled. Traps checked: trap/button-div, trap/role-button, trap/native-control, trap/button-icon-name, trap/icon-optical-size, trap/icon-optical-align, trap/control-height, trap/focus-ring-shape, trap/hover-beats-focus, trap/disabled-still-hovers, trap/touch-hover-flash, trap/hover-unguarded, trap/touch-tap-highlight.
@@ -13,7 +13,7 @@ Not applicable: hand-rolled — the circle, the .08 hover fill and the 14px glyp
 ## Examples
 `<IconButton icon="close" title="Close the panel" />` — the panel's close control.
 
-Real uses, 23 call sites (`rg -c "<IconButton" src/components` → `src/components/AssistantPane.tsx:16`, `src/components/LayersPanel.tsx:1`, `src/components/MenuBar.tsx:1`, `src/components/PropertiesPanel.tsx:1`, `src/components/ToolStrip.tsx:1`, `src/components/TopBar.tsx:3`):
+Real uses, 24 call sites (`rg -c "<IconButton" src/components` → `src/components/AssistantPane.tsx:17`, `src/components/LayersPanel.tsx:1`, `src/components/MenuBar.tsx:1`, `src/components/PropertiesPanel.tsx:1`, `src/components/ToolStrip.tsx:1`, `src/components/TopBar.tsx:3`):
 - `src/components/AssistantPane.tsx` — the composer pilot: the toolbar's attach (`soft`), stop and send (`inverted`), and each attachment chip's remove circle (`sm`).
 - `src/components/ToolStrip.tsx:111` — every tool in the strip: the glyph from the tool's icon id, the title its label and shortcut, click to invoke it.
 
@@ -29,6 +29,7 @@ Real uses, 23 call sites (`rg -c "<IconButton" src/components` → `src/componen
 | `docs/system/examples/icon-button/disabled.tsx` | state:disabled | A blocked tool at the disabled ink. |
 | `docs/system/examples/icon-button/selected.tsx` | state:selected | A toggled tool at the .14 fill, announced pressed. |
 | `docs/system/examples/icon-button/expanded.tsx` | state:expanded | A fold key over the region it folds, announced expanded. |
+| `docs/system/examples/icon-button/popup-menu.tsx` | popup=menu | A key that opens a menu, announced as a collapsed menu button. |
 | `docs/system/examples/icon-button/matrix-variant-size.tsx` | matrix:variant,size | Every variant at both sizes. |
 | `docs/system/examples/icon-button/in-assistant-pane.tsx` | composition:AssistantPane | The composer's toolbar row: attach, stop, send. |
 
@@ -80,7 +81,7 @@ export default function InAssistantPane() {
 ## Variants
 
 ### variant
-- `ghost`: the transparent circle for a tool bar; the default. Used at 20 call sites (the assistant header's New chat and Close, the narrow window's Main menu key, the sidebar sections' fold and unfold (the layers and the properties), the title bar's sidebar and command-line keys, the changes row's show and hide, an attachment chip's remove, the selection chip's remove, the turn's copy, a tool's code copy, a reply's code copy, a failed request's Try again, a queued message's send and remove, the composer's attach, every tool in the tool strip, and the top bar's assistant key).
+- `ghost`: the transparent circle for a tool bar; the default. Used at 21 call sites (the assistant header's New chat and Close, the setup sheet's show-or-hide key beside the API key, the narrow window's Main menu key, the sidebar sections' fold and unfold (the layers and the properties), the title bar's sidebar and command-line keys, the changes row's show and hide, an attachment chip's remove, the selection chip's remove, the turn's copy, a tool's code copy, a reply's code copy, a failed request's Try again, a queued message's send and remove, the composer's attach, every tool in the tool strip, and the top bar's assistant key).
 - `soft`: the resting `.08` fill, for a tool that is currently on. Used at 1 call site (the transcript's jump-to-latest key).
 - `inverted`: the ink-coloured circle with the accent-surface glyph, for the one primary action. Used at 2 call sites (the composer's stop and send).
 
@@ -115,7 +116,7 @@ export default function VariantInverted() {
 ```
 
 ### size
-- `sm`: the 20px circle with the 12px glyph, for a chip row. Used at 13 call sites (the sidebar sections' fold and unfold (the layers and the properties), the changes row's show and hide, an attachment chip's remove, the selection chip's remove, the turn's copy, a tool's code copy, a reply's code copy, a failed request's Try again, and a queued message's send and remove).
+- `sm`: the 20px circle with the 12px glyph, for a chip row. Used at 14 call sites (the setup sheet's show-or-hide key beside the API key, the sidebar sections' fold and unfold (the layers and the properties), the changes row's show and hide, an attachment chip's remove, the selection chip's remove, the turn's copy, a tool's code copy, a reply's code copy, a failed request's Try again, and a queued message's send and remove).
 - `md`: the 24px circle with the 14px glyph, the composer's size. Used at 11 call sites (the assistant header's New chat and Close, the narrow window's Main menu key, the composer's attach, stop and send, the transcript's jump-to-latest key, every tool in the tool strip, and the title bar's sidebar, command-line and assistant keys).
 
 Example: The 20px circle with the 12px glyph. (`docs/system/examples/icon-button/size-sm.tsx`)
@@ -138,6 +139,16 @@ export default function SizeMd() {
 }
 ```
 
+Example: A key that opens a menu, announced as a collapsed menu button. (`docs/system/examples/icon-button/popup-menu.tsx`)
+
+```tsx
+import { IconButton } from "../../../../src/ui/IconButton";
+
+export default function PopupMenu() {
+  return <IconButton icon="list" title="Main menu" popup="menu" expanded={false} />;
+}
+```
+
 ## States
 | State | Trigger | What the user can do | Shown by, besides color | Checked by |
 |---|---|---|---|---|
@@ -147,6 +158,7 @@ export default function SizeMd() {
 | Focused | Keyboard focus arrives by Tab. | Enter or Space runs the action. | The 1px ring in the focus ink at offset -1, following the circle; on `inverted`, the ring is the glyph's ink drawn 3px inside the edge. | by hand |
 | Selected | The caller passes `selected` (a toggle). | Click it again to turn the tool off. | The `.14` fill, the full ink, and `aria-pressed="true"`. | test |
 | Expanded | The caller passes `expanded` (a fold key), with `controls` naming the region. | Click it to fold the region away; click again to bring it back. | `aria-expanded="true"` while the region shows and `"false"` while it is folded, and `aria-controls` holding the region's `id`; the look is the variant's own. | test |
+| Hinted | A mouse or a pen rests on the circle for 0.4s (at once when another hint was up within the last 0.3s), or keyboard focus arrives. Never a finger. | Read the name; a press, a click or Escape puts the box away, and it stays away until the pointer or the focus moves to another control. | The layer's hint box holding the `title`, below the circle (above it at the window's foot), held inside the window's edges. | test |
 | Disabled | The caller's condition is false. | Nothing: no click, no hover. | The glyph drops to the disabled ink; the fill to the disabled step. | test |
 
 Example: A blocked tool at the disabled ink. (`docs/system/examples/icon-button/disabled.tsx`)
@@ -192,6 +204,12 @@ export default function Expanded() {
 - Expanded and Disabled: Disabled wins. A disabled fold key keeps `aria-expanded` and takes no click.
 - Selected and Disabled: Disabled wins. A disabled toggle drops to the disabled ink and takes no click.
 - Pressed and Focused: both show. The ring stays drawn while the circle is held down.
+- Hinted and Pressed: Pressed wins. The press puts the hint away.
+- Hinted and Hover: both show. The hint follows the hover after its delay.
+- Hinted and Focused: both show. The hint arrives with the ring, with no delay.
+- Hinted and Selected: both show. The hint names a toggle whatever its state.
+- Hinted and Expanded: both show, until the click that folds or opens puts the hint away.
+- Hinted and Disabled: both show. A disabled key still says what it is, as the native `title` it replaces did.
 
 ### Motion
 | Trigger | Kind | Preset | Properties | Reduced motion |
@@ -206,22 +224,24 @@ export default function Expanded() {
 | Prop | Type | Default | Purpose |
 |---|---|---|---|
 | `icon` | `string` |  | The id from `../icons.ts`; the glyph is drawn in code. |
-| `title` | `string` |  | The accessible name (also `aria-label`), and the tooltip. |
+| `title` | `string` |  | The accessible name (`aria-label`) and the hint's text. |
 | `controls?` | `string` |  | The `id` of the region a fold key shows and hides: sets `aria-controls`. |
 | `disabled?` | `boolean` |  | Blocks the click and drops the glyph to the disabled ink. |
 | `expanded?` | `boolean` |  | A fold key: sets `aria-expanded` to whether the region it folds is showing now. |
 | `onClick?` | `((event: MouseEvent) => void)` |  | Runs on click. |
+| `popup?` | `IconButtonPopup` |  | The key opens a popup of this kind: sets `aria-haspopup`. |
 | `selected?` | `boolean` |  | A toggle-style icon button: sets `aria-pressed` and the .14 selected fill. |
 | `size?` | `IconButtonSize` |  | The box size. |
 | `variant?` | `IconButtonVariant` |  | The look. |
 
 - `icon`: the id from `src/icons.ts`; the glyph is drawn in code, never an image.
-- `title`: the accessible name and the tooltip; an icon alone has no name without it.
+- `title`: the accessible name (`aria-label`) and the text of the layer's hint; an icon alone has no name without it. No native `title` attribute is rendered.
 - `variant`: the look; defaults to `ghost`.
 - `size`: the circle; `md` is 24px with a 14px glyph, `sm` is 20px with a 12px glyph.
 - `selected`: sets `aria-pressed` and the `.14` selected fill.
 - `expanded`: a fold key; sets `aria-expanded` to whether the region it folds is showing.
-- `controls`: the `id` of the region a fold key shows and hides; sets `aria-controls`.
+- `controls`: the `id` of the region a fold key shows and hides, or of the popup a key opens; sets `aria-controls`.
+- `popup`: the key opens a popup of this kind; sets `aria-haspopup`. `menu` for a list of actions, `listbox` for a list of values to pick one from, `dialog` for a popover holding fields or other controls.
 - `disabled`: blocks the click and drops the glyph to the disabled ink.
 - `onClick`: runs on click; a disabled circle never fires it.
 
@@ -247,8 +267,15 @@ export default function Expanded() {
   - Don't: `<IconButton icon="chevron-down" size="sm" title={open() ? "Hide the layers" : "Show the layers"} selected={open()} />`
   - Do: `<IconButton icon="chevron-down" size="sm" title={open() ? "Hide the layers" : "Show the layers"} expanded={open()} controls="layers-body" />`
 
+- `rule/icon-button-popup-kind`: When an icon button opens something that floats over the page, pass `popup` with its kind (1 of `menu`, `listbox`, `dialog`, matching the `role` of what opens), `expanded` with whether it is open, and `controls` with its `id` while it is rendered, and leave `selected` unset, because a key with no `aria-haspopup` is announced as a plain button and the menu it opens arrives unannounced. Evidence: single use `src/components/MenuBar.tsx:194`, the narrow window's Main menu key, which sets the attribute from outside on mount. Check: test `src/ui/IconButton.test.tsx`.
+  - Don't: `<IconButton icon="list" title="Main menu" expanded={open()} />` with `setAttribute("aria-haspopup", "menu")` on mount.
+  - Do: `<IconButton icon="list" title="Main menu" popup="menu" expanded={open()} controls={open() ? "main-menu" : undefined} />`
+- `rule/icon-button-no-native-title`: When an icon button is styled or wrapped, add 0 hints of its own (no `title` attribute set from outside, no `Tooltip` around it), because the component already shows its `title` in the layer's hint box and a second hint stacks on the first. Evidence: app 31/31 icon buttons in the running shell render no `title` attribute, measured in the browser 2026-11-11. Check: test `src/ui/IconButton.test.tsx`.
+  - Don't: `<Tooltip text="Close"><IconButton icon="close" title="Close" /></Tooltip>`
+  - Do: `<IconButton icon="close" title="Close the panel" />`
+
 ### Content
-- `rule/icon-button-title-sentence`: When `title` is written, name the action in sentence case with no full stop (Close the panel, Send, Stop), because the same string is the tooltip and the accessible name. Evidence: single use `src/components/AssistantPane.tsx:857`, the "Attach a picture (or paste, or drop one)" label. Check: review `src/components/AssistantPane.tsx`.
+- `rule/icon-button-title-sentence`: When `title` is written, name the action in sentence case with no full stop (Close the panel, Send, Stop), because the same string is the hint and the accessible name. Evidence: single use `src/components/AssistantPane.tsx:857`, the "Attach a picture (or paste, or drop one)" label. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `title="close panel."`
   - Do: `title="Close the panel"`
 
@@ -261,7 +288,7 @@ export default function Expanded() {
 - `rule/icon-button-row-limit`: When a toolbar row holds more than 5 icon buttons, move the rest into a menu, because the measured composer row holds 3 at 24px each with 4px gaps and the row starts crowding the input past 5. Evidence: measured 3 actions at 24px with 4px gaps, `docs/system/decisions.md`. Check: review `src/components/AssistantPane.tsx`.
   - Don't: 6 circles in the composer's toolbar row.
   - Do: 3 circles in the row and the rest inside a menu.
-- `rule/icon-button-touch-target`: When 2 `sm` icon buttons sit side by side, keep at least 4px between them, because under a coarse pointer each 20px circle keeps its drawn size and takes a 24px target from an invisible `::after` 2px past every edge, and closer circles overlap their targets. Evidence: measured 20px circle with a 24px `::after` target, `src/ui/ui.css:580`. Check: review `src/ui/ui.css`.
+- `rule/icon-button-touch-target`: When 2 `sm` icon buttons sit side by side, keep at least 4px between them, because under a coarse pointer each 20px circle keeps its drawn size and takes a 24px target from an invisible `::after` 2px past every edge, and closer circles overlap their targets. Evidence: measured 20px circle with a 24px `::after` target, `src/ui/ui.css:567`. Check: review `src/ui/ui.css`.
   - Don't: `.my-row .ui-icon-button--sm + .ui-icon-button--sm { margin-left: 0 }` — two 24px targets on a 20px pitch.
   - Do: `.my-row { display: flex; gap: var(--gap-4) }`
 
@@ -271,14 +298,16 @@ Rests on the native `<button>` element, with the drawn glyph hidden from assisti
 ### Keyboard
 | Key | Where focus is | Effect | Focus after | Checked by |
 |---|---|---|---|---|
-| Tab | The circle, in document order. | Moves focus to it; the accent ring draws. | On the circle. | by hand |
+| Tab | The circle, in document order. | Moves focus to it; the accent ring draws and the hint shows at once. | On the circle. | by hand |
 | Enter | The focused circle. | Runs the action. | Stays on the circle. | test |
 | Space | The focused circle. | Runs the action on release, exactly once. | Stays on the circle. | by hand |
+| Escape | The focused or hovered circle, its hint showing. | Puts the hint away; the key is not consumed, so a surface that closes on Escape still closes. | Stays on the circle. | test |
 
 ### ARIA
 | Part | Role | Accessible name from | States and properties | Announced | Checked by |
 |---|---|---|---|---|---|
-| The circle | `button` (native) | `aria-label` (the same string as `title`) | `aria-pressed` when `selected`; `aria-expanded` and `aria-controls` on a fold key; `disabled` when blocked | "Close the panel, button" / "Stop, pressed button" / "Hide the layers, expanded, button" | test |
+| The circle | `button` (native) | `aria-label` (the `title` string) | `aria-pressed` when `selected`; `aria-expanded` and `aria-controls` on a fold key; `aria-haspopup` with `aria-expanded` on a key that opens a popup; `disabled` when blocked | "Close the panel, button" / "Stop, pressed button" / "Hide the layers, expanded, button" / "Main menu, menu button, collapsed" | test |
+| The hint | None: the box is `aria-hidden="true"` | — | It repeats the circle's name for the eye; assistive tech reads the name from `aria-label` | Nothing | test |
 | The glyph | `svg` with `aria-hidden="true"` | — | Hidden from the accessibility tree | Nothing: the name is the button's | test |
 
 ## Tokens
@@ -308,3 +337,4 @@ Rests on the native `<button>` element, with the drawn glyph hidden from assisti
 - `Chip`: when the glyph and the text are a fact rather than an action.
 - `Row`: when the clickable band is a list item.
 - `Tab`: when the control brings one view of a strip to the front rather than toggling a setting; a closable tab draws its own close key.
+- `Tooltip`: the hint box this component shows by itself; wrap another control in it, never this one.

@@ -19,7 +19,7 @@ import { createEffect, createUniqueId, onCleanup, onMount, type Accessor, type J
 import type { DisplayList } from "../display";
 import type { AppFacade } from "../facade";
 import { drawDisplay, paletteFrom, type Palette } from "../canvas";
-import { fitAspect, panBy, screenToWorld, zoomAt, type Point, type Rect } from "../view";
+import { fitAspect, panBy, screenToWorld, zoomAt, type Point, type Rect, type ScreenSize } from "../view";
 
 export interface CanvasViewProps {
   facade: AppFacade;
@@ -45,7 +45,7 @@ const FALLBACK_PALETTE: Palette = { canvas: "#181818", gridMinor: "#202020", gri
 
 /** What the canvas is and how to work on it without a pointer: its accessible description. */
 export const CANVAS_HELP =
-  "The drawing area. With a pointer: drag to pan, turn the wheel to zoom, click an object to select it. With the keyboard: type a command, such as LINE, ZOOM or PAN, and it goes to the command line; Escape cancels the running command; F6 moves to the next part of the window.";
+  "The drawing area. With a pointer: drag to pan, turn the wheel to zoom, click an object to select it. With the keyboard: type a command, such as LINE, ZOOM or PAN, and it goes to the command line; Enter or Space repeats the last command, or accepts the running command's default; Escape cancels the running command; F6 moves to the next part of the window.";
 
 /** Read a prop that may be a value or an accessor. */
 function read<T>(value: T | Accessor<T> | undefined): T | undefined {
@@ -53,11 +53,43 @@ function read<T>(value: T | Accessor<T> | undefined): T | undefined {
   return typeof value === "function" ? (value as Accessor<T>)() : value;
 }
 
+/** How far a view's aspect may be from the canvas's (as a fraction) before it counts as stretched. */
+const ASPECT_TOLERANCE = 1e-6;
+
+/** Whether drawing `rect` on `screen` would scale x and y differently (a stretched drawing). */
+function isStretched(rect: Rect, screen: ScreenSize): boolean {
+  const spanX = rect.x1 - rect.x0;
+  const spanY = rect.y1 - rect.y0;
+  if (!(spanX > 0) || !(spanY > 0) || !(screen.w > 0) || !(screen.h > 0)) return false;
+  const have = spanX / spanY;
+  const want = screen.w / screen.h;
+  return Number.isFinite(have) && Math.abs(have - want) > ASPECT_TOLERANCE * want;
+}
+
+/**
+ * The view after the canvas changed size from `from` to `to`: the same world point at the centre
+ * and the same world size per pixel (the zoom), so the drawing keeps its place and its scale and
+ * the new room shows more of it (or less), as a CAD window does.
+ */
+function resizeView(rect: Rect, from: ScreenSize, to: ScreenSize): Rect {
+  const cx = (rect.x0 + rect.x1) / 2;
+  const cy = (rect.y0 + rect.y1) / 2;
+  const halfW = ((rect.x1 - rect.x0) / from.w) * to.w * 0.5;
+  const halfH = ((rect.y1 - rect.y0) / from.h) * to.h * 0.5;
+  if (!Number.isFinite(halfW) || !Number.isFinite(halfH) || !(halfW > 0) || !(halfH > 0)) return rect;
+  return { x0: cx - halfW, y0: cy - halfH, x1: cx + halfW, y1: cy + halfH };
+}
+
 export function CanvasView(props: CanvasViewProps): JSX.Element {
   let canvas: HTMLCanvasElement | undefined;
   let stage: HTMLDivElement | undefined;
   const helpId = createUniqueId();
-  let size = { w: 0, h: 0 };
+  /** The canvas in CSS px: its backing store's whole device pixels over the pixel ratio. */
+  let size: ScreenSize = { w: 0, h: 0 };
+  /** The backing store the canvas should have, in device pixels. */
+  let pixels: ScreenSize = { w: 0, h: 0 };
+  /** The size the view was last fitted to; it survives the canvas being hidden (a size of zero). */
+  let shown: ScreenSize | null = null;
   let palette: Palette = FALLBACK_PALETTE;
   /** The live drag; `moved` records whether the pointer left the click slop. */
   let dragging: { pointerId: number; x: number; y: number; downX: number; downY: number; moved: boolean; button: number } | null = null;
@@ -84,10 +116,8 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     const selection = read(props.selection);
     if (canvas === undefined || size.w <= 0 || size.h <= 0 || list === undefined) return;
     const scale = dpr();
-    const pxW = Math.max(1, Math.round(size.w * scale));
-    const pxH = Math.max(1, Math.round(size.h * scale));
-    if (canvas.width !== pxW) canvas.width = pxW;
-    if (canvas.height !== pxH) canvas.height = pxH;
+    if (canvas.width !== pixels.w) canvas.width = pixels.w;
+    if (canvas.height !== pixels.h) canvas.height = pixels.h;
     const ctx = canvas.getContext("2d");
     if (ctx === null) {
       props.onNotice("this browser has no 2D canvas context");
@@ -97,29 +127,72 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     drawDisplay(ctx, list, rect, { width: size.w, height: size.h, dpr: scale, palette, grid: true, ...(highlighted === undefined ? {} : { selection: highlighted }) });
   };
 
+  /**
+   * A view whose shape is not the canvas's would draw stretched (the first view of a drawing, a
+   * view an engine command set): widen it around its centre until nothing is cropped.
+   */
+  const refit = (): void => {
+    const rect = view();
+    if (isStretched(rect, size)) props.onViewChange(fitAspect(rect, size));
+  };
+
   // Redraw when the display list, the view or the selection changes (the revision is what the
   // facade bumps).
-  createEffect(redraw);
+  createEffect(() => {
+    refit();
+    redraw();
+  });
 
   onMount(() => {
     if (stage !== undefined) {
-      palette = paletteFrom(stage);
-      const measure = (): void => {
-        const before = { w: size.w, h: size.h };
-        size = { w: stage?.clientWidth ?? 0, h: stage?.clientHeight ?? 0 };
-        // The canvas changed shape (the assistant panel opened, a window resize): keep the view
-        // centred and uncropped by fitting it to the new aspect. Only when the shape really
-        // changed — a first measure has nothing to fit, and a pixel of drift is not a reshape.
-        if (before.w > 0 && before.h > 0 && size.w > 0 && size.h > 0) {
-          const drift = Math.abs(before.w / before.h - size.w / size.h);
-          if (drift > 0.01) props.onViewChange(fitAspect(view(), size));
+      const host = stage;
+      palette = paletteFrom(host);
+      /**
+       * Take the canvas's size. The backing store is the box in whole device pixels (the
+       * observer's own count where the browser gives one, so a fractional CSS box or a fractional
+       * pixel ratio still maps one canvas pixel to one device pixel), and the drawing's CSS size
+       * is that count over the ratio.
+       */
+      const measure = (entry?: ResizeObserverEntry): void => {
+        const scale = dpr();
+        const box = host.getBoundingClientRect();
+        const device = entry?.devicePixelContentBoxSize?.[0];
+        // The observer's count is the snapped one, so it is within a pixel of the box times the
+        // ratio; a count further off was taken at another ratio (an emulated screen) and is not used.
+        const snap = (counted: number | undefined, css: number): number =>
+          counted !== undefined && Math.abs(counted - css * scale) <= 1 ? Math.round(counted) : Math.round(css * scale);
+        const pxW = snap(device?.inlineSize, box.width);
+        const pxH = snap(device?.blockSize, box.height);
+        // Hidden (the assistant covers the editor in a narrow window): there is nothing to draw
+        // on, and the view waits as it is for the canvas to come back.
+        if (!(pxW > 0) || !(pxH > 0)) {
+          size = { w: 0, h: 0 };
+          return;
         }
+        pixels = { w: pxW, h: pxH };
+        size = { w: pxW / scale, h: pxH / scale };
+        // The canvas changed size (a panel folded, a window resize): the drawing keeps its centre
+        // and its zoom. A first measure has no size to keep and goes straight to the fit.
+        if (shown !== null && (shown.w !== size.w || shown.h !== size.h)) props.onViewChange(resizeView(view(), shown, size));
+        shown = size;
+        refit();
         redraw();
       };
-      measure();
-      const observer = new ResizeObserver(measure);
-      observer.observe(stage);
+      const observer = new ResizeObserver((entries) => measure(entries[entries.length - 1]));
+      observer.observe(host);
       onCleanup(() => observer.disconnect());
+      // A change of pixel ratio alone (the window moved to another screen, the page zoomed with
+      // the box unchanged) resizes nothing: watch the ratio itself, and watch again from each new
+      // one. The first call is the first measure.
+      let ratio: MediaQueryList | null = null;
+      const onRatio = (): void => {
+        ratio?.removeEventListener("change", onRatio);
+        ratio = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+        ratio.addEventListener("change", onRatio);
+        measure();
+      };
+      onRatio();
+      onCleanup(() => ratio?.removeEventListener("change", onRatio));
     }
     if (canvas !== undefined) {
       // Wheel must be non-passive to stop the page from scrolling while zooming.

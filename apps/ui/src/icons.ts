@@ -99,16 +99,21 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
   search: "M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13 M15.5 15.5L20 20",
   /** A window with a band along its foot: the command line's panel. */
   "layout.bottom": "M4 5h16v14H4z M4 14.5h16",
+  /** A lens with a pupil: a masked value is showing (the key field's show and hide). */
+  eye: "M3 12a10.5 10.5 0 0 1 18 0a10.5 10.5 0 0 1-18 0z M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z",
+  /** The empty lens struck through: the value is masked. */
+  "eye-off": "M3 12a10.5 10.5 0 0 1 18 0a10.5 10.5 0 0 1-18 0z M5.5 4.5l13 15",
   /** A four-point spark with a small plus: the assistant's toggle in the top bar. */
   assistant: "M11 4l1.8 5.2L18 11l-5.2 1.8L11 18l-1.8-5.2L4 11l5.2-1.8z M19 15v4 M17 17h4",
 };
 
 /**
- * The composer's icons (`AssistantPane.tsx`): the send and stop glyphs. They live in this map
- * because it is the one icon set, and this list is what lets the icon test tell a used path from
- * an orphan one.
+ * The assistant's icons (`AssistantPane.tsx`): the composer's send and stop glyphs, the
+ * transcript's and the header's keys, and the provider form's `eye` and `eye-off` (a masked
+ * field's show and hide). They live in this map because it is the one icon set, and this list is
+ * what lets the icon test tell a used path from an orphan one.
  */
-export const COMPOSER_ICONS: readonly string[] = ["send", "stop", "plus", "close", "chevron-right", "chevron-down", "copy", "retry", "circle", "pick", "assistant"];
+export const COMPOSER_ICONS: readonly string[] = ["send", "stop", "plus", "close", "chevron-right", "chevron-down", "copy", "retry", "circle", "pick", "assistant", "eye", "eye-off"];
 
 /** The shell's own glyphs: the layers palette's states (on, frozen and locked, each with its
  *  opposite; `LayersPanel.tsx`), the command centre's magnifier and the panel key (`TopBar.tsx`). */

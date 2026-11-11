@@ -87,6 +87,12 @@ export function LayoutTabs(props: LayoutTabsProps): JSX.Element {
   );
 }
 
+/** A count as it is read: grouped in threes ("1,284,019"), so a large drawing's is not a run of digits. */
+const count = (n: number): string => n.toLocaleString("en-US");
+
+/** The fewest characters a long layer name keeps in a bar too short for all of it. */
+const LAYER_FLOOR = 6;
+
 export interface StatusBarProps {
   settings: SettingsState;
   /** Which engine is live (the wasm facade, or the mock). */
@@ -107,14 +113,19 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
         <span class={props.mode.kind === "wasm" ? "status-item status-mode is-wasm" : "status-item status-mode is-mock"} title={props.mode.detail}>
           {props.mode.kind}
         </span>
-        <span class="status-item status-layer" title="The current layer (CLAYER)">
+        <span
+          class="status-item status-layer"
+          title={`The current layer (CLAYER): ${props.currentLayer}`}
+          // How narrow the name may be squeezed (chrome.css): never to fewer letters than it has.
+          style={{ "--layer-floor": Math.min([...props.currentLayer].length, LAYER_FLOOR) }}
+        >
           {props.currentLayer}
         </span>
         <span class="status-item status-count" title="Objects in the drawing">
-          {props.entityCount === 1 ? "1 object" : `${props.entityCount} objects`}
+          {props.entityCount === 1 ? "1 object" : `${count(props.entityCount)} objects`}
         </span>
         <span class="status-item status-count" title="Layers in the drawing">
-          {props.layerCount === 1 ? "1 layer" : `${props.layerCount} layers`}
+          {props.layerCount === 1 ? "1 layer" : `${count(props.layerCount)} layers`}
         </span>
       </div>
       <div class="status-right">
@@ -147,7 +158,7 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
         </span>
         <Show when={props.selectionCount > 0}>
           <span class="status-selection" title="Objects in the selection">
-            {props.selectionCount} selected
+            {count(props.selectionCount)} selected
           </span>
         </Show>
       </div>

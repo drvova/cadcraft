@@ -2,52 +2,54 @@
 # Tooltip
 
 ## Description
-It names a control on hover and on focus, in a small box near the control. It is a hint, not the control: the child keeps its own element, its own pointer and its own accessible name.
+It is the layer's one hint: a small box that names a control under the pointer or under keyboard focus. One box serves the whole window; `IconButton` shows it by itself from its `title`, and the `Tooltip` wrapper gives it to any other control. It is a hint, not the control: the child keeps its own element, its own pointer and its own accessible name.
 
 `import { Tooltip } from "../../../../src/ui/Tooltip";`, source `src/ui/Tooltip.tsx`, status `ready`.
 Foundation: hand-rolled. Traps checked: trap/button-div, trap/hover-unguarded, trap/touch-hover-flash.
 
 ### Foundation
-Not applicable: hand-rolled — the hover box is measured from the running Cursor 3.27.22 (`docs/system/decisions.md`, measured 2026-10-28): the chrome fill `#141414`, radius 3, the `.15` hairline, the `0 2px 8px rgba(0,0,0,.4)` shadow, 12px type, and the `fadein` arrival over 0.1s.
+Not applicable: hand-rolled — the hover box is measured from the running Cursor 3.27.22 (`docs/system/decisions.md`, measured 2026-10-28): the chrome fill `#141414`, radius 3, the `.15` hairline, the `0 2px 8px rgba(0,0,0,.4)` shadow, 12px type, and the arrival over 0.1s. The placement, the delay and the dismissal are the layer's own (`docs/system/decisions.md`, "The hint").
 
 ## Examples
-`<Tooltip text="Close the panel"><IconButton icon="close" title="Close the panel" /></Tooltip>` — a hint over an icon-only control.
+`<Tooltip text="Outline, the current layer"><span class="layer-name">Outline</span></Tooltip>` — a hint over a control that is not an `IconButton`.
 
-Real uses, 0 call sites: the assistant header's two keys were its only users and are `IconButton`s now, which carry their own hint (`rule/tooltip-one-hint`). The component stays for a control that has no hint of its own.
+Real uses, 0 call sites: no surface wraps a control in `<Tooltip>` yet. The box itself is in use on every `IconButton` (31 in the running shell at 1280px, measured in the browser 2026-11-11), which carries the hint without the wrapper.
+- (planned) `src/components/StatusBar.tsx` — the drafting toggles carry a native `title` today; they move onto the wrapper in a later arc.
+- (planned) `src/components/AssistantPane.tsx` — the chat title's native `title` (the full text of a clipped title) moves onto the wrapper in a later arc.
 
 ### Example files
 | File | Covers | Caption |
 |---|---|---|
-| `docs/system/examples/tooltip/default.tsx` | default | The hint over an icon button. |
-| `docs/system/examples/tooltip/in-assistant-head.tsx` | composition:AssistantPane | The hint in the pane's header. |
+| `docs/system/examples/tooltip/default.tsx` | default | The hint over a text button. |
+| `docs/system/examples/tooltip/in-assistant-head.tsx` | composition:AssistantPane | The full text of a clipped chat title. |
 
-Example: The hint over an icon button. (`docs/system/examples/tooltip/default.tsx`)
+Example: The hint over a text button. (`docs/system/examples/tooltip/default.tsx`)
 
 ```tsx
 import { Tooltip } from "../../../../src/ui/Tooltip";
-import { IconButton } from "../../../../src/ui/IconButton";
+import { Button } from "../../../../src/ui/Button";
 
-/** The hover hint over an icon-only control (the tooltip host keeps the button a button). */
+/** The hint over a control that is not an icon button (that one shows the hint by itself). */
 export default function Example() {
   return (
-    <Tooltip text="Close the panel">
-      <IconButton icon="close" title="Close the panel" />
+    <Tooltip text="Check the address and the key">
+      <Button>Check connection</Button>
     </Tooltip>
   );
 }
 ```
 
-Example: The hint in the pane's header. (`docs/system/examples/tooltip/in-assistant-head.tsx`)
+Example: The full text of a clipped chat title. (`docs/system/examples/tooltip/in-assistant-head.tsx`)
 
 ```tsx
 import { Tooltip } from "../../../../src/ui/Tooltip";
-import { IconButton } from "../../../../src/ui/IconButton";
 
-/** The pane's header: the icon button with its own name, wrapped for the hover hint. */
+/** The pane's header: a title that clips keeps its full text in the hint, on hover and on focus. */
 export default function InAssistantHead() {
+  const title = "Summarise the layers and count the objects on each";
   return (
-    <Tooltip text="New chat">
-      <IconButton icon="plus" aria-label="New chat" />
+    <Tooltip text={title} placement="bottom">
+      <span class="assistant-title">{title}</span>
     </Tooltip>
   );
 }
@@ -55,21 +57,25 @@ export default function InAssistantHead() {
 
 ## Variants
 
-One shape; two placements (above the child by default, below for a control at a pane's top edge) and two alignments (over the child's middle by default, or with its right edge for a control at a pane's right edge).
+One shape. The box prefers the side below the control and takes the side above with `placement="top"`; either way it flips to the other side when the preferred one has no room, and slides along the window's edge rather than cross it.
 
 ## States
 | State | Trigger | What the user can do | Shown by, besides color | Checked by |
 |---|---|---|---|---|
-| Rest | The pointer is away and nothing inside has focus. | Use the child. | The box is `opacity: 0; visibility: hidden` and takes no pointer. | by hand |
-| Shown | The pointer is over the child on a device with a hover pointer, or anything inside the child has focus. | Read the hint; the child keeps the pointer. | The box fades in over 0.1s at `role="tooltip"`. | by hand |
+| Rest | The pointer is away and keyboard focus is elsewhere. | Use the child. | The box is `opacity: 0; visibility: hidden` and takes no pointer. | test |
+| Shown | A mouse or a pen rests on the host for 0.4s (at once when another hint was up within the last 0.3s), or keyboard focus arrives inside the host. Never a finger. | Read the hint; the child keeps the pointer. | The box fades in over 0.1s beside the host, inside the window's edges. | test |
+| Dismissed | Escape, a press, a click, a scroll, a resize, or the window losing focus, while the box is shown or waiting to show. | Use the child; move the pointer or the focus to another control to see a hint again. | The box is gone at once and stays away while the pointer rests on the same host. | test |
 
 ### State precedence
-- Hover and Focused: both show the same box; focus keeps it visible after the pointer leaves.
+- Shown and Dismissed: Dismissed wins. A dismissed hint does not come back until the pointer or the focus moves to another control.
+- Rest and Shown: Not applicable: the box is one or the other.
+- Rest and Dismissed: Not applicable: both draw nothing.
 
 ### Motion
 | Trigger | Kind | Preset | Properties | Reduced motion |
 |---|---|---|---|---|
-| The pointer enters the host, or focus arrives inside it | input | the measured `fadein` (`--dur-fast` + `--ease-standard`) | opacity | The box appears at once: the shell's `:root[data-animations="off"] *` rule removes the animation. |
+| The hint shows | input | hover / focus feedback (`--dur-fast` + `--ease-standard`) | opacity | The box appears at once: the shell's `:root[data-animations="off"] *` rule removes the transition. |
+| The hint goes away | input | none: the box leaves at once | opacity | The same: nothing moves. |
 
 ## Props
 
@@ -78,70 +84,75 @@ One shape; two placements (above the child by default, below for a control at a 
 |---|---|---|---|
 | `children` | `Element` |  | The control the hint describes. |
 | `text` | `string` |  | The hint. |
-| `align?` | `"center" \| "end"` |  | Which edge of the control the box lines up with. |
-| `placement?` | `"top" \| "bottom"` |  | Where the box sits. |
+| `placement?` | `TooltipPlacement` |  | The side the box prefers: `bottom` (the default, where the platform's own hint falls, clear of the bar above a tool row) or `top`. |
 
 - `text`: the hint. A short fragment: "New chat", "Copy the code".
-- `placement`: `top` (the default) or `bottom`, for a control at the top edge of a pane.
-- `align`: `center` (the default) or `end`, which lines the box's right edge up with the control's, for a control at the right edge of a pane, where a centred box would run past the window.
-- `children`: the control the hint describes. Give it its own `aria-label` — the tooltip is not the name.
+- `placement`: the side the box prefers, `bottom` (the default) or `top`. It flips to the other side when the preferred one has no room.
+- `children`: the control the hint describes. Give it its own `aria-label` or visible text — the hint is not the name. Not an `IconButton`: that one carries the hint itself.
 
 ## Usage
 
 ### When to use
-- The control is icon-only and its meaning is not obvious from the glyph.
-- A truncated value needs its full text on hover.
+- A control that is not an `IconButton` needs a short hint: a toggle with a terse face, a key with a shortcut to teach.
+- A truncated value needs its full text on hover and on focus.
 
 ### When not to use
+- The control is an icon-only action. Use `IconButton` instead: its `title` already shows in this box.
 - The text is the control's only name. Use `Button` with a visible label instead.
 - The content is rich, interactive or long. Use `Row` rows inside a menu instead.
 
 ### Rules
-- `rule/tooltip-not-a-name`: When a control carries a tooltip, give the control its own `aria-label`, because a `role="tooltip"` is a description, not an accessible name, and a control named only by its tooltip is unnamed to a screen reader. Evidence: app 2/2 tooltip hosts name their button, `src/components/AssistantPane.tsx:511` and `src/components/AssistantPane.tsx:552`. Check: review `src/components/AssistantPane.tsx`.
+- `rule/tooltip-not-a-name`: When a control carries a tooltip, give the control its own `aria-label` or visible text, because the box is `aria-hidden` and a control named only by its hint has 0 names for a screen reader. Evidence: single use `src/ui/Tooltip.tsx:97`, `aria-hidden="true"` on the box. Check: test `src/ui/Tooltip.test.tsx`.
   - Don't: `<Tooltip text="Close"><button>✕</button></Tooltip>`
   - Do: `<Tooltip text="Close the panel"><button aria-label="Close the panel">✕</button></Tooltip>`
-- `rule/tooltip-never-blocks`: When the tooltip shows, the box keeps `pointer-events: none`, because it sits above the control and a hint that takes the click is worse than 0 hints. Evidence: single use `src/ui/ui.css:526`, `pointer-events: none` on the box. Check: review `src/ui/ui.css`.
+- `rule/tooltip-never-blocks`: When the tooltip shows, the box keeps `pointer-events: none`, because it sits beside the control and a hint that takes the click is worse than 0 hints. Evidence: single use `src/ui/ui.css:540`, `pointer-events: none` on the box. Check: review `src/ui/ui.css`.
   - Don't: a tooltip box with a hover handler of its own.
   - Do: `pointer-events: none` on `.ui-tooltip`.
+- `rule/tooltip-no-touch`: When the pointer is a finger, show 0 hints, because a finger has no hover and a tap would leave the box up over the control it just pressed. Evidence: single use `src/ui/Tooltip.tsx:150`, the `pointerType === "touch"` guard. Check: test `src/ui/Tooltip.test.tsx`.
+  - Don't: a hint that carries an instruction a touch user needs ("Hold to record").
+  - Do: the instruction in the control's label or beside it, and the hint only as a repeat.
 
 ### Content
-- `rule/tooltip-text-fragment`: When the hint's text is written, keep it a fragment of 1 to 4 words in sentence case with no full stop ("Copy the code", not "Click here to copy."), because the box is 25px tall and a sentence is read as a paragraph. Evidence: app 2/2 hints are fragments, `src/components/AssistantPane.tsx:442` and `src/components/AssistantPane.tsx:447`. Check: review `src/components/AssistantPane.tsx`.
+- `rule/tooltip-text-fragment`: When the hint's text is written, keep it a fragment of 1 to 4 words in sentence case with no full stop ("Copy the code", not "Click here to copy."), a shortcut in brackets after it, because the box is 24px tall and a sentence is read as a paragraph. Evidence: app 31/31 icon button hints in the running shell are 4 words or fewer before the bracket, measured in the browser 2026-11-11. Check: review `src/components/ToolStrip.tsx`.
   - Don't: `<Tooltip text="This button will close the assistant panel.">`
   - Do: `<Tooltip text="Close the panel">`
 
 ### Anti-slop
-- `rule/tooltip-one-hint`: When a control already shows a native `title`, wrap it in `Tooltip` instead of keeping both, because two hints stack and the native one arrives on its own delay. Evidence: app 2/2 wrapped buttons dropped their `title`, `src/components/AssistantPane.tsx:443`. Check: review `src/components/AssistantPane.tsx`.
-  - Don't: `<Tooltip text="Close"><IconButton icon="close" title="Close" /></Tooltip>`
-  - Do: `<Tooltip text="Close the panel"><IconButton icon="close" /></Tooltip>`
+- `rule/tooltip-one-hint`: When a control shows this hint, keep it the control's 1 hint: move the text out of the native `title` into `text`, and leave an `IconButton` unwrapped, because two hints stack: the platform's box arrives on its own delay over the layer's, and an `IconButton` already shows its own. Evidence: app 31/31 icon buttons in the running shell render no `title` attribute, measured in the browser 2026-11-11. Check: test `src/ui/Tooltip.test.tsx`.
+  - Don't: `<Tooltip text="Snap Mode (F9)"><button title="Snap Mode (F9)">Snap</button></Tooltip>`
+  - Do: `<Tooltip text="Snap Mode (F9)"><button aria-label="Snap Mode">Snap</button></Tooltip>`
 
 ### Limits
-- `rule/tooltip-length-limit`: When a hint runs past 40 characters, move the explanation into the control's label or help text, because the box is `white-space: nowrap` and a long hint runs past the viewport edge on a narrow pane. Evidence: measured 147px box at 12px type, `src/ui/ui.css:509`. Check: review `src/ui/ui.css`.
+- `rule/tooltip-length-limit`: When a hint runs past 40 characters, move the explanation into the control's label or help text, because the box is `white-space: nowrap` on 1 line and clips with an ellipsis at the window's width less 6px a side. Evidence: measured 225px box for the 40-character "Attach a picture (or paste, or drop one)" at 12px type, `src/ui/ui.css:525`. Check: review `src/ui/ui.css`.
   - Don't: a 60-character hint over the composer.
   - Do: a 3-word hint and a visible label for the rest.
 
 ## Accessibility
-The box is an extra description; the control keeps its own name. The host is a plain `<span>`, so the child's semantics are unchanged.
+The box repeats, for the eye, a name the control already has; it is hidden from assistive tech. The host is a plain `<span>`, so the child's semantics are unchanged. It meets WCAG 1.4.13 as dismissable (Escape) and persistent (it stays while the pointer or the focus does); it is not hoverable, which the criterion allows for a box that only repeats the control's own name and covers nothing else the pointer needs.
 
 ### Keyboard
 | Key | Where focus is | Effect | Focus after | Checked by |
 |---|---|---|---|---|
-| Tab | The child control. | The box shows while anything inside the host has focus. | Stays on the child. | by hand |
-| Escape | Anywhere | Not handled: the box hides with focus, not with Escape. | Unchanged. | by hand |
+| Tab | The child control. | The box shows at once, and goes when focus leaves the host. | Stays on the child. | by hand |
+| Escape | Anywhere, the box showing. | Puts the box away; the key is not consumed, so a surface that closes on Escape still closes. | Unchanged. | test |
+| Enter | The child control, the box showing. | The child's click puts the box away. | Unchanged. | test |
 
 ### ARIA
 | Part | Role | Accessible name from | States and properties | Announced | Checked by |
 |---|---|---|---|---|---|
-| The box | `tooltip` | Its text content | — | The hint, after the control's name | by hand |
-| The child | Unchanged (the child's own role) | The child's own `aria-label` or text | — | Its own name | by hand |
+| The box | None: `aria-hidden="true"` | — | — | Nothing | test |
+| The host | None: a plain `<span>` carrying `data-hint` | — | — | Nothing | test |
+| The child | Unchanged (the child's own role) | The child's own `aria-label` or text | — | Its own name | test |
 
 ## Tokens
 | Part | State | Token |
 |---|---|---|
-| The box | all | `--tooltip-bg`, `--tooltip-border`, `--tooltip-shadow`, `--radius-small`, `--font-label`, `--gap-8`, `--gap-6` |
+| The box | all | `--tooltip-bg`, `--tooltip-border`, `--tooltip-shadow`, `--radius-small`, `--font-label`, `--gap-8`, `--gap-3`, `--gap-16`, `--hairline` |
+| The gap to the control and to the window's edges | all | `--gap-6` |
 | The text | all | `--text` |
 | The motion | shown | `--dur-fast`, `--ease-standard` |
 
 ## Related
-- `IconButton`: the usual child; its `title` already provides the native hint, so use one or the other.
+- `IconButton`: shows this box by itself from its `title`; never wrap one.
 - `Chip`: the pickable keyword form.
 - `Kbd`: when the text is the key that runs an action and should stay on the surface rather than show on hover.

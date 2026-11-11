@@ -1,6 +1,7 @@
 /**
  * Field's contract: a native input with its accessible name, the value the caller owns, the
- * keystroke event, and the type/placeholder passthrough a real form needs.
+ * keystroke event, the type/placeholder passthrough a real form needs, the autofill and spelling
+ * switches, and the refused state with the line that explains it.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -32,5 +33,36 @@ describe("Field", () => {
   test("disabled blocks typing", () => {
     const input = inputIn(mount(() => <Field disabled ariaLabel="Locked" />));
     expect(input.disabled).toBe(true);
+  });
+
+  test("masks a password and never spell-checks it", () => {
+    const input = inputIn(mount(() => <Field type="password" ariaLabel="API key" />));
+    expect(input.getAttribute("type")).toBe("password");
+    expect(input.getAttribute("spellcheck")).toBe("false");
+  });
+
+  test("passes the autofill hint and the spelling switch through, and leaves both to the platform when unset", () => {
+    const key = inputIn(mount(() => <Field ariaLabel="API key" autocomplete="off" spellcheck={false} />));
+    expect(key.getAttribute("autocomplete")).toBe("off");
+    expect(key.getAttribute("spellcheck")).toBe("false");
+    const plain = inputIn(mount(() => <Field ariaLabel="Note" />));
+    expect(plain.hasAttribute("autocomplete")).toBe(false);
+    expect(plain.hasAttribute("spellcheck")).toBe(false);
+  });
+
+  test("a refused value is announced invalid, and only then", () => {
+    const refused = inputIn(mount(() => <Field ariaLabel="Base URL" invalid />));
+    expect(refused.getAttribute("aria-invalid")).toBe("true");
+    const fine = inputIn(mount(() => <Field ariaLabel="Base URL" invalid={false} />));
+    expect(fine.hasAttribute("aria-invalid")).toBe(false);
+    const plain = inputIn(mount(() => <Field ariaLabel="Base URL" />));
+    expect(plain.hasAttribute("aria-invalid")).toBe(false);
+  });
+
+  test("ties the help line or the error line to the input", () => {
+    const input = inputIn(mount(() => <Field ariaLabel="API key" describedBy="key-help key-error" />));
+    expect(input.getAttribute("aria-describedby")).toBe("key-help key-error");
+    const plain = inputIn(mount(() => <Field ariaLabel="Model" />));
+    expect(plain.hasAttribute("aria-describedby")).toBe(false);
   });
 });

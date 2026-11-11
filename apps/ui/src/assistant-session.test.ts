@@ -6,7 +6,7 @@
 
 import { describe, expect, test } from "bun:test";
 import type { ProviderConfig } from "./assistant";
-import { createAssistantSession, type AssistantSession, type SessionFacade } from "./assistant-session";
+import { createAssistantSession, loadProvider, parseStoredProvider, STORAGE_KEY, type AssistantSession, type SessionFacade } from "./assistant-session";
 import type { Envelope } from "./facade";
 
 const PROVIDER: ProviderConfig = { baseUrl: "http://127.0.0.1:11434/v1", model: "test-model", apiKey: "" };
@@ -430,6 +430,193 @@ describe("try again", () => {
   test("nothing to retry after a clean turn", async () => {
     const session = sessionWith(scriptedFetch([textReply("Hello")]).fetch);
     await say(session, "hi");
+    expect(session.canRetry()).toBe(false);
+  });
+});
+
+/** A stand-in for the browser's storage, installed for one test and taken away after it. */
+function withStorage<T>(initial: Record<string, string>, body: (store: Map<string, string>) => T | Promise<T>, getItem?: (key: string) => string | null): Promise<T> {
+  const store = new Map(Object.entries(initial));
+  const fake = {
+    getItem: getItem ?? ((key: string): string | null => store.get(key) ?? null),
+    setItem: (key: string, value: string): void => void store.set(key, value),
+    removeItem: (key: string): void => void store.delete(key),
+  };
+  Object.defineProperty(globalThis, "localStorage", { value: fake, configurable: true, writable: true });
+  return Promise.resolve()
+    .then(() => body(store))
+    .finally(() => Reflect.deleteProperty(globalThis, "localStorage"));
+}
+
+describe("a stored setup", () => {
+  const NOT_SET_UP: ProviderConfig = { baseUrl: "", model: "", apiKey: "" };
+  const GOOD = { baseUrl: "https://api.example.test/v1", model: "m-1", apiKey: "sk-1" };
+
+  test("a setup this build saved is read back", () => {
+    expect(parseStoredProvider(JSON.stringify(GOOD))).toEqual(GOOD);
+    expect(parseStoredProvider(JSON.stringify({ baseUrl: " http://127.0.0.1:11434/v1 ", model: " llama3.2 " }))).toEqual({ baseUrl: "http://127.0.0.1:11434/v1", model: "llama3.2", apiKey: "" });
+  });
+
+  test("anything else is not set up, and reading it never throws", () => {
+    const bad: ReadonlyArray<[string, string | null]> = [
+      ["nothing stored", null],
+      ["an empty text", ""],
+      ["not JSON", "{baseUrl:"],
+      ["null", "null"],
+      ["a number", "7"],
+      ["a text", '"https://api.example.test/v1"'],
+      ["an array", JSON.stringify([GOOD])],
+      ["an empty object", "{}"],
+      ["a number where the address belongs", JSON.stringify({ ...GOOD, baseUrl: 7 })],
+      ["an array where the model belongs", JSON.stringify({ ...GOOD, model: ["m-1"] })],
+      ["an object where the key belongs", JSON.stringify({ ...GOOD, apiKey: { toString: "x" } })],
+      ["null where the key belongs", JSON.stringify({ ...GOOD, apiKey: null })],
+      ["an ftp address", JSON.stringify({ ...GOOD, baseUrl: "ftp://files.example.test" })],
+      ["a script address", JSON.stringify({ ...GOOD, baseUrl: "javascript:alert(1)" })],
+      ["a file address", JSON.stringify({ ...GOOD, baseUrl: "file:///etc/passwd" })],
+      ["an address with a name and password", JSON.stringify({ ...GOOD, baseUrl: "https://admin:hunter2@api.example.test/v1" })],
+      ["an address with a line break", JSON.stringify({ ...GOOD, baseUrl: "https://api.example.test/v1\nHost: evil.test" })],
+      ["a key with a line break", JSON.stringify({ ...GOOD, apiKey: "sk-1\r\nx-injected: 1" })],
+      ["a model with a line break", JSON.stringify({ ...GOOD, model: "m\n1" })],
+      ["no model", JSON.stringify({ ...GOOD, model: "  " })],
+      ["a model past its limit", JSON.stringify({ ...GOOD, model: "m".repeat(201) })],
+      ["an address past its limit", JSON.stringify({ ...GOOD, baseUrl: `https://api.example.test/${"a".repeat(2_100)}` })],
+      ["5 MB of text", JSON.stringify({ ...GOOD, model: "m".repeat(5 << 20) })],
+      ["5 MB that is not JSON", "x".repeat(5 << 20)],
+    ];
+    for (const [name, raw] of bad) expect([name, parseStoredProvider(raw)]).toEqual([name, NOT_SET_UP]);
+  });
+
+  test("markup in a stored setup stays text: it is a model name, and nothing more", () => {
+    const stored = parseStoredProvider(JSON.stringify({ ...GOOD, model: "<img src=x onerror=alert(1)>" }));
+    expect(stored.model).toBe("<img src=x onerror=alert(1)>");
+  });
+
+  test("a session over a bad stored setup opens as not set up", async () => {
+    for (const raw of ["{oops", "null", JSON.stringify({ baseUrl: "ftp://x", model: "m", apiKey: "" }), JSON.stringify({ baseUrl: 5, model: [] })]) {
+      await withStorage({ "cadcraft.assistant.provider": raw }, () => {
+        const session = createAssistantSession({ facade: fakeFacade().facade, onChanged: () => {}, fetchImpl: scriptedFetch([]).fetch });
+        expect(session.ready()).toBe(false);
+        expect(session.provider()).toEqual(NOT_SET_UP);
+        session.setInput("draw");
+        expect(session.send()).toBe("unconfigured");
+      });
+    }
+  });
+
+  test("a storage that refuses to be read is a browser without a saved setup", async () => {
+    await withStorage(
+      {},
+      () => expect(loadProvider()).toEqual(NOT_SET_UP),
+      () => {
+        throw new Error("SecurityError: the operation is insecure");
+      },
+    );
+  });
+
+  test("a good stored setup is ready", async () => {
+    await withStorage({ "cadcraft.assistant.provider": JSON.stringify(GOOD) }, () => {
+      const session = createAssistantSession({ facade: fakeFacade().facade, onChanged: () => {}, fetchImpl: scriptedFetch([]).fetch });
+      expect(session.ready()).toBe(true);
+      expect(session.provider()).toEqual(GOOD);
+    });
+  });
+
+  test("ready is the turn's own check, not only that something is typed", () => {
+    const session = sessionWith(scriptedFetch([]).fetch);
+    expect(session.ready()).toBe(true);
+    for (const baseUrl of ["ftp://x/v1", "https://user:pass@x.test/v1", "x.test/v1"]) {
+      session.setProvider({ baseUrl, model: "m", apiKey: "" });
+      session.setInput("draw");
+      expect([baseUrl, session.ready(), session.send()]).toEqual([baseUrl, false, "unconfigured"]);
+    }
+  });
+});
+
+describe("the key", () => {
+  const SECRET = "sk-secret-1";
+  const withKey: ProviderConfig = { ...PROVIDER, apiKey: SECRET };
+  const echo = (): Response => sseResponse([`data: ${JSON.stringify({ error: { message: `key ${SECRET} is over its quota` } })}\n\n`]);
+
+  test("it is kept in the provider entry and nowhere else", async () => {
+    await withStorage({}, async (store) => {
+      const scripted = scriptedFetch([toolReply("(+ 1 2)"), textReply("Three."), echo()]);
+      const session = createAssistantSession({ facade: fakeFacade().facade, onChanged: () => {}, fetchImpl: scripted.fetch });
+      session.setProvider(withKey);
+      await say(session, "add");
+      await say(session, "again");
+      expect([...store.keys()]).toEqual([STORAGE_KEY]);
+      expect(JSON.parse(store.get(STORAGE_KEY) ?? "{}")).toEqual(withKey);
+      // No request's address or body carries it (the header does; `assistant.test.ts` pins that).
+      for (const request of scripted.requests) expect(request.url + JSON.stringify(request.body)).not.toContain(SECRET);
+    });
+  });
+
+  test("a provider that quotes it back does not get it into the transcript, the status or the title", async () => {
+    const seen: string[] = [];
+    const holder: { session?: AssistantSession } = {};
+    const scripted = scriptedFetch([toolReply("(+ 1 2)"), echo(), new Response(`denied: ${SECRET}`, { status: 403 })]);
+    holder.session = createAssistantSession({ facade: fakeFacade().facade, onChanged: () => seen.push(holder.session?.status() ?? ""), fetchImpl: scripted.fetch });
+    const session = holder.session;
+    session.setProvider(withKey);
+    await say(session, "add");
+    await say(session, "again");
+    const drawn = JSON.stringify(session.entries) + session.status() + session.title() + seen.join("") + JSON.stringify(session.queued) + JSON.stringify(session.changes());
+    expect(drawn).not.toContain(SECRET);
+    const failures = session.entries.filter((e) => e.kind === "failed").map((e) => (e.kind === "failed" ? e.text : ""));
+    expect(failures).toEqual([
+      "The provider reported an error. The provider said: key (your key) is over its quota.",
+      "The provider refused the request (403). Check the API key in the model setup. The provider said: denied: (your key).",
+    ]);
+  });
+});
+
+describe("a provider that stops answering", () => {
+  /** A reply that starts and then stays open; it ignores the abort, as the worst server would. */
+  const stalled = (): Response =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        start(c) {
+          c.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: "Starting" }, finish_reason: null }] })}\n\n`));
+        },
+      }),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    );
+
+  test("the turn ends by itself after the silence limit, with what arrived and a line that says why", async () => {
+    const session = createAssistantSession({ facade: fakeFacade().facade, onChanged: () => {}, fetchImpl: scriptedFetch([stalled()]).fetch, idleMs: 20 });
+    session.setProvider(PROVIDER);
+    await say(session, "hi");
+    expect(session.running()).toBe(false);
+    expect(kinds(session)).toEqual(["user", "assistant", "failed"]);
+    const last = session.entries[2];
+    expect(last?.kind === "failed" ? last.text : "").toBe("The provider sent nothing for 1 second, so the request was stopped. Check that the server is running, then ask again.");
+    // Words had arrived, so the request is not simply asked again.
+    expect(session.canRetry()).toBe(false);
+  });
+
+  test("Stop ends it at once, and the queue waits", async () => {
+    const session = createAssistantSession({ facade: fakeFacade().facade, onChanged: () => {}, fetchImpl: scriptedFetch([stalled()]).fetch, idleMs: 60_000 });
+    session.setProvider(PROVIDER);
+    session.setInput("hi");
+    session.send();
+    await until(() => session.entries.length === 2);
+    session.setInput("next");
+    expect(session.send()).toBe("queued");
+    session.stop();
+    await session.whenIdle();
+    expect(session.running()).toBe(false);
+    expect(kinds(session)).toEqual(["user", "assistant"]);
+    expect(session.queued.length).toBe(1);
+  });
+
+  test("a reply past the size limit is kept to the limit and the queue waits", async () => {
+    const piece = `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: "word ".repeat(10_000) }, finish_reason: null }] })}\n\n`;
+    const session = sessionWith(scriptedFetch([sseResponse(Array.from({ length: 10 }, () => piece))]).fetch);
+    await say(session, "hi");
+    expect(kinds(session)).toEqual(["user", "assistant", "failed"]);
+    const reply = session.entries[1];
+    expect(reply?.kind === "assistant" ? reply.text.length : 0).toBe(200_000);
     expect(session.canRetry()).toBe(false);
   });
 });

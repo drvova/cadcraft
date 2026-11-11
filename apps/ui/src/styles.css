@@ -223,10 +223,11 @@ body {
 
 /* A window too narrow for the menus beside the command centre keeps the centre and the keys:
    the menus fold into one Main menu key (chrome.css shows it). The start track still balances
-   the keys' track, so the centre stays in the middle of the window. */
+   the keys' track, so the centre stays in the middle of the window. The keys' track is never
+   narrower than the keys: in a phone's width the command centre gives the room, not they. */
 @media (max-width: 900px) {
   .titlebar {
-    grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(max-content, 1fr);
     padding-left: var(--gap-8);
   }
 
@@ -617,9 +618,29 @@ body {
      it steps a fifth of the way to the ink. */
   color: color-mix(in srgb, var(--error) 80%, var(--text));
   font-size: var(--font-small);
-  white-space: nowrap;
+  line-height: var(--gap-14);
+  border-radius: var(--radius-small);
+  /* A long error takes a second line before it is cut, in the room beside the field: the field
+     keeps its row. Two lines stand a little taller than the field, so the error gives that back
+     and the row (and the drawing over it) keeps its height. A word longer than the line breaks
+     where it must. */
+  margin-block: calc(-1 * var(--gap-2));
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+}
+
+/* The error takes the focus (Tab, a click, a tap), and with it shows its whole text. */
+.cmd-error:focus {
+  -webkit-line-clamp: none;
+  outline: none;
+}
+
+.cmd-error:focus-visible {
+  outline: var(--focus-outline-w) solid var(--focus-ring);
+  outline-offset: var(--gap-2);
 }
 
 /* ---- Motion ---- */

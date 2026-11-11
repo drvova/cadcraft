@@ -152,7 +152,8 @@
     ]
    },
    "states": [
-    "disabled"
+    "disabled",
+    "invalid"
    ],
    "tokens": [
     "--control-h-input",
@@ -166,7 +167,8 @@
     "--text",
     "--text-faint",
     "--text-disabled",
-    "--focus-ring"
+    "--focus-ring",
+    "--error"
    ],
    "replaces": []
   },
@@ -240,6 +242,11 @@
     "--radius-small",
     "--font-label",
     "--gap-8",
+    "--gap-6",
+    "--gap-3",
+    "--gap-16",
+    "--hairline",
+    "--text",
     "--dur-fast",
     "--ease-standard"
    ],
