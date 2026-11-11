@@ -13,7 +13,7 @@ Not applicable: hand-rolled — the circle, the .08 hover fill and the 14px glyp
 ## Examples
 `<IconButton icon="close" title="Close the panel" />` — the panel's close control.
 
-Real uses, 21 call sites (`rg -c "<IconButton" src/components` → `src/components/AssistantPane.tsx:14`, `src/components/LayersPanel.tsx:1`, `src/components/PropertiesPanel.tsx:2`, `src/components/ToolStrip.tsx:1`, `src/components/TopBar.tsx:3`):
+Real uses, 20 call sites (`rg -c "<IconButton" src/components` → `src/components/AssistantPane.tsx:14`, `src/components/LayersPanel.tsx:1`, `src/components/PropertiesPanel.tsx:1`, `src/components/ToolStrip.tsx:1`, `src/components/TopBar.tsx:3`):
 - `src/components/AssistantPane.tsx` — the composer pilot: the toolbar's attach (`soft`), stop and send (`inverted`), and each attachment chip's remove circle (`sm`).
 - `src/components/ToolStrip.tsx:111` — every tool in the strip: the glyph from the tool's icon id, the title its label and shortcut, click to invoke it.
 
@@ -79,7 +79,7 @@ export default function InAssistantPane() {
 ## Variants
 
 ### variant
-- `ghost`: the transparent circle for a tool bar; the default. Used at 18 call sites (the sidebar sections' fold and unfold (the layers and the properties), the title bar's sidebar and command-line keys, the changes row's show and hide, an attachment chip's remove, the selection chip's remove, the turn's copy, a tool's code copy, a reply's code copy, a failed request's Try again, a queued message's send and remove, the composer's attach, every tool in the tool strip, and the top bar's assistant key).
+- `ghost`: the transparent circle for a tool bar; the default. Used at 17 call sites (the sidebar sections' fold and unfold (the layers and the properties), the title bar's sidebar and command-line keys, the changes row's show and hide, an attachment chip's remove, the selection chip's remove, the turn's copy, a tool's code copy, a reply's code copy, a failed request's Try again, a queued message's send and remove, the composer's attach, every tool in the tool strip, and the top bar's assistant key).
 - `soft`: the resting `.08` fill, for a tool that is currently on. Used at 1 call site (the transcript's jump-to-latest key).
 - `inverted`: the ink-coloured circle with the accent-surface glyph, for the one primary action. Used at 2 call sites (the composer's stop and send).
 
@@ -114,7 +114,7 @@ export default function VariantInverted() {
 ```
 
 ### size
-- `sm`: the 20px circle with the 12px glyph, for a chip row. Used at 14 call sites (the sidebar sections' fold and unfold (the layers and the properties), the changes row's show and hide, an attachment chip's remove, the selection chip's remove, the turn's copy, a tool's code copy, a reply's code copy, a failed request's Try again, and a queued message's send and remove).
+- `sm`: the 20px circle with the 12px glyph, for a chip row. Used at 13 call sites (the sidebar sections' fold and unfold (the layers and the properties), the changes row's show and hide, an attachment chip's remove, the selection chip's remove, the turn's copy, a tool's code copy, a reply's code copy, a failed request's Try again, and a queued message's send and remove).
 - `md`: the 24px circle with the 14px glyph, the composer's size. Used at 8 call sites (the composer's attach, stop and send, the transcript's jump-to-latest key, every tool in the tool strip, and the title bar's sidebar, command-line and assistant keys).
 
 Example: The 20px circle with the 12px glyph. (`docs/system/examples/icon-button/size-sm.tsx`)
