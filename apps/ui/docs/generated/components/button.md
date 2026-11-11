@@ -13,9 +13,9 @@ Not applicable: hand-rolled — the recipe is the app's own `src/ui/ui.css`, mea
 ## Examples
 `<Button variant="primary">Save</Button>` — the one action of a dialog or a pane.
 
-Real uses, 3 call sites (`rg -c "<Button" src/components` → `src/components/AssistantPane.tsx:2`, `src/components/TopBar.tsx:1`):
-- `src/components/AssistantPane.tsx` — the composer pilot's call sites: the provider popover's Cancel (`variant="ghost"`) and Save (`variant="primary"`).
-- `src/components/TopBar.tsx:48` — Zoom extents (`size="sm"`), the bar's one action.
+Real uses, 6 call sites (`rg -c "<Button" src/components` → `src/components/AssistantPane.tsx:5`, `src/components/TopBar.tsx:1`):
+- `src/components/AssistantPane.tsx` — the assistant's call sites: the provider popover's Cancel (`variant="ghost"`) and Save (`variant="primary"`), and the stack over the composer: Stop on the run row and Undo all on the changes row (`variant="ghost" size="sm"`), and Keep beside it (`size="sm"`).
+- `src/components/TopBar.tsx:52` — Zoom extents (`size="sm"`), the bar's one action.
 
 ### Example files
 | File | Covers | Caption |
@@ -85,8 +85,8 @@ export default function InTopBar() {
 
 ### variant
 - `primary`: the one action of the pane or dialog; the accent fill. Used at 1 call site (the provider popover's Save).
-- `secondary`: the default action; the `.08` fill that Cursor's own default button draws. Used at 0 call sites.
-- `ghost`: a quiet action on a tool bar or in a list; no resting fill. Used at 1 call site (the provider popover's Cancel).
+- `secondary`: the default action; the `.08` fill that Cursor's own default button draws. Used at 2 call sites (the top bar's Zoom extents and the changes row's Keep).
+- `ghost`: a quiet action on a tool bar or in a list; no resting fill. Used at 3 call sites (the provider popover's Cancel, the run row's Stop and the changes row's Undo all).
 - `danger`: a destructive action; the error fill. Used at 0 call sites.
 
 Example: The accent fill, the one action of a pane. (`docs/system/examples/button/variant-primary.tsx`)
@@ -130,7 +130,7 @@ export default function VariantDanger() {
 ```
 
 ### size
-- `sm`: the 24px control, for a button beside a field or inside a row. Used at 1 call site (the top bar's Zoom extents).
+- `sm`: the 24px control, for a button beside a field or inside a row. Used at 4 call sites (the top bar's Zoom extents, and the stack's Stop, Undo all and Keep).
 - `md`: the 28px default, for a dialog footer or a pane header. Used at 2 call sites (the provider popover's Cancel and Save).
 
 Example: The 24px button that sits beside a field. (`docs/system/examples/button/size-sm.tsx`)
@@ -224,7 +224,7 @@ export default function Disabled() {
   - Do: `.ui-button--secondary:hover { background: var(--fill-active) }`
 
 ### Content
-- `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Zoom extents` — because the label is the action's name and the accessible name comes from it. Evidence: single use `src/components/TopBar.tsx:48`, the label "Zoom extents". Check: review `src/components/TopBar.tsx`.
+- `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Zoom extents` — because the label is the action's name and the accessible name comes from it. Evidence: app 6/6 labels are verbs or verb phrases, `src/components/TopBar.tsx:52`, the label "Zoom extents". Check: review `src/components/TopBar.tsx`.
   - Don't: `<Button>SAVE</Button>`
   - Do: `<Button>Save</Button>`
 

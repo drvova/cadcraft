@@ -73,6 +73,14 @@ export interface DrawingState {
   space: string;
   /** The drawing's units in words (`INSUNITS`), as the assistant's briefing names them. */
   units: string;
+  /** The undo stack's depth (`Facade::state`'s `undoDepth`); null when the facade does not say
+   *  (the mock, or an older wasm build): then there is no checkpoint to keep. */
+  undoDepth: number | null;
+}
+
+/** A reported undo depth as a whole, non-negative count; anything else is "not said". */
+function undoDepthOf(n: number | null): number | null {
+  return n === null || !Number.isFinite(n) || n < 0 ? null : Math.round(n);
 }
 
 export function parseDrawingState(raw: string): DrawingState | null {
@@ -104,6 +112,7 @@ export function parseDrawingState(raw: string): DrawingState | null {
     currentLayer: asString(first("currentLayer", "current", "clayer")) ?? "0",
     space: asString(first("space", "activeSpace")) ?? "model",
     units: asString(first("units", "insunits")) ?? "",
+    undoDepth: undoDepthOf(asNumber(first("undoDepth"))),
   };
 }
 

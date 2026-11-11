@@ -579,6 +579,28 @@ export function relativeTime(then: number, now: number): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+/**
+ * The one-line form of a tool call's code: its first non-empty line and how many more follow
+ * (a port of the desktop pane's `activity_lines`). Empty code asks for the manual.
+ */
+export function activityLine(code: string): string {
+  const lines = code
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l !== "");
+  const first = lines[0];
+  if (first === undefined) return "Read the manual";
+  return lines.length > 1 ? `${first}  +${lines.length - 1}` : first;
+}
+
+/** How close to the end counts as "at the end" of the transcript, in CSS pixels. */
+export const FOLLOW_SLACK = 24;
+
+/** Whether a scroller is at its end, so new content should keep it there. */
+export function atEnd(scrollHeight: number, scrollTop: number, clientHeight: number): boolean {
+  return scrollHeight - scrollTop - clientHeight <= FOLLOW_SLACK;
+}
+
 export function parseInline(text: string): InlinePart[] {
   const parts: InlinePart[] = [];
   let last = 0;

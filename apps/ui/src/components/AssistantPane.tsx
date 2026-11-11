@@ -13,26 +13,19 @@
  * plain on the surface (with inline `code` and **bold** runs), and each tool call one dim line
  * that opens on click to its code and report.
  *
- * The turn itself lives in `../assistant.ts`; this component owns the view state, the provider
- * settings (kept in `localStorage`), the attachments (paperclip, paste, drop — they travel to the
- * model in the vision shape) and the `run` executor (the shell's own `engine.execute`).
+ * Over the composer sits the stack (the reference board's "one surface over the input"): what is
+ * queued behind the running turn, the turn's status with Stop, and the assistant's unresolved
+ * changes to the drawing with Undo all and Keep. The canvas selection rides in the card as a chip.
+ *
+ * The turn and the conversation live in `../assistant-session.ts`, which outlives this panel; the
+ * component owns only the view state (the provider popover, the scroll follow, the element refs)
+ * and the attachment intake (paperclip, paste, drop — they travel to the model in the vision
+ * shape).
  */
 
-import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from "solid-js";
-import type { AppFacade } from "../facade";
-import {
-  MAX_REQUEST_CHARS,
-  parseInline,
-  relativeTime,
-  splitFences,
-  PROVIDER_PRESETS,
-  runTurn,
-  type AssistantEvent,
-  type Briefing,
-  type ChatImage,
-  type ChatMessage,
-  type ProviderConfig,
-} from "../assistant";
+import { createEffect, createMemo, createSignal, For, Index, Match, on, onCleanup, onMount, Show, Switch, type JSX } from "solid-js";
+import { activityLine, atEnd, MAX_REQUEST_CHARS, parseInline, PROVIDER_PRESETS, relativeTime, splitFences, type ChatImage, type ProviderConfig } from "../assistant";
+import type { AssistantSession } from "../assistant-session";
 import { ToolIcon } from "../icons";
 import { Tooltip } from "../ui/Tooltip";
 import { Button } from "../ui/Button";
@@ -42,31 +35,13 @@ import { Row } from "../ui/Row";
 import "../assistant.css";
 
 export interface AssistantPaneProps {
-  facade: AppFacade;
-  /** The drawing changed (a tool call ran): re-read what the surfaces show. */
-  onChanged: () => void;
+  /** The conversation, the draft and the running turn (the shell owns it; it outlives the panel). */
+  session: AssistantSession;
+  /** The canvas selection's handles (the shell's signal); drives the context chip. */
+  selection: () => readonly string[];
   /** The panel's close button. */
   onClose: () => void;
 }
-
-interface ToolEntry {
-  kind: "tool";
-  name: string;
-  code: string;
-  report: string;
-  ok: boolean;
-  note: string;
-  open: boolean;
-  at: number;
-}
-
-type Entry =
-  | { kind: "user"; text: string; pictures: number; at: number }
-  | { kind: "assistant"; text: string; at: number }
-  | { kind: "failed"; text: string; at: number }
-  | ToolEntry;
-
-const STORAGE_KEY = "cadcraft.assistant.provider";
 
 /** The empty state's suggestions: one click fills the composer (the measured 32px suggestion row). */
 const EXAMPLES: readonly { icon: string; text: string }[] = [
@@ -78,45 +53,6 @@ const EXAMPLES: readonly { icon: string; text: string }[] = [
 /** How many pictures one message may carry, and how large each may be. */
 const MAX_ATTACHMENTS = 4;
 const MAX_ATTACHMENT_BYTES = 4 << 20;
-
-/** The provider settings the pane keeps: the last one saved in this browser. */
-function loadProvider(): ProviderConfig {
-  const empty: ProviderConfig = { baseUrl: "", model: "", apiKey: "" };
-  if (typeof localStorage === "undefined") return empty;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === null) return empty;
-    const v = JSON.parse(raw) as Record<string, unknown>;
-    return {
-      baseUrl: typeof v["baseUrl"] === "string" ? v["baseUrl"] : "",
-      model: typeof v["model"] === "string" ? v["model"] : "",
-      apiKey: typeof v["apiKey"] === "string" ? v["apiKey"] : "",
-    };
-  } catch {
-    return empty;
-  }
-}
-
-function saveProvider(p: ProviderConfig): void {
-  if (typeof localStorage === "undefined") return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
-  } catch {
-    // a full or blocked storage is not worth failing the composer over
-  }
-}
-
-/** How full the context is: the characters the conversation would send, against the budget. */
-function contextUsed(conversation: readonly ChatMessage[]): number {
-  return conversation.reduce(
-    (n, m) =>
-      n +
-      (m.content ?? "").length +
-      (m.images ?? []).reduce((k, img) => k + img.dataUrl.length, 0) +
-      (m.toolCalls ?? []).reduce((k, c) => k + c.name.length + JSON.stringify(c.args ?? {}).length, 0),
-    0,
-  );
-}
 
 /** Read a file as a data URL (the wire wants base64; the reader's file is never uploaded). */
 function readAsDataUrl(file: File): Promise<string> {
@@ -135,112 +71,63 @@ function grow(el: HTMLTextAreaElement): void {
 }
 
 export function AssistantPane(props: AssistantPaneProps): JSX.Element {
-  const [entries, setEntries] = createSignal<Entry[]>([]);
-  const [conversation, setConversation] = createSignal<ChatMessage[]>([]);
-  const [input, setInput] = createSignal("");
-  const [attached, setAttached] = createSignal<readonly ChatImage[]>([]);
-  const [running, setRunning] = createSignal(false);
-  const [status, setStatus] = createSignal("");
-  const [provider, setProvider] = createSignal<ProviderConfig>(loadProvider());
+  const s = props.session;
   const [menuOpen, setMenuOpen] = createSignal(false);
-  const [draft, setDraft] = createSignal<ProviderConfig>(loadProvider());
+  const [draft, setDraft] = createSignal<ProviderConfig>(s.provider());
+  /** The transcript keeps to its end only while the reader is there. */
+  const [following, setFollowing] = createSignal(true);
+  /** The transcript's ages move: the clock is re-read twice a minute. */
+  const [now, setNow] = createSignal(Date.now());
   let body: HTMLDivElement | undefined;
   let inputEl: HTMLTextAreaElement | undefined;
   let fileInput: HTMLInputElement | undefined;
-  let controller: AbortController | null = null;
 
-  const used = createMemo(() => contextUsed(conversation()));
-  const ready = createMemo(() => provider().baseUrl !== "" && provider().model !== "");
-  const title = createMemo(() => {
-    const first = entries().find((e) => e.kind === "user");
-    if (first === undefined || first.kind !== "user") return "New chat";
-    const line = first.text.split("\n")[0] ?? "";
-    return line.length > 48 ? `${line.slice(0, 48)}…` : line;
-  });
+  const tick = setInterval(() => setNow(Date.now()), 30_000);
+  onCleanup(() => clearInterval(tick));
 
-  // The transcript follows the conversation as it grows.
+  // The transcript follows the conversation as it grows, while the reader is at its end.
   createEffect(() => {
-    entries();
-    if (body !== undefined) queueMicrotask(() => (body as HTMLDivElement).scrollTop = (body as HTMLDivElement).scrollHeight);
+    void s.entries.length;
+    const last = s.entries[s.entries.length - 1];
+    if (last !== undefined && last.kind !== "tool") void last.text;
+    if (!following() || body === undefined) return;
+    const el = body;
+    queueMicrotask(() => (el.scrollTop = el.scrollHeight));
   });
 
-  onMount(() => inputEl?.focus());
-  onCleanup(() => controller?.abort());
+  // A new selection is context again, even if the last one was left out. The shell hands a fresh
+  // array after every command, so what is selected is compared, not the array.
+  const selectionKey = createMemo(() => props.selection().join(","));
+  createEffect(on(selectionKey, () => s.setSelectionIncluded(true), { defer: true }));
+  const selectionShown = (): boolean => props.selection().length > 0 && s.selectionIncluded();
 
-  /** The briefing the model is told about the drawing, read fresh at the start of every turn. */
-  const briefing = (): Briefing => {
-    const state = props.facade.drawingState();
-    return {
-      app: "CADCraft (browser)",
-      drawing: state?.title ?? "",
-      units: state?.units ?? "",
-      objects: state?.entityCount ?? 0,
-      selection: props.facade.selection().handles.length,
-      extents: state?.extents === null || state?.extents === undefined ? null : [state.extents.x0, state.extents.y0, state.extents.x1, state.extents.y1],
-    };
-  };
-
-  const onEvent = (e: AssistantEvent): void => {
-    if (e.type === "text") {
-      setStatus("");
-      setEntries((prev) => {
-        const last = prev[prev.length - 1];
-        if (last?.kind === "assistant") return [...prev.slice(0, -1), { ...last, text: last.text + e.text }];
-        return [...prev, { kind: "assistant", text: e.text, at: Date.now() }];
-      });
-      return;
-    }
-    if (e.type === "call") {
-      setStatus(`Running ${e.name}…`);
-      setEntries((prev) => [...prev, { kind: "tool", name: e.name, code: e.code, report: "", ok: true, note: "running…", open: false, at: Date.now() }]);
-      return;
-    }
-    if (e.type === "result") {
-      setStatus("");
-      setEntries((prev) => {
-        const next = [...prev];
-        for (let i = next.length - 1; i >= 0; i--) {
-          const entry = next[i];
-          if (entry?.kind === "tool" && entry.report === "") {
-            next[i] = { ...entry, ok: e.ok, note: e.note, report: e.report };
-            break;
-          }
-        }
-        return next;
-      });
-      props.onChanged();
-      return;
-    }
-    if (e.type === "failed") {
-      setStatus("");
-      setEntries((prev) => [...prev, { kind: "failed", text: e.error, at: Date.now() }]);
-      return;
-    }
-    setStatus("");
-  };
+  onMount(() => {
+    inputEl?.focus();
+    if (inputEl !== undefined && s.input() !== "") grow(inputEl);
+  });
 
   /** Add files from the picker, a paste or a drop: pictures only, within the caps. */
   const addFiles = async (files: readonly File[]): Promise<void> => {
     const pictures = files.filter((f) => f.type.startsWith("image/"));
     if (pictures.length === 0) return;
-    const room = MAX_ATTACHMENTS - attached().length;
+    const room = MAX_ATTACHMENTS - s.attached().length;
     if (room <= 0) {
-      setStatus(`At most ${MAX_ATTACHMENTS} pictures per message.`);
+      s.setStatus(`At most ${MAX_ATTACHMENTS} pictures per message.`);
       return;
     }
     const accepted: ChatImage[] = [];
     for (const file of pictures.slice(0, room)) {
       if (file.size > MAX_ATTACHMENT_BYTES) {
-        setStatus(`${file.name} is too large (limit ${Math.round(MAX_ATTACHMENT_BYTES / (1 << 20))} MB).`);
+        s.setStatus(`${file.name} is too large (limit ${Math.round(MAX_ATTACHMENT_BYTES / (1 << 20))} MB).`);
         continue;
       }
       try {
         accepted.push({ name: file.name === "" ? "pasted.png" : file.name, dataUrl: await readAsDataUrl(file) });
       } catch {
-        setStatus(`${file.name} could not be read.`);
+        s.setStatus(`${file.name} could not be read.`);
       }
     }
-    if (accepted.length > 0) setAttached((prev) => [...prev, ...accepted]);
+    if (accepted.length > 0) s.setAttached([...s.attached(), ...accepted]);
   };
 
   const onPaste = (e: ClipboardEvent): void => {
@@ -260,47 +147,17 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     void addFiles(files);
   };
 
-  const send = async (): Promise<void> => {
-    const text = input().trim();
-    if (text === "" || running()) return;
-    if (!ready()) {
-      setDraft(provider());
+  const send = (): void => {
+    const outcome = s.send();
+    if (outcome === "unconfigured") {
+      setDraft(s.provider());
       setMenuOpen(true);
       return;
     }
-    const pictures = attached();
-    setInput("");
+    if (outcome === "empty") return;
     if (inputEl !== undefined) inputEl.style.height = "";
-    setAttached([]);
-    setEntries((prev) => [...prev, { kind: "user", text, pictures: pictures.length, at: Date.now() }]);
-    const message: ChatMessage = pictures.length === 0 ? { role: "user", content: text } : { role: "user", content: text, images: pictures };
-    const next: ChatMessage[] = [...conversation(), message];
-    setConversation(next);
-    setRunning(true);
-    setStatus("Thinking…");
-    controller = new AbortController();
-    try {
-      await runTurn({
-        provider: provider(),
-        briefing: briefing(),
-        conversation: next,
-        execute: (code, values) => {
-          const env = props.facade.execute("run", values === null ? { code } : { code, values });
-          return env.ok ? { ok: true, result: env.result } : { ok: false, error: env.error };
-        },
-        onEvent,
-        signal: controller.signal,
-      });
-    } finally {
-      setConversation([...next]);
-      setRunning(false);
-      setStatus("");
-      controller = null;
-    }
-  };
-
-  const stop = (): void => {
-    controller?.abort();
+    // The reader's own message always comes into view.
+    setFollowing(true);
   };
 
   /** Copy a message or a tool's code (the turn-actions affordance). */
@@ -309,19 +166,31 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   };
 
   const newChat = (): void => {
-    controller?.abort();
-    setEntries([]);
-    setConversation([]);
-    setAttached([]);
-    setInput("");
+    s.clear();
     if (inputEl !== undefined) inputEl.style.height = "";
+    setFollowing(true);
     inputEl?.focus();
   };
 
   const onKeyDown = (e: KeyboardEvent): void => {
     if (e.key !== "Enter" || e.shiftKey) return;
     e.preventDefault();
-    void send();
+    send();
+  };
+
+  /** Escape closes the popover, or stops the turn; it never reaches the shell's own Escape. */
+  const onEscape = (e: KeyboardEvent): void => {
+    if (e.key !== "Escape") return;
+    if (menuOpen()) {
+      setMenuOpen(false);
+      inputEl?.focus();
+    } else if (s.running()) {
+      s.stop();
+    } else {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   const applyPreset = (id: string): void => {
@@ -331,15 +200,9 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   };
 
   const saveDraft = (): void => {
-    const p = draft();
-    setProvider(p);
-    saveProvider(p);
+    s.setProvider(draft());
     setMenuOpen(false);
     inputEl?.focus();
-  };
-
-  const toggleTool = (index: number): void => {
-    setEntries((prev) => prev.map((entry, i) => (i === index && entry.kind === "tool" ? { ...entry, open: !entry.open } : entry)));
   };
 
   /** The model's words, with inline `code` and **bold** runs rendered as elements. */
@@ -354,12 +217,13 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
       class="assistant-panel"
       role="complementary"
       aria-label="Assistant"
+      on:keydown={onEscape}
       onDragOver={(e) => e.preventDefault()}
       onDrop={onDrop}
     >
       <div class="assistant-head">
-        <span class="assistant-title" title={title()}>
-          {title()}
+        <span class="assistant-title" title={s.title()}>
+          {s.title()}
         </span>
         <div class="assistant-head-actions">
           <Tooltip text="New chat" placement="bottom">
@@ -375,8 +239,12 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         </div>
       </div>
 
-      <div class="assistant-body" ref={body}>
-        <Show when={entries().length === 0}>
+      <div
+        class="assistant-body"
+        ref={body}
+        onScroll={(e) => setFollowing(atEnd(e.currentTarget.scrollHeight, e.currentTarget.scrollTop, e.currentTarget.clientHeight))}
+      >
+        <Show when={s.entries.length === 0}>
           <div class="assistant-empty">
             <p>The assistant works in the open drawing: it draws, measures and changes it, and reports the numbers.</p>
             <For each={EXAMPLES}>
@@ -385,7 +253,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                   class="assistant-example"
                   type="button"
                   onClick={() => {
-                    setInput(example.text);
+                    s.setInput(example.text);
                     inputEl?.focus();
                   }}
                 >
@@ -401,7 +269,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             </For>
           </div>
         </Show>
-        <For each={entries()}>
+        <For each={s.entries}>
           {(entry, index) => (
             <Switch>
               <Match when={entry.kind === "user"}>
@@ -411,31 +279,39 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 </div>
               </Match>
               <Match when={entry.kind === "assistant"}>
-                <For each={splitFences(entry.kind === "assistant" ? entry.text : "")}>
-                  {(part) =>
-                    part.kind === "code" ? (
+                <Index each={splitFences(entry.kind === "assistant" ? entry.text : "")}>
+                  {(part) => (
+                    <Show when={part().kind === "code"} fallback={<div class="assistant-text">{richText(part().text)}</div>}>
                       <div class="assistant-code-wrap">
-                        <pre class="assistant-code">{part.text}</pre>
+                        <pre class="assistant-code">{part().text}</pre>
                         <span class="assistant-code-copy">
-                          <IconButton icon="copy" size="sm" title="Copy the code" onClick={() => copyText(part.text)} />
+                          <IconButton icon="copy" size="sm" title="Copy the code" onClick={() => copyText(part().text)} />
                         </span>
                       </div>
-                    ) : (
-                      <div class="assistant-text">{richText(part.text)}</div>
-                    )
-                  }
-                </For>
+                    </Show>
+                  )}
+                </Index>
                 <div class="assistant-turn-actions">
                   <IconButton icon="copy" size="sm" title="Copy" onClick={() => copyText(entry.kind === "assistant" ? entry.text : "")} />
-                  <time class="assistant-time">{relativeTime(entry.kind === "assistant" ? entry.at : Date.now(), Date.now())}</time>
+                  <time class="assistant-time">{relativeTime(entry.kind === "assistant" ? entry.at : now(), now())}</time>
                 </div>
               </Match>
               <Match when={entry.kind === "failed"}>
                 <div class="assistant-failed">{entry.kind === "failed" ? entry.text : ""}</div>
+                <Show when={index() === s.entries.length - 1 && s.canRetry()}>
+                  <div class="assistant-turn-actions">
+                    <IconButton icon="retry" size="sm" title="Try again" onClick={s.retry} />
+                  </div>
+                </Show>
               </Match>
               <Match when={entry.kind === "tool"}>
-                <button class="assistant-tool" type="button" onClick={() => toggleTool(index())} aria-expanded={entry.kind === "tool" && entry.open}>
-                  <span class="assistant-tool-name">{entry.kind === "tool" ? entry.name : ""}</span>
+                <button
+                  class={entry.kind === "tool" && !entry.ok ? "assistant-tool assistant-tool--failed" : "assistant-tool"}
+                  type="button"
+                  onClick={() => s.toggleTool(index())}
+                  aria-expanded={entry.kind === "tool" && entry.open}
+                >
+                  <span class="assistant-tool-name">{entry.kind === "tool" ? activityLine(entry.code) : ""}</span>
                   <span class="assistant-tool-note">{entry.kind === "tool" ? entry.note : ""}</span>
                   <span class="assistant-tool-chevron">
                     <ToolIcon id="chevron-right" />
@@ -458,39 +334,92 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             </Switch>
           )}
         </For>
+        <Show when={!following()}>
+          <div class="assistant-jump">
+            <span class="assistant-jump-key">
+              <IconButton icon="chevron-down" variant="soft" title="Jump to the latest" onClick={() => setFollowing(true)} />
+            </span>
+          </div>
+        </Show>
       </div>
 
       <div class="assistant-composer">
+        <Show when={s.running() || s.status() !== "" || s.queued.length > 0 || s.changes() !== null}>
+          <div class="assistant-stack">
+            <Show when={s.queued.length > 0}>
+              <div class="assistant-stack-head">{s.queued.length === 1 ? "1 queued" : `${s.queued.length} queued`}</div>
+              <For each={s.queued}>
+                {(item, index) => (
+                  <div class="assistant-stack-row">
+                    <span class="assistant-stack-text">{item.text}</span>
+                    <IconButton icon="send" size="sm" title="Send this now" disabled={s.running()} onClick={() => s.sendQueued(index())} />
+                    <IconButton icon="close" size="sm" title="Remove from the queue" onClick={() => s.unqueue(index())} />
+                  </div>
+                )}
+              </For>
+            </Show>
+            <Show when={s.changes()}>
+              {(c) => (
+                <div class="assistant-stack-row">
+                  <span class="assistant-stack-text">{c().steps === 1 ? "1 change to the drawing" : `${c().steps} changes to the drawing`}</span>
+                  <Button variant="ghost" size="sm" disabled={s.running()} onClick={s.undoChanges}>
+                    Undo all
+                  </Button>
+                  <Button size="sm" disabled={s.running()} onClick={s.keepChanges}>
+                    Keep
+                  </Button>
+                </div>
+              )}
+            </Show>
+            <Show when={s.running() || s.status() !== ""}>
+              <div class="assistant-stack-row" role="status">
+                <Show when={s.running()}>
+                  <span class="assistant-ripple" />
+                </Show>
+                <span class="assistant-stack-text">{s.status() === "" ? "Working" : s.status()}</span>
+                <Show when={s.running()}>
+                  <Button variant="ghost" size="sm" onClick={s.stop}>
+                    Stop
+                  </Button>
+                  <kbd class="assistant-key">esc</kbd>
+                </Show>
+              </div>
+            </Show>
+          </div>
+        </Show>
         <div class="assistant-box">
-          <Show when={attached().length > 0}>
+          <Show when={selectionShown() || s.attached().length > 0}>
             <div class="assistant-attachments">
-              <For each={attached()}>
+              <Show when={selectionShown()}>
+                <span class="assistant-attachment">
+                  <span class="assistant-attachment-icon">
+                    <ToolIcon id="pick" />
+                  </span>
+                  <span class="assistant-attachment-name">{props.selection().length === 1 ? "1 selected" : `${props.selection().length} selected`}</span>
+                  <IconButton icon="close" size="sm" title="Leave the selection out" onClick={() => s.setSelectionIncluded(false)} />
+                </span>
+              </Show>
+              <For each={s.attached()}>
                 {(picture, index) => (
                   <span class="assistant-attachment">
                     <img src={picture.dataUrl} alt={picture.name} />
                     <span class="assistant-attachment-name">{picture.name}</span>
-                    <IconButton icon="close" size="sm" title={`Remove ${picture.name}`} onClick={() => setAttached((prev) => prev.filter((_, i) => i !== index()))} />
+                    <IconButton icon="close" size="sm" title={`Remove ${picture.name}`} onClick={() => s.setAttached(s.attached().filter((_, i) => i !== index()))} />
                   </span>
                 )}
               </For>
-            </div>
-          </Show>
-          <Show when={status() !== ""}>
-            <div class="assistant-status">
-              <Show when={running()}>
-                <span class="assistant-ripple" />
-              </Show>
-              <span>{status()}</span>
             </div>
           </Show>
           <textarea
             class="assistant-input"
             ref={inputEl}
             rows={1}
-            placeholder="Ask the assistant…"
-            value={input()}
+            placeholder={s.running() ? "Queue a follow-up" : "Ask the assistant…"}
+            value={s.input()}
             onInput={(e) => {
-              setInput(e.currentTarget.value);
+              s.setInput(e.currentTarget.value);
+              // A notice (a refused attachment, a restore) has been read once typing resumes.
+              if (!s.running() && s.status() !== "") s.setStatus("");
               grow(e.currentTarget);
             }}
             onKeyDown={onKeyDown}
@@ -498,30 +427,38 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             aria-label="Ask the assistant"
           />
           <div class="assistant-row">
-            <IconButton icon="attach" variant="soft" title="Attach a picture (or paste, or drop one)" onClick={() => fileInput?.click()} />
-            <div class="assistant-actions">
-              <button
-                class="assistant-ghost"
-                type="button"
-                title={ready() ? `${provider().baseUrl} · ${provider().model}` : "Choose a provider and model"}
-                onClick={() => {
-                  setDraft(provider());
-                  setMenuOpen((v) => !v);
-                }}
-              >
-                <span class="assistant-ghost-label">{ready() ? provider().model : "Set up model"}</span>
-                <span class="assistant-ghost-caret">▾</span>
-              </button>
-              <span class="assistant-context" title={`${used()} characters of the ${MAX_REQUEST_CHARS} the model can be sent`}>
-                {used() === 0 ? "" : `${Math.round(used() / 100) / 10}k / ${Math.round(MAX_REQUEST_CHARS / 1000)}k`}
+            <button
+              class="assistant-ghost"
+              type="button"
+              title={s.ready() ? `${s.provider().baseUrl} · ${s.provider().model}` : "Choose a provider and model"}
+              onClick={() => {
+                setDraft(s.provider());
+                setMenuOpen((v) => !v);
+              }}
+            >
+              <span class="assistant-ghost-label">{s.ready() ? s.provider().model : "Set up model"}</span>
+              <span class="assistant-ghost-caret">
+                <ToolIcon id="chevron-down" />
               </span>
+            </button>
+            <div class="assistant-actions">
+              <span class="assistant-context" title={`${s.used()} characters of the ${MAX_REQUEST_CHARS} the model can be sent`}>
+                {s.used() === 0 ? "" : `${Math.round(s.used() / 100) / 10}k / ${Math.round(MAX_REQUEST_CHARS / 1000)}k`}
+              </span>
+              <IconButton icon="attach" title="Attach a picture (or paste, or drop one)" onClick={() => fileInput?.click()} />
               <Show
-                when={running()}
+                when={s.running() && s.input().trim() === ""}
                 fallback={
-                  <IconButton icon="send" variant="inverted" title="Send (Enter)" disabled={input().trim() === ""} onClick={() => void send()} />
+                  <IconButton
+                    icon="send"
+                    variant="inverted"
+                    title={s.running() ? "Queue (Enter)" : "Send (Enter)"}
+                    disabled={s.input().trim() === ""}
+                    onClick={send}
+                  />
                 }
               >
-                <IconButton icon="stop" variant="inverted" title="Stop" onClick={stop} />
+                <IconButton icon="stop" variant="inverted" title="Stop (Esc)" onClick={s.stop} />
               </Show>
             </div>
           </div>

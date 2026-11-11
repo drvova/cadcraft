@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+  activityLine,
   apiErrorText,
+  atEnd,
   checkRunArgs,
   MAX_ROUNDS,
   noteOf,
@@ -425,6 +427,29 @@ describe("runTurn", () => {
     const { events, onEvent } = collect();
     await runTurn({ provider: PROVIDER, briefing: BRIEFING, conversation: [], execute: () => ({ ok: true, result: {} }), onEvent, signal: controller.signal, fetchImpl: fetch });
     expect(events[events.length - 1]).toEqual({ type: "done", reason: "stopped" });
+  });
+});
+
+describe("activityLine", () => {
+  test("one line is itself, trimmed", () => {
+    expect(activityLine("  (cmd \"circle\")  ")).toBe("(cmd \"circle\")");
+  });
+  test("more lines are counted, blank ones aside", () => {
+    expect(activityLine(["(setq r 5)", "", '(cmd "circle")', "  (inspect)", ""].join("\n"))).toBe("(setq r 5)  +2");
+  });
+  test("empty code asks for the manual", () => {
+    expect(activityLine("")).toBe("Read the manual");
+    expect(activityLine(["", "  ", ""].join("\n"))).toBe("Read the manual");
+  });
+});
+
+describe("atEnd", () => {
+  test("within the slack counts as the end", () => {
+    expect(atEnd(1000, 776, 200)).toBe(true);
+    expect(atEnd(1000, 775, 200)).toBe(false);
+  });
+  test("a transcript with nothing to scroll is at its end", () => {
+    expect(atEnd(200, 0, 200)).toBe(true);
   });
 });
 

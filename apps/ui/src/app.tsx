@@ -25,6 +25,7 @@ import { MenuBar } from "./components/MenuBar";
 import { ToolStrip } from "./components/ToolStrip";
 import { StatusBar } from "./components/StatusBar";
 import { AssistantPane } from "./components/AssistantPane";
+import { createAssistantSession } from "./assistant-session";
 import { CanvasView } from "./components/CanvasView";
 import { LayersPanel } from "./components/LayersPanel";
 import { PropertiesPanel } from "./components/PropertiesPanel";
@@ -136,6 +137,10 @@ export function App(props: AppProps): JSX.Element {
     setCommands(props.facade.commands());
     syncDisplay();
   };
+
+  // The assistant's session outlives its panel: closing the panel hides the view, not the chat.
+  const assistant = createAssistantSession({ facade: props.facade, onChanged: () => refresh() });
+  onCleanup(() => assistant.stop());
 
   /**
    * Re-read the view the facade is showing (a space switch or a zoom command moves it) and fetch
@@ -431,6 +436,8 @@ export function App(props: AppProps): JSX.Element {
         entityCount={() => drawing()?.entityCount ?? 0}
         currentLayer={currentLayer}
         onZoomExtents={zoomExtents}
+        assistantOpen={showAssistant}
+        onToggleAssistant={() => setShowAssistant((v) => !v)}
       />
       <Show when={showMenubar()}>
         <MenuBar commands={commands()} onInvoke={onInvoke} />
@@ -452,7 +459,7 @@ export function App(props: AppProps): JSX.Element {
           />
         </main>
         <Show when={showAssistant()}>
-          <AssistantPane facade={props.facade} onChanged={refresh} onClose={() => setShowAssistant(false)} />
+          <AssistantPane session={assistant} selection={selection} onClose={() => setShowAssistant(false)} />
         </Show>
         <aside class="rail">
           <Show when={showLayers()}>

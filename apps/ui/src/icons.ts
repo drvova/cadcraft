@@ -81,6 +81,10 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
   copy: "M9 9h10v10H9z M15 5H5v10",
   /** A circular arrow: retry the turn. */
   retry: "M20 12a8 8 0 1 1-2.6-5.9 M20 4v5h-5",
+  /** A pointer arrow: the canvas selection riding in the composer. */
+  pick: "M5 3l14 8-6.5 1.8L10 19z",
+  /** A four-point spark with a small plus: the assistant's toggle in the top bar. */
+  assistant: "M11 4l1.8 5.2L18 11l-5.2 1.8L11 18l-1.8-5.2L4 11l5.2-1.8z M19 15v4 M17 17h4",
 };
 
 /**
@@ -88,7 +92,7 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
  * because it is the one icon set, and this list is what lets the icon test tell a used path from
  * an orphan one.
  */
-export const COMPOSER_ICONS: readonly string[] = ["send", "stop", "plus", "close", "chevron-right", "chevron-down", "copy", "retry", "circle"];
+export const COMPOSER_ICONS: readonly string[] = ["send", "stop", "plus", "close", "chevron-right", "chevron-down", "copy", "retry", "circle", "pick", "assistant"];
 
 /** The path for a toolbar id, or null when there is none. */
 export function iconPath(id: string): string | null {

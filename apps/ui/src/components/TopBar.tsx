@@ -1,11 +1,12 @@
 /**
  * The top bar: the drawing's title and dirty state from `state()`, a few counts, which facade is
- * live (wasm or mock), and Zoom extents. Pure flex layout.
+ * live (wasm or mock), Zoom extents, and the key that docks the assistant. Pure flex layout.
  */
 
 import { Show, type Accessor, type JSX } from "solid-js";
 import type { DrawingState, FacadeMode } from "../facade";
 import { Button } from "../ui/Button";
+import { IconButton } from "../ui/IconButton";
 
 export interface TopBarProps {
   drawing: Accessor<DrawingState | null>;
@@ -13,6 +14,9 @@ export interface TopBarProps {
   entityCount: Accessor<number>;
   currentLayer: Accessor<string>;
   onZoomExtents: () => void;
+  /** Whether the assistant panel is docked, and the key that docks it. */
+  assistantOpen: Accessor<boolean>;
+  onToggleAssistant: () => void;
 }
 
 export function TopBar(props: TopBarProps): JSX.Element {
@@ -48,6 +52,7 @@ export function TopBar(props: TopBarProps): JSX.Element {
       <Button size="sm" title="Zoom extents" onClick={() => props.onZoomExtents()}>
         Zoom extents
       </Button>
+      <IconButton icon="assistant" title="Assistant (Ctrl+7)" selected={props.assistantOpen()} onClick={() => props.onToggleAssistant()} />
     </header>
   );
 }

@@ -10,8 +10,9 @@
  *   - the model chip: the pill (radius 9999px, 24px, `padding: 0 8px`, 13px), transparent at
  *     rest, the `.08` hover fill (§2);
  *   - send and stop: the inverted circle (fill `--text`, glyph `--on-accent`) (§2);
- *   - the status row: `font-size: 11px; gap: 4px`, placeholder colour (§1.3), and the running dot
- *     carries `ripple 1.2s cubic-bezier(.25,.8,.25,1)` to `scale(1.7)` (§1.14);
+ *   - the stack over the composer: flat rows on the recessed surface, flush on the card — the
+ *     queue, the unresolved changes, and the run's status, whose dot carries
+ *     `ripple 1.2s cubic-bezier(.25,.8,.25,1)` to `scale(1.7)` (§1.14);
  *   - the provider popover: the elevated surface, the hairline stroke, radius 8, the shadow; its
  *     preset rows are the system's `Row`, its inputs `Field`, its actions `Button`.
  * The transcript follows the measured glass transcript (research §7): the prompt is the human
@@ -102,6 +103,23 @@
   display: flex;
   flex-direction: column;
   gap: var(--gap-14);
+}
+
+/* The jump key: shown when the reader has scrolled away from the end; it rides the bottom edge
+   of the transcript. The key's own fill is translucent, so the wrapper backs it with the panel. */
+.assistant-jump {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.assistant-jump-key {
+  display: inline-flex;
+  border-radius: var(--radius-round);
+  background: var(--panel);
+  pointer-events: auto;
 }
 
 .assistant-empty {
@@ -298,21 +316,29 @@
   animation: transcript-reveal 0.22s linear;
 }
 
-.assistant-tool-arrow {
-  flex: 0 0 auto;
-}
-
+/* What the step ran: the first line of its code, in the mono face, clipped. */
 .assistant-tool-name {
   flex: 0 0 auto;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-mono);
 }
 
 .assistant-tool-note {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   color: var(--text-disabled);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* A step that failed says so in the error ink. */
+.assistant-tool--failed .assistant-tool-note {
+  color: var(--error);
 }
 
 /* The opened row: the content sits 14px under its header (the measured collapsible padding),
@@ -400,6 +426,57 @@
   border-top: var(--hairline) solid var(--border);
 }
 
+/* The stack: what waits, what changed and what runs, as flat rows on one recessed surface that
+   sits flush on the input card (the reference board's "one surface over the input": Cursor's
+   queue and "Generating" rows). It is inset from the card's sides and has no bottom edge. */
+.assistant-stack {
+  display: flex;
+  flex-direction: column;
+  margin: 0 var(--gap-8);
+  padding: var(--gap-2) 0;
+  background: var(--surface-inset);
+  border: var(--hairline) solid var(--composer-border);
+  border-bottom: none;
+  border-radius: var(--radius-block) var(--radius-block) 0 0;
+  max-height: var(--block-max-height);
+  overflow-y: auto;
+}
+
+.assistant-stack-head {
+  padding: var(--gap-4) var(--gap-12) 0;
+  color: var(--text-disabled);
+  font-size: var(--font-chip);
+}
+
+.assistant-stack-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-6);
+  flex-shrink: 0;
+  min-height: var(--control-h-button);
+  padding: 0 var(--gap-8) 0 var(--gap-12);
+  color: var(--text-faint);
+  font-size: var(--font-body);
+}
+
+.assistant-stack-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A key cap beside an action: the shortcut in the mono face on the hairline. */
+.assistant-key {
+  padding: 0 var(--gap-4);
+  border: var(--hairline) solid var(--border-soft);
+  border-radius: var(--radius-small);
+  color: var(--text-disabled);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-chip);
+}
+
 .assistant-box {
   position: relative;
   display: flex;
@@ -438,6 +515,17 @@
   border-radius: var(--radius-control);
 }
 
+.assistant-attachment-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--icon);
+}
+
+.assistant-attachment-icon .tool-icon {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+}
+
 .assistant-attachment-name {
   max-width: 120px;
   overflow: hidden;
@@ -447,17 +535,9 @@
   font-size: var(--font-chip);
 }
 
-.assistant-status {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-4);
-  padding: var(--gap-8) var(--gap-12) 0;
-  color: var(--text-faint);
-  font-size: var(--font-chip);
-}
-
 .assistant-ripple {
   position: relative;
+  flex: 0 0 auto;
   width: 7px;
   height: 7px;
   border-radius: 50%;
@@ -557,7 +637,12 @@
 
 .assistant-ghost-caret {
   flex: 0 0 auto;
-  font-size: 10px;
+  display: inline-flex;
+}
+
+.assistant-ghost-caret .tool-icon {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
 }
 
 .assistant-context {

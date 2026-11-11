@@ -1,7 +1,6 @@
 {
   "src/assistant.css": {
     "rule/css-px": {
-      "font-size: 10px": 1,
       "gap: 2px": 1,
       "height: 14px": 1,
       "height: 18px": 1,

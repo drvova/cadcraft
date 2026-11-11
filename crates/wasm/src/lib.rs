@@ -375,6 +375,9 @@ impl Facade {
             "space": st.space.tab_name(),
             // What the assistant's briefing names: the drawing's units in words (`INSUNITS`).
             "units": cadcraft_engine::units::name(st.doc.header.i64("INSUNITS", 1)),
+            // The undo stack's depth: the checkpoint the assistant records before a request
+            // and hands back to `undoto`.
+            "undoDepth": st.undo.len(),
         })
         .to_string()
     }
@@ -862,6 +865,20 @@ mod tests {
         let d = parse(&f.display(0.0));
         let b = d["bounds"].as_array().unwrap();
         [b[0].as_f64().unwrap(), b[1].as_f64().unwrap(), b[2].as_f64().unwrap(), b[3].as_f64().unwrap()]
+    }
+
+    #[test]
+    fn state_names_the_undo_depth_and_undoto_returns_to_it() {
+        let mut f = Facade::new();
+        assert_eq!(parse(&f.state())["undoDepth"].as_u64(), Some(0), "a new drawing has no history");
+        let drawn = parse(&f.execute("circle", r#"{"center":[0,0],"radius":5}"#));
+        assert_eq!(drawn["ok"].as_bool(), Some(true), "circle: {drawn}");
+        let after = parse(&f.state())["undoDepth"].as_u64();
+        assert!(after.is_some_and(|n| n > 0), "drawing adds history: {after:?}");
+        let back = parse(&f.execute("undoto", r#"{"depth":0}"#));
+        assert_eq!(back["ok"].as_bool(), Some(true), "undoto: {back}");
+        assert_eq!(parse(&f.state())["undoDepth"].as_u64(), Some(0));
+        assert_eq!(parse(&f.state())["entityCount"].as_u64(), Some(0));
     }
 
     #[test]
