@@ -39,6 +39,8 @@
   font-size: var(--font-label);
   white-space: nowrap;
   cursor: pointer;
+  /* A tap is a tap: no double-tap zoom on a control (and none of its wait). */
+  touch-action: manipulation;
 }
 
 @media (hover: hover) {
@@ -66,16 +68,24 @@
    the box's less its inset, so the two curves stay concentric. */
 .menu-drop {
   --menu-inset: var(--gap-4);
+  --menu-row-h: var(--control-h-input);
+  /* How far the menu is pulled back to stay inside the window: MenuBar.tsx measures the opened
+     box and sets the overhang here (none when it fits). Restated on every menu, so a submenu does
+     not inherit its parent's pull. */
+  --menu-shift-x: 0;
+  --menu-shift-y: 0;
+  translate: var(--menu-shift-x) var(--menu-shift-y);
   position: absolute;
   top: 100%;
   left: 0;
   min-width: 30ch;
   /* A menu longer than the window's height (Draw and Modify hold thirty rows) runs on into a
      second column instead of off the screen. It is a grid, not a scrolling box: a box that
-     scrolls would clip the submenus that open beside its rows. */
+     scrolls would clip the submenus that open beside its rows. The columns read, and the arrow
+     keys walk, down the first and then down the next. */
   display: grid;
   grid-auto-flow: column;
-  grid-template-rows: repeat(auto-fit, var(--control-h-input));
+  grid-template-rows: repeat(auto-fit, var(--menu-row-h));
   grid-auto-columns: minmax(30ch, max-content);
   column-gap: var(--menu-inset);
   max-height: calc(100dvh - var(--control-h-tab) - var(--gap-16));
@@ -95,6 +105,13 @@
   z-index: 50;
 }
 
+/* A submenu with no room on the right of its row (a menu near the window's edge, or the last
+   column of a tall one) opens on the left of it instead. */
+.menu-drop-sub.is-flipped {
+  left: auto;
+  right: calc(100% + var(--menu-inset) + var(--hairline) + var(--gap-2));
+}
+
 .menu-sub {
   position: relative;
 }
@@ -106,7 +123,7 @@
   align-items: center;
   gap: var(--gap-16);
   width: 100%;
-  height: var(--control-h-input);
+  height: var(--menu-row-h);
   padding: 0 var(--gap-8);
   border: none;
   border-radius: calc(var(--radius-popover) - var(--menu-inset) - var(--hairline));
@@ -116,6 +133,19 @@
   font-size: var(--font-body);
   text-align: left;
   cursor: pointer;
+  touch-action: manipulation;
+}
+
+/* Under a finger the titles and the rows take the button's height: a row is still a row, with
+   room to land on it. */
+@media (pointer: coarse) {
+  .menubar-title {
+    height: var(--control-h-button);
+  }
+
+  .menu-drop {
+    --menu-row-h: var(--control-h-button);
+  }
 }
 
 @media (hover: hover) {
@@ -192,6 +222,38 @@
   display: none;
 }
 
+/* The three bands that scroll sideways with no scrollbar say so at the edge that hides something:
+   the band fades out over one key's width there, and only there. `scrollBand` (ToolStrip.tsx)
+   marks the clipped edges as the band scrolls or the window resizes, and turns the mouse's wheel
+   along the band. A finger pans it sideways and nothing else, so a double tap does not zoom. */
+.toolstrip,
+.editor-tabs,
+.status-toggles {
+  --fade-start: 0;
+  --fade-end: 0;
+  mask-image: linear-gradient(to right, transparent, var(--text) var(--fade-start), var(--text) calc(100% - var(--fade-end)), transparent);
+  touch-action: pan-x;
+}
+
+.toolstrip[data-clip-start],
+.editor-tabs[data-clip-start],
+.status-toggles[data-clip-start] {
+  --fade-start: var(--control-h-input);
+}
+
+.toolstrip[data-clip-end],
+.editor-tabs[data-clip-end],
+.status-toggles[data-clip-end] {
+  --fade-end: var(--control-h-input);
+}
+
+/* Under a finger the keys keep their size and stand further apart. */
+@media (pointer: coarse) {
+  .toolstrip {
+    gap: var(--gap-6);
+  }
+}
+
 /* The strip's cells never squeeze: the band scrolls instead. */
 .toolstrip .ui-icon-button {
   flex: 0 0 auto;
@@ -225,10 +287,19 @@
   scrollbar-width: none;
 }
 
+/* A layout's name can be a sheet's whole title: a tab holds the first of it and clips the rest
+   with an ellipsis (its tooltip has the full name), so a dozen layouts stay a strip of tabs. */
+.editor-tabs .ui-tab {
+  max-width: 24ch;
+}
+
 /* ---- The status bar ---- */
 
-/* One 22px line that never wraps. When the window narrows the least needed gives way first: the
-   counts, then the toggles scroll inside their own run, then the coordinates. */
+/* One 22px line that never wraps. When the window narrows, what can only be read gives way before
+   what can be pressed: the counts and all but the start of a long layer name (900px), then the
+   coordinates (780px, where they would start to clip the toggles), then the engine's name (560px;
+   the layer's stays, the sidebar is gone there and the bar is the one place that names it). Only
+   under that do the toggles scroll inside their own run, fading at the edge that hides some. */
 .statusbar {
   display: flex;
   align-items: center;
@@ -281,8 +352,11 @@
   background: var(--toggle-on);
 }
 
+/* The right run is the bar's full height, so a toggle in it is too: the target is the bar, not
+   the word's line box. */
 .status-right {
   flex: 1 1 auto;
+  align-self: stretch;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -305,8 +379,8 @@
 }
 
 /* Micro toggles: a word the height of the bar, quiet when off; on, the full ink over a rule in
-   the on-green on the bar's bottom edge. No pills, no borders, no fills: on and off differ in
-   lightness as well as in hue. */
+   the on-green under the word. No pills, no borders, no fills: on and off differ in lightness as
+   well as in hue. */
 .status-toggle {
   position: relative;
   flex: 0 0 auto;
@@ -321,6 +395,17 @@
   text-transform: uppercase;
   white-space: nowrap;
   cursor: pointer;
+}
+
+/* Under a finger the bar is the button's height and each word has more room around it. */
+@media (pointer: coarse) {
+  .statusbar {
+    height: var(--control-h-button);
+  }
+
+  .status-toggle {
+    padding: 0 var(--gap-8);
+  }
 }
 
 @media (hover: hover) {
@@ -343,9 +428,16 @@
   position: absolute;
   left: var(--gap-4);
   right: var(--gap-4);
-  bottom: 0;
+  bottom: var(--gap-3);
   height: var(--hairline);
   background: var(--toggle-on);
+}
+
+/* The taller bar under a finger: the rule keeps its distance from the word. */
+@media (pointer: coarse) {
+  .status-toggle.is-on::after {
+    bottom: var(--gap-6);
+  }
 }
 
 .status-sep {
@@ -380,11 +472,21 @@
   .status-count {
     display: none;
   }
+
+  .status-layer {
+    max-width: 12ch;
+  }
+}
+
+@media (max-width: 780px) {
+  .status-sep,
+  .status-coord {
+    display: none;
+  }
 }
 
 @media (max-width: 560px) {
-  .status-sep,
-  .status-coord {
+  .status-mode {
     display: none;
   }
 }

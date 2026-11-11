@@ -16,9 +16,9 @@ Not applicable: hand-rolled — the 22px row, the 4px inset and the .14 selected
 Real uses, 4 call sites (`rg -c "<Row" src/components` → `src/components/AssistantPane.tsx:2`, `src/components/CommandPalette.tsx:1`, `src/components/LayersPanel.tsx:1`):
 - `src/components/AssistantPane.tsx` — the setup sheet's provider rows and the composer's slash list (the commands a `/word` draft matches; `selected` marks the one the arrow keys are on); the chat tabs in the header moved onto `Tab`; the transcript's tool rows and the composer's toolbar row stay bespoke (the toolbar is a container, and the tool row carries a disclosure arrow and a note).
 - `src/components/CommandPalette.tsx:126` — each command in the palette's list; `selected` marks the one the arrow keys are on, `disabled` the ones that cannot run now.
-- `src/components/LayersPanel.tsx:49` — each layer's name band (`is-current` marks the current one); the toggle cluster beside it stays native buttons.
+- `src/components/LayersPanel.tsx:53` — each layer's name band (`is-current` marks the current one); the toggle cluster beside it stays native buttons.
 - (planned) `src/components/MenuBar.tsx` — `.menu-row` (1 use) moves onto `<Row>` once `Row` can carry the `menuitem` roles; the rows stay native buttons for now.
-- (planned) `src/components/PropertiesPanel.tsx:177` — `.prop-row` (1 use) moves onto `<Row>` when the palette's rows become clickable; today they are display rows with an inline editor.
+- (planned) `src/components/PropertiesPanel.tsx:202` — `.prop-row` (1 use) moves onto `<Row>` when the palette's rows become clickable; today they are display rows with an inline editor.
 - `.layer-row` (LayersPanel) stays bespoke because its row nests a toggle cluster, and a button cannot nest buttons.
 
 ### Example files
@@ -138,7 +138,7 @@ export default function Disabled() {
   - Do: `<Row selected>Current layer</Row>`
 
 ### Content
-- `rule/row-trailing-quiet`: When a row carries a shortcut or a value, put it after the label in the dim ink (`--text-faint`), because the label is what the user scans and the trailing text is secondary. Evidence: single use `src/components/MenuBar.tsx:175`, the shortcut span. Check: review `src/components/MenuBar.tsx`.
+- `rule/row-trailing-quiet`: When a row carries a shortcut or a value, put it after the label in the dim ink (`--text-faint`), because the label is what the user scans and the trailing text is secondary. Evidence: single use `src/components/MenuBar.tsx:203`, the shortcut span. Check: review `src/components/MenuBar.tsx`.
   - Don't: a shortcut before the label.
   - Do: `<Row>Save<span class="row-shortcut">Ctrl+S</span></Row>`
 

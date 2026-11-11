@@ -144,6 +144,24 @@
   background: var(--control);
 }
 
+/* A value the row refused: the error hairline, over hover and focus alike, until it is corrected
+   or given up (Escape, or leaving the field, brings the old value back). */
+.prop-input[aria-invalid="true"] {
+  border-color: var(--error);
+  background: var(--control);
+}
+
+/* Objects that disagree: the placeholder reads quieter than a real value. */
+.prop-input.is-varies,
+.prop-select.is-varies {
+  color: var(--text-faint);
+}
+
+/* The open list's choices are real values again. */
+.prop-select.is-varies option {
+  color: var(--text);
+}
+
 /* The chosen option reads on the value edge, ahead of the arrow. */
 .prop-select {
   text-align-last: right;

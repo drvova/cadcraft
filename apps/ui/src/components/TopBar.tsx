@@ -41,7 +41,7 @@ export function TopBar(props: TopBarProps): JSX.Element {
             </span>
             <span class="command-center-title">{title()}</span>
             <Show when={dirty()}>
-              <span class="command-center-dirty" title="Unsaved changes" />
+              <span class="command-center-dirty" role="img" aria-label="Unsaved changes" title="Unsaved changes" />
             </Show>
           </span>
         </Button>

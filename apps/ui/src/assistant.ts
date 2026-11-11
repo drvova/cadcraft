@@ -51,11 +51,11 @@ export function providerEndpoint(baseUrl: string): string {
 
 /** Whether the provider is configured enough to send; the message names what is missing. */
 export function providerReady(provider: ProviderConfig): string | null {
-  if (provider.baseUrl.trim() === "") return "Set the assistant's base URL (the model button below).";
+  if (provider.baseUrl.trim() === "") return "Set a base URL in the model setup.";
   if (!provider.baseUrl.trim().startsWith("http://") && !provider.baseUrl.trim().startsWith("https://")) {
     return `The assistant's base URL must start with http:// or https://, not \`${provider.baseUrl.trim()}\`.`;
   }
-  if (provider.model.trim() === "") return "Set the assistant's model name.";
+  if (provider.model.trim() === "") return "Set a model name in the model setup.";
   return null;
 }
 
@@ -101,11 +101,11 @@ export async function listModels(provider: ProviderConfig, signal: AbortSignal, 
   try {
     body = JSON.parse(await resp.text());
   } catch {
-    throw new Error("the provider answered, but not with a model list");
+    throw new Error("the provider answered, but not with a model list. Type the model's name and save");
   }
   const root = asRecord(body);
   const rows = Array.isArray(root["data"]) ? root["data"] : Array.isArray(root["models"]) ? root["models"] : Array.isArray(body) ? body : null;
-  if (rows === null) throw new Error("the provider answered, but not with a model list");
+  if (rows === null) throw new Error("the provider answered, but not with a model list. Type the model's name and save");
   const ids: string[] = [];
   for (const row of rows.slice(0, MAX_LISTED_MODELS)) {
     const r = asRecord(row);
@@ -874,7 +874,7 @@ export function apiErrorText(status: number, body: string): string {
 function friendlyError(e: unknown): string {
   const m = message(e);
   if (/Failed to fetch|NetworkError|load failed/i.test(m)) {
-    return "the provider could not be reached (is the server running, and does it allow this page's origin?)";
+    return "the provider could not be reached. Check that the server is running and accepts requests from this page";
   }
   return m;
 }

@@ -187,13 +187,13 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     const accepted: ChatImage[] = [];
     for (const file of pictures.slice(0, room)) {
       if (file.size > MAX_ATTACHMENT_BYTES) {
-        s.setStatus(`${file.name} is too large (limit ${Math.round(MAX_ATTACHMENT_BYTES / (1 << 20))} MB).`);
+        s.setStatus(`${file.name} is over the ${Math.round(MAX_ATTACHMENT_BYTES / (1 << 20))} MB limit. Attach a smaller picture.`);
         continue;
       }
       try {
         accepted.push({ name: file.name === "" ? "pasted.png" : file.name, dataUrl: await readAsDataUrl(file) });
       } catch {
-        s.setStatus(`${file.name} could not be read.`);
+        s.setStatus(`${file.name} could not be read. Try attaching it again.`);
       }
     }
     if (accepted.length > 0) s.setAttached([...s.attached(), ...accepted]);
@@ -335,10 +335,10 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         ok: true,
         text:
           ids.length === 0
-            ? "Reached. The server lists no models; type the model's name."
+            ? "Connected. The provider lists no models. Type the model's name."
             : ids.includes(model)
-              ? `Reached. ${count}, ${model} among them.`
-              : `Reached. ${count}. Pick one, or keep the name you typed.`,
+              ? `Connected. ${count}, including ${model}.`
+              : `Connected. ${count}. Pick one, or keep the name you typed.`,
       });
     } catch (e) {
       if (mine.signal.aborted) return;
@@ -514,7 +514,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                   )}
                 </Index>
                 <div class="assistant-turn-actions">
-                  <IconButton icon="copy" size="sm" title="Copy" onClick={() => copyText(entry.kind === "assistant" ? entry.text : "")} />
+                  <IconButton icon="copy" size="sm" title="Copy the reply" onClick={() => copyText(entry.kind === "assistant" ? entry.text : "")} />
                   <time class="assistant-time">{relativeTime(entry.kind === "assistant" ? entry.at : now(), now())}</time>
                 </div>
               </Match>
@@ -601,7 +601,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                   <div class="assistant-field">
                     <span>API key</span>
                     <Field type="password" value={draft().apiKey} ariaLabel="API key" placeholder="e.g. sk-..." onInput={(v) => setDraft({ ...draft(), apiKey: v })} />
-                    <span class="assistant-field-hint">Kept in this browser. Sent only to the address below.</span>
+                    <span class="assistant-field-hint">Kept in this browser. Sent only to the base URL below.</span>
                   </div>
                 </Show>
                 <div class="assistant-field">
@@ -615,11 +615,11 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             </div>
             <div class="assistant-setup-foot">
               <p class={checkNote()?.ok === false ? "assistant-setup-note is-failed" : "assistant-setup-note"} role="status">
-                {checking() ? "Checking the connection" : (checkNote()?.text ?? "")}
+                {checking() ? "Checking the connection…" : (checkNote()?.text ?? "")}
               </p>
               <div class="assistant-setup-actions">
                 <Button variant="ghost" disabled={checking() || draft().baseUrl.trim() === ""} onClick={() => void checkConnection()}>
-                  Check
+                  Check connection
                 </Button>
                 <span class="assistant-setup-spacer" />
                 <Button variant="ghost" onClick={closeSetup}>
@@ -679,7 +679,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 <Show when={s.running()}>
                   <span class="assistant-ripple" />
                 </Show>
-                <span class="assistant-stack-text">{s.status() === "" ? "Working" : s.status()}</span>
+                <span class="assistant-stack-text">{s.status() === "" ? "Working…" : s.status()}</span>
                 <Show when={s.running()}>
                   <Button variant="ghost" size="sm" onClick={s.stop}>
                     Stop
@@ -752,16 +752,16 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             <button
               class="assistant-ghost"
               type="button"
-              title={s.ready() ? `${s.provider().baseUrl} · ${s.provider().model}` : "Choose a provider and model"}
+              title={s.ready() ? `Change the model (${s.provider().model} at ${s.provider().baseUrl})` : "Choose a provider and model"}
               onClick={() => (menuOpen() ? closeSetup() : openSetup())}
             >
-              <span class="assistant-ghost-label">{s.ready() ? s.provider().model : "Set up model"}</span>
+              <span class="assistant-ghost-label">{s.ready() ? s.provider().model : "Set up a model"}</span>
               <span class="assistant-ghost-caret">
                 <ToolIcon id="chevron-down" />
               </span>
             </button>
             <div class="assistant-actions">
-              <span class="assistant-context" title={`${s.used()} characters of the ${MAX_REQUEST_CHARS} the model can be sent`}>
+              <span class="assistant-context" title={`Context sent to the model: ${s.used().toLocaleString()} of ${MAX_REQUEST_CHARS.toLocaleString()} characters`}>
                 {meter()}
               </span>
               <IconButton icon="attach" title="Attach a picture (or paste, or drop one)" onClick={() => fileInput?.click()} />

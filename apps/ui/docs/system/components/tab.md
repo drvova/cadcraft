@@ -13,7 +13,7 @@ Not applicable: hand-rolled — the editor tab (13px type on a 12px inset in the
 `<Tab selected onClick={show}>Model</Tab>` — the model-space tab over the drawing.
 
 Real uses, 2 call sites (`rg -c "<Tab" src/components` → `src/components/AssistantPane.tsx:4`, `src/components/StatusBar.tsx:1`):
-- `src/components/StatusBar.tsx:57` — `LayoutTabs`, the editor tabs over the drawing (`size="md"`): Model, then each layout; `selected` marks the space in front, `title` says what the tab switches to.
+- `src/components/StatusBar.tsx:76` — `LayoutTabs`, the editor tabs over the drawing (`size="md"`): Model, then each layout; `selected` marks the space in front, `title` says what the tab switches to.
 - `src/components/AssistantPane.tsx:434` — the chat tabs in the assistant's header when more than one chat is open (`size="sm"`): `selected` marks the chat in front, `onClose` closes that chat, `closeLabel` names it ("Close hello"), `title` carries the full chat title when the label clips.
 - The menu titles in `src/components/MenuBar.tsx` stay native buttons: they open menus, a different role.
 - `.status-toggle` in `src/components/StatusBar.tsx` stays bespoke: a drafting toggle is an `aria-pressed` switch, not a tab.

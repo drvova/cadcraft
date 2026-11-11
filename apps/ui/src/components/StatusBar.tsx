@@ -9,9 +9,10 @@
  * (`formatPoint`), never here — no units logic in TS.
  */
 
-import { For, Show, type JSX } from "solid-js";
+import { createEffect, For, Show, type JSX } from "solid-js";
 import type { FacadeMode, SettingsState } from "../facade";
 import { Tab } from "../ui/Tab";
+import { scrollBand } from "./ToolStrip";
 
 /** The boolean drafting settings a status toggle can flip. */
 type ToggleKey = "grid" | "snap" | "ortho" | "polar" | "isodraft" | "otrack" | "osnap" | "lwdisplay" | "transparency" | "dynmode" | "qpmode";
@@ -50,8 +51,26 @@ export interface LayoutTabsProps {
 /** The editor tabs over the drawing: Model, then each layout; the active one is the pane's fill. */
 export function LayoutTabs(props: LayoutTabsProps): JSX.Element {
   const tabs = (): readonly string[] => ["Model", ...props.layouts];
+  let strip: HTMLDivElement | undefined;
+  let mark: (() => void) | undefined;
+  // A strip longer than the pane scrolls: when the layouts or the one in front change (a layout
+  // made or switched to from the command line), bring the tab in front into view and re-mark the
+  // clipped edges.
+  createEffect(() => {
+    const front = tabs().indexOf(props.space);
+    strip?.children.item(front)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    mark?.();
+  });
   return (
-    <div class="editor-tabs" role="tablist" aria-label="Layouts">
+    <div
+      class="editor-tabs"
+      role="tablist"
+      aria-label="Layouts"
+      ref={(element) => {
+        strip = element;
+        mark = scrollBand(element);
+      }}
+    >
       <For each={tabs()}>
         {(name) => (
           <Tab size="md" selected={props.space === name} title={name === "Model" ? "Switch to model space" : `Switch to ${name}`} onClick={() => props.onLayout(name)}>
@@ -94,7 +113,7 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
         </span>
       </div>
       <div class="status-right">
-        <div class="status-toggles" role="group" aria-label="Drafting settings">
+        <div class="status-toggles" role="group" aria-label="Drafting settings" ref={scrollBand}>
           <For each={STATUS_TOGGLES}>
             {(toggle) => (
               <button

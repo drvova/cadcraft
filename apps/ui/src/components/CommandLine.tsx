@@ -5,6 +5,12 @@
  * walk), and the prompt's keywords render as clickable chips that submit the keyword. The output
  * tail sits above in a scrollback. Pure flex column.
  *
+ * For a screen reader the panel is a named region. The scrollback is a log that is in the page
+ * before its first line (a live region that arrives with its text is not read), so each new line
+ * is announced; the prompt, which a sighted user reads as the placeholder, is repeated in a status
+ * line that is not drawn, so a change of prompt is announced too; and an error shown beside the
+ * field is an alert.
+ *
  * The props accept the value or the accessor form (Solid passes an attribute expression through
  * as written, so a parent may hand either); the component reads both.
  */
@@ -96,12 +102,13 @@ export function CommandLine(props: CommandLineProps): JSX.Element {
   };
 
   return (
-    <footer class="cmdline">
-      <Show when={state().output.length > 0}>
-        <div class="cmd-output" ref={scrollback} aria-live="polite">
-          <For each={state().output}>{(line) => <div class="cmd-line">{line}</div>}</For>
-        </div>
-      </Show>
+    <section class="cmdline" aria-label="Command line">
+      <div class="cmd-output" ref={scrollback} role="log" aria-label="Command history">
+        <For each={state().output}>{(line) => <div class="cmd-line">{line}</div>}</For>
+      </div>
+      <div class="cmd-status" role="status">
+        {promptText(state())}
+      </div>
       <Show when={state().keywords.length > 0}>
         <div class="cmd-chips" role="group" aria-label="Keywords">
           <For each={state().keywords}>{(keyword) => (
@@ -129,9 +136,13 @@ export function CommandLine(props: CommandLineProps): JSX.Element {
           }}
         />
         <Show when={freshError()}>
-          {(error) => <span class="cmd-error">{error()}</span>}
+          {(error) => (
+            <span class="cmd-error" role="alert" title={error()}>
+              {error()}
+            </span>
+          )}
         </Show>
       </div>
-    </footer>
+    </section>
   );
 }

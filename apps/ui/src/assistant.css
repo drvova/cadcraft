@@ -65,7 +65,7 @@
   width: var(--hairline);
   background: var(--accent);
   opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease-standard);
+  transition: opacity var(--dur-fast) var(--ease-out);
 }
 
 @media (hover: hover) {
@@ -137,7 +137,10 @@
   color: var(--text-dim);
   opacity: var(--hover-opacity);
   cursor: pointer;
-  transition: opacity var(--dur-fast) var(--ease-out);
+  /* The ink and the fade move together (the ink used to snap while the fade eased). */
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
 
 @media (hover: hover) {
@@ -426,8 +429,9 @@
   flex: 0 0 auto;
   display: inline-flex;
   color: var(--text-disabled);
-  /* The turn lives on the element that turns, so it eases both ways (it used to snap shut). */
-  transition: transform var(--dur-slow) var(--ease-collapse);
+  /* The turn lives on the element that turns, so it eases both ways. This is the close preset:
+     it turns back fast, because the content it opened is already gone. */
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
 .assistant-tool-chevron .tool-icon {
@@ -435,10 +439,12 @@
   height: var(--icon-size-sm);
 }
 
-/* The measured expand: the chevron turns a quarter over 200ms on the ease-out quart curve
-   (research §8); the opened content fades in and settles 4px, on the same curve. */
+/* The open preset: the chevron turns a quarter and the opened content fades in and settles 4px,
+   both at the popover's pace on the strong ease-out. A row is opened often, so it takes the
+   medium duration, not the panel's slow one. */
 .assistant-tool[aria-expanded="true"] .assistant-tool-chevron {
   transform: rotate(90deg);
+  transition: transform var(--dur-med) var(--ease-out-quint);
 }
 
 @keyframes transcript-reveal {
@@ -453,7 +459,7 @@
 }
 
 .assistant-detail {
-  animation: transcript-reveal var(--dur-slow) var(--ease-collapse);
+  animation: transcript-reveal var(--dur-med) var(--ease-out-quint);
 }
 
 /* What the step ran: the first line of its code, in the mono face, clipped. */

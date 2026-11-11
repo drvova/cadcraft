@@ -7,9 +7,40 @@
  * the Rust table, egui types removed.
  */
 
-import { For, Show, type JSX } from "solid-js";
+import { For, onCleanup, Show, type JSX } from "solid-js";
 import { isMacPlatform, shortcutLabel } from "../commands";
 import { IconButton } from "../ui/IconButton";
+
+/**
+ * Wires a band that scrolls sideways without a scrollbar (the tool strip, the editor tabs, the
+ * status toggles): it marks the edges that hide something (`data-clip-start`, `data-clip-end`;
+ * chrome.css fades the band there) and turns a mouse's vertical wheel along the band, which a
+ * sideways-only scroller otherwise ignores. Call it from a component's `ref`. Returns the marking
+ * function, for a caller whose content changes without the band's own box changing.
+ */
+export function scrollBand(band: HTMLElement): () => void {
+  const mark = (): void => {
+    const hidden = band.scrollWidth - band.clientWidth;
+    band.toggleAttribute("data-clip-start", band.scrollLeft > 1);
+    band.toggleAttribute("data-clip-end", band.scrollLeft < hidden - 1);
+  };
+  const onWheel = (event: WheelEvent): void => {
+    // A trackpad's sideways swipe and a pinch (ctrl + wheel) are already what they should be.
+    if (event.deltaX !== 0 || event.deltaY === 0 || event.ctrlKey || band.scrollWidth <= band.clientWidth) return;
+    event.preventDefault();
+    band.scrollLeft += event.deltaMode === WheelEvent.DOM_DELTA_PIXEL ? event.deltaY : event.deltaY * band.clientHeight;
+  };
+  const observer = new ResizeObserver(mark);
+  observer.observe(band);
+  band.addEventListener("scroll", mark, { passive: true });
+  band.addEventListener("wheel", onWheel, { passive: false });
+  onCleanup(() => {
+    observer.disconnect();
+    band.removeEventListener("scroll", mark);
+    band.removeEventListener("wheel", onWheel);
+  });
+  return mark;
+}
 
 /** One toolbar button: the icon id, the command id it invokes, the label, and the shortcut. */
 export interface ToolbarEntry {
@@ -68,7 +99,7 @@ export interface ToolStripProps {
 
 export function ToolStrip(props: ToolStripProps): JSX.Element {
   return (
-    <nav class="toolstrip" role="toolbar" aria-label="Tool bar">
+    <nav class="toolstrip" role="toolbar" aria-label="Tool bar" ref={scrollBand}>
       <For each={TOOLBAR}>
         {(group, index) => (
           <>

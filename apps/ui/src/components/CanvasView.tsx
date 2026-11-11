@@ -6,11 +6,14 @@
  * device-pixel-ratio sizing; the actual drawing lives in ../canvas.ts and the view math in
  * ../view.ts.
  *
+ * The canvas is pointer-only by nature, so its wrapper is exposed as an image named "Drawing"
+ * whose description says how to work without a pointer: the command line is the keyboard path.
+ *
  * The props accept the value or the accessor form (the shell may hand either); the component
  * reads both.
  */
 
-import { createEffect, onCleanup, onMount, type Accessor, type JSX } from "solid-js";
+import { createEffect, createUniqueId, onCleanup, onMount, type Accessor, type JSX } from "solid-js";
 import type { DisplayList } from "../display";
 import type { AppFacade } from "../facade";
 import { drawDisplay, paletteFrom, type Palette } from "../canvas";
@@ -38,6 +41,10 @@ export const CLICK_SLOP = 3;
 
 const FALLBACK_PALETTE: Palette = { canvas: "#181818", gridMinor: "#202020", gridMajor: "#2a2a2a", axisX: "#552633", axisY: "#23412f", selection: "#81a1c1" };
 
+/** What the canvas is and how to work on it without a pointer: its accessible description. */
+export const CANVAS_HELP =
+  "The drawing area. With a pointer: drag to pan, turn the wheel to zoom, click an object to select it. With the keyboard: type commands in the command line, such as LINE, ZOOM or PAN.";
+
 /** Read a prop that may be a value or an accessor. */
 function read<T>(value: T | Accessor<T> | undefined): T | undefined {
   if (value === undefined) return undefined;
@@ -47,6 +54,7 @@ function read<T>(value: T | Accessor<T> | undefined): T | undefined {
 export function CanvasView(props: CanvasViewProps): JSX.Element {
   let canvas: HTMLCanvasElement | undefined;
   let stage: HTMLDivElement | undefined;
+  const helpId = createUniqueId();
   let size = { w: 0, h: 0 };
   let palette: Palette = FALLBACK_PALETTE;
   /** The live drag; `moved` records whether the pointer left the click slop. */
@@ -165,7 +173,7 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
   };
 
   return (
-    <div class="canvas-stage" ref={stage}>
+    <div class="canvas-stage" ref={stage} role="img" aria-label="Drawing" aria-describedby={helpId}>
       <canvas
         ref={canvas}
         class="canvas"
@@ -176,6 +184,9 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
         onPointerLeave={onPointerLeave}
         onContextMenu={(e) => e.preventDefault()}
       />
+      <p id={helpId} hidden>
+        {CANVAS_HELP}
+      </p>
     </div>
   );
 }

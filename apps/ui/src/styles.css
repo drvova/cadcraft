@@ -311,6 +311,13 @@ body {
   border-bottom: var(--hairline) solid var(--border);
 }
 
+/* The fold key is one element in both states (it keeps the keyboard's focus when the section
+   folds): the chevron that points down turns to point right. */
+.layers.is-folded .layers-head .ui-icon-button .tool-icon,
+.properties.is-folded .properties-head .ui-icon-button .tool-icon {
+  transform: rotate(-90deg);
+}
+
 .layers-count {
   margin-left: auto;
   font-size: var(--font-chip);
@@ -376,13 +383,14 @@ body {
 }
 
 /* In the light theme `--layer-current` is the row's pale fill, not an ink: the current layer's
-   name takes the theme's own "on" green there, which reads on the light panel. */
+   name takes the theme's own "on" green there, a quarter of the way to the ink: the green alone
+   measures 4.49:1 on the selected fill, under the 4.5 that text needs. */
 :root[data-theme="light"] .layer-row.is-current .ui-row {
-  color: var(--toggle-on);
+  color: color-mix(in srgb, var(--toggle-on) 75%, var(--text));
 }
 
-/* The status column, as the desktop draws it: a small diamond, bright when the layer has
-   objects and faint when it does not (`crates/ui-egui/src/layers.rs`, `status_icon`). */
+/* The status column: a small diamond, filled when the layer has objects and hollow when it does
+   not. The two inks are one step apart, too close to tell by eye, so the fill carries the state. */
 .layer-used {
   justify-self: center;
   width: 7px;
@@ -394,6 +402,7 @@ body {
 }
 
 .layer-row .layer-used.is-used {
+  background: currentColor;
   color: var(--icon);
 }
 
@@ -404,9 +413,10 @@ body {
   gap: 0;
 }
 
-/* The on/freeze/lock toggles are drawn glyphs, each with its opposite; the quiet state is faint,
-   the state worth noticing (off, frozen, locked) takes its colour. Each key is a cell of the
-   row's full height, so the three make one even column down the list. */
+/* The on/freeze/lock toggles are drawn glyphs, each with its opposite; the quiet state is the
+   quiet ink (the disabled ink measured under 3:1, and these keys are live), the state worth
+   noticing (off, frozen, locked) takes its colour. Each key is a cell of the row's full height,
+   so the three make one even column down the list. */
 .toggle {
   display: inline-flex;
   align-items: center;
@@ -417,7 +427,7 @@ body {
   border: none;
   border-radius: var(--radius-small);
   background: transparent;
-  color: var(--text-disabled);
+  color: var(--text-faint);
   cursor: pointer;
 }
 
@@ -455,6 +465,21 @@ body {
   color: var(--icon-locked);
 }
 
+/* The three state inks are pale colours made for the dark panel; on the light one they measure
+   under 3:1 (frozen 1.5, locked 1.9, off 2.6 on the current row). There the states take the
+   theme's own inks: the stronger grey for off, the accent for frozen, the warning for locked. */
+:root[data-theme="light"] .toggle[aria-pressed="false"]:first-child {
+  color: var(--text-dim);
+}
+
+:root[data-theme="light"] .toggle.is-frozen {
+  color: var(--accent);
+}
+
+:root[data-theme="light"] .toggle.is-locked {
+  color: var(--warn);
+}
+
 /* ---- The command line ---- */
 
 /* The editor's bottom panel. Everything in it reads on one text column: the scrollback, the
@@ -483,6 +508,29 @@ body {
   font-size: var(--font-mono);
   line-height: 1.45;
   color: var(--text-faint);
+}
+
+/* The log is in the page before its first line, so a screen reader hears that line arrive. While
+   it is empty it has no height, and it gives back the gap the column would put under it. */
+.cmd-output:empty {
+  margin-bottom: calc(-1 * var(--gap-4));
+}
+
+/* A scrollback long enough to scroll takes the keyboard's focus (the arrows scroll it). */
+.cmd-output:focus-visible {
+  outline: var(--focus-outline-w) solid var(--accent);
+  outline-offset: var(--focus-outline-offset);
+}
+
+/* The prompt, said again for a screen reader when it changes; a sighted user reads it as the
+   field's placeholder, so this line is not drawn and takes no room. */
+.cmd-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .cmd-line {
@@ -552,7 +600,9 @@ body {
   flex: 0 1 auto;
   min-width: 0;
   max-width: min(40ch, 50%);
-  color: var(--error);
+  /* The error ink alone measures 4.39:1 on the dark panel, under the 4.5 this small text needs:
+     it steps a fifth of the way to the ink. */
+  color: color-mix(in srgb, var(--error) 80%, var(--text));
   font-size: var(--font-small);
   white-space: nowrap;
   overflow: hidden;

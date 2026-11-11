@@ -15,6 +15,32 @@ import { buildMenu, hoverPath, isMacPlatform, menuEntries, shortcutLabel, UI_ITE
 import { ToolIcon } from "../icons";
 import "../chrome.css";
 
+/**
+ * Keeps an opened menu inside the window. A submenu with no room on the right of its row (its
+ * menu is near the window's edge, or it opens from the last column of a tall menu) opens on the
+ * left of it (`is-flipped`, chrome.css). Whatever still overhangs, such as a submenu low in a
+ * short window, is pulled back by the overhang, never past the top-left corner. The margin kept
+ * from the window's edge is the menu's own inset.
+ */
+function keepOnScreen(drop: HTMLElement): void {
+  if (!drop.isConnected) return;
+  const margin = Number.parseFloat(getComputedStyle(drop).paddingLeft) || 0;
+  const right = window.innerWidth - margin;
+  const bottom = window.innerHeight - margin;
+  if (drop.classList.contains("menu-drop-sub") && drop.getBoundingClientRect().right > right) drop.classList.add("is-flipped");
+  const box = drop.getBoundingClientRect();
+  const shiftX = Math.max(Math.min(0, right - box.right), margin - box.left);
+  const shiftY = Math.max(Math.min(0, bottom - box.bottom), margin - box.top);
+  if (box.right > right || box.left < margin) drop.style.setProperty("--menu-shift-x", `${shiftX}px`);
+  if (box.bottom > bottom || box.top < margin) drop.style.setProperty("--menu-shift-y", `${shiftY}px`);
+}
+
+/** A menu's `ref`: it is measured once it is in the document, before the frame is painted. */
+const placeMenu = (drop: HTMLElement): void => queueMicrotask(() => keepOnScreen(drop));
+
+/** Only a mouse hovers: a finger's tap also "enters" a row, and its click must be the one act. */
+const hovers = (event: PointerEvent): boolean => event.pointerType === "mouse";
+
 export interface MenuBarProps {
   commands: CommandInfo[];
   onInvoke: (id: string) => void;
@@ -167,7 +193,9 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
           disabled={!submenu && !node.enabled}
           aria-haspopup={submenu ? "true" : undefined}
           aria-expanded={submenu ? submenuOpen : undefined}
-          onPointerEnter={() => hover(node, path)}
+          onPointerEnter={(event) => {
+            if (hovers(event)) hover(node, path);
+          }}
           onClick={() => clickRow(node, path)}
         >
           <span class="menu-label">{node.label}</span>
@@ -181,7 +209,7 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
           </Show>
         </button>
         <Show when={submenuOpen}>
-          <div class="menu-drop menu-drop-sub" role="menu">
+          <div class="menu-drop menu-drop-sub" role="menu" ref={placeMenu}>
             {renderList(node.children, [...path, node.label], openChain.slice(1))}
           </div>
         </Show>
@@ -200,9 +228,9 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
               role="menuitem"
               aria-haspopup="true"
               aria-expanded={openIndex() === index()}
-              onPointerEnter={() => {
+              onPointerEnter={(event) => {
                 // While a menu is open, pointing at another title opens that one (switch_on_hover).
-                if (openIndex() !== null && openIndex() !== index()) open(index());
+                if (hovers(event) && openIndex() !== null && openIndex() !== index()) open(index());
               }}
               onClick={() => {
                 if (openIndex() === index()) close();
@@ -212,7 +240,7 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
               {title.label}
             </button>
             <Show when={openIndex() === index()}>
-              <div class="menu-drop" role="menu">
+              <div class="menu-drop" role="menu" ref={placeMenu}>
                 {renderList(title.children, [], openPath())}
               </div>
             </Show>
