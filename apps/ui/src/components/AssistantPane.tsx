@@ -163,6 +163,11 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   // array after every command, so what is selected is compared, not the array.
   const selectionKey = createMemo(() => props.selection().join(","));
   createEffect(on(selectionKey, () => s.setSelectionIncluded(true), { defer: true }));
+  /** How full the context is, in thousands of characters; nothing until it rounds to a figure. */
+  const meter = (): string => {
+    const thousands = Math.round(s.used() / 100) / 10;
+    return thousands === 0 ? "" : `${thousands}k / ${Math.round(MAX_REQUEST_CHARS / 1000)}k`;
+  };
   const selectionShown = (): boolean => props.selection().length > 0 && s.selectionIncluded();
 
   onMount(() => {
@@ -434,12 +439,12 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
           </div>
         </Show>
         <div class="assistant-head-actions">
-          <Tooltip text="New chat" placement="bottom">
+          <Tooltip text="New chat" placement="bottom" align="end">
             <button class="assistant-icon" type="button" aria-label="New chat" onClick={newChat}>
               <ToolIcon id="plus" />
             </button>
           </Tooltip>
-          <Tooltip text="Close the panel" placement="bottom">
+          <Tooltip text="Close the panel" placement="bottom" align="end">
             <button class="assistant-icon" type="button" aria-label="Close the panel" onClick={() => props.onClose()}>
               <ToolIcon id="close" />
             </button>
@@ -757,7 +762,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             </button>
             <div class="assistant-actions">
               <span class="assistant-context" title={`${s.used()} characters of the ${MAX_REQUEST_CHARS} the model can be sent`}>
-                {s.used() === 0 ? "" : `${Math.round(s.used() / 100) / 10}k / ${Math.round(MAX_REQUEST_CHARS / 1000)}k`}
+                {meter()}
               </span>
               <IconButton icon="attach" title="Attach a picture (or paste, or drop one)" onClick={() => fileInput?.click()} />
               <Show

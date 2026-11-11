@@ -17,6 +17,10 @@ export interface TooltipProps {
   /** Where the box sits. `top` (the default) suits a control away from the pane's edge; `bottom`
    *  flips it below, as a control at the top of a pane needs. */
   placement?: "top" | "bottom";
+  /** Which edge of the control the box lines up with. `center` (the default) sits over its
+   *  middle; `end` lines the box's right edge up with the control's, for a control at a pane's
+   *  right edge, where a centred box would run off the window. */
+  align?: "center" | "end";
   /** The control the hint describes. */
   children: JSX.Element;
 }
@@ -25,7 +29,10 @@ export function Tooltip(props: TooltipProps): JSX.Element {
   return (
     <span class="ui-tooltip-host">
       {props.children}
-      <span class={props.placement === "bottom" ? "ui-tooltip ui-tooltip--bottom" : "ui-tooltip"} role="tooltip">
+      <span
+        class={`ui-tooltip${props.placement === "bottom" ? " ui-tooltip--bottom" : ""}${props.align === "end" ? " ui-tooltip--end" : ""}`}
+        role="tooltip"
+      >
         {props.text}
       </span>
     </span>

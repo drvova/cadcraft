@@ -501,6 +501,14 @@
   bottom: auto;
 }
 
+/* A control at the right edge lines the box up with its own right edge, so the box (shown or
+   hidden) never reaches past the window and widens the page. */
+.ui-tooltip--end {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
 @keyframes tooltip-in {
   from {
     opacity: 0;

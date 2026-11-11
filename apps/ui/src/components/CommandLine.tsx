@@ -87,6 +87,14 @@ export function CommandLine(props: CommandLineProps): JSX.Element {
     }
   };
 
+  /** The error to show beside the field: none when the history's last line already says it. */
+  const freshError = (): string | null => {
+    const error = state().error ?? read(props.notice);
+    if (error === null || error === undefined || error === "") return null;
+    const last = (state().output[state().output.length - 1] ?? "").trim();
+    return last !== "" && (last === error.trim() || last.includes(error.trim())) ? null : error;
+  };
+
   return (
     <footer class="cmdline">
       <Show when={state().output.length > 0}>
@@ -120,7 +128,7 @@ export function CommandLine(props: CommandLineProps): JSX.Element {
             walk = -1;
           }}
         />
-        <Show when={state().error ?? read(props.notice)}>
+        <Show when={freshError()}>
           {(error) => <span class="cmd-error">{error()}</span>}
         </Show>
       </div>

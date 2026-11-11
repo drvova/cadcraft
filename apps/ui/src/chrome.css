@@ -70,6 +70,15 @@
   top: 100%;
   left: 0;
   min-width: 30ch;
+  /* A menu longer than the window's height (Draw and Modify hold thirty rows) runs on into a
+     second column instead of off the screen. It is a grid, not a scrolling box: a box that
+     scrolls would clip the submenus that open beside its rows. */
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(auto-fit, var(--control-h-input));
+  grid-auto-columns: minmax(30ch, max-content);
+  column-gap: var(--menu-inset);
+  max-height: calc(100dvh - var(--control-h-tab) - var(--gap-16));
   padding: var(--menu-inset);
   background: var(--surface-elevated);
   border: var(--hairline) solid var(--border);
