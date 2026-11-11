@@ -83,6 +83,11 @@
   outline: none;
 }
 
+/* Focused from the keyboard, the hairline is the handle's focus ring. */
+.assistant-resize:focus-visible::after {
+  background: var(--focus-ring);
+}
+
 /* ---- The title (the part title's recipe) ---- */
 
 .assistant-head {
@@ -116,53 +121,14 @@
   scrollbar-width: none;
 }
 
+/* The header's keys are the system's 24px circles around a 14px glyph. The pair steps out by the
+   glyph's margin less the header's own inset, so the close glyph ends where the glyph of the
+   18px key it replaces ended. */
 .assistant-head-actions {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 2px;
-}
-
-/* The control icon buttons (§1.7): 18px, transparent, opacity .8 → 1. */
-.assistant-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-small);
-  background: transparent;
-  color: var(--text-dim);
-  opacity: var(--hover-opacity);
-  cursor: pointer;
-  /* The ink and the fade move together (the ink used to snap while the fade eased). */
-  transition:
-    opacity var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out);
-}
-
-@media (hover: hover) {
-  .assistant-icon:hover {
-    color: var(--text);
-    opacity: 1;
-  }
-}
-
-.assistant-icon:active {
-  color: var(--text);
-  opacity: 1;
-}
-
-.assistant-icon:focus-visible {
-  outline: var(--focus-outline-w) solid var(--accent);
-  outline-offset: var(--focus-outline-offset);
-}
-
-.assistant-icon .tool-icon {
-  width: 14px;
-  height: 14px;
+  margin-right: calc(-1 * var(--gap-3));
 }
 
 /* ---- The transcript ---- */
@@ -215,12 +181,15 @@
   padding: 0;
 }
 
+/* The one sentence: what the assistant does with the drawing. It is read, so it takes the dim
+   ink, a step above the quiet one. */
 .assistant-empty p {
   margin: 0 0 var(--gap-6);
   padding: 0 var(--assistant-inset);
-  color: var(--text-faint);
+  color: var(--text-dim);
   font-size: var(--font-body);
   line-height: 1.5;
+  text-wrap: pretty;
 }
 
 /* A suggestion is the measured 32px empty-state row (research §7b): the 14px icon at .66, the
@@ -250,7 +219,7 @@
 }
 
 .assistant-example:focus-visible {
-  outline: var(--focus-outline-w) solid var(--accent);
+  outline: var(--focus-outline-w) solid var(--focus-ring);
   outline-offset: var(--focus-outline-offset);
 }
 
@@ -421,7 +390,7 @@
 }
 
 .assistant-tool:focus-visible {
-  outline: var(--focus-outline-w) solid var(--accent);
+  outline: var(--focus-outline-w) solid var(--focus-ring);
   outline-offset: var(--focus-outline-offset);
 }
 
@@ -883,7 +852,7 @@
 }
 
 .assistant-ghost:focus-visible {
-  outline: var(--focus-outline-w) solid var(--accent);
+  outline: var(--focus-outline-w) solid var(--focus-ring);
   outline-offset: var(--focus-outline-offset);
 }
 
@@ -1040,20 +1009,37 @@
   font-size: var(--font-chip);
 }
 
-/* A labelled field of the sheet: the name, the system's `Field`, and a quiet line of help. */
+/* A labelled field of the sheet: the name, the system's `Field`, and a quiet line of help. The
+   name's line is 16px, the hint's lines too, so every field block is built from the same rows. */
 .assistant-field {
   display: flex;
   flex-direction: column;
   gap: var(--gap-4);
   color: var(--text-dim);
   font-size: var(--font-chip);
+  line-height: var(--gap-16);
 }
 
 /* A field and what follows it in the group stand 4px further apart than a field and its own
    name and hint, so each name reads with the field under it and not the hint above it. */
-.assistant-field + .assistant-field,
-.assistant-setup-models + .assistant-field {
+.assistant-field + .assistant-field {
   margin-top: var(--gap-4);
+}
+
+/* The key and its show/hide key share one row: the field gives way, the key keeps its width. */
+.assistant-key {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-4);
+}
+
+.assistant-key .ui-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.assistant-key .ui-button {
+  flex: 0 0 auto;
 }
 
 /* Help is read, so it takes the quiet ink, not the disabled one (11px at .36 is below reading
@@ -1064,12 +1050,16 @@
   line-height: var(--gap-16);
 }
 
-/* The models the server listed, as chips to pick from; the one in the field is marked. */
+/* The models the server listed, as chips to pick from; the one in the field is marked. They
+   belong to the Model field above them, so they sit closer to it than a new field would. A chip
+   carries 8px of its own inset: the list steps out by it, so the names start on the column. */
 .assistant-setup-models {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--gap-2);
-  margin: 0 calc(-1 * var(--gap-8));
+  gap: var(--gap-4);
+  margin: calc(-1 * var(--gap-2)) calc(-1 * var(--gap-8)) 0;
+  /* Brought into view after a check, it keeps the sheet's own inset under it. */
+  scroll-margin-bottom: var(--gap-12);
 }
 
 /* The sheet's foot stays put: what the check found, then Check on the left and the two answers
@@ -1083,18 +1073,53 @@
   border-top: var(--hairline) solid var(--border);
 }
 
-.assistant-setup-note {
-  margin: 0;
+/* The foot's two lines: what the connection check found, and why Save is off. Each is there only
+   while it has something to say, and the foot keeps one line's height when neither does. */
+.assistant-setup-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-2);
   min-height: var(--gap-16);
   padding: 0 var(--assistant-inset);
-  color: var(--text-faint);
   font-size: var(--font-label);
   line-height: var(--gap-16);
   overflow-wrap: anywhere;
 }
 
+/* The check's line, one ink per state: quiet before a check and during one, the full ink for a
+   server that answered with its models, the warning ink for one that answered without a list
+   (the name must be typed), the error ink for an address that cannot be asked, a server that did
+   not answer, a refused key and any other error. The words say the state too. */
+.assistant-setup-note {
+  margin: 0;
+  color: var(--text-faint);
+}
+
+.assistant-setup-note .assistant-ripple {
+  display: inline-block;
+  margin-right: var(--gap-6);
+  vertical-align: 1px;
+}
+
+.assistant-setup-note.is-reached {
+  color: var(--text);
+}
+
+.assistant-setup-note.is-no-list {
+  color: var(--warn);
+}
+
+.assistant-setup-note.is-invalid,
+.assistant-setup-note.is-unreachable,
+.assistant-setup-note.is-refused,
 .assistant-setup-note.is-failed {
   color: var(--error);
+}
+
+/* Why Save is off: read, so the dim ink, not the disabled one. */
+.assistant-setup-reason {
+  margin: 0;
+  color: var(--text-dim);
 }
 
 /* The ghost Check button carries its own inset: stepping out by it puts its word on the column.
@@ -1110,14 +1135,9 @@
   flex: 1 1 auto;
 }
 
-/* The empty state when no model is connected: what is missing, and the one key that fixes it. */
+/* The empty state when no model is connected: the one key that fixes it, its fill starting on
+   the text column under the sentence. */
 .assistant-empty-setup {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--gap-8);
-  padding: var(--gap-2) var(--assistant-inset) var(--gap-12);
-  color: var(--text-dim);
-  font-size: var(--font-body);
-  line-height: 1.5;
+  padding: var(--gap-4) var(--assistant-inset) 0;
 }

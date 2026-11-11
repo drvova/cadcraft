@@ -124,6 +124,61 @@ describe("the layer's contrast, from the tokens", () => {
   test("the dark accent chip keeps the accent itself as its ink", () => {
     expect(dark["text-accent"]?.toLowerCase()).toBe(dark["accent"]?.toLowerCase());
   });
+
+  for (const [name, theme] of Object.entries(themes)) {
+    test(`${name}: the accent ink holds 4.5:1 as text on every surface and on the hovered row`, () => {
+      expect(lowest(theme, "text-accent", [], [...SURFACES, "control-hover"])).toBeGreaterThanOrEqual(4.5);
+      expect(lowest(theme, "text-accent", ["hover"], SURFACES)).toBeGreaterThanOrEqual(4.5);
+    });
+    test(`${name}: the drawing's ring and selection stroke hold 3:1 against the canvas`, () => {
+      expect(lowest(theme, "canvas-focus-ring", [], ["canvas"])).toBeGreaterThanOrEqual(3);
+      expect(lowest(theme, "selection", [], ["canvas"])).toBeGreaterThanOrEqual(3);
+    });
+    test(`${name}: the attention glyph holds 3:1 on every surface and on the control's hover`, () => {
+      expect(lowest(theme, "icon-point", [], [...SURFACES, "control-hover"])).toBeGreaterThanOrEqual(3);
+    });
+  }
+
+  test("light: a frozen layer's key, the accent ink, holds 3:1 hovered on the current row of the sidebar", () => {
+    const light = themes["light"];
+    if (light === undefined) throw new Error("no light theme");
+    expect(lowest(light, "text-accent", ["fill-active", "hover"], ["panel"])).toBeGreaterThanOrEqual(3);
+  });
+
+  test("the canvas keeps one surface and one ring in both themes", () => {
+    const light = block(':root[data-theme="light"]');
+    expect(light["canvas"]).toBeUndefined();
+    expect(light["canvas-focus-ring"]).toBeUndefined();
+  });
+});
+
+describe("the app's own sheets speak the layer's colour vocabulary", () => {
+  const sheets = ["styles.css", "interaction.css", "palette.css"].map(
+    (file) => [file, strip(readFileSync(join(import.meta.dir, "..", file), "utf8"))] as const,
+  );
+
+  test("every ring is the focus ink, and the drawing's ring is the canvas's own", () => {
+    for (const [file, css] of sheets) {
+      for (const m of css.matchAll(/outline:\s*([^;]+);/g)) {
+        const ring = m[1];
+        if (ring === "none") continue;
+        expect(`${file}: ${ring}`).toMatch(/: var\(--focus-outline-w\) solid var\(--(focus-ring|canvas-focus-ring)\)$/);
+      }
+    }
+    const styles = sheets[0]?.[1] ?? "";
+    expect(rule(styles, ".canvas-stage:focus-visible")).toContain("solid var(--canvas-focus-ring)");
+    expect(rule(styles, ".cmd-input:focus")).toContain("border-color: var(--focus-ring)");
+    expect(rule(sheets[1]?.[1] ?? "", ".prop-input:focus-visible, .prop-select:focus-visible")).toContain(
+      "border-color: var(--focus-ring)",
+    );
+  });
+
+  test("no text or glyph takes the accent fill as its ink, and no live text takes the disabled ink", () => {
+    for (const [file, css] of sheets) {
+      expect(`${file}: ${/(?<![\w-])color:\s*var\(--accent\)/.test(css)}`).toBe(`${file}: false`);
+      expect(`${file}: ${/(?<![\w-])color:\s*var\(--text-disabled\)/.test(css)}`).toBe(`${file}: false`);
+    }
+  });
 });
 
 describe("the layer's recipe, from the stylesheet", () => {

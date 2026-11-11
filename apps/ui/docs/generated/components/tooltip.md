@@ -13,9 +13,7 @@ Not applicable: hand-rolled — the hover box is measured from the running Curso
 ## Examples
 `<Tooltip text="Close the panel"><IconButton icon="close" title="Close the panel" /></Tooltip>` — a hint over an icon-only control.
 
-Real uses, 2 call sites (`rg -c "<Tooltip" src/components` → `src/components/AssistantPane.tsx:5`):
-- `src/components/AssistantPane.tsx:442` — New chat.
-- `src/components/AssistantPane.tsx:447` — Close the panel.
+Real uses, 0 call sites: the assistant header's two keys were its only users and are `IconButton`s now, which carry their own hint (`rule/tooltip-one-hint`). The component stays for a control that has no hint of its own.
 
 ### Example files
 | File | Covers | Caption |
@@ -99,7 +97,7 @@ One shape; two placements (above the child by default, below for a control at a 
 - The content is rich, interactive or long. Use `Row` rows inside a menu instead.
 
 ### Rules
-- `rule/tooltip-not-a-name`: When a control carries a tooltip, give the control its own `aria-label`, because a `role="tooltip"` is a description, not an accessible name, and a control named only by its tooltip is unnamed to a screen reader. Evidence: app 2/2 tooltip hosts name their button, `src/components/AssistantPane.tsx:443` and `src/components/AssistantPane.tsx:448`. Check: review `src/components/AssistantPane.tsx`.
+- `rule/tooltip-not-a-name`: When a control carries a tooltip, give the control its own `aria-label`, because a `role="tooltip"` is a description, not an accessible name, and a control named only by its tooltip is unnamed to a screen reader. Evidence: app 2/2 tooltip hosts name their button, `src/components/AssistantPane.tsx:511` and `src/components/AssistantPane.tsx:552`. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Tooltip text="Close"><button>✕</button></Tooltip>`
   - Do: `<Tooltip text="Close the panel"><button aria-label="Close the panel">✕</button></Tooltip>`
 - `rule/tooltip-never-blocks`: When the tooltip shows, the box keeps `pointer-events: none`, because it sits above the control and a hint that takes the click is worse than 0 hints. Evidence: single use `src/ui/ui.css:526`, `pointer-events: none` on the box. Check: review `src/ui/ui.css`.

@@ -13,7 +13,11 @@ import {
   parseToolArgs,
   relativeTime,
   splitFences,
+  failedNote,
   listModels,
+  reachedNote,
+  saveBlocker,
+  withoutKey,
   modelsEndpoint,
   presetFor,
   providerEndpoint,
@@ -140,6 +144,54 @@ describe("setting a provider up", () => {
     const odd = fetchOf(new Response("<html>", { status: 200 }));
     await expect(listModels(PROVIDER, signal, odd.fetch)).rejects.toThrow("The provider answered, but not with a model list. Type the model's name and save.");
     await expect(listModels({ baseUrl: "", model: "", apiKey: "" }, signal, odd.fetch)).rejects.toThrow("base URL");
+  });
+
+  test("each way a check ends is its own state", async () => {
+    const stateOf = async (provider: ProviderConfig, fetchImpl: typeof fetch): Promise<string> => {
+      try {
+        return reachedNote(await listModels(provider, signal, fetchImpl), provider.model).state;
+      } catch (e) {
+        return failedNote(e).state;
+      }
+    };
+    expect(await stateOf(PROVIDER, fetchOf(new Response(JSON.stringify({ data: [{ id: "a" }] }), { status: 200 })).fetch)).toBe("reached");
+    expect(await stateOf(PROVIDER, fetchOf(new Response(JSON.stringify({ data: [] }), { status: 200 })).fetch)).toBe("no-list");
+    expect(await stateOf(PROVIDER, fetchOf(new Response("<html>", { status: 200 })).fetch)).toBe("no-list");
+    expect(await stateOf(PROVIDER, fetchOf(new Response("", { status: 401 })).fetch)).toBe("refused");
+    expect(await stateOf(PROVIDER, fetchOf(new Response("", { status: 403 })).fetch)).toBe("refused");
+    expect(await stateOf(PROVIDER, fetchOf(new Response("", { status: 500 })).fetch)).toBe("failed");
+    expect(await stateOf(PROVIDER, fetchOf(new TypeError("Failed to fetch")).fetch)).toBe("unreachable");
+    expect(await stateOf({ ...PROVIDER, baseUrl: "ftp://x" }, fetchOf(new Response("", { status: 200 })).fetch)).toBe("invalid");
+  });
+
+  test("the note after a check counts the models and says whether the typed one is listed", () => {
+    expect(reachedNote(["a", "b"], "a").text).toBe("Connected. 2 models, including a.");
+    expect(reachedNote(["a"], "").text).toBe("Connected. 1 model.");
+    expect(reachedNote(["a", "b"], "c").text).toBe("Connected. 2 models, but not c. Pick one from the list, or keep the name you typed.");
+    expect(reachedNote([], "c")).toEqual({ state: "no-list", text: "Connected. The provider lists no models. Type the model's name." });
+    expect(failedNote(new Error("the socket closed"))).toEqual({ state: "failed", text: "The socket closed" });
+  });
+
+  test("a provider that quotes the key back does not get it shown", async () => {
+    expect(withoutKey("Incorrect API key provided: sk-secret-1.", " sk-secret-1 ")).toBe("Incorrect API key provided: (your key).");
+    expect(withoutKey("no key here", "")).toBe("no key here");
+    const echo = fetchOf(new Response(JSON.stringify({ error: { message: "Incorrect API key provided: sk-secret-1" } }), { status: 401 }));
+    const note = await listModels({ ...PROVIDER, apiKey: "sk-secret-1" }, signal, echo.fetch).then(
+      () => "",
+      (e: unknown) => failedNote(e).text,
+    );
+    expect(note).toContain("(your key)");
+    expect(note).not.toContain("sk-secret-1");
+  });
+
+  test("a setup is saved only when it can work, and the reason is said", () => {
+    expect(saveBlocker({ baseUrl: "", model: "", apiKey: "" }, false, 0)).toBe("To save, choose a provider or type a base URL.");
+    expect(saveBlocker({ baseUrl: "ftp://x/v1", model: "m", apiKey: "" }, false, 0)).toBe("To save, start the base URL with http:// or https://.");
+    expect(saveBlocker({ baseUrl: "https://x/v1", model: "m", apiKey: " " }, true, 0)).toBe("To save, add the API key this provider needs.");
+    expect(saveBlocker({ baseUrl: "https://x/v1", model: "", apiKey: "k" }, true, 0)).toBe("To save, type a model name.");
+    expect(saveBlocker({ baseUrl: "https://x/v1", model: "", apiKey: "" }, false, 4)).toBe("To save, pick a model from the list or type its name.");
+    expect(saveBlocker({ baseUrl: "http://127.0.0.1:11434/v1", model: "llama3.2", apiKey: "" }, false, 0)).toBeNull();
+    expect(saveBlocker({ baseUrl: "https://x/v1", model: "m", apiKey: "k" }, true, 0)).toBeNull();
   });
 });
 

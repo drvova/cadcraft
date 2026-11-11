@@ -87,6 +87,66 @@ const UNREADABLE_CALL = "The model asked to run code, but its request could not 
 export const MAX_LISTED_MODELS = 200;
 
 /**
+ * How a connection check ended. `reached` and `no-list` are answers from the server (the second
+ * without model names to pick from); the rest are failures: an address that cannot be asked
+ * (`invalid`), a server that did not answer (`unreachable`), a key it turned down (`refused`),
+ * and any other error it reported (`failed`).
+ */
+export type ConnectionState = "reached" | "no-list" | "refused" | "unreachable" | "invalid" | "failed";
+
+/** What the setup shows after a check: which state it is, and the sentence that says so. */
+export interface ConnectionNote {
+  state: ConnectionState;
+  text: string;
+}
+
+/** A connection check that failed, with the state it failed in. */
+export class ConnectionError extends Error {
+  readonly state: ConnectionState;
+  constructor(state: ConnectionState, message: string) {
+    super(message);
+    this.name = "ConnectionError";
+    this.state = state;
+  }
+}
+
+/** A provider's message with the reader's key taken out of it (some providers quote the key back). */
+export function withoutKey(text: string, apiKey: string): string {
+  const key = apiKey.trim();
+  return key === "" ? text : text.split(key).join("(your key)");
+}
+
+/** The note for a check the server answered: how many models it lists, and whether the typed one is there. */
+export function reachedNote(ids: readonly string[], model: string): ConnectionNote {
+  if (ids.length === 0) return { state: "no-list", text: "Connected. The provider lists no models. Type the model's name." };
+  const count = ids.length === 1 ? "1 model" : `${ids.length} models`;
+  const name = model.trim();
+  if (name === "") return { state: "reached", text: `Connected. ${count}.` };
+  if (ids.includes(name)) return { state: "reached", text: `Connected. ${count}, including ${name}.` };
+  return { state: "reached", text: `Connected. ${count}, but not ${name}. Pick one from the list, or keep the name you typed.` };
+}
+
+/** The note for a check that threw: the error's own state and words, as a sentence. */
+export function failedNote(e: unknown): ConnectionNote {
+  const text = message(e);
+  return { state: e instanceof ConnectionError ? e.state : "failed", text: text.charAt(0).toUpperCase() + text.slice(1) };
+}
+
+/**
+ * Why a setup cannot be saved yet, in the sheet's own words, or null when it can. A hosted preset
+ * (`needsKey`) is not saved without its key: every request would be refused. `listed` is how many
+ * models the last check found, so the sentence can point at the list.
+ */
+export function saveBlocker(provider: ProviderConfig, needsKey: boolean, listed: number): string | null {
+  const base = provider.baseUrl.trim();
+  if (base === "") return "To save, choose a provider or type a base URL.";
+  if (!base.startsWith("http://") && !base.startsWith("https://")) return "To save, start the base URL with http:// or https://.";
+  if (needsKey && provider.apiKey.trim() === "") return "To save, add the API key this provider needs.";
+  if (provider.model.trim() === "") return listed > 0 ? "To save, pick a model from the list or type its name." : "To save, type a model name.";
+  return null;
+}
+
+/**
  * Ask the provider which models it serves: the setup's connection check. Resolves with the model
  * ids (possibly none: some servers answer the route with an empty list); rejects with a message
  * in the pane's own words when the server cannot be reached, refuses the key, or answers with
@@ -94,7 +154,7 @@ export const MAX_LISTED_MODELS = 200;
  */
 export async function listModels(provider: ProviderConfig, signal: AbortSignal, fetchImpl: typeof fetch = fetch): Promise<string[]> {
   const missing = providerReady({ ...provider, model: provider.model.trim() === "" ? "any" : provider.model });
-  if (missing !== null) throw new Error(missing);
+  if (missing !== null) throw new ConnectionError("invalid", missing);
   const url = modelsEndpoint(provider.baseUrl);
   const headers: Record<string, string> = {};
   if (provider.apiKey.trim() !== "") headers["authorization"] = `Bearer ${provider.apiKey.trim()}`;
@@ -103,18 +163,21 @@ export async function listModels(provider: ProviderConfig, signal: AbortSignal, 
     resp = await fetchImpl(url, { method: "GET", headers, signal });
   } catch (e) {
     if (signal.aborted) throw new Error("stopped");
-    throw new Error(unreachableText(e, url));
+    throw new ConnectionError("unreachable", unreachableText(e, url));
   }
-  if (!resp.ok) throw new Error(apiErrorText(resp.status, await resp.text().catch(() => "")));
+  if (!resp.ok) {
+    const refused = resp.status === 401 || resp.status === 403;
+    throw new ConnectionError(refused ? "refused" : "failed", withoutKey(apiErrorText(resp.status, await resp.text().catch(() => "")), provider.apiKey));
+  }
   let body: unknown;
   try {
     body = JSON.parse(await resp.text());
   } catch {
-    throw new Error(NOT_A_MODEL_LIST);
+    throw new ConnectionError("no-list", NOT_A_MODEL_LIST);
   }
   const root = asRecord(body);
   const rows = Array.isArray(root["data"]) ? root["data"] : Array.isArray(root["models"]) ? root["models"] : Array.isArray(body) ? body : null;
-  if (rows === null) throw new Error(NOT_A_MODEL_LIST);
+  if (rows === null) throw new ConnectionError("no-list", NOT_A_MODEL_LIST);
   const ids: string[] = [];
   for (const row of rows.slice(0, MAX_LISTED_MODELS)) {
     const r = asRecord(row);
@@ -793,7 +856,7 @@ export async function requestChat(
   }
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
-    throw new Error(apiErrorText(resp.status, text));
+    throw new Error(withoutKey(apiErrorText(resp.status, text), provider.apiKey));
   }
   const contentType = resp.headers.get("content-type") ?? "";
   if (!contentType.includes("event-stream") || resp.body === null) {

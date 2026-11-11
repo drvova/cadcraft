@@ -82,7 +82,7 @@ Not applicable: no variant axes — a row is one band; the selected and disabled
   - Do: `<Row selected>Current layer</Row>`
 
 ### Content
-- `rule/row-trailing-quiet`: When a row carries a shortcut or a value, put it after the label in the dim ink (`--text-faint`), because the label is what the user scans and the trailing text is secondary. Evidence: single use `src/components/MenuBar.tsx:203`, the shortcut span. Check: review `src/components/MenuBar.tsx`.
+- `rule/row-trailing-quiet`: When a row carries a shortcut or a value, put it after the label in the dim ink (`--text-faint`), because the label is what the user scans and the trailing text is secondary. Evidence: single use `src/components/MenuBar.tsx:231`, the shortcut span. Check: review `src/components/MenuBar.tsx`.
   - Don't: a shortcut before the label.
   - Do: `<Row>Save<span class="row-shortcut">Ctrl+S</span></Row>`
 

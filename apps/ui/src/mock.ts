@@ -68,6 +68,8 @@ export class MockFacade implements RawFacade {
   private title = "sample.dxf";
   private currentView: Rect = { x0: -20, y0: -9, x1: 120, y1: 83 };
   private pending: { id: string; step: number; center?: { x: number; y: number }; first?: { x: number; y: number } } | null = null;
+  /** The last command that opened a prompt: what an empty Enter starts again. */
+  private lastAsked: string | null = null;
   private selected: string[] = [];
   private grid = true;
   private snap = false;
@@ -88,6 +90,7 @@ export class MockFacade implements RawFacade {
     this.revision = 1;
     this.dirty = false;
     this.pending = null;
+    this.lastAsked = null;
     // The canned drawing: a 100x60 plate with a bore, a datum line, a filled arrow (tris),
     // corner points and an image frame — every primitive kind the canvas knows.
     this.entities = [
@@ -150,6 +153,12 @@ export class MockFacade implements RawFacade {
     return JSON.stringify(st);
   }
 
+  /** Open a command's first question and remember it for the empty Enter that repeats it. */
+  private ask(id: string): void {
+    this.pending = { id, step: 0 };
+    this.lastAsked = id;
+  }
+
   /** A command's one-line form, dispatched like the engine's typed input. */
   private dispatch(text: string): string {
     const trimmed = text.trim();
@@ -159,23 +168,24 @@ export class MockFacade implements RawFacade {
     const args = rest.length > 0 ? rest.split(/\s+/) : [];
     switch (head) {
       case "":
-        return this.replyWith([]);
+        // An empty Enter repeats the last prompting command, as the engine's does.
+        return this.lastAsked === null ? this.replyWith([]) : this.start(this.lastAsked);
       case "circle":
         if (args.length === 0) {
-          this.pending = { id: "circle", step: 0 };
+          this.ask("circle");
           return this.replyWith([]);
         }
         return this.circleFrom(args);
       case "line":
         if (args.length === 0) {
-          this.pending = { id: "line", step: 0 };
+          this.ask("line");
           return this.replyWith([]);
         }
         return this.lineFrom(args);
       case "rectang":
       case "rectangle":
         if (args.length === 0) {
-          this.pending = { id: "rectang", step: 0 };
+          this.ask("rectang");
           return this.replyWith([]);
         }
         return this.rectFrom(args);
@@ -510,6 +520,19 @@ export class MockFacade implements RawFacade {
   }
 
   /**
+   * Escape, as the engine's session cancels: the running command ends with `*Cancel*`; with
+   * none running the selection is cleared and nothing is said.
+   */
+  cancel(): string {
+    if (this.pending === null) {
+      this.selected = [];
+      return this.replyWith([]);
+    }
+    this.pending = null;
+    return this.replyWith(["*Cancel*"]);
+  }
+
+  /**
    * Start a command by id, as a menu click does: `circle`/`line`/`rectang` open their two-step
    * prompt, a simple command echoes `Command: X` and answers with its own output, an unknown id
    * is refused. The reply carries the same delta fields `cmdline` does (running, prompt,
@@ -520,7 +543,7 @@ export class MockFacade implements RawFacade {
     if (name === "") return this.replyWith([], 'Unknown command "". Press F1 for a list of commands.');
     if (name === "circle" || name === "line" || name === "rectang" || name === "rectangle") {
       const promptId = name === "rectangle" ? "rectang" : name;
-      this.pending = { id: promptId, step: 0 };
+      this.ask(promptId);
       return this.replyWith([`Command: ${promptId.toUpperCase()}`]);
     }
     if (name === "zoom") {

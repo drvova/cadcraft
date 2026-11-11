@@ -308,6 +308,13 @@ impl Facade {
             self.session.echo(m.clone());
             error = Some(m);
         }
+        self.cmdline_reply(before, error)
+    }
+
+    /// The reply `cmdline`, `start` and `cancel` share: the command-line state after the call,
+    /// the `output` lines the log gained since it held `before` lines, and `error` when the call
+    /// was refused.
+    fn cmdline_reply(&mut self, before: usize, error: Option<String>) -> String {
         self.refresh();
         let mut v = cmdline_state(&self.session);
         let out: Vec<String> = self.session.log.iter().skip(before).take(MAX_OUTPUT).cloned().collect();
@@ -318,6 +325,17 @@ impl Facade {
             }
         }
         v.to_string()
+    }
+
+    /// Cancel the running command, exactly as Escape does ([`Session::cancel`]): the command
+    /// ends with `*Cancel*` in the output and what it had already drawn stays as one undo step;
+    /// inside a transparent command, both it and the command it interrupted end. With no command
+    /// running it clears the selection. The reply has the shape `cmdline` and `start` reply; a
+    /// cancel is never refused, so it carries no `error`.
+    pub fn cancel(&mut self) -> String {
+        let before = self.session.log.len();
+        self.session.cancel();
+        self.cmdline_reply(before, None)
     }
 
     /// Start a command **by its id**, exactly as a menu click does ([`Session::start`]): the
@@ -335,16 +353,7 @@ impl Facade {
             self.session.echo(m.clone());
             error = Some(m);
         }
-        self.refresh();
-        let mut v = cmdline_state(&self.session);
-        let out: Vec<String> = self.session.log.iter().skip(before).take(MAX_OUTPUT).cloned().collect();
-        if let Some(o) = v.as_object_mut() {
-            o.insert("output".into(), json!(out));
-            if let Some(e) = error {
-                o.insert("error".into(), json!(e));
-            }
-        }
-        v.to_string()
+        self.cmdline_reply(before, error)
     }
 
     /// The command-line state: the prompt as shown, the running command, its keywords and
@@ -763,6 +772,11 @@ mod bindings {
             self.0.start(id)
         }
 
+        #[wasm_bindgen(js_name = cancel)]
+        pub fn cancel(&mut self) -> String {
+            self.0.cancel()
+        }
+
         #[wasm_bindgen(js_name = prompt)]
         pub fn prompt(&self) -> String {
             self.0.prompt()
@@ -943,6 +957,49 @@ mod tests {
         // (about 0.01 here) short of the exact radius.
         assert!(x0 <= 0.0 && y0 <= 0.0, "the bounds contain the centre: {x0} {y0}");
         assert!(x1 >= 4.95 && y1 >= 4.95, "the bounds reach the circle: {x1} {y1}");
+    }
+
+    #[test]
+    fn cancel_ends_the_running_command_and_enter_repeats_it() {
+        let mut f = Facade::new();
+        let started = parse(&f.start("circle"));
+        assert_eq!(started["running"].as_str(), Some("circle"), "{started}");
+        let centre = parse(&f.cmdline("0,0"));
+        assert_eq!(centre["running"].as_str(), Some("circle"), "{centre}");
+        let cancelled = parse(&f.cancel());
+        assert!(cancelled["running"].is_null(), "nothing runs after a cancel: {cancelled}");
+        assert!(cancelled.get("error").is_none(), "a cancel is never refused: {cancelled}");
+        let output: Vec<&str> = cancelled["output"].as_array().unwrap().iter().filter_map(Value::as_str).collect();
+        assert_eq!(output, ["*Cancel*"], "the cancel adds one line, and no other command's echo: {cancelled}");
+        assert_eq!(entity_count(&f), 0, "the cancelled circle was not drawn");
+        // The engine's own empty Enter repeats the command the user ran, not a stand-in.
+        let repeated = parse(&f.cmdline(""));
+        assert_eq!(repeated["running"].as_str(), Some("circle"), "{repeated}");
+        // A command typed at the command line is cancelled the same way.
+        assert!(parse(&f.cancel())["running"].is_null());
+        assert_eq!(parse(&f.cmdline("line 0,0 1,0 2,0"))["running"].as_str(), Some("line"));
+        let kept = parse(&f.cancel());
+        assert!(kept["running"].is_null(), "{kept}");
+        assert_eq!(entity_count(&f), 2, "what LINE had drawn stays: {kept}");
+    }
+
+    #[test]
+    fn cancel_with_nothing_running_clears_the_selection_and_never_fails() {
+        let mut f = Facade::new();
+        let drawn = parse(&f.execute("circle", r#"{"center":[0,0],"radius":5}"#));
+        let handle = drawn["result"]["handle"].as_str().unwrap();
+        assert_eq!(parse(&f.execute("select", &json!({ "handles": [handle] }).to_string()))["ok"], json!(true));
+        assert_eq!(parse(&f.selection())["count"].as_u64(), Some(1));
+        let idle = parse(&f.cancel());
+        assert!(idle["running"].is_null(), "{idle}");
+        assert!(idle.get("error").is_none(), "{idle}");
+        assert_eq!(parse(&f.selection())["count"].as_u64(), Some(0), "Escape with no command clears the selection");
+        assert_eq!(entity_count(&f), 1, "and leaves the drawing alone");
+        // Repeated cancels on an idle, empty session are harmless.
+        let mut empty = Facade::new();
+        for _ in 0..3 {
+            assert!(parse(&empty.cancel())["running"].is_null());
+        }
     }
 
     #[test]

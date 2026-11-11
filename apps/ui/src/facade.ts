@@ -24,6 +24,8 @@ export interface RawFacade {
   execute(command: string, paramsJson: string): string;
   cmdline(text: string): string;
   start(id: string): string;
+  /** The engine session's own cancel (Escape); replies the same delta `cmdline` does. */
+  cancel(): string;
   prompt(): string;
   state(): string;
   selection(): string;
@@ -317,6 +319,16 @@ export class AppFacade {
   start(id: string, prev: PromptState = emptyPrompt()): PromptState {
     const raw = this.call(() => this.raw.start(id));
     return reducePrompt(prev, raw, id);
+  }
+
+  /**
+   * Cancel the running command, as Escape does in the engine: it ends with `*Cancel*` in the
+   * output, and the engine's empty Enter still repeats it. Folded like `cmdline`, with no echo
+   * (nothing was typed).
+   */
+  cancel(prev: PromptState = emptyPrompt()): PromptState {
+    const raw = this.call(() => this.raw.cancel());
+    return reducePrompt(prev, raw);
   }
 
   /** The engine's prompt state without typing anything (seeds the log tail at boot). */

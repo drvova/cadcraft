@@ -29,6 +29,9 @@
   --grid-major: #2a2a2a;
   --axis-x: #552633;
   --axis-y: #23412f;
+  /* The keyboard ring on the drawing. The canvas is the same dark surface in both themes, so its
+     ring is the dark accent in both: the light --focus-ring measures 2.62 against it. */
+  --canvas-focus-ring: #599CE7;
 
   /* ---- Text and icons (text, text_dim, text_faint, icon, icon_accent, icon_point) ---- */
   --text: #F0F0F0;
@@ -63,11 +66,9 @@
   --snap: #3fa266;
   --toggle-on: #3fa266;
 
-  /* ---- The command line (cmd_bg a=f0, cmd_border, cmd_keyword, cmd_keyword_hover, cmd_history a=170) ---- */
+  /* ---- The command line (cmd_bg a=f0, cmd_border, cmd_history a=170) ---- */
   --cmd-bg: rgba(28, 28, 28, 0.94);
   --cmd-border: #333333;
-  --cmd-keyword: #599CE7;
-  --cmd-keyword-hover: rgba(89, 156, 231, 0.12);
   --cmd-history: rgba(26, 26, 26, 0.667);
 
   /* ---- Lists (list_bg, list_row) ---- */
@@ -211,7 +212,9 @@
   --text-accent: #005DA4;
   --icon: rgba(20, 20, 20, 0.66);
   --icon-accent: #2678C1;
-  --icon-point: #b8791f;
+  /* The attention glyph is the warning ink, as it is in dark: the paler #b8791f measured 3.0 over
+     the control and 2.7 over its hover. */
+  --icon-point: #A46701;
   --accent: #2678C1;
   /* On light surfaces the action fills step toward black, not white: the --on-accent label
      measured 3.77 and 3.20 on the white-mixed steps, and holds 5.35 and 6.41 on these. */
@@ -221,8 +224,6 @@
   --cmd-bg: #ebebeb;
   --cmd-border: #c9c9c9;
   --cmd-history: #f2f2f2;
-  --cmd-keyword: #2678C1;
-  --cmd-keyword-hover: rgba(38, 120, 193, 0.12);
   --shadow: rgba(0, 0, 0, 0.18);
   --selection: #2678C1;
   /* The accent ring measures 2.83 against the .14 selected fill over the control; the accent's

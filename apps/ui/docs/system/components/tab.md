@@ -14,7 +14,7 @@ Not applicable: hand-rolled — the editor tab (13px type on a 12px inset in the
 
 Real uses, 2 call sites (`rg -c "<Tab" src/components` → `src/components/AssistantPane.tsx:4`, `src/components/StatusBar.tsx:1`):
 - `src/components/StatusBar.tsx:76` — `LayoutTabs`, the editor tabs over the drawing (`size="md"`): Model, then each layout; `selected` marks the space in front, `title` says what the tab switches to.
-- `src/components/AssistantPane.tsx:434` — the chat tabs in the assistant's header when more than one chat is open (`size="sm"`): `selected` marks the chat in front, `onClose` closes that chat, `closeLabel` names it ("Close hello"), `title` carries the full chat title when the label clips.
+- `src/components/AssistantPane.tsx:502` — the chat tabs in the assistant's header when more than one chat is open (`size="sm"`): `selected` marks the chat in front, `onClose` closes that chat, `closeLabel` names it ("Close hello"), `title` carries the full chat title when the label clips.
 - The menu titles in `src/components/MenuBar.tsx` stay native buttons: they open menus, a different role.
 - `.status-toggle` in `src/components/StatusBar.tsx` stays bespoke: a drafting toggle is an `aria-pressed` switch, not a tab.
 
@@ -81,7 +81,7 @@ Real uses, 2 call sites (`rg -c "<Tab" src/components` → `src/components/Assis
 - `rule/tab-selected-marked`: When a strip has a tab in front, pass `selected` on it, because the fill alone is colour and a screen reader needs `aria-selected="true"` to hear which view shows. Evidence: app 2/2 strips mark the tab in front, `src/components/StatusBar.tsx:57` and `src/components/AssistantPane.tsx:434`. Check: test `src/ui/Tab.test.tsx`.
   - Don't: `<Tab onClick={show}>Model</Tab>` for the tab whose view is showing.
   - Do: `<Tab selected onClick={show}>Model</Tab>`
-- `rule/tab-in-tablist`: When tabs are rendered, place them in 1 container carrying `role="tablist"` and an `aria-label`, because a `tab` role outside a `tablist` is announced without its strip and its position. Evidence: app 2/2 strips, `src/components/StatusBar.tsx:54` and `src/components/AssistantPane.tsx:431`. Check: review `src/components/StatusBar.tsx`.
+- `rule/tab-in-tablist`: When tabs are rendered, place them in 1 container carrying `role="tablist"` and an `aria-label`, because a `tab` role outside a `tablist` is announced without its strip and its position. Evidence: app 2/2 strips, `src/components/StatusBar.tsx:54` and `src/components/AssistantPane.tsx:499`. Check: review `src/components/StatusBar.tsx`.
   - Don't: `<div class="editor-tabs"><Tab selected>Model</Tab></div>`
   - Do: `<div class="editor-tabs" role="tablist" aria-label="Layouts"><Tab selected>Model</Tab></div>`
 - `rule/tab-close-sibling`: When a tab can be closed, pass `onClose` rather than putting a button in the tab's children, because a `<button>` cannot nest a `<button>` and `Tab` renders the close key as a sibling. Evidence: single use `src/components/AssistantPane.tsx:434`, the one closable strip. Check: test `src/ui/Tab.test.tsx`.

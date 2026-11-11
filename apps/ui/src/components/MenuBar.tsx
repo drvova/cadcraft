@@ -16,13 +16,24 @@
  * returns the focus to what opened it, Enter or Space invoke and return the focus to the title.
  * A row that is not available keeps its place in the walk (`aria-disabled`) and does not invoke.
  * Tab leaves the bar and closes the menu. Focus is never trapped.
+ *
+ * A window too narrow for the bar (900px and under, where the title bar folds it away) shows one
+ * menu key in its place. It opens the same tree as one vertical menu: the titles are its rows and
+ * each title's menu is a submenu, drawn by the same rows and walked by the same keys. Enter, Space
+ * or Down on the key open the menu on its first row and Up on its last, Escape closes one level
+ * and, from the titles, returns the focus to the key. Left and Right only open and close
+ * submenus: there is no bar to move along. Where a submenu has no room beside its parent (560px
+ * and under) it opens in place, as an indented group under its row in a menu that scrolls: the
+ * row that opened it stays in view above it, so nothing has to be added to get back, and the
+ * roles and the keys are the ones of the menus that open beside.
  */
 
-import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import type { CommandInfo } from "../facade";
 import { buildMenu, hoverPath, isMacPlatform, sameStrings, shortcutLabel, UI_ITEMS, type MenuNode } from "../commands";
 import { ToolIcon } from "../icons";
 import { isTypeaheadKey, rovingIndex, typeaheadIndex } from "../roving";
+import { IconButton } from "../ui/IconButton";
 import "../chrome.css";
 
 /**
@@ -30,13 +41,26 @@ import "../chrome.css";
  * menu is near the window's edge, or it opens from the last column of a tall menu) opens on the
  * left of it (`is-flipped`, chrome.css). Whatever still overhangs, such as a submenu low in a
  * short window, is pulled back by the overhang, never past the top-left corner. The margin kept
- * from the window's edge is the menu's own inset.
+ * from the window's edge is the menu's own inset. The status bar is an edge too: a menu ends above
+ * it (`--menu-floor`, which chrome.css takes out of a menu's height). A submenu opened in place
+ * (the compact menu in a narrow window) is in its parent's flow and is only scrolled into view,
+ * with the row that opened it: a group longer than the box starts at the box's top, under its row.
  */
 function keepOnScreen(drop: HTMLElement): void {
   if (!drop.isConnected) return;
-  const margin = Number.parseFloat(getComputedStyle(drop).paddingLeft) || 0;
+  const style = getComputedStyle(drop);
+  if (style.position === "static") {
+    const item = drop.parentElement;
+    const box = item?.closest<HTMLElement>(".is-stacked");
+    if (item === null || box === null || box === undefined) return;
+    item.scrollIntoView({ block: item.offsetHeight > box.clientHeight ? "start" : "nearest" });
+    return;
+  }
+  const margin = Number.parseFloat(style.paddingLeft) || 0;
+  const floor = document.querySelector(".statusbar")?.getBoundingClientRect().top ?? window.innerHeight;
+  drop.style.setProperty("--menu-floor", `${Math.max(0, window.innerHeight - floor)}px`);
   const right = window.innerWidth - margin;
-  const bottom = window.innerHeight - margin;
+  const bottom = floor - margin;
   if (drop.classList.contains("menu-drop-sub") && drop.getBoundingClientRect().right > right) drop.classList.add("is-flipped");
   const box = drop.getBoundingClientRect();
   const shiftX = Math.max(Math.min(0, right - box.right), margin - box.left);
@@ -60,14 +84,28 @@ const menuOf = (owner: HTMLElement): HTMLElement | null => owner.parentElement?.
 /** A menu's own rows in reading order (down the first column, then the next), not its submenus'. */
 const rowsOf = (menu: HTMLElement): HTMLElement[] => Array.from(menu.querySelectorAll<HTMLElement>(":scope > .menu-item > .menu-row"));
 
+/** `openIndex` when the open menu is the compact one, opened by the menu key, not by a title. */
+const COMPACT = -1;
+
+/**
+ * The widths under which the bar gives way to the menu key (the title bar folds the bar away
+ * there) and under which the compact menu's submenus open in place. chrome.css shows and hides
+ * the bar and the key at the first; the second is decided here alone (`is-stacked`).
+ */
+const COMPACT_QUERY = "(max-width: 900px)";
+const STACKED_QUERY = "(max-width: 560px)";
+
 export interface MenuBarProps {
   commands: CommandInfo[];
   onInvoke: (id: string) => void;
 }
 
 export function MenuBar(props: MenuBarProps): JSX.Element {
-  let root: HTMLElement | undefined;
+  let root: HTMLDivElement | undefined;
+  let keyHost: HTMLDivElement | undefined;
+  const compactId = createUniqueId();
   const titles: (HTMLButtonElement | undefined)[] = [];
+  /** The open title's index, `COMPACT` for the menu key's menu, `null` when nothing is open. */
   const [openIndex, setOpenIndex] = createSignal<number | null>(null);
   /** The open submenu chain inside the open dropdown, from its top list. */
   const [openPath, setOpenPath] = createSignal<readonly string[]>([]);
@@ -75,6 +113,16 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
   const [tabStop, setTabStop] = createSignal(0);
 
   const tree = createMemo(() => buildMenu(props.commands, UI_ITEMS));
+
+  const compactMedia = window.matchMedia(COMPACT_QUERY);
+  const stackedMedia = window.matchMedia(STACKED_QUERY);
+  /** Whether the compact menu's submenus open in place (no room beside their parent). */
+  const [stacked, setStacked] = createSignal(stackedMedia.matches);
+
+  /** The menu key itself: the system's icon button inside its host. */
+  const menuKey = (): HTMLElement | null => keyHost?.querySelector<HTMLElement>(":scope > button") ?? null;
+  /** What opened the open menu and takes the focus back when it closes: a title or the menu key. */
+  const opener = (): HTMLElement | null => (openIndex() === COMPACT ? menuKey() : (titles[openIndex() ?? -1] ?? null));
 
   const close = (): void => {
     setOpenIndex(null);
@@ -98,6 +146,29 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
     open(index);
     enter(titles[index], last);
   };
+  /** Opens the compact menu; from the keyboard (`into`) the focus moves to its first or last row. */
+  const openCompact = (into: boolean, last = false): void => {
+    setOpenIndex(COMPACT);
+    setOpenPath([]);
+    if (into) enter(menuKey() ?? undefined, last);
+  };
+
+  // A window resized across either width swaps the bar for the key, or the submenus' placement:
+  // a menu open at that moment was placed for the other arrangement, so it closes.
+  const onCompactChange = (): void => close();
+  const onStackedChange = (): void => {
+    close();
+    setStacked(stackedMedia.matches);
+  };
+  compactMedia.addEventListener("change", onCompactChange);
+  stackedMedia.addEventListener("change", onStackedChange);
+  onCleanup(() => {
+    compactMedia.removeEventListener("change", onCompactChange);
+    stackedMedia.removeEventListener("change", onStackedChange);
+  });
+  // The system's icon button says whether it is expanded; that what it opens is a menu is said
+  // here.
+  onMount(() => menuKey()?.setAttribute("aria-haspopup", "menu"));
 
   // A click anywhere outside closes the open menu, and so does Escape pressed outside the bar (a
   // menu opened by the pointer leaves the focus where it was). Inside the bar Escape belongs to
@@ -127,6 +198,9 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
   };
 
   const hover = (node: MenuNode, path: readonly string[]): void => {
+    // A submenu that opens in place would push the rows away from under the pointer: there a
+    // submenu opens on a click only.
+    if (openIndex() === COMPACT && stacked()) return;
     // Only a real change: a signal that notified on every hover would redo the work under the
     // pointer for nothing.
     const next = hoverPath(openPath(), node, path);
@@ -136,8 +210,9 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
   const clickRow = (event: MouseEvent, row: HTMLElement, node: MenuNode, path: readonly string[]): void => {
     if (node.id !== null) {
       if (!node.enabled) return;
-      // From the keyboard the focus is on the row that is about to go: it returns to the title.
-      if (keyed(event)) titles[openIndex() ?? -1]?.focus();
+      // From the keyboard the focus is on the row that is about to go: it returns to the title
+      // (or to the menu key).
+      if (keyed(event)) opener()?.focus();
       close();
       props.onInvoke(node.id);
       return;
@@ -171,21 +246,37 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
     titles[next]?.focus();
   };
 
+  /** The menu key's own keys: Down and Up open the menu on its first and last row, Escape closes it. */
+  const onMenuKey = (event: KeyboardEvent): void => {
+    if (event.target !== menuKey()) return;
+    if (event.key === "Escape" && openIndex() === COMPACT) {
+      event.preventDefault();
+      close();
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      openCompact(true, event.key === "ArrowUp");
+    }
+  };
+
   const onRowKey = (event: KeyboardEvent, row: HTMLElement, node: MenuNode, path: readonly string[], siblings: readonly MenuNode[]): void => {
     const top = openIndex();
     const menu = row.closest<HTMLElement>('[role="menu"]');
     if (top === null || menu === null) return;
     const count = tree().length;
+    const compact = top === COMPACT;
     if (event.key === "Tab") {
-      // Tab leaves the whole bar: the menu closes and the browser's Tab goes on from the title.
-      titles[top]?.focus();
+      // Tab leaves the whole bar: the menu closes and the browser's Tab goes on from the title
+      // (or from the menu key).
+      opener()?.focus();
       close();
       return;
     }
     if (event.key === "Escape" || (event.key === "ArrowLeft" && path.length > 0)) {
       event.preventDefault();
       if (path.length === 0) {
-        titles[top]?.focus();
+        opener()?.focus();
         close();
         return;
       }
@@ -196,7 +287,8 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
     }
     if (event.key === "ArrowLeft") {
       event.preventDefault();
-      openInto((top - 1 + count) % count);
+      // The compact menu has no bar to move along: Left on its titles stays where it is.
+      if (!compact) openInto((top - 1 + count) % count);
       return;
     }
     if (event.key === "ArrowRight") {
@@ -204,7 +296,7 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
       if (node.id === null) {
         setOpenPath([...path, node.label]);
         enter(row);
-      } else {
+      } else if (!compact) {
         openInto((top + 1) % count);
       }
       return;
@@ -265,53 +357,72 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
   };
 
   return (
-    <nav
-      class="menubar"
-      role="menubar"
-      aria-label="Main menu"
+    <div
+      class="menus"
       ref={root}
       onFocusOut={(event) => {
-        // The focus going to something outside the bar (Tab, a click on another control) closes
+        // The focus going to something outside the menus (Tab, a click on another control) closes
         // the menu; the focus merely dropped (a row taken away, the window left) does not.
         if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) close();
       }}
     >
-      <For each={tree()}>
-        {(title, index) => (
-          <div class="menubar-item" role="none">
-            <button
-              class={openIndex() === index() ? "menubar-title is-open" : "menubar-title"}
-              type="button"
-              role="menuitem"
-              tabIndex={tabStop() === index() ? 0 : -1}
-              aria-haspopup="menu"
-              aria-expanded={openIndex() === index()}
-              ref={(element) => {
-                titles[index()] = element;
-              }}
-              onFocus={() => setTabStop(index())}
-              onKeyDown={(event) => onTitleKey(event, index())}
-              onPointerEnter={(event) => {
-                // While a menu is open, pointing at another title opens that one (switch_on_hover).
-                if (hovers(event) && openIndex() !== null && openIndex() !== index()) open(index());
-              }}
-              onClick={(event) => {
-                // Enter or Space: open it and move into it. A pointer's click opens or closes it.
-                if (keyed(event)) openInto(index());
-                else if (openIndex() === index()) close();
-                else open(index());
-              }}
-            >
-              {title.label}
-            </button>
-            <Show when={openIndex() === index()}>
-              <div class="menu-drop" role="menu" aria-label={title.label} ref={placeMenu}>
-                {renderList(title.children, [])}
-              </div>
-            </Show>
+      <nav class="menubar" role="menubar" aria-label="Main menu">
+        <For each={tree()}>
+          {(title, index) => (
+            <div class="menubar-item" role="none">
+              <button
+                class={openIndex() === index() ? "menubar-title is-open" : "menubar-title"}
+                type="button"
+                role="menuitem"
+                tabIndex={tabStop() === index() ? 0 : -1}
+                aria-haspopup="menu"
+                aria-expanded={openIndex() === index()}
+                ref={(element) => {
+                  titles[index()] = element;
+                }}
+                onFocus={() => setTabStop(index())}
+                onKeyDown={(event) => onTitleKey(event, index())}
+                onPointerEnter={(event) => {
+                  // While a menu is open, pointing at another title opens that one (switch_on_hover).
+                  if (hovers(event) && openIndex() !== null && openIndex() !== index()) open(index());
+                }}
+                onClick={(event) => {
+                  // Enter or Space: open it and move into it. A pointer's click opens or closes it.
+                  if (keyed(event)) openInto(index());
+                  else if (openIndex() === index()) close();
+                  else open(index());
+                }}
+              >
+                {title.label}
+              </button>
+              <Show when={openIndex() === index()}>
+                <div class="menu-drop" role="menu" aria-label={title.label} ref={placeMenu}>
+                  {renderList(title.children, [])}
+                </div>
+              </Show>
+            </div>
+          )}
+        </For>
+      </nav>
+      <div class="menu-compact" role="none" ref={keyHost} onKeyDown={onMenuKey}>
+        <IconButton
+          icon="list"
+          title="Main menu"
+          expanded={openIndex() === COMPACT}
+          controls={compactId}
+          onClick={(event) => {
+            // Enter or Space: open it and move into it. A pointer's click opens or closes it.
+            if (keyed(event)) openCompact(true);
+            else if (openIndex() === COMPACT) close();
+            else openCompact(false);
+          }}
+        />
+        <Show when={openIndex() === COMPACT}>
+          <div id={compactId} class={stacked() ? "menu-drop is-stacked" : "menu-drop"} role="menu" aria-label="Main menu" ref={placeMenu}>
+            {renderList(tree(), [])}
           </div>
-        )}
-      </For>
-    </nav>
+        </Show>
+      </div>
+    </div>
   );
 }

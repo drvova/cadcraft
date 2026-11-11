@@ -157,10 +157,11 @@ body {
   overflow: hidden;
 }
 
-/* The drawing with the keyboard in it (Tab, F6): the accent edge inside its own box, so the
-   regions around it do not move and the ring is not clipped. */
+/* The drawing with the keyboard in it (Tab, F6): the ring inside its own box, so the regions
+   around it do not move and the ring is not clipped. It is drawn on the canvas, which is dark in
+   both themes, so it takes the canvas's own ring ink and not the theme's. */
 .canvas-stage:focus-visible {
-  outline: var(--focus-outline-w) solid var(--accent);
+  outline: var(--focus-outline-w) solid var(--canvas-focus-ring);
   outline-offset: var(--focus-outline-offset);
 }
 
@@ -221,7 +222,7 @@ body {
 }
 
 /* A window too narrow for the menus beside the command centre keeps the centre and the keys:
-   every menu item is in the palette, one search away. The emptied start track still balances
+   the menus fold into one Main menu key (chrome.css shows it). The start track still balances
    the keys' track, so the centre stays in the middle of the window. */
 @media (max-width: 900px) {
   .titlebar {
@@ -451,7 +452,7 @@ body {
 }
 
 .toggle:focus-visible {
-  outline: var(--focus-outline-w) solid var(--accent);
+  outline: var(--focus-outline-w) solid var(--focus-ring);
   outline-offset: var(--focus-outline-offset);
 }
 
@@ -460,8 +461,10 @@ body {
   color: var(--icon);
 }
 
+/* The off ink alone measures 2.81:1 when the key is hovered on the current row (two fills under
+   it), under the 3:1 a state needs: it steps a seventh of the way to the ink. */
 .toggle[aria-pressed="false"]:first-child {
-  color: var(--icon-layer-off);
+  color: color-mix(in srgb, var(--icon-layer-off) 85%, var(--text));
 }
 
 .toggle.is-frozen {
@@ -474,17 +477,20 @@ body {
 
 /* The three state inks are pale colours made for the dark panel; on the light one they measure
    under 3:1 (frozen 1.5, locked 1.9, off 2.6 on the current row). There the states take the
-   theme's own inks: the stronger grey for off, the accent for frozen, the warning for locked. */
+   theme's own inks: the stronger grey for off, the accent's ink step for frozen, the warning for
+   locked. The accent fill and the warning alone hold 3:1 on the row but not when the key is
+   hovered on the current row (2.87 and 2.88), so frozen takes the text step and the warning
+   steps a fifth of the way to the ink. */
 :root[data-theme="light"] .toggle[aria-pressed="false"]:first-child {
   color: var(--text-dim);
 }
 
 :root[data-theme="light"] .toggle.is-frozen {
-  color: var(--accent);
+  color: var(--text-accent);
 }
 
 :root[data-theme="light"] .toggle.is-locked {
-  color: var(--warn);
+  color: color-mix(in srgb, var(--warn) 80%, var(--text));
 }
 
 /* ---- The command line ---- */
@@ -525,7 +531,7 @@ body {
 
 /* A scrollback long enough to scroll takes the keyboard's focus (the arrows scroll it). */
 .cmd-output:focus-visible {
-  outline: var(--focus-outline-w) solid var(--accent);
+  outline: var(--focus-outline-w) solid var(--focus-ring);
   outline-offset: var(--focus-outline-offset);
 }
 
@@ -564,14 +570,14 @@ body {
 .cmd-caret {
   flex: 0 0 auto;
   width: var(--icon-size-sm);
-  color: var(--accent);
+  color: var(--text-accent);
   font-family: var(--font-family-mono);
   font-size: var(--font-button);
   line-height: 1;
   text-align: center;
 }
 
-/* A recessed field on the panel: an edge at rest so it reads as editable, the accent edge and
+/* A recessed field on the panel: an edge at rest so it reads as editable, the focus edge and
    ring when it has the keyboard (the Field's own focus recipe). */
 .cmd-input {
   flex: 1 1 auto;
@@ -598,8 +604,8 @@ body {
 }
 
 .cmd-input:focus {
-  border-color: var(--accent);
-  outline: var(--focus-outline-w) solid var(--accent);
+  border-color: var(--focus-ring);
+  outline: var(--focus-outline-w) solid var(--focus-ring);
   outline-offset: var(--focus-outline-offset);
 }
 

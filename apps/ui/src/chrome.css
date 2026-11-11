@@ -59,8 +59,40 @@
 .menubar-title:focus-visible,
 .menu-row:focus-visible,
 .status-toggle:focus-visible {
-  outline: var(--focus-outline-w) solid var(--accent);
+  outline: var(--focus-outline-w) solid var(--focus-ring);
   outline-offset: var(--focus-outline-offset);
+}
+
+/* The bar and the menu key that stands in for it in a narrow window are one part with one of the
+   two showing. The part has no box of its own: the bar and the key are laid out by the title bar
+   as if they were its own children. */
+.menus {
+  display: contents;
+}
+
+/* The menu key's host: the box its menu opens from, as a title's is. */
+.menu-compact {
+  position: relative;
+  display: none;
+  align-items: center;
+  height: 100%;
+}
+
+/* A window too narrow for the titles beside the command centre (the width at which the title bar
+   folds its start away, styles.css) shows the key instead: the part stays, the bar goes. The
+   selector names the title bar so it outranks that fold. */
+@media (max-width: 900px) {
+  .titlebar-start > .menus {
+    display: contents;
+  }
+
+  .menubar {
+    display: none;
+  }
+
+  .menu-compact {
+    display: flex;
+  }
 }
 
 /* A menu is the system's popover: the elevated surface on the hairline, the popover's radius and
@@ -88,7 +120,9 @@
   grid-template-rows: repeat(auto-fit, var(--menu-row-h));
   grid-auto-columns: minmax(30ch, max-content);
   column-gap: var(--menu-inset);
-  max-height: calc(100dvh - var(--control-h-tab) - var(--gap-16));
+  /* A menu ends above the status bar: MenuBar.tsx measures the bar and sets `--menu-floor` (the
+     bar's height under a finger until then). */
+  max-height: calc(100dvh - var(--control-h-tab) - var(--menu-floor, var(--control-h-button)) - var(--gap-8));
   padding: var(--menu-inset);
   background: var(--surface-elevated);
   border: var(--hairline) solid var(--border);
@@ -114,6 +148,38 @@
 
 .menu-sub {
   position: relative;
+}
+
+/* The compact menu in a window with no room for a submenu beside its parent (MenuBar.tsx sets
+   `is-stacked`): one column of a fixed width that scrolls, each submenu opened in place under its
+   row as an indented group. Nothing opens beside a row here, so the box may scroll. The row that
+   opened a group stays above it with its chevron turned down, and a hairline down the group's
+   leading edge says where the group ends. */
+.menu-drop.is-stacked {
+  display: block;
+  width: min(40ch, calc(100vw - 2 * var(--gap-8)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.menu-drop.is-stacked .menu-drop-sub {
+  position: static;
+  display: block;
+  translate: none;
+  min-width: 0;
+  max-height: none;
+  margin-inline-start: var(--gap-12);
+  padding: 0;
+  padding-inline-start: var(--gap-4);
+  background: transparent;
+  border: none;
+  border-inline-start: var(--hairline) solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.menu-drop.is-stacked .menu-row[aria-expanded="true"] .menu-arrow {
+  rotate: 90deg;
 }
 
 /* One row height for every item; the label first, then the shortcut or the submenu's chevron
@@ -297,13 +363,16 @@
 /* One 22px line that never wraps. When the window narrows, what can only be read gives way before
    what can be pressed: the counts and all but the start of a long layer name (900px), then the
    coordinates (780px, where they would start to clip the toggles), then the engine's name (560px;
-   the layer's stays, the sidebar is gone there and the bar is the one place that names it). Only
-   under that do the toggles scroll inside their own run, fading at the edge that hides some. */
+   the layer's stays, the sidebar is gone there and the bar is the one place that names it). From
+   there down the toggles' run wraps onto a second line (see the end of this file); above it, a
+   run that still does not fit scrolls inside itself, fading at the edge that hides some. */
 .statusbar {
+  /* One line's height: the row's, the button's under a finger. */
+  --status-h: var(--control-h-row);
   display: flex;
   align-items: center;
   gap: var(--gap-12);
-  height: var(--control-h-row);
+  height: var(--status-h);
   padding: 0 var(--gap-8);
   background: var(--chrome-dark);
   border-top: var(--hairline) solid var(--border);
@@ -399,7 +468,7 @@
 /* Under a finger the bar is the button's height and each word has more room around it. */
 @media (pointer: coarse) {
   .statusbar {
-    height: var(--control-h-button);
+    --status-h: var(--control-h-button);
   }
 
   .status-toggle {
@@ -484,8 +553,25 @@
   }
 }
 
+/* A phone's width cannot hold the eleven toggles on one line, and a toggle that has to be swiped
+   to is a toggle not found: the run wraps onto a second line and the bar grows by that line. Every
+   toggle is on screen, each line still one line's height. */
 @media (max-width: 560px) {
   .status-mode {
     display: none;
+  }
+
+  .statusbar {
+    height: auto;
+    min-height: var(--status-h);
+  }
+
+  .status-toggles {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .status-toggle {
+    height: var(--status-h);
   }
 }

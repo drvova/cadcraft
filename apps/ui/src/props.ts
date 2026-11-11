@@ -283,7 +283,7 @@ export function parseProperties(reply: unknown, layers: readonly string[]): Prop
  * Edited row values into `properties.set` parameters, by what each key is: a number row's text
  * becomes a number (`readNumber`), the tick's "true"/"false" a boolean, and every other row
  * stays a string with the space around it removed. A layer called "0" or "true" therefore stays
- * a name (the engine reads `layer` only as a string and silently skips anything else). Number
+ * a name (the engine reads `layer` only as a string and refuses anything else). Number
  * text that is not a number stays a string, so nothing is invented for it. Only the keys the
  * caller edited are included; a non-string value is skipped rather than coerced.
  */

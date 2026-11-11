@@ -32,6 +32,7 @@ Dark is the default (`:root`); light restates only the roles that change, under 
 | `--grid-major` | `#2a2a2a` | `#2a2a2a` | The major grid every ten units. |
 | `--axis-x` | `#552633` | `#552633` | The X axis, warm and dim so it never reads as geometry. |
 | `--axis-y` | `#23412f` | `#23412f` | The Y axis, cool and dim. |
+| `--canvas-focus-ring` | `#599CE7` | `#599CE7` | The keyboard ring on the drawing: the dark accent in both themes, because the canvas under it does not change (the light `--focus-ring` measures 2.62 there). |
 
 ### Text and icons
 
@@ -41,10 +42,10 @@ Dark is the default (`:root`); light restates only the roles that change, under 
 | `--text-dim` | `rgba(240,240,240,.74)` | `rgba(20,20,20,.74)` | Secondary ink: hints, units, secondary values. |
 | `--text-faint` | `rgba(240,240,240,.60)` | `rgba(20,20,20,.66)` | Tertiary ink: section headers, captions. Light's `.60` misses 4.5 over the `#e8e8e8` control (4.49); the nearest passing measured step, the icon ink `.66` (5.45), is used instead. |
 | `--text-disabled` | `rgba(240,240,240,.36)` | `rgba(20,20,20,.36)` | Disabled ink (Cursor §5); exempt from contrast as an inactive control. |
-| `--text-accent` | `#599CE7` | `#005DA4` | The accent as a text ink: the label of an accent chip. Dark's is the accent itself; light's is the accent's hue and chroma at OKLCH L .47 (the accent is .56), because `#2678C1` measures 3.28 on its own tint over the `#e8e8e8` control. |
+| `--text-accent` | `#599CE7` | `#005DA4` | The accent as a text or glyph ink: the label of an accent chip, the palette's matched letters, the command line's prompt mark, a frozen layer's key in light. Dark's is the accent itself; light's is the accent's hue and chroma at OKLCH L .47 (the accent is .56), because `#2678C1` measures 3.28 on its own tint over the `#e8e8e8` control. |
 | `--icon` | `rgba(240,240,240,.66)` | `rgba(20,20,20,.66)` | The default glyph ink. |
 | `--icon-accent` | `#599CE7` | `#2678C1` | A glyph carrying the accent: the current tool, a link. |
-| `--icon-point` | `#f1b467` | `#b8791f` | A glyph calling for attention without error: snap, warning-adjacent. |
+| `--icon-point` | `#f1b467` | `#A46701` | A glyph calling for attention without error: snap, warning-adjacent. The warning ink in both themes; light's earlier `#b8791f` measured 3.0 over the control and 2.7 over its hover. |
 
 ### Action and selection
 
@@ -79,8 +80,6 @@ Dark is the default (`:root`); light restates only the roles that change, under 
 | --- | --- | --- | --- |
 | `--cmd-bg` | `rgba(28,28,28,.94)` | `#ebebeb` | The command line's own surface over the chrome. |
 | `--cmd-border` | `#333333` | `#c9c9c9` | Its border. |
-| `--cmd-keyword` | `#599CE7` | `#2678C1` | A recognised command keyword. |
-| `--cmd-keyword-hover` | `rgba(89,156,231,.12)` | `rgba(38,120,193,.12)` | The keyword's hover tint. |
 | `--cmd-history` | `rgba(26,26,26,.667)` | `#f2f2f2` | A recalled history row. |
 
 ### Lists
@@ -123,7 +122,7 @@ Each specimen is drawn with the token itself, never a copied value.
 - Text ladder on `--chrome`: <span style="background:var(--chrome);color:var(--text);padding:2px 8px">Text</span> <span style="background:var(--chrome);color:var(--text-dim);padding:2px 8px">Text dim</span> <span style="background:var(--chrome);color:var(--text-faint);padding:2px 8px">Text faint</span> <span style="background:var(--chrome);color:var(--text-disabled);padding:2px 8px">Disabled</span>.
 - Icons on `--chrome`: <span style="background:var(--chrome);color:var(--icon);padding:2px 8px">icon</span> <span style="background:var(--chrome);color:var(--icon-accent);padding:2px 8px">icon-accent</span> <span style="background:var(--chrome);color:var(--icon-point);padding:2px 8px">icon-point</span>.
 - Action fills: <span style="display:inline-block;width:72px;height:20px;background:var(--accent);vertical-align:middle"></span> <span style="display:inline-block;width:72px;height:20px;background:var(--accent-hover);vertical-align:middle"></span> <span style="display:inline-block;width:72px;height:20px;background:var(--accent-pressed);vertical-align:middle"></span> <span style="display:inline-block;width:72px;height:20px;background:var(--accent-soft);vertical-align:middle"></span> — accent, hover, pressed, soft.
-- On accent: <span style="background:var(--accent);color:var(--on-accent);padding:2px 10px">Primary</span> <span style="background:var(--error);color:var(--on-accent);padding:2px 10px">Danger</span>.
+- On accent: <span style="background:var(--accent);color:var(--on-accent);padding:2px 10px">Primary</span> <span style="background:var(--error);color:var(--on-error);padding:2px 10px">Danger</span>.
 - Status: <span style="color:var(--warn)">warn</span> <span style="color:var(--error)">error</span> <span style="color:var(--snap)">snap</span> <span style="color:var(--toggle-on)">toggle-on</span>.
 - State fills over `--control`: <span style="background:var(--control);padding:2px 10px">rest <span style="background:var(--hover);padding:1px 6px">hover</span> <span style="background:var(--fill-active);padding:1px 6px">active</span> <span style="background:var(--fill-pressed);padding:1px 6px">pressed</span> <span style="background:var(--fill-disabled);padding:1px 6px">disabled</span></span>.
 - Borders: <span style="border:1px solid var(--border);padding:2px 10px">border</span> <span style="border:1px solid var(--border-soft);padding:2px 10px">border-soft</span>.
@@ -135,37 +134,38 @@ Each specimen is drawn with the token itself, never a copied value.
 - Disabled is a lighter ink (`--text-disabled`) on an unchanged fill (`--fill-disabled`), because a disabled control should read as unavailable, not as a different control.
 - On an accent fill the label is `--on-accent`, never `--text`, because the fill is the same in both themes' buttons and the ink must stay readable on it; on the error fill it is `--on-error`, because the dark error fill is darker than the dark accent and the accent's ink misses 4.5 on it.
 - Accent-coloured text is `--text-accent`, never `--accent`, because the accent is tuned as a fill and a stroke (3:1) and in light it misses 4.5 as text on every surface but the lightest.
-- A focus ring is `--focus-ring`, never `--accent`, because a ring crosses the selected and hover fills and the light accent drops under 3:1 against them.
+- A focus ring is `--focus-ring`, never `--accent`, because a ring crosses the selected and hover fills and the light accent drops under 3:1 against them. The one exception is the ring on the drawing, `--canvas-focus-ring`, because the canvas is dark in both themes and a theme ink would fail on it in light.
+- The accent itself stays for fills and strokes that are not focus: the primary button, the current layer's bar, the text caret, a ticked box, the selection tint.
 - The drawing area keeps its own colours (`--canvas`, `--grid-*`, `--axis-*`) in both themes, because a drawing's paper should not change when the chrome's theme does.
 - `--text-faint` is the lowest ink a reader must still read; anything quieter is `--text-disabled`, which only disabled controls carry, because an enabled control a reader cannot read is a bug, not a hierarchy.
 
 ## Accessibility
 
-Contrast, measured by `node scripts/contrast-report.mjs` (run from the app folder), WCAG 2.x. Every cell is the foreground composited over that surface: ratio, then ✓ at the token's threshold (4.5:1 text, 3:1 icons and borders), ✗ below it, · for the fills, which carry no threshold — their cell shows how visible the step is against the surface.
+Contrast, measured by `node scripts/contrast-report.mjs` (run from the app folder), WCAG 2.x. Every cell is the foreground composited over that surface: ratio, then ✓ at the token's threshold (4.5:1 text, 3:1 icons, borders and the focus ring), ✗ below it, · for the fills, which carry no threshold — their cell shows how visible the step is against the surface. The drawing keeps one dark surface in both themes, so it is not a column: the strokes drawn over it are listed under each grid.
 
 ### dark (default)
 
-| foreground \ surface | `--chrome` | `--chrome-dark` | `--panel` | `--tab-active` | `--control` | `--control-hover` | `--surface-elevated` | `--canvas` | `--list-bg` | `--cmd-bg` |
+| foreground \ surface | `--chrome` | `--chrome-dark` | `--panel` | `--tab-active` | `--control` | `--control-hover` | `--surface-elevated` | `--surface-inset` | `--list-bg` | `--cmd-bg` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `--text` | 16.2 ✓ | 16.8 ✓ | 16.2 ✓ | 15.6 ✓ | 15.0 ✓ | 13.8 ✓ | 14.1 ✓ | 15.6 ✓ | 15.0 ✓ | 15.0 ✓ |
 | `--text-dim` | 9.2 ✓ | 9.4 ✓ | 9.2 ✓ | 8.9 ✓ | 8.7 ✓ | 8.2 ✓ | 8.3 ✓ | 8.9 ✓ | 8.7 ✓ | 8.7 ✓ |
 | `--text-faint` | 6.4 ✓ | 6.5 ✓ | 6.4 ✓ | 6.3 ✓ | 6.1 ✓ | 5.9 ✓ | 6.0 ✓ | 6.3 ✓ | 6.1 ✓ | 6.1 ✓ |
 | `--text-disabled` | 3.1 · | 3.0 · | 3.1 · | 3.1 · | 3.1 · | 3.0 · | 3.0 · | 3.1 · | 3.1 · | 3.1 · |
+| `--text-accent` | 6.4 ✓ | 6.7 ✓ | 6.4 ✓ | 6.2 ✓ | 6.0 ✓ | 5.5 ✓ | 5.6 ✓ | 6.2 ✓ | 6.0 ✓ | 6.0 ✓ |
 | `--icon` | 7.5 ✓ | 7.6 ✓ | 7.5 ✓ | 7.3 ✓ | 7.2 ✓ | 6.8 ✓ | 6.9 ✓ | 7.3 ✓ | 7.2 ✓ | 7.2 ✓ |
 | `--icon-accent` | 6.4 ✓ | 6.7 ✓ | 6.4 ✓ | 6.2 ✓ | 6.0 ✓ | 5.5 ✓ | 5.6 ✓ | 6.2 ✓ | 6.0 ✓ | 6.0 ✓ |
 | `--icon-point` | 10.1 ✓ | 10.5 ✓ | 10.1 ✓ | 9.7 ✓ | 9.3 ✓ | 8.6 ✓ | 8.8 ✓ | 9.7 ✓ | 9.3 ✓ | 9.3 ✓ |
 | `--accent` | 6.4 ✓ | 6.7 ✓ | 6.4 ✓ | 6.2 ✓ | 6.0 ✓ | 5.5 ✓ | 5.6 ✓ | 6.2 ✓ | 6.0 ✓ | 6.0 ✓ |
+| `--focus-ring` | 6.4 ✓ | 6.7 ✓ | 6.4 ✓ | 6.2 ✓ | 6.0 ✓ | 5.5 ✓ | 5.6 ✓ | 6.2 ✓ | 6.0 ✓ | 6.0 ✓ |
 | `--warn` | 10.1 ✓ | 10.5 ✓ | 10.1 ✓ | 9.7 ✓ | 9.3 ✓ | 8.6 ✓ | 8.8 ✓ | 9.7 ✓ | 9.3 ✓ | 9.3 ✓ |
 | `--error` | 4.7 ✓ | 4.9 ✓ | 4.7 ✓ | 4.5 ✓ | 4.4 ✓ | 4.0 ✓ | 4.1 ✓ | 4.5 ✓ | 4.4 ✓ | 4.4 ✓ |
 | `--snap` | 5.8 ✓ | 6.0 ✓ | 5.8 ✓ | 5.6 ✓ | 5.3 ✓ | 4.9 ✓ | 5.0 ✓ | 5.6 ✓ | 5.3 ✓ | 5.3 ✓ |
 | `--toggle-on` | 5.8 ✓ | 6.0 ✓ | 5.8 ✓ | 5.6 ✓ | 5.3 ✓ | 4.9 ✓ | 5.0 ✓ | 5.6 ✓ | 5.3 ✓ | 5.3 ✓ |
-| `--cmd-keyword` | 6.4 ✓ | 6.7 ✓ | 6.4 ✓ | 6.2 ✓ | 6.0 ✓ | 5.5 ✓ | 5.6 ✓ | 6.2 ✓ | 6.0 ✓ | 6.0 ✓ |
 | `--hover` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.3 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · |
 | `--fill-active` (fill) | 1.5 · | 1.4 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · |
 | `--fill-pressed` (fill) | 1.8 · | 1.7 · | 1.8 · | 1.8 · | 1.8 · | 1.8 · | 1.8 · | 1.8 · | 1.8 · | 1.8 · |
 | `--fill-disabled` (fill) | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · |
 | `--accent-soft` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · |
-| `--cmd-keyword-hover` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · |
 | `--border` (fill) | 1.4 · | 1.3 · | 1.4 · | 1.4 · | 1.4 · | 1.4 · | 1.4 · | 1.4 · | 1.4 · | 1.4 · |
 | `--border-soft` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.3 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · |
 | `--scrollbar` (fill) | 1.5 · | 1.4 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · |
@@ -174,50 +174,64 @@ Contrast, measured by `node scripts/contrast-report.mjs` (run from the app folde
 | `--composer-border-active` (fill) | 1.4 · | 1.3 · | 1.4 · | 1.4 · | 1.4 · | 1.4 · | 1.4 · | 1.4 · | 1.4 · | 1.4 · |
 | `--cmd-history` (fill) | 1.0 · | 1.1 · | 1.0 · | 1.0 · | 1.0 · | 1.1 · | 1.1 · | 1.0 · | 1.0 · | 1.0 · |
 
-`--on-accent` on the action fills: `--accent` 6.0 ✓; `--accent-hover` 6.7 ✓; `--accent-pressed` 7.5 ✓; `--error` 4.4 ✗; `--error-hover` 5.0 ✓; `--error-pressed` 5.6 ✓; `--selection` 6.0 ✓.
+`--on-accent` on its action fills: `--accent` 6.0 ✓; `--accent-hover` 6.7 ✓; `--accent-pressed` 7.5 ✓.
 
-Below threshold: on-accent over error 4.4:1 (needs 4.5:1)
+`--on-error` on its action fills: `--error` 4.7 ✓; `--error-hover` 5.4 ✓; `--error-pressed` 6.1 ✓.
+
+`--focus-ring` against `--hover` over each surface: `--chrome` 5.3 ✓; `--chrome-dark` 5.6 ✓; `--panel` 5.3 ✓; `--tab-active` 5.1 ✓; `--control` 4.8 ✓; `--control-hover` 4.4 ✓; `--surface-elevated` 4.5 ✓; `--surface-inset` 5.1 ✓; `--list-bg` 4.8 ✓; `--cmd-bg` 4.8 ✓.
+
+`--focus-ring` against `--fill-active` over each surface: `--chrome` 4.4 ✓; `--chrome-dark` 4.7 ✓; `--panel` 4.4 ✓; `--tab-active` 4.2 ✓; `--control` 4.0 ✓; `--control-hover` 3.6 ✓; `--surface-elevated` 3.7 ✓; `--surface-inset` 4.2 ✓; `--list-bg` 4.0 ✓; `--cmd-bg` 4.0 ✓.
+
+On the drawing (`--canvas`, one dark surface in both themes): `--selection` 6.2 ✓; `--canvas-focus-ring` 6.2 ✓.
+
+Every ink pair is at or above its threshold.
 
 ### light
 
-| foreground \ surface | `--chrome` | `--chrome-dark` | `--panel` | `--tab-active` | `--control` | `--control-hover` | `--surface-elevated` | `--canvas` | `--list-bg` | `--cmd-bg` |
+| foreground \ surface | `--chrome` | `--chrome-dark` | `--panel` | `--tab-active` | `--control` | `--control-hover` | `--surface-elevated` | `--surface-inset` | `--list-bg` | `--cmd-bg` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `--text` | 17.3 ✓ | 16.6 ✓ | 18.0 ✓ | 18.0 ✓ | 15.0 ✓ | 13.7 ✓ | 18.0 ✓ | 1.0 ✗ | 18.4 ✓ | 15.5 ✓ |
-| `--text-dim` | 7.7 ✓ | 7.5 ✓ | 7.8 ✓ | 7.8 ✓ | 7.1 ✓ | 6.7 ✓ | 7.8 ✓ | 1.0 ✗ | 7.9 ✓ | 7.2 ✓ |
-| `--text-faint` | 5.8 ✓ | 5.7 ✓ | 5.9 ✓ | 5.9 ✓ | 5.5 ✓ | 5.2 ✓ | 5.9 ✓ | 1.0 ✗ | 5.9 ✓ | 5.5 ✓ |
-| `--text-disabled` | 2.3 · | 2.3 · | 2.3 · | 2.3 · | 2.2 · | 2.2 · | 2.3 · | 1.0 · | 2.3 · | 2.3 · |
-| `--icon` | 5.8 ✓ | 5.7 ✓ | 5.9 ✓ | 5.9 ✓ | 5.5 ✓ | 5.2 ✓ | 5.9 ✓ | 1.0 ✗ | 5.9 ✓ | 5.5 ✓ |
-| `--icon-accent` | 4.4 ✓ | 4.2 ✓ | 4.5 ✓ | 4.5 ✓ | 3.8 ✓ | 3.4 ✓ | 4.5 ✓ | 3.8 ✓ | 4.6 ✓ | 3.9 ✓ |
-| `--icon-point` | 3.4 ✓ | 3.3 ✓ | 3.5 ✓ | 3.5 ✓ | 3.0 ✗ | 2.7 ✗ | 3.5 ✓ | 4.9 ✓ | 3.6 ✓ | 3.0 ✓ |
-| `--accent` | 4.4 ✓ | 4.2 ✓ | 4.5 ✓ | 4.5 ✓ | 3.8 ✓ | 3.4 ✓ | 4.5 ✓ | 3.8 ✓ | 4.6 ✓ | 3.9 ✓ |
-| `--warn` | 4.4 ✓ | 4.2 ✓ | 4.5 ✓ | 4.5 ✓ | 3.8 ✓ | 3.5 ✓ | 4.5 ✓ | 3.8 ✓ | 4.6 ✓ | 3.9 ✓ |
-| `--error` | 5.8 ✓ | 5.6 ✓ | 6.0 ✓ | 6.0 ✓ | 5.0 ✓ | 4.6 ✓ | 6.0 ✓ | 2.9 ✗ | 6.2 ✓ | 5.2 ✓ |
-| `--snap` | 5.8 ✓ | 5.6 ✓ | 6.0 ✓ | 6.0 ✓ | 5.0 ✓ | 4.6 ✓ | 6.0 ✓ | 2.9 ✗ | 6.2 ✓ | 5.2 ✓ |
-| `--toggle-on` | 5.8 ✓ | 5.6 ✓ | 6.0 ✓ | 6.0 ✓ | 5.0 ✓ | 4.6 ✓ | 6.0 ✓ | 2.9 ✗ | 6.2 ✓ | 5.2 ✓ |
-| `--cmd-keyword` | 4.4 ✗ | 4.2 ✗ | 4.5 ✓ | 4.5 ✓ | 3.8 ✗ | 3.4 ✗ | 4.5 ✓ | 3.8 ✗ | 4.6 ✓ | 3.9 ✗ |
-| `--hover` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.0 · | 1.2 · | 1.2 · |
-| `--fill-active` (fill) | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.0 · | 1.3 · | 1.3 · |
-| `--fill-pressed` (fill) | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.0 · | 1.5 · | 1.5 · |
-| `--fill-disabled` (fill) | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.0 · | 1.1 · | 1.1 · |
-| `--accent-soft` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.1 · | 1.2 · | 1.1 · | 1.2 · | 1.2 · |
-| `--cmd-keyword-hover` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.1 · | 1.2 · | 1.1 · | 1.2 · | 1.2 · |
-| `--border` (fill) | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.0 · | 1.3 · | 1.3 · |
-| `--border-soft` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.0 · | 1.2 · | 1.2 · |
-| `--scrollbar` (fill) | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.0 · | 1.3 · | 1.3 · |
-| `--scrollbar-hover` (fill) | 1.6 · | 1.6 · | 1.6 · | 1.6 · | 1.6 · | 1.6 · | 1.6 · | 1.0 · | 1.6 · | 1.6 · |
-| `--composer-border` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.0 · | 1.2 · | 1.2 · |
-| `--composer-border-active` (fill) | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.0 · | 1.3 · | 1.3 · |
-| `--cmd-history` (fill) | 1.1 · | 1.0 · | 1.1 · | 1.1 · | 1.1 · | 1.2 · | 1.1 · | 15.9 · | 1.1 · | 1.1 · |
+| `--text` | 17.3 ✓ | 16.6 ✓ | 18.0 ✓ | 18.0 ✓ | 15.0 ✓ | 13.7 ✓ | 18.0 ✓ | 16.6 ✓ | 18.4 ✓ | 15.5 ✓ |
+| `--text-dim` | 7.7 ✓ | 7.5 ✓ | 7.8 ✓ | 7.8 ✓ | 7.1 ✓ | 6.7 ✓ | 7.8 ✓ | 7.5 ✓ | 7.9 ✓ | 7.2 ✓ |
+| `--text-faint` | 5.8 ✓ | 5.7 ✓ | 5.9 ✓ | 5.9 ✓ | 5.5 ✓ | 5.2 ✓ | 5.9 ✓ | 5.7 ✓ | 5.9 ✓ | 5.5 ✓ |
+| `--text-disabled` | 2.3 · | 2.3 · | 2.3 · | 2.3 · | 2.2 · | 2.2 · | 2.3 · | 2.3 · | 2.3 · | 2.3 · |
+| `--text-accent` | 6.4 ✓ | 6.1 ✓ | 6.6 ✓ | 6.6 ✓ | 5.5 ✓ | 5.0 ✓ | 6.6 ✓ | 6.1 ✓ | 6.8 ✓ | 5.7 ✓ |
+| `--icon` | 5.8 ✓ | 5.7 ✓ | 5.9 ✓ | 5.9 ✓ | 5.5 ✓ | 5.2 ✓ | 5.9 ✓ | 5.7 ✓ | 5.9 ✓ | 5.5 ✓ |
+| `--icon-accent` | 4.4 ✓ | 4.2 ✓ | 4.5 ✓ | 4.5 ✓ | 3.8 ✓ | 3.4 ✓ | 4.5 ✓ | 4.2 ✓ | 4.6 ✓ | 3.9 ✓ |
+| `--icon-point` | 4.4 ✓ | 4.2 ✓ | 4.5 ✓ | 4.5 ✓ | 3.8 ✓ | 3.5 ✓ | 4.5 ✓ | 4.2 ✓ | 4.6 ✓ | 3.9 ✓ |
+| `--accent` | 4.4 ✓ | 4.2 ✓ | 4.5 ✓ | 4.5 ✓ | 3.8 ✓ | 3.4 ✓ | 4.5 ✓ | 4.2 ✓ | 4.6 ✓ | 3.9 ✓ |
+| `--focus-ring` | 6.4 ✓ | 6.1 ✓ | 6.6 ✓ | 6.6 ✓ | 5.5 ✓ | 5.0 ✓ | 6.6 ✓ | 6.1 ✓ | 6.8 ✓ | 5.7 ✓ |
+| `--warn` | 4.4 ✓ | 4.2 ✓ | 4.5 ✓ | 4.5 ✓ | 3.8 ✓ | 3.5 ✓ | 4.5 ✓ | 4.2 ✓ | 4.6 ✓ | 3.9 ✓ |
+| `--error` | 5.8 ✓ | 5.6 ✓ | 6.0 ✓ | 6.0 ✓ | 5.0 ✓ | 4.6 ✓ | 6.0 ✓ | 5.6 ✓ | 6.2 ✓ | 5.2 ✓ |
+| `--snap` | 5.8 ✓ | 5.6 ✓ | 6.0 ✓ | 6.0 ✓ | 5.0 ✓ | 4.6 ✓ | 6.0 ✓ | 5.6 ✓ | 6.2 ✓ | 5.2 ✓ |
+| `--toggle-on` | 5.8 ✓ | 5.6 ✓ | 6.0 ✓ | 6.0 ✓ | 5.0 ✓ | 4.6 ✓ | 6.0 ✓ | 5.6 ✓ | 6.2 ✓ | 5.2 ✓ |
+| `--hover` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · |
+| `--fill-active` (fill) | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · |
+| `--fill-pressed` (fill) | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · |
+| `--fill-disabled` (fill) | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · |
+| `--accent-soft` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.1 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · |
+| `--border` (fill) | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · |
+| `--border-soft` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · |
+| `--scrollbar` (fill) | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · |
+| `--scrollbar-hover` (fill) | 1.6 · | 1.6 · | 1.6 · | 1.6 · | 1.6 · | 1.6 · | 1.6 · | 1.6 · | 1.6 · | 1.6 · |
+| `--composer-border` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · |
+| `--composer-border-active` (fill) | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · |
+| `--cmd-history` (fill) | 1.1 · | 1.0 · | 1.1 · | 1.1 · | 1.1 · | 1.2 · | 1.1 · | 1.0 · | 1.1 · | 1.1 · |
 
-`--on-accent` on the action fills: `--accent` 4.5 ✓; `--accent-hover` 5.4 ✓; `--accent-pressed` 6.4 ✓; `--error` 6.0 ✓; `--error-hover` 7.0 ✓; `--error-pressed` 8.3 ✓; `--selection` 4.5 ✓.
+`--on-accent` on its action fills: `--accent` 4.5 ✓; `--accent-hover` 5.4 ✓; `--accent-pressed` 6.4 ✓.
 
-Below threshold: text over canvas 1.0:1 (needs 4.5:1); text-dim over canvas 1.0:1 (needs 4.5:1); text-faint over canvas 1.0:1 (needs 4.5:1); icon over canvas 1.0:1 (needs 3:1); icon-point over control 3.0:1 (needs 3:1); icon-point over control-hover 2.7:1 (needs 3:1); error over canvas 2.9:1 (needs 3:1); snap over canvas 2.9:1 (needs 3:1); toggle-on over canvas 2.9:1 (needs 3:1); cmd-keyword over chrome 4.4:1 (needs 4.5:1); cmd-keyword over chrome-dark 4.2:1 (needs 4.5:1); cmd-keyword over control 3.8:1 (needs 4.5:1); cmd-keyword over control-hover 3.4:1 (needs 4.5:1); cmd-keyword over canvas 3.8:1 (needs 4.5:1); cmd-keyword over cmd-bg 3.9:1 (needs 4.5:1)
+`--on-error` on its action fills: `--error` 6.0 ✓; `--error-hover` 7.0 ✓; `--error-pressed` 8.3 ✓.
 
-`--on-accent` over `--error` (4.4 in dark) is no longer a pair the app draws: the danger button's label is `--on-error`, 4.72 there.
+`--focus-ring` against `--hover` over each surface: `--chrome` 5.4 ✓; `--chrome-dark` 5.2 ✓; `--panel` 5.6 ✓; `--tab-active` 5.6 ✓; `--control` 4.7 ✓; `--control-hover` 4.3 ✓; `--surface-elevated` 5.6 ✓; `--surface-inset` 5.2 ✓; `--list-bg` 5.7 ✓; `--cmd-bg` 4.8 ✓.
+
+`--focus-ring` against `--fill-active` over each surface: `--chrome` 4.8 ✓; `--chrome-dark` 4.6 ✓; `--panel` 4.9 ✓; `--tab-active` 4.9 ✓; `--control` 4.1 ✓; `--control-hover` 3.8 ✓; `--surface-elevated` 4.9 ✓; `--surface-inset` 4.6 ✓; `--list-bg` 5.0 ✓; `--cmd-bg` 4.3 ✓.
+
+On the drawing (`--canvas`, one dark surface in both themes): `--selection` 3.8 ✓; `--canvas-focus-ring` 6.2 ✓.
+
+Every ink pair is at or above its threshold.
 
 ### The layer's pairs
 
-The nine components of `src/ui/`, measured in the running app on 2026-11-11 from the browser's computed token colours (WCAG 2.x): each ink composited over its own fill over every surface the component sits on, with the lowest ratio and the surface it falls on. Text needs 4.5:1; a glyph and a focus ring need 3:1; a disabled state is exempt. Before is the layer as it stood that morning; after is the layer with `--text-accent`, `--focus-ring`, `--on-error` and the light action steps. The report above does not list the three new tokens: its ink list lives in `scripts/contrast-report.mjs`.
+The nine components of `src/ui/`, measured in the running app on 2026-11-11 from the browser's computed token colours (WCAG 2.x): each ink composited over its own fill over every surface the component sits on, with the lowest ratio and the surface it falls on. Text needs 4.5:1; a glyph and a focus ring need 3:1; a disabled state is exempt. Before is the layer as it stood that morning; after is the layer with `--text-accent`, `--focus-ring`, `--on-error` and the light action steps.
 
 | Component | State | Theme | Lowest on | Before | After | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -339,6 +353,167 @@ The nine components of `src/ui/`, measured in the running app on 2026-11-11 from
 | SectionLabel | text | light | `--control` | 5.45 | 5.45 | 4.5 |
 
 The accent chip on the command line itself, read from the rendered chip (11px, `--cmd-bg`): light 3.37 before, 4.93 after; dark 5.01, unchanged.
+
+### The app's pairs
+
+The inks of `src/styles.css`, `src/interaction.css` and `src/palette.css`, measured in the running app on 2026-11-11 from the browser's computed colours (WCAG 2.x), each over the surface it is drawn on: the sidebar with one layer frozen, one locked and one off; everything selected, so the properties show fields and mixed values; a refused value; a running command with keyword chips; an unknown command; the palette with a query. A hovered or current-row pair is the same computed ink over that row's fill. Text needs 4.5:1; a glyph, a state mark, an edge and a focus ring need 3:1. Before is the app as it stood that morning (every ring `--accent`); after is the app with its rings on `--focus-ring`, its accent inks on `--text-accent`, the drawing's ring on `--canvas-focus-ring`, the palette's path and tag on `--text-faint`, and the three layer-state inks stepped.
+
+| Pair | Theme | Before | After | Needs |
+| --- | --- | --- | --- | --- |
+| title: command centre name | dark | 8.31 | 8.31 | 4.5 |
+| title: command centre glyph | dark | 6.90 | 6.90 | 3 |
+| title: unsaved dot | dark | 8.79 | 8.79 | 3 |
+| layers: count | dark | 6.39 | 6.39 | 4.5 |
+| layers: name | dark | 9.17 | 9.17 | 4.5 |
+| layers: name, row hovered | dark | 7.96 | 7.96 | 4.5 |
+| layers: current layer name | dark | 5.53 | 5.53 | 4.5 |
+| layers: current row accent bar vs row | dark | 4.43 | 4.43 | 3 |
+| layers: has-objects diamond (filled) | dark | 7.50 | 7.50 | 3 |
+| layers: has-objects diamond (filled), current row | dark | 5.82 | 5.82 | 3 |
+| layers: empty diamond (hollow) | dark | 6.39 | 6.39 | 3 |
+| layers: toggle on (quiet) | dark | 7.50 | 7.50 | 3 |
+| layers: toggle on, current row | dark | 5.82 | 5.82 | 3 |
+| layers: toggle thawed/unlocked (quiet) | dark | 6.39 | 6.39 | 3 |
+| layers: toggle thawed/unlocked, current row | dark | 5.10 | 5.10 | 3 |
+| layers: toggle off | dark | 5.14 | 6.29 | 3 |
+| layers: toggle off, row hovered | dark | 4.25 | 5.20 | 3 |
+| layers: toggle off, as on current row | dark | 3.54 | 4.33 | 3 |
+| layers: toggle off, hovered on current row | dark | 2.81 | 3.44 | 3 |
+| layers: toggle frozen | dark | 11.70 | 11.70 | 3 |
+| layers: toggle frozen, row hovered | dark | 9.66 | 9.66 | 3 |
+| layers: toggle frozen, as on current row | dark | 8.05 | 8.05 | 3 |
+| layers: toggle frozen, hovered on current row | dark | 6.39 | 6.39 | 3 |
+| layers: toggle locked | dark | 9.61 | 9.61 | 3 |
+| layers: toggle locked, row hovered | dark | 7.94 | 7.94 | 3 |
+| layers: toggle locked, as on current row | dark | 6.61 | 6.61 | 3 |
+| layers: toggle locked, hovered on current row | dark | 5.25 | 5.25 | 3 |
+| layers: toggle hovered ink on its hover fill | dark | 10.64 | 10.64 | 3 |
+| layers: toggle focus ring vs row | dark | 6.43 | 6.43 | 3 |
+| layers: toggle focus ring vs current row | dark | 4.43 | 4.43 | 3 |
+| properties: state (heading end) | dark | 6.39 | 6.39 | 4.5 |
+| properties: label | dark | 6.39 | 6.39 | 4.5 |
+| properties: label, row hovered/edited | dark | 5.87 | 5.87 | 4.5 |
+| properties: read-only value | dark | 9.17 | 9.17 | 4.5 |
+| properties: read-only value, row hovered | dark | 8.16 | 8.16 | 4.5 |
+| properties: mixed value by token, panel | dark | 6.39 | 6.39 | 4.5 |
+| properties: mixed value by token, row hovered | dark | 5.87 | 5.87 | 4.5 |
+| properties: refused-value edge by token vs control | dark | 4.37 | 4.37 | 3 |
+| properties: refused-value edge by token vs control-hover | dark | 4.03 | 4.03 | 3 |
+| properties: field focus edge vs field fill | dark | 5.95 | 5.95 | 3 |
+| properties: field/checkbox focus edge vs edited row | dark | 5.49 | 5.49 | 3 |
+| command line: history line | dark | 6.16 | 6.16 | 4.5 |
+| command line: newest history line | dark | 8.71 | 8.71 | 4.5 |
+| command line: prompt mark | dark | 5.98 | 5.98 | 3 |
+| command line: prompt (placeholder) | dark | 6.28 | 6.28 | 4.5 |
+| command line: typed text | dark | 15.58 | 15.58 | 4.5 |
+| command line: field focus edge vs field | dark | 6.20 | 6.20 | 3 |
+| command line: field focus edge vs band | dark | 5.98 | 5.98 | 3 |
+| command line: scrollback focus ring vs band | dark | 5.98 | 5.98 | 3 |
+| palette: typed text | dark | 14.13 | 14.13 | 4.5 |
+| palette: placeholder | dark | 5.95 | 5.95 | 4.5 |
+| palette: field glyph | dark | 6.90 | 6.90 | 3 |
+| palette: empty line | dark | 5.95 | 5.95 | 4.5 |
+| canvas: keyboard focus ring vs drawing | dark | 6.20 | 6.20 | 3 |
+| canvas: selection stroke vs drawing | dark | 6.20 | 6.20 | 3 |
+| properties: value (field at rest) | dark | 16.17 | 16.17 | 4.5 |
+| properties: value, row hovered | dark | 13.79 | 13.79 | 4.5 |
+| properties: value, field hovered/focused | dark | 14.95 | 14.95 | 4.5 |
+| properties: select value | dark | 16.17 | 16.17 | 4.5 |
+| properties: mixed value (*VARIES*) | dark | 6.39 | 6.39 | 4.5 |
+| properties: mixed value, row hovered | dark | 5.87 | 5.87 | 4.5 |
+| properties: mixed value, field hovered/focused | dark | 6.15 | 6.15 | 4.5 |
+| properties: refused-value edge vs field fill | dark | 4.37 | 4.37 | 3 |
+| properties: refused-value edge vs edited row | dark | 4.03 | 4.03 | 3 |
+| command line: error | dark | 5.47 | 5.47 | 4.5 |
+| command line: keyword chip | dark | 5.01 | 5.01 | 4.5 |
+| command line: keyword chip, hovered | dark | 4.84 | 4.84 | 4.5 |
+| palette: row label | dark | 14.13 | 14.13 | 4.5 |
+| palette: row label, lit row | dark | 9.39 | 9.39 | 4.5 |
+| palette: matched letters | dark | 5.62 | 5.62 | 4.5 |
+| palette: matched letters, hovered row | dark | 4.51 | 4.51 | 4.5 |
+| palette: menu path | dark | 3.04 | 5.95 | 4.5 |
+| palette: menu path, lit row | dark | 2.64 | 4.54 | 4.5 |
+| palette: command id | dark | 5.95 | 5.95 | 4.5 |
+| palette: command id, lit row | dark | 4.54 | 4.54 | 4.5 |
+| palette: keycap | dark | 5.95 | 5.95 | 4.5 |
+| title: command centre name | light | 6.86 | 6.86 | 4.5 |
+| title: command centre glyph | light | 5.30 | 5.30 | 3 |
+| title: unsaved dot | light | 3.56 | 3.56 | 3 |
+| layers: count | light | 5.87 | 5.87 | 4.5 |
+| layers: name | light | 7.82 | 7.82 | 4.5 |
+| layers: name, row hovered | light | 7.16 | 7.16 | 4.5 |
+| layers: current layer name | light | 6.13 | 6.13 | 4.5 |
+| layers: current row accent bar vs row | light | 3.36 | 3.36 | 3 |
+| layers: has-objects diamond (filled) | light | 5.87 | 5.87 | 3 |
+| layers: has-objects diamond (filled), current row | light | 5.18 | 5.18 | 3 |
+| layers: empty diamond (hollow) | light | 5.87 | 5.87 | 3 |
+| layers: toggle on (quiet) | light | 5.87 | 5.87 | 3 |
+| layers: toggle on, current row | light | 5.18 | 5.18 | 3 |
+| layers: toggle thawed/unlocked (quiet) | light | 5.87 | 5.87 | 3 |
+| layers: toggle thawed/unlocked, current row | light | 5.18 | 5.18 | 3 |
+| layers: toggle off | light | 7.82 | 7.82 | 3 |
+| layers: toggle off, row hovered | light | 7.16 | 7.16 | 3 |
+| layers: toggle off, as on current row | light | 6.65 | 6.65 | 3 |
+| layers: toggle off, hovered on current row | light | 6.06 | 6.06 | 3 |
+| layers: toggle frozen | light | 4.51 | 6.60 | 3 |
+| layers: toggle frozen, row hovered | light | 3.83 | 5.60 | 3 |
+| layers: toggle frozen, as on current row | light | 3.36 | 4.91 | 3 |
+| layers: toggle frozen, hovered on current row | light | 2.87 | 4.20 | 3 |
+| layers: toggle locked | light | 4.53 | 6.06 | 3 |
+| layers: toggle locked, row hovered | light | 3.84 | 5.14 | 3 |
+| layers: toggle locked, as on current row | light | 3.37 | 4.51 | 3 |
+| layers: toggle locked, hovered on current row | light | 2.88 | 3.85 | 3 |
+| layers: toggle hovered ink on its hover fill | light | 12.97 | 12.97 | 3 |
+| layers: toggle focus ring vs row | light | 4.51 | 6.60 | 3 |
+| layers: toggle focus ring vs current row | light | 3.36 | 4.91 | 3 |
+| properties: state (heading end) | light | 5.87 | 5.87 | 4.5 |
+| properties: label | light | 5.87 | 5.87 | 4.5 |
+| properties: label, row hovered/edited | light | 5.23 | 5.23 | 4.5 |
+| properties: read-only value | light | 7.82 | 7.82 | 4.5 |
+| properties: read-only value, row hovered | light | 6.74 | 6.74 | 4.5 |
+| properties: mixed value by token, panel | light | 5.87 | 5.87 | 4.5 |
+| properties: mixed value by token, row hovered | light | 5.23 | 5.23 | 4.5 |
+| properties: refused-value edge by token vs control | light | 5.05 | 5.05 | 3 |
+| properties: refused-value edge by token vs control-hover | light | 4.60 | 4.60 | 3 |
+| properties: field focus edge vs field fill | light | 3.78 | 5.53 | 3 |
+| properties: field/checkbox focus edge vs edited row | light | 3.44 | 5.03 | 3 |
+| command line: history line | light | 5.51 | 5.51 | 4.5 |
+| command line: newest history line | light | 7.21 | 7.21 | 4.5 |
+| command line: prompt mark | light | 3.88 | 5.68 | 3 |
+| command line: prompt (placeholder) | light | 5.68 | 5.68 | 4.5 |
+| command line: typed text | light | 16.60 | 16.60 | 4.5 |
+| command line: field focus edge vs field | light | 4.17 | 6.10 | 3 |
+| command line: field focus edge vs band | light | 3.88 | 5.68 | 3 |
+| command line: scrollback focus ring vs band | light | 3.88 | 5.68 | 3 |
+| palette: typed text | light | 17.96 | 17.96 | 4.5 |
+| palette: placeholder | light | 5.87 | 5.87 | 4.5 |
+| palette: field glyph | light | 5.87 | 5.87 | 3 |
+| palette: empty line | light | 5.87 | 5.87 | 4.5 |
+| canvas: keyboard focus ring vs drawing | light | 3.84 | 6.20 | 3 |
+| canvas: selection stroke vs drawing | light | 3.84 | 3.84 | 3 |
+| properties: value (field at rest) | light | 17.96 | 17.96 | 4.5 |
+| properties: value, row hovered | light | 13.69 | 13.69 | 4.5 |
+| properties: value, field hovered/focused | light | 15.04 | 15.04 | 4.5 |
+| properties: select value | light | 17.96 | 17.96 | 4.5 |
+| properties: mixed value (*VARIES*) | light | 5.87 | 5.87 | 4.5 |
+| properties: mixed value, row hovered | light | 5.23 | 5.23 | 4.5 |
+| properties: mixed value, field hovered/focused | light | 5.45 | 5.45 | 4.5 |
+| properties: refused-value edge vs field fill | light | 5.05 | 5.05 | 3 |
+| properties: refused-value edge vs edited row | light | 4.60 | 4.60 | 3 |
+| command line: error | light | 6.79 | 6.79 | 4.5 |
+| command line: keyword chip | light | 4.93 | 4.93 | 4.5 |
+| command line: keyword chip, hovered | light | 4.83 | 4.83 | 4.5 |
+| palette: row label | light | 17.96 | 17.96 | 4.5 |
+| palette: row label, lit row | light | 13.37 | 13.37 | 4.5 |
+| palette: matched letters | light | 6.60 | 6.60 | 4.5 |
+| palette: matched letters, hovered row | light | 5.60 | 5.60 | 4.5 |
+| palette: menu path | light | 2.30 | 5.87 | 4.5 |
+| palette: menu path, lit row | light | 2.21 | 5.18 | 4.5 |
+| palette: command id | light | 5.87 | 5.87 | 4.5 |
+| palette: command id, lit row | light | 5.18 | 5.18 | 4.5 |
+| palette: keycap | light | 5.87 | 5.87 | 4.5 |
+
+Left to the light `--focus-ring`, the drawing's ring would measure 2.62 against the canvas: the canvas does not change with the theme, so its ring does not either.
 
 ## Not tokens
 

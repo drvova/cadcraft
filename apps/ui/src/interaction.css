@@ -106,8 +106,8 @@
   justify-content: flex-end;
 }
 
-/* A value is text until it is touched: transparent field, hairline on hover, accent on focus.
-   The field's box overhangs the column by its own padding and border, so the text inside it ends
+/* A value is text until it is touched: transparent field, hairline on hover, the focus edge when
+   it has the keyboard. The field's box overhangs the column by its own padding and border, so the text inside it ends
    on the same edge as a read-only value, at rest and while editing. */
 .prop-input,
 .prop-select {
@@ -140,7 +140,7 @@
 .prop-input:focus-visible,
 .prop-select:focus-visible {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--focus-ring);
   background: var(--control);
 }
 
@@ -178,7 +178,7 @@
 }
 
 .prop-check:focus-visible {
-  outline: var(--focus-outline-w) solid var(--accent);
+  outline: var(--focus-outline-w) solid var(--focus-ring);
   outline-offset: var(--hairline);
 }
 

@@ -51,13 +51,6 @@ const FILE_IDS: Readonly<Record<string, "open" | "save" | "new" | "sample">> = {
   "ui.sample": "sample",
 };
 
-/**
- * The command the shell starts to cancel a running one. The facade has no cancel of its own:
- * starting any command ends the running one through the engine's own cancel (the one its Escape
- * uses), whatever the prompt was asking for, and this command does nothing else to the drawing.
- */
-const CANCEL_VIA = "redraw";
-
 /** What takes the keyboard's focus inside a region when nothing names a better control. */
 const FOCUSABLE = "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])";
 
@@ -352,27 +345,12 @@ export function App(props: AppProps): JSX.Element {
   };
 
   /**
-   * Cancel the running command, as Escape does in a CAD program. The engine cancels it when
-   * another command starts (see [`CANCEL_VIA`]); the lines that start adds to the history are
-   * taken out again, so the history reads `*Cancel*` as it does on the desktop.
+   * Cancel the running command, as Escape does in a CAD program: the engine's own cancel, which
+   * writes `*Cancel*` to the history and leaves its empty Enter repeating the cancelled command.
    */
   const cancelCommand = (): void => {
     setNotice(null);
-    const before = prompt();
-    repeatOnEnter = before.running;
-    const started = props.facade.start(CANCEL_VIA, before);
-    if (started.running !== null) {
-      // A facade that does not know the command (the stand-in engine): an empty Enter ends its prompts.
-      setPrompt(props.facade.cmdline("", before));
-    } else {
-      // The start adds its echo, the engine's `*Cancel*` and its own `Command:` line (a full
-      // history is capped, so the count of new lines is not always the difference in length).
-      const added = Math.max(3, started.output.length - before.output.length);
-      const own = new Set([CANCEL_VIA, `Command: ${CANCEL_VIA.toUpperCase()}`]);
-      const kept = started.output.slice(0, -added);
-      const tail = started.output.slice(-added).filter((line) => !own.has(line));
-      setPrompt({ ...started, output: [...kept, ...tail], error: null });
-    }
+    setPrompt(props.facade.cancel(prompt()));
     refresh();
   };
 
@@ -420,25 +398,15 @@ export function App(props: AppProps): JSX.Element {
     if (!regionCovers(displayRegion, rect, engineRevision)) fetchDisplay(rect);
   };
 
-  /**
-   * The command Escape cancelled last, until another line is entered. The engine's empty Enter
-   * repeats the last command started, which after a cancel is the shell's own [`CANCEL_VIA`]:
-   * the shell sends the cancelled command's name instead, so Enter repeats what the user ran.
-   */
-  let repeatOnEnter: string | null = null;
-
   const onCommand = (text: string): void => {
     setNotice(null);
-    const line = text.trim() === "" && prompt().running === null && repeatOnEnter !== null ? repeatOnEnter : text;
-    repeatOnEnter = null;
-    setPrompt(props.facade.cmdline(line, prompt()));
+    setPrompt(props.facade.cmdline(text, prompt()));
     refresh();
   };
 
   /** Start a command by id, exactly as the desktop menu does; the prompt becomes interactive. */
   const startCommand = (id: string): void => {
     setNotice(null);
-    repeatOnEnter = null;
     const state = props.facade.start(id, prompt());
     setPrompt(state);
     if (state.error !== null) setNotice(state.error);

@@ -185,6 +185,7 @@ describe("AppFacade over the mock", () => {
         },
         cmdline: () => "",
         start: () => "",
+        cancel: () => "",
         prompt: () => "",
         state: () => "",
         selection: () => "",
@@ -227,6 +228,35 @@ describe("the extended facade contract over the mock", () => {
     expect(state.error).toBeNull();
 
     expect(facade.displayList().prims.length).toBe(before + 1);
+  });
+
+  test("cancel ends the running command with *Cancel*, and an empty Enter repeats it", () => {
+    const facade = mockFacade();
+    const before = facade.displayList().prims.length;
+    let state = facade.start("circle");
+    state = facade.cmdline("0,0", state);
+    expect(state.running).toBe("circle");
+
+    state = facade.cancel(state);
+    expect(state.running).toBeNull();
+    expect(promptText(state)).toBe("Command:");
+    expect(state.error).toBeNull();
+    expect(state.output.at(-1)).toBe("*Cancel*");
+    expect(facade.displayList().prims.length).toBe(before);
+
+    // Enter repeats the command the user ran, from its first question.
+    state = facade.cmdline("", state);
+    expect(state.running).toBe("circle");
+    expect(promptText(state)).toBe("Specify center point for circle:");
+
+    // With nothing running a cancel clears the selection and adds no line.
+    state = facade.cancel(state);
+    facade.execute("select", { at: [0, 0] });
+    expect(facade.selection().count).toBe(1);
+    const lines = state.output.length;
+    state = facade.cancel(state);
+    expect(facade.selection().count).toBe(0);
+    expect(state.output.length).toBe(lines);
   });
 
   test("start on an unknown id replies an error, and a simple command echoes", () => {
@@ -297,6 +327,7 @@ describe("the extended facade contract over the mock", () => {
       execute: () => "{",
       cmdline: () => "[]",
       start: () => "not json",
+      cancel: () => "not json",
       prompt: () => "null",
       state: () => "{}",
       selection: () => '{"count":"many","handles":[1,"A"]}',
@@ -343,6 +374,7 @@ describe("the extended facade contract over the mock", () => {
       "execute",
       "cmdline",
       "start",
+      "cancel",
       "prompt",
       "state",
       "selection",

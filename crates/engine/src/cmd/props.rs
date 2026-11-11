@@ -181,6 +181,12 @@ fn set_xy(p: &mut Vec3, v: &Value) {
     }
 }
 
+/// A name `properties.set` takes as a string (`layer`, `linetype`): absent is `None`, and anything
+/// that is not a string is refused with the values `accepts` names, never skipped.
+fn name_param<'a>(p: &'a Value, key: &str, accepts: &str) -> Result<Option<&'a str>> {
+    p.get(key).map(|v| v.as_str().ok_or_else(|| bad("properties.set", format!("{key} must be a string ({accepts})")))).transpose()
+}
+
 fn run_set(s: &mut Session, p: &Value) -> Result<Value> {
     let hs = targets(s, p)?;
     if hs.is_empty() {
@@ -191,14 +197,21 @@ fn run_set(s: &mut Session, p: &Value) -> Result<Value> {
         .get("transparency")
         .map(|v| parse_transparency(v).ok_or_else(|| bad("properties.set", "transparency must be ByLayer, ByBlock or a percentage from 0 to 90")))
         .transpose()?;
+    // The same range the THICKNESS command accepts.
     let thickness = p
         .get("thickness")
-        .map(|v| v.as_f64().filter(|x| x.is_finite()).ok_or_else(|| bad("properties.set", "thickness must be a finite number")))
+        .map(|v| v.as_f64().filter(|x| thickness_in_range(*x)).ok_or_else(|| bad("properties.set", "thickness must be a number from -1e12 to 1e12")))
+        .transpose()?;
+    let ltscale = p
+        .get("ltscale")
+        .map(|v| v.as_f64().filter(|x| x.is_finite() && *x > 0.0).ok_or_else(|| bad("properties.set", "ltscale must be a positive number")))
         .transpose()?;
     let lw = p.get("lineweight").map(|v| super::layer::parse_lw(v).ok_or_else(|| bad("properties.set", "bad lineweight"))).transpose()?;
+    let layer = name_param(p, "layer", "a layer name")?;
+    let linetype = name_param(p, "linetype", "ByLayer, ByBlock or the name of a loaded linetype")?;
     let d = s.doc_mut()?;
     // An explicit object linetype must be ByLayer, ByBlock or a loaded definition (as `linetype current` requires).
-    let linetype = str_param(p, "linetype")
+    let linetype = linetype
         .map(|n| {
             if n.eq_ignore_ascii_case("ByLayer") || n.eq_ignore_ascii_case("ByBlock") {
                 Ok(n.to_string())
@@ -207,7 +220,7 @@ fn run_set(s: &mut Session, p: &Value) -> Result<Value> {
             }
         })
         .transpose()?;
-    if let Some(l) = str_param(p, "layer") {
+    if let Some(l) = layer {
         d.ensure_layer(l);
     }
     let dim_style = str_param(p, "dimStyle")
@@ -221,7 +234,7 @@ fn run_set(s: &mut Session, p: &Value) -> Result<Value> {
             if let Some(a) = p.get("annotative").and_then(Value::as_bool) {
                 cadcraft_doc::set_annotative(e, a, &anno_scale);
             }
-            if let Some(l) = str_param(p, "layer") {
+            if let Some(l) = layer {
                 e.common.layer = l.to_string();
             }
             if let Some(c) = color {
@@ -233,7 +246,7 @@ fn run_set(s: &mut Session, p: &Value) -> Result<Value> {
             if let Some(w) = lw {
                 e.common.lineweight = w;
             }
-            if let Some(x) = p.get("ltscale").and_then(Value::as_f64).filter(|x| *x > 0.0) {
+            if let Some(x) = ltscale {
                 e.common.ltscale = x;
             }
             if let Some(t) = transparency {
@@ -1195,5 +1208,58 @@ mod tests {
             s.execute("properties.set", &json!({ "handles": [h], "linetype": ok })).unwrap();
             assert_eq!(lt(&s), ok);
         }
+    }
+
+    /// `properties.set` used to answer ok while skipping these values; each is now refused with a
+    /// message naming the property, and the object is left exactly as it was.
+    #[test]
+    fn properties_set_refuses_bad_values_instead_of_skipping_them() {
+        let mut s = Session::new();
+        s.execute("line", &json!({ "points": [[0, 0], [50, 0]] })).unwrap();
+        let h = s.doc().unwrap().model.last().unwrap().handle.hex();
+        s.execute("properties.set", &json!({ "handles": [h], "ltscale": 2.5, "thickness": 3, "layer": "Walls" })).unwrap();
+        let common = |s: &Session| s.doc().unwrap().model.last().unwrap().common.clone();
+        let before = common(&s);
+        assert_eq!((before.ltscale, before.thickness, before.layer.as_str()), (2.5, 3.0, "Walls"));
+        let layers = s.doc().unwrap().layers.len();
+        for (bad, names) in [
+            (json!({ "ltscale": 0 }), "ltscale"),
+            (json!({ "ltscale": -1.5 }), "ltscale"),
+            (json!({ "ltscale": "2" }), "ltscale"),
+            // What a non-finite number is in JSON.
+            (json!({ "ltscale": f64::INFINITY }), "ltscale"),
+            (json!({ "ltscale": f64::NAN }), "ltscale"),
+            (json!({ "layer": 7 }), "layer"),
+            (json!({ "layer": null }), "layer"),
+            (json!({ "layer": ["Walls"] }), "layer"),
+            (json!({ "linetype": 7 }), "linetype"),
+            (json!({ "linetype": true }), "linetype"),
+            (json!({ "thickness": 1e13 }), "thickness"),
+            (json!({ "thickness": -1e13 }), "thickness"),
+            // A bad value beside good ones refuses the whole call: nothing is half-applied.
+            (json!({ "layer": "Doors", "ltscale": 0 }), "ltscale"),
+            (json!({ "thickness": 9, "linetype": 3 }), "linetype"),
+        ] {
+            let mut params = bad.clone();
+            params["handles"] = json!([h]);
+            let err = s.execute("properties.set", &params).expect_err(&format!("{bad} was accepted")).to_string();
+            assert!(err.contains(names), "{bad}: the message names the property: {err}");
+            let after = common(&s);
+            assert_eq!(
+                (after.ltscale, after.thickness, after.layer.as_str(), after.linetype.as_str()),
+                (2.5, 3.0, "Walls", before.linetype.as_str()),
+                "{bad}"
+            );
+            assert_eq!(s.doc().unwrap().layers.len(), layers, "{bad}: no layer was made");
+        }
+        // The bounds themselves, and every valid form, still pass.
+        for good in
+            [json!({ "thickness": 1e12 }), json!({ "thickness": -1e12 }), json!({ "ltscale": 1e-6 }), json!({ "layer": "0", "linetype": "ByLayer" })]
+        {
+            let mut params = good.clone();
+            params["handles"] = json!([h]);
+            s.execute("properties.set", &params).unwrap_or_else(|e| panic!("{good} was refused: {e}"));
+        }
+        assert_eq!(common(&s).thickness, -1e12);
     }
 }

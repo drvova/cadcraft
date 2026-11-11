@@ -16,6 +16,7 @@ function fakeInstance(): { instance: Record<string, unknown>; calls: Array<{ nam
     execute: record("execute"),
     cmdline: record("cmdline"),
     start: record("start"),
+    cancel: record("cancel"),
     prompt: record("prompt"),
     state: record("state"),
     selection: record("selection"),
@@ -85,6 +86,14 @@ describe("wrapWasmFacade", () => {
     const raw = wrapWasmFacade(instance);
     raw?.set_view(-1, 2, 3, 4);
     expect(calls).toEqual([{ name: "set_view", args: [-1, 2, 3, 4] }]);
+  });
+
+  test("cancel reaches the engine's own cancel, and a module without one is refused", () => {
+    const { instance, calls } = fakeInstance();
+    wrapWasmFacade(instance)?.cancel();
+    expect(calls).toEqual([{ name: "cancel", args: [] }]);
+    delete instance["cancel"];
+    expect(wrapWasmFacade(instance)).toBeNull();
   });
 
   test("execute forwards the command and its JSON", () => {

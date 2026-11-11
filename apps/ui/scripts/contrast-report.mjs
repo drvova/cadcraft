@@ -56,18 +56,23 @@ const ratio = (a, b) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x,
 const fmt = (x) => (Math.round(x * 10) / 10).toFixed(1);
 
 // ---- the pairs ----
-// Surfaces: every colour a foreground can sit on. Foregrounds: the ink roles (4.5:1 text AA,
-// 3:1 for icons and borders, per WCAG 1.4.3 and 1.4.11) and the translucent fills, which carry
-// no contrast threshold; their cell is the ratio of the composited fill against the surface
-// (perceptibility of a hover or selected step).
-const SURFACES = ["chrome", "chrome-dark", "panel", "tab-active", "control", "control-hover", "surface-elevated", "canvas", "list-bg", "cmd-bg"];
+// Surfaces: every colour a theme ink can sit on. Foregrounds: the ink roles (4.5:1 text AA,
+// 3:1 for icons, borders and the focus ring, per WCAG 1.4.3 and 1.4.11) and the translucent
+// fills, which carry no contrast threshold; their cell is the ratio of the composited fill
+// against the surface (perceptibility of a hover or selected step).
+const SURFACES = ["chrome", "chrome-dark", "panel", "tab-active", "control", "control-hover", "surface-elevated", "surface-inset", "list-bg", "cmd-bg"];
 const INK = {
-  text: 4.5, "text-dim": 4.5, "text-faint": 4.5, "text-disabled": null, icon: 3, "icon-accent": 3, "icon-point": 3,
-  accent: 3, warn: 3, error: 3, snap: 3, "toggle-on": 3, "cmd-keyword": 4.5,
+  text: 4.5, "text-dim": 4.5, "text-faint": 4.5, "text-disabled": null, "text-accent": 4.5, icon: 3, "icon-accent": 3, "icon-point": 3,
+  accent: 3, "focus-ring": 3, warn: 3, error: 3, snap: 3, "toggle-on": 3,
 };
-// The action fills: the ink on them is --on-accent, not a surface pair.
-const ACTIONS = ["accent", "accent-hover", "accent-pressed", "error", "error-hover", "error-pressed", "selection"];
-const FILLS = ["hover", "fill-active", "fill-pressed", "fill-disabled", "accent-soft", "cmd-keyword-hover", "border", "border-soft", "scrollbar", "scrollbar-hover", "composer-border", "composer-border-active", "cmd-history"];
+// The action fills and the ink each one carries: a label pair (4.5:1), not a surface pair.
+const ON = { "on-accent": ["accent", "accent-hover", "accent-pressed"], "on-error": ["error", "error-hover", "error-pressed"] };
+// The focus ring also crosses the two state fills a focused control can carry (3:1 over each surface).
+const RING_FILLS = ["hover", "fill-active"];
+// The drawing is the same dark surface in both themes, so no theme ink is paired with it: these
+// are the only strokes the interface draws over it (3:1).
+const CANVAS_INK = ["selection", "canvas-focus-ring"];
+const FILLS = ["hover", "fill-active", "fill-pressed", "fill-disabled", "accent-soft", "border", "border-soft", "scrollbar", "scrollbar-hover", "composer-border", "composer-border-active", "cmd-history"];
 
 function report(theme, name) {
   const color = (token) => parseColor(theme[token], theme);
@@ -96,17 +101,28 @@ function report(theme, name) {
     });
     lines.push(`| \`--${fg}\` (fill) | ${cells.join(" | ")} |`);
   }
-  const onAccent = color("on-accent");
-  if (onAccent) {
-    const cells = ACTIONS.map((a) => {
-      const fill = color(a);
-      if (!fill) return "?";
-      const r = ratio(over(onAccent, fill), fill);
-      const bad = r < 4.5;
-      if (bad) below.push(`on-accent over ${a} ${fmt(r)}:1 (needs 4.5:1)`);
-      return `\`--${a}\` ${fmt(r)}${bad ? " ✗" : " ✓"}`;
+  // One sentence of pairs: `ink` over each ground (a token, or that token under a fill), at `threshold`.
+  const pairs = (ink, grounds, threshold, ground = color, where = (g) => g) =>
+    grounds.map((g) => {
+      const base = color(ink);
+      const bg = ground(g);
+      if (!base || !bg) return `\`--${g}\` ?`;
+      const r = ratio(over(base, bg), bg);
+      const bad = r < threshold;
+      if (bad) below.push(`${ink} over ${where(g)} ${fmt(r)}:1 (needs ${threshold}:1)`);
+      return `\`--${g}\` ${fmt(r)}${bad ? " ✗" : " ✓"}`;
     });
-    lines.push("", `\`--on-accent\` on the action fills: ${cells.join("; ")}.`);
+  for (const [ink, fills] of Object.entries(ON)) {
+    lines.push("", `\`--${ink}\` on its action fills: ${pairs(ink, fills, 4.5).join("; ")}.`);
+  }
+  for (const fill of RING_FILLS) {
+    const under = (s) => { const surface = color(s); const top = color(fill); return surface && top ? over(top, surface) : null; };
+    lines.push("", `\`--focus-ring\` against \`--${fill}\` over each surface: ${pairs("focus-ring", SURFACES, 3, under, (s) => `${fill} over ${s}`).join("; ")}.`);
+  }
+  const canvas = color("canvas");
+  if (canvas) {
+    const cells = CANVAS_INK.flatMap((ink) => pairs(ink, ["canvas"], 3).map((cell) => cell.replace("`--canvas`", `\`--${ink}\``)));
+    lines.push("", `On the drawing (\`--canvas\`, one dark surface in both themes): ${cells.join("; ")}.`);
   }
   lines.push("", below.length ? `Below threshold: ${below.join("; ")}` : "Every ink pair is at or above its threshold.");
   return { lines, below };
@@ -118,11 +134,11 @@ if (args.includes("--help") || args.includes("-h")) {
   process.exit(0);
 }
 const out = [];
-out.push("Contrast, measured by `node scripts/contrast-report.mjs` (run from the app folder), WCAG 2.x. Every cell is the foreground composited over that surface: ratio, then ✓ at the token's threshold (4.5:1 text, 3:1 icons and borders), ✗ below it, · for the fills, which carry no threshold — their cell shows how visible the step is against the surface.");
+out.push("Contrast, measured by `node scripts/contrast-report.mjs` (run from the app folder), WCAG 2.x. Every cell is the foreground composited over that surface: ratio, then ✓ at the token's threshold (4.5:1 text, 3:1 icons, borders and the focus ring), ✗ below it, · for the fills, which carry no threshold — their cell shows how visible the step is against the surface. The drawing keeps one dark surface in both themes, so it is not a column: the strokes drawn over it are listed under each grid.");
 for (const [theme, name] of [[dark, "dark (default)"], [light, "light"]]) {
   const r = report(theme, name);
   out.push("", ...r.lines);
 }
-const missing = ["text", "icon", "accent", "error"].filter((t) => !parseColor(dark[t], dark) || !parseColor(light[t], light));
+const missing = ["text", "icon", "accent", "error", "text-accent", "focus-ring", "on-accent", "on-error", "canvas-focus-ring"].filter((t) => !parseColor(dark[t], dark) || !parseColor(light[t], light));
 if (missing.length) out.push("", `Unresolved tokens: ${missing.join(", ")}`);
 console.log(out.join("\n"));
