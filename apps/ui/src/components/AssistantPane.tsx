@@ -637,7 +637,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               <For each={s.queued}>
                 {(item, index) => (
                   <div class="assistant-stack-row">
-                    <span class="assistant-stack-text">{item.text}</span>
+                    <span class="assistant-stack-text" title={item.text}>{item.text}</span>
                     <IconButton icon="send" size="sm" title="Send this now" disabled={s.running()} onClick={() => s.sendQueued(index())} />
                     <IconButton icon="close" size="sm" title="Remove from the queue" onClick={() => s.unqueue(index())} />
                   </div>

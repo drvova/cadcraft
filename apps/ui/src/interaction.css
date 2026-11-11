@@ -36,6 +36,7 @@
 .properties-state {
   margin-left: auto;
   font-size: var(--font-chip);
+  font-variant-numeric: lining-nums tabular-nums;
   color: var(--text-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -45,6 +46,7 @@
 .properties-body {
   flex: 1 1 auto;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--gap-2) 0;
   display: flex;
@@ -52,28 +54,43 @@
   gap: 0;
 }
 
+/* The empty line is a row like the others: the same height, on the labels' column. */
 .properties-empty {
-  padding: var(--gap-6) var(--gap-8);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  min-height: var(--control-h-row);
+  padding: 0 var(--gap-8);
   color: var(--text-faint);
   font-size: var(--font-small);
 }
 
+/* Two equal columns over one gutter: the label starts on the heading's inset, the value ends on
+   the column the heading's state and the layers' count end on. */
 .prop-row {
-  display: flex;
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
-  gap: var(--gap-6);
+  column-gap: var(--gap-8);
   min-height: var(--control-h-row);
   padding: 0 var(--gap-8);
   border-radius: 0;
   background: transparent;
 }
 
-.prop-row:hover {
+/* The row being edited stays marked while the pointer is elsewhere. */
+.prop-row:focus-within {
   background: var(--control-hover);
 }
 
+@media (hover: hover) {
+  .prop-row:hover {
+    background: var(--control-hover);
+  }
+}
+
 .prop-label {
-  flex: 1 1 auto;
   min-width: 0;
   color: var(--text-faint);
   font-size: var(--font-small);
@@ -83,18 +100,22 @@
 }
 
 .prop-value {
-  flex: 0 0 118px;
   min-width: 0;
   display: flex;
+  align-items: center;
   justify-content: flex-end;
 }
 
-/* A value is text until it is touched: transparent field, hairline on hover, accent on focus. */
+/* A value is text until it is touched: transparent field, hairline on hover, accent on focus.
+   The field's box overhangs the column by its own padding and border, so the text inside it ends
+   on the same edge as a read-only value, at rest and while editing. */
 .prop-input,
 .prop-select {
-  width: 100%;
+  flex: 0 0 auto;
+  width: calc(100% + var(--gap-4) + var(--hairline));
   min-width: 0;
   height: var(--control-h-chip);
+  margin-right: calc(-1 * (var(--gap-4) + var(--hairline)));
   padding: 0 var(--gap-4);
   border: var(--hairline) solid transparent;
   border-radius: var(--radius-small);
@@ -102,14 +123,18 @@
   color: var(--text);
   /* Values are words and numbers, not code: the interface's own face, with figures that line up. */
   font-family: var(--font-family);
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
   font-size: var(--font-small);
+  text-align: right;
+  text-overflow: ellipsis;
 }
 
-.prop-input:hover,
-.prop-select:hover {
-  border-color: var(--border);
-  background: var(--control);
+@media (hover: hover) {
+  .prop-input:hover,
+  .prop-select:hover {
+    border-color: var(--border);
+    background: var(--control);
+  }
 }
 
 .prop-input:focus-visible,
@@ -119,16 +144,24 @@
   background: var(--control);
 }
 
+/* The chosen option reads on the value edge, ahead of the arrow. */
 .prop-select {
+  text-align-last: right;
   cursor: pointer;
 }
 
 .prop-check {
-  width: 13px;
-  height: 13px;
+  flex: 0 0 auto;
+  width: calc(var(--icon-size-md) - var(--hairline));
+  height: calc(var(--icon-size-md) - var(--hairline));
   margin: 0;
   accent-color: var(--accent);
   cursor: pointer;
+}
+
+.prop-check:focus-visible {
+  outline: var(--focus-outline-w) solid var(--accent);
+  outline-offset: var(--hairline);
 }
 
 /* A value that cannot be edited reads a step quieter than one that can. */
@@ -136,7 +169,7 @@
   min-width: 0;
   color: var(--text-dim);
   font-family: var(--font-family);
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
   font-size: var(--font-small);
   text-align: right;
   white-space: nowrap;
@@ -146,8 +179,12 @@
 
 /* ---- The command line's keyword chips ---- */
 
+/* The chips start on the band's inset, the column the scrollback and the prompt mark start on,
+   and stand a chip's inner gap apart so two pills never read as one. */
 .cmd-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--gap-2);
+  align-items: center;
+  gap: var(--gap-4);
+  padding: var(--gap-2) 0;
 }

@@ -39,13 +39,6 @@
       "rgb(${c[0]},${c[1]},${c[2]})": 1
     }
   },
-  "src/chrome.css": {
-    "rule/css-px": {
-      "font-size: 10px": 1,
-      "min-width: 176px": 1,
-      "min-width: 208px": 1
-    }
-  },
   "src/components/AssistantPane.tsx": {
     "trap/native-control": {
       "<button> where the system has Button": 5
@@ -91,12 +84,6 @@
       "#88c0d0": 1,
       "#d4d4d4": 1,
       "#ff0000": 1
-    }
-  },
-  "src/interaction.css": {
-    "rule/css-px": {
-      "height: 13px": 1,
-      "width: 13px": 1
     }
   },
   "src/props.test.ts": {

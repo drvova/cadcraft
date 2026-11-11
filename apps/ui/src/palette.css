@@ -36,18 +36,8 @@
   border-radius: var(--radius-block);
   box-shadow: var(--shadow-popover);
   overflow: hidden;
-  animation: palette-in var(--dur-med) var(--ease-out-quint);
-}
-
-@keyframes palette-in {
-  from {
-    opacity: 0;
-    transform: translateY(calc(-1 * var(--gap-4)));
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  /* No arrival: it is opened from the keyboard, many times a day, and anything that plays
+     between the key and the field reads as lag. */
 }
 
 .palette-field {
@@ -101,15 +91,20 @@
   min-height: 0;
   overflow-y: auto;
   padding: var(--gap-4);
+  /* The lit row stops short of the list's edge when the arrows bring it into view. */
+  scroll-padding-block: var(--gap-4);
   display: flex;
   flex-direction: column;
   gap: 0;
 }
 
-/* The row is the system's Row; these are its three parts. */
+/* The row is the system's Row; these are its three parts. The label keeps its width and the
+   menu path is what gives way; the trailing column ends as far from the box's edge as the label
+   starts from it. */
 .palette-label {
   flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
   padding: 0 var(--gap-4);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -124,8 +119,9 @@
 }
 
 .palette-path {
-  flex: 0 1 auto;
+  flex: 0 100 auto;
   min-width: 0;
+  padding-left: var(--gap-4);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -136,7 +132,7 @@
 .palette-trail {
   flex: 0 0 auto;
   margin-left: auto;
-  padding-left: var(--gap-12);
+  padding: 0 var(--gap-4) 0 var(--gap-12);
   display: inline-flex;
   align-items: center;
   gap: var(--gap-8);
@@ -151,10 +147,14 @@
   color: var(--text-faint);
   font-family: var(--font-family-mono);
   font-size: var(--font-chip);
+  white-space: nowrap;
 }
 
+/* The empty line starts where a row's label would. */
 .palette-empty {
-  padding: var(--gap-12);
+  padding: var(--gap-8);
   color: var(--text-faint);
   font-size: var(--font-body);
+  line-height: 1.5;
+  text-wrap: pretty;
 }

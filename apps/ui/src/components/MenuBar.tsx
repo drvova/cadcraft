@@ -12,6 +12,7 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import type { CommandInfo } from "../facade";
 import { buildMenu, hoverPath, isMacPlatform, menuEntries, shortcutLabel, UI_ITEMS, type MenuEntry, type MenuNode } from "../commands";
+import { ToolIcon } from "../icons";
 import "../chrome.css";
 
 export interface MenuBarProps {
@@ -174,7 +175,9 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
             <span class="menu-shortcut">{shortcutLabel(node.shortcut, isMacPlatform())}</span>
           </Show>
           <Show when={submenu}>
-            <span class="menu-arrow" aria-hidden="true" />
+            <span class="menu-arrow" aria-hidden="true">
+              <ToolIcon id="chevron-right" />
+            </span>
           </Show>
         </button>
         <Show when={submenuOpen}>

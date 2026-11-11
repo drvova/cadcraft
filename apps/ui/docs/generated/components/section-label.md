@@ -15,7 +15,7 @@ Not applicable: hand-rolled — the 11px uppercase header is measured from the r
 
 Real uses, 4 call sites (`rg -c "<SectionLabel" src/components` → `src/components/AssistantPane.tsx:5`, `src/components/LayersPanel.tsx:1`, `src/components/PropertiesPanel.tsx:1`):
 - `src/components/AssistantPane.tsx:566` and `:542` — the setup sheet's "Provider" and "Connection" headings.
-- `src/components/LayersPanel.tsx:34` — the "Layers" heading.
+- `src/components/LayersPanel.tsx:41` — the "Layers" heading.
 - `src/components/PropertiesPanel.tsx:41` — the "Properties" heading.
 
 ### Example files
@@ -94,7 +94,7 @@ Not applicable: no motion — the heading never changes state, and its ink comes
   - Do: `<div class="head"><SectionLabel>Layers</SectionLabel><IconButton icon="plus" title="New layer" /></div>`
 
 ### Content
-- `rule/section-label-one-noun`: When the label's text is written, use 1 noun in title case (Layers, Properties, Selection), because the label is uppercased by CSS and a sentence reads as shouting. Evidence: single use `src/components/LayersPanel.tsx:28`, the label "Layers". Check: review `src/components/LayersPanel.tsx`.
+- `rule/section-label-one-noun`: When the label's text is written, use 1 noun in title case (Layers, Properties, Selection), because the label is uppercased by CSS and a sentence reads as shouting. Evidence: single use `src/components/LayersPanel.tsx:35`, the label "Layers". Check: review `src/components/LayersPanel.tsx`.
   - Don't: `<SectionLabel>Here are your layers</SectionLabel>`
   - Do: `<SectionLabel>Layers</SectionLabel>`
 

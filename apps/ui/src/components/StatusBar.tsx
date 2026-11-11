@@ -83,30 +83,32 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
         <span class={props.mode.kind === "wasm" ? "status-item status-mode is-wasm" : "status-item status-mode is-mock"} title={props.mode.detail}>
           {props.mode.kind}
         </span>
-        <span class="status-item" title="The current layer (CLAYER)">
+        <span class="status-item status-layer" title="The current layer (CLAYER)">
           {props.currentLayer}
         </span>
-        <span class="status-item" title="Objects in the drawing">
+        <span class="status-item status-count" title="Objects in the drawing">
           {props.entityCount === 1 ? "1 object" : `${props.entityCount} objects`}
         </span>
-        <span class="status-item" title="Layers in the drawing">
+        <span class="status-item status-count" title="Layers in the drawing">
           {props.layerCount === 1 ? "1 layer" : `${props.layerCount} layers`}
         </span>
       </div>
       <div class="status-right">
-        <For each={STATUS_TOGGLES}>
-          {(toggle) => (
-            <button
-              class={props.settings[toggle.key] ? "status-toggle is-on" : "status-toggle"}
-              type="button"
-              title={toggle.label}
-              aria-pressed={props.settings[toggle.key]}
-              onClick={() => props.onCommand(toggle.id, { on: !props.settings[toggle.key] })}
-            >
-              {toggle.short}
-            </button>
-          )}
-        </For>
+        <div class="status-toggles" role="group" aria-label="Drafting settings">
+          <For each={STATUS_TOGGLES}>
+            {(toggle) => (
+              <button
+                class={props.settings[toggle.key] ? "status-toggle is-on" : "status-toggle"}
+                type="button"
+                title={toggle.label}
+                aria-pressed={props.settings[toggle.key]}
+                onClick={() => props.onCommand(toggle.id, { on: !props.settings[toggle.key] })}
+              >
+                {toggle.short}
+              </button>
+            )}
+          </For>
+        </div>
         <span class="status-sep" aria-hidden="true" />
         <span class="status-coord" title="Pointer position in the drawing's units">
           {props.cursor === null ? "\u2014" : props.formatPoint(props.cursor.x, props.cursor.y)}

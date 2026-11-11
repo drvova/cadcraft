@@ -1,8 +1,8 @@
 /*
- * The chrome: the menu bar, the tool strip and the status bar. Every colour, gap, radius and
- * size comes from tokens.css. The bands are compact and flush — a menu bar of quiet titles, a
- * tool strip of code-drawn icons, a status bar of layout tabs and micro toggles — with elevation
- * reserved for the menus themselves (the only things that float).
+ * The chrome: the menu bar, the tool strip, the editor tabs' strip and the status bar. Every
+ * colour, gap, radius and size comes from tokens.css. The bands are compact and flush — a menu
+ * bar of quiet titles, a tool strip of code-drawn icons, a status bar of micro toggles — with
+ * elevation reserved for the menus themselves (the popover surface).
  *
  * Imported once, from MenuBar.tsx (the shell does not import it elsewhere).
  */
@@ -32,21 +32,25 @@
   height: var(--control-h-row);
   padding: 0 var(--gap-8);
   border: none;
-  border-radius: var(--radius-small);
+  border-radius: var(--radius-card);
   background: transparent;
   color: var(--text-dim);
   font-family: var(--font-family);
   font-size: var(--font-label);
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.menubar-title:hover {
-  background: var(--control-hover);
-  color: var(--text);
+@media (hover: hover) {
+  .menubar-title:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
 }
 
+/* The title of the open menu reads pressed: the selected fill, one rung over the hover. */
 .menubar-title.is-open {
-  background: var(--control-hover);
+  background: var(--fill-active);
   color: var(--text);
 }
 
@@ -57,26 +61,28 @@
   outline-offset: var(--focus-outline-offset);
 }
 
-/* The one elevated surface in the interface: a menu. */
-/* Cursor's menu recipe: radius 4-5px, a soft 0 2px 8px shadow, 13px type, 2em rows. Ours sits
-   on the same scale with the UI's own tokens (radius-card 4px, font-label 12px, 24px rows). */
+/* A menu is the system's popover: the elevated surface on the hairline, the popover's radius and
+   its three-layer shadow (the command palette's box wears the same surface). The rows' corner is
+   the box's less its inset, so the two curves stay concentric. */
 .menu-drop {
+  --menu-inset: var(--gap-4);
   position: absolute;
   top: 100%;
   left: 0;
-  min-width: 208px;
-  padding: var(--gap-4);
-  background: var(--list-bg);
+  min-width: 30ch;
+  padding: var(--menu-inset);
+  background: var(--surface-elevated);
   border: var(--hairline) solid var(--border);
-  border-radius: var(--radius-card);
-  box-shadow: 0 2px 8px var(--shadow);
+  border-radius: var(--radius-popover);
+  box-shadow: var(--shadow-popover);
   z-index: 40;
 }
 
+/* A submenu opens beside its row, its first row level with it. */
 .menu-drop-sub {
-  top: calc(-1 * var(--gap-4));
-  left: calc(100% + var(--gap-2));
-  min-width: 176px;
+  top: calc(-1 * (var(--menu-inset) + var(--hairline)));
+  left: calc(100% + var(--menu-inset) + var(--hairline) + var(--gap-2));
+  min-width: 24ch;
   z-index: 50;
 }
 
@@ -84,35 +90,40 @@
   position: relative;
 }
 
+/* One row height for every item; the label first, then the shortcut or the submenu's chevron
+   against the same right edge. */
 .menu-row {
   display: flex;
   align-items: center;
-  gap: var(--gap-8);
+  gap: var(--gap-16);
   width: 100%;
   height: var(--control-h-input);
-  padding: 0 var(--gap-6);
+  padding: 0 var(--gap-8);
   border: none;
-  border-radius: var(--radius-card);
+  border-radius: calc(var(--radius-popover) - var(--menu-inset) - var(--hairline));
   background: transparent;
   color: var(--text);
   font-family: var(--font-family);
-  font-size: var(--font-label);
+  font-size: var(--font-body);
   text-align: left;
   cursor: pointer;
 }
 
-.menu-row:hover,
-.menu-row.is-active {
-  background: var(--control-hover);
+@media (hover: hover) {
+  .menu-row:hover:not(.is-disabled) {
+    background: var(--hover);
+  }
+}
+
+/* The keyboard's row and the row whose submenu is open hold the same fill as the pointer's. */
+.menu-row.is-active:not(.is-disabled),
+.menu-row[aria-expanded="true"] {
+  background: var(--hover);
 }
 
 .menu-row.is-disabled {
-  color: var(--text-faint);
+  color: var(--text-disabled);
   cursor: default;
-}
-
-.menu-row.is-disabled:hover {
-  background: transparent;
 }
 
 .menu-label {
@@ -126,16 +137,26 @@
 .menu-shortcut {
   flex: 0 0 auto;
   color: var(--text-faint);
-  font-size: var(--font-chip);
+  font-size: var(--font-label);
+  white-space: nowrap;
 }
 
+.menu-row.is-disabled .menu-shortcut {
+  color: inherit;
+}
+
+/* The chevron's stroke sits in the middle of its box: the box is pulled out so the stroke, not
+   the box, meets the shortcuts' right edge. */
 .menu-arrow {
   flex: 0 0 auto;
-  width: 0;
-  height: 0;
-  border-left: 4px solid currentColor;
-  border-top: 3px solid transparent;
-  border-bottom: 3px solid transparent;
+  display: inline-flex;
+  margin-right: calc(-1 * var(--gap-4));
+  color: var(--text-faint);
+}
+
+.menu-arrow .tool-icon {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
 }
 
 /* ---- The tool strip ---- */
@@ -143,13 +164,23 @@
 .toolstrip {
   display: flex;
   align-items: center;
-  gap: 1px;
+  gap: var(--gap-2);
   height: var(--control-h-button);
   padding: 0 var(--gap-6);
   background: var(--chrome);
   border-bottom: var(--hairline) solid var(--border);
+  /* A window narrower than the strip scrolls it sideways (wheel, touch, or focus moving along
+     the keys); a scrollbar would cost the 28px band a third of its height, so none is drawn. */
   overflow-x: auto;
   overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.toolstrip::-webkit-scrollbar,
+.editor-tabs::-webkit-scrollbar,
+.status-toggles::-webkit-scrollbar {
+  display: none;
 }
 
 /* The strip's cells never squeeze: the band scrolls instead. */
@@ -157,6 +188,7 @@
   flex: 0 0 auto;
 }
 
+/* A group's divider: the glyphs' height, with the same room on each side. */
 .tool-divider {
   flex: 0 0 auto;
   width: var(--hairline);
@@ -165,25 +197,47 @@
   background: var(--border);
 }
 
+/* ---- The editor tabs ---- */
+
+/* The editor tabs over the drawing: one 35px strip on the chrome. Its closing hairline is drawn
+   inside the strip, under the tabs, so the tab in front (filled with the pane's surface) covers
+   it and runs into the drawing, while the rest of the strip stays closed. */
+.editor-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  height: var(--control-h-tab);
+  gap: 0;
+  background: var(--chrome);
+  box-shadow: inset 0 calc(-1 * var(--hairline)) 0 var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
 /* ---- The status bar ---- */
 
+/* One 22px line that never wraps. When the window narrows the least needed gives way first: the
+   counts, then the toggles scroll inside their own run, then the coordinates. */
 .statusbar {
   display: flex;
   align-items: center;
-  gap: 0;
+  gap: var(--gap-12);
   height: var(--control-h-row);
-  padding: 0 var(--gap-6);
+  padding: 0 var(--gap-8);
   background: var(--chrome-dark);
   border-top: var(--hairline) solid var(--border);
+  overflow: hidden;
 }
 
 /* The left of the bar: what the window is working on, as one quiet run of small items. */
 .status-left {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: var(--gap-12);
   min-width: 0;
-  overflow: hidden;
 }
 
 .status-item {
@@ -193,10 +247,17 @@
   white-space: nowrap;
 }
 
+/* A long layer name clips with an ellipsis; its full text stays in the layer list. */
+.status-layer {
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .status-mode {
   display: inline-flex;
   align-items: center;
-  gap: var(--gap-4);
+  gap: var(--gap-6);
 }
 
 .status-mode::before {
@@ -211,72 +272,110 @@
   background: var(--toggle-on);
 }
 
-/* The editor tabs over the drawing: one 35px strip on the chrome, closed by a hairline. */
-.editor-tabs {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: stretch;
-  height: var(--control-h-tab);
-  gap: 0;
-  background: var(--chrome);
-  border-bottom: var(--hairline) solid var(--border);
-  overflow-x: auto;
-}
-
 .status-right {
-  margin-left: auto;
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
-  gap: var(--gap-2);
+  justify-content: flex-end;
+  gap: var(--gap-8);
   min-width: 0;
 }
 
-/* Micro toggles: a word, faint when off, the on-green when on. No pills, no borders, no fills. */
+/* The toggles' run: it keeps its words whole and scrolls sideways when the bar is too short. */
+.status-toggles {
+  flex: 0 1 auto;
+  align-self: stretch;
+  display: flex;
+  align-items: stretch;
+  gap: var(--gap-2);
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+/* Micro toggles: a word the height of the bar, quiet when off; on, the full ink over a rule in
+   the on-green on the bar's bottom edge. No pills, no borders, no fills: on and off differ in
+   lightness as well as in hue. */
 .status-toggle {
-  height: var(--control-h-chip);
+  position: relative;
+  flex: 0 0 auto;
   padding: 0 var(--gap-4);
   border: none;
-  border-radius: var(--radius-small);
+  border-radius: 0;
   background: transparent;
   color: var(--text-faint);
   font-family: var(--font-family);
-  font-size: 10px;
-  letter-spacing: 0.06em;
+  font-size: var(--font-chip);
+  letter-spacing: 0.04em;
   text-transform: uppercase;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.status-toggle:hover {
-  background: var(--control-hover);
+@media (hover: hover) {
+  .status-toggle:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
+}
+
+.status-toggle:active {
+  background: var(--fill-active);
+}
+
+.status-toggle.is-on {
   color: var(--text);
 }
 
-/* On is said by the ink alone: a row of lit boxes made the bar the loudest thing on screen. */
-.status-toggle.is-on {
-  color: var(--toggle-on);
+.status-toggle.is-on::after {
+  content: "";
+  position: absolute;
+  left: var(--gap-4);
+  right: var(--gap-4);
+  bottom: 0;
+  height: var(--hairline);
+  background: var(--toggle-on);
 }
 
 .status-sep {
+  flex: 0 0 auto;
   width: var(--hairline);
   height: var(--icon-size-sm);
-  margin: 0 var(--gap-4);
   background: var(--border);
 }
 
+/* The readout holds its right edge and room for three four-digit ordinates with a sign
+   ("-1234.5678, -1234.5678, 0.0000" is 30 characters), so the digits change in place and the
+   toggles beside it never shift. */
 .status-coord {
-  min-width: 21ch;
+  flex: 0 0 auto;
+  min-width: 30ch;
   text-align: right;
   font-family: var(--font-family-mono);
   font-size: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   color: var(--text-dim);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .status-selection {
-  padding-left: var(--gap-6);
+  flex: 0 0 auto;
   color: var(--text-faint);
   font-size: var(--font-small);
   white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .status-count {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .status-sep,
+  .status-coord {
+    display: none;
+  }
 }

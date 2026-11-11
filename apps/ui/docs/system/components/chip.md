@@ -67,7 +67,7 @@ Real uses, 2 call sites (`rg -c "<Chip" src/components` → `src/components/Assi
 - The value is editable. Use `Field` instead.
 
 ### Rules
-- `rule/chip-interactive-only-with-handler`: When a chip runs an action, pass `onClick` so it renders as a `<button>`; when it is a fact, pass nothing so it stays a `<span>`, because a fact in the tab order adds a stop that does nothing. Evidence: app 2/2 chip surfaces — 1 interactive and 1 static — `src/components/CommandLine.tsx:100` and `src/components/StatusBar.tsx:86`. Check: test `src/ui/Chip.test.tsx`.
+- `rule/chip-interactive-only-with-handler`: When a chip runs an action, pass `onClick` so it renders as a `<button>`; when it is a fact, pass nothing so it stays a `<span>`, because a fact in the tab order adds a stop that does nothing. Evidence: app 2/2 chip surfaces — 1 interactive and 1 static — `src/components/CommandLine.tsx:100` and `src/components/StatusBar.tsx:86` (the status bar's current-layer item, a static fact). Check: test `src/ui/Chip.test.tsx`.
   - Don't: `<Chip>26 objects</Chip>` inside an `onClick` wrapper `div`.
   - Do: `<Chip onClick={() => pick("line")}>line</Chip>`
 - `rule/chip-tone-meaning`: When a chip's tone is picked, use `accent` only for a keyword the user can pick and `neutral` for a value, because the accent tint is the app's signal for the accent role and 2 tinted chips in one row read as 2 selections. Evidence: app 2/2 chips, `accent` only on the keyword row, `src/components/CommandLine.tsx:100`. Check: review `src/ui/ui.css`.

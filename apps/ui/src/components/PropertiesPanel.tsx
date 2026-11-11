@@ -141,6 +141,7 @@ function PropRowView(props: PropRowViewProps): JSX.Element {
         <select
           class="prop-select"
           value={draft()}
+          title={draft()}
           aria-label={row.label}
           onChange={(e) => {
             const value = e.currentTarget.value;
@@ -163,6 +164,7 @@ function PropRowView(props: PropRowViewProps): JSX.Element {
         spellcheck={false}
         autocomplete="off"
         value={draft()}
+        title={draft()}
         aria-label={row.label}
         onInput={(e) => setDraft(e.currentTarget.value)}
         onKeyDown={onKeyDown}
