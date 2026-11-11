@@ -13,8 +13,8 @@ glue when a command lands.
 # Headless: an in-process drawing session, no window.
 cadcraft-cli mcp
 
-# Bridged to the running app (watch the agent draw):
-cadcraft --control 7979 &
+# Bridged to a running app that serves the control channel. The desktop app does not serve one
+# today (docs/control-protocol.md), so this has nothing to connect to yet:
 cadcraft-cli mcp --connect 127.0.0.1:7979
 ```
 

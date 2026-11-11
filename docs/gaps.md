@@ -1,5 +1,7 @@
 # Where CADCraft falls short of AutoCAD
 
+> **2026-11-11:** the egui interface was removed in favour of the SolidJS interface in `apps/ui`. Engine rows below stand; interface rows describe egui and are now gaps of `apps/ui` until re-assessed (its dialogs, the control channel, interface languages and device support are not there yet).
+
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-25 · **Change:** minor (raster images attach, draw and trace; DESCRIBE; SCALE by size; FF10 narrowed) · **Target:** Autodesk AutoCAD 2027
 
 Every known shortfall, one row each, ranked within each section by user impact. This is the work

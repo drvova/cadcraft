@@ -43,7 +43,6 @@ pub const TABLE: &[(&str, Class)] = &[
     ("render", Class::Layer(2)),
     ("io", Class::Layer(3)),
     ("engine", Class::Layer(4)),
-    ("ui-egui", Class::Layer(5)),
     ("mcp", Class::Layer(5)),
     ("ai", Class::Layer(5)),
     ("wasm", Class::Layer(5)),
@@ -51,8 +50,6 @@ pub const TABLE: &[(&str, Class)] = &[
     // apps and tooling
     ("cadcraft", Class::Exempt),
     ("cli", Class::Exempt),
-    ("web", Class::Exempt),
-    ("desktop", Class::Exempt),
     ("xtask", Class::Exempt),
 ];
 
@@ -65,7 +62,6 @@ pub const INTRA_LAYER_ORDER: &[&[&str]] = &[
     &["fonts", "render"],
     // The assistant owns the agent-facing tool surface and the model transport; the interface and
     // the MCP server both build on it (docs/assistant.md).
-    &["ai", "ui-egui"],
     &["ai", "mcp"],
 ];
 
@@ -79,7 +75,7 @@ fn intra_layer_allowed(from: &str, to: &str) -> bool {
 
 /// External crates that constitute a UI toolkit / windowing dependency.
 /// Entries ending in `*` are prefixes.
-pub const UI_CRATES: &[&str] = &["craft-ui", "egui", "eframe", "egui-wgpu", "wgpu", "winit", "egui_kittest", "rfd", "bevy*"];
+pub const UI_CRATES: &[&str] = &["craft-ui", "egui", "eframe", "egui-wgpu", "wgpu", "winit", "tao", "wry", "egui_kittest", "rfd", "bevy*"];
 
 /// First layer allowed to use UI crates.
 pub const UI_MIN_LAYER: u8 = 5;
@@ -254,8 +250,9 @@ mod tests {
             c("cadcraft-geom", &[("kurbo", Normal, false)]),
             c("cadcraft-doc", &[("cadcraft-geom", Normal, true)]),
             c("cadcraft-engine", &[("cadcraft-doc", Normal, true), ("cadcraft-testkit", Dev, true)]),
-            c("cadcraft-ui-egui", &[("cadcraft-engine", Normal, true), ("egui", Normal, false)]),
-            c("cadcraft-cli", &[("cadcraft-ui-egui", Normal, true)]),
+            c("cadcraft-mcp", &[("cadcraft-engine", Normal, true)]),
+            c("cadcraft", &[("tao", Normal, false), ("wry", Normal, false)]),
+            c("cadcraft-cli", &[("cadcraft-mcp", Normal, true)]),
         ];
         assert!(check(&g).is_empty(), "{:?}", check(&g));
     }
@@ -292,7 +289,7 @@ mod tests {
 
     #[test]
     fn ui_crates_below_l6_flagged() {
-        for dep in ["craft-ui", "egui", "eframe", "winit", "egui_kittest", "rfd", "bevy_ecs", "bevy"] {
+        for dep in ["craft-ui", "egui", "eframe", "winit", "tao", "wry", "egui_kittest", "rfd", "bevy_ecs", "bevy"] {
             let v = check(&[c("cadcraft-engine", &[(dep, Normal, false)])]);
             assert!(matches!(v[..], [Violation::UiBelowL6 { layer: 4, .. }]), "{dep}");
         }
@@ -317,8 +314,8 @@ mod tests {
 
     #[test]
     fn apps_and_xtask_exempt() {
-        for app in ["cadcraft", "cadcraft-cli", "cadcraft-web", "xtask"] {
-            assert!(check(&[c(app, &[("egui", Normal, false), ("cadcraft-ui-egui", Normal, true)])]).is_empty());
+        for app in ["cadcraft", "cadcraft-cli", "xtask"] {
+            assert!(check(&[c(app, &[("wry", Normal, false), ("cadcraft-mcp", Normal, true)])]).is_empty());
         }
     }
 

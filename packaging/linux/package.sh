@@ -45,6 +45,7 @@ BASENAME="cadcraft-$VERSION-linux-$ARCH"
 echo "==> CADCraft $VERSION for Linux $ARCH ($FORMATS)"
 
 if [[ "$SKIP_BUILD" = 0 ]]; then
+  build_interface
   if [[ -n "${CROSS_TARGET:-}" ]]; then
     (cd "$ROOT" && cargo build --release --locked -p cadcraft -p cadcraft-cli --target "$CROSS_TARGET")
   else

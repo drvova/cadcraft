@@ -8,7 +8,7 @@ use cadcraft_engine::Session;
 use serde_json::{Value, json};
 
 /// Something that answers control-channel methods (`engine.execute`, `cmdline.input`,
-/// `drawing.inspect`, `ui.render`…). See `cadcraft_ui_egui::control` for the full list.
+/// `drawing.inspect`, `ui.render`…). The full list is in `docs/control-protocol.md`.
 pub trait Backend {
     /// Invoke a control method and return its result or a descriptive error.
     fn call(&mut self, method: &str, params: Value) -> Result<Value, String>;
@@ -297,7 +297,7 @@ impl Default for Headless {
     }
 }
 
-/// The command-line state, with the same fields as the app's (`cadcraft_ui_egui::control`). There
+/// The command-line state, with the fields `docs/control-protocol.md` gives it. There
 /// is no command-line widget here: nothing is typed (`buffer`) and the history isn't expanded.
 fn state(s: &Session) -> Value {
     let p = s.current_prompt();

@@ -80,8 +80,8 @@ src/styles.css       the layout (flex/grid) and component chrome
 
 `src/tokens.css` carries the values measured from the running Cursor 3.27.22 desktop app
 (2026-10-28; `.design-system/research/cursor-recipes-2026-10-28.md`) — not a hand-copy of
-`crates/ui-egui/src/theme.rs`, which stays the frozen egui reference until the migration's phase 5
-retires it. The tables below keep their `theme.rs` column as the record of where each token's role
+`crates/ui-egui/src/theme.rs`, the theme of the egui interface this app replaced (that crate is
+removed). The tables below keep their `theme.rs` column as the record of where each token's role
 came from; the colour values in them are superseded by the measured ladder in `tokens.css`. The
 mapping, token for token:
 

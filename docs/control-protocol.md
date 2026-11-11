@@ -1,5 +1,7 @@
 # CADCraft control protocol
 
+> **2026-11-11:** this channel was served by the egui desktop app, which was removed. Nothing serves it today: the desktop app is the web interface in a native webview and has no `--control` flag. The protocol below is kept as the specification for a control channel on the new interface; `cadcraft-cli mcp --connect` has nothing to connect to until then. Headless use (`cadcraft-cli run`, `cadcraft-cli mcp`) is unaffected.
+
 Start the desktop app with `--control PORT` (or `CADCRAFT_CONTROL_PORT=PORT`). It listens on
 `127.0.0.1:PORT` for JSON lines: one request per line, one reply per line. A port given with
 `--control` wins over the variable; a bare `--control` keeps the variable's port.

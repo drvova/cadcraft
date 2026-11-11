@@ -72,3 +72,11 @@ sha256() {
   if command -v sha256sum >/dev/null; then sha256sum "$file" | cut -d' ' -f1; else shasum -a 256 "$file" | cut -d' ' -f1; fi
   return
 }
+
+# The desktop app embeds the interface's build (apps/ui/dist, read by apps/cadcraft/build.rs), so
+# it is built before cargo: the wasm facade, then the site. Extra arguments go to `vite build`.
+build_interface() {
+  command -v bun >/dev/null || { echo "error: bun not found (https://bun.sh); the interface in apps/ui needs it" >&2; exit 1; }
+  (cd "$ROOT/apps/ui" && bun install --frozen-lockfile && bun run build:wasm && bun run typecheck && bun x vite build "$@")
+  return
+}

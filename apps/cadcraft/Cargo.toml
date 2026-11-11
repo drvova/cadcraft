@@ -1,54 +1,18 @@
 [package]
 name = "cadcraft"
-description = "CADCraft desktop app"
+description = "CADCraft desktop app: a native window hosting the web interface (apps/ui)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version = "1.95"
 publish = false
-default-run = "cadcraft"
 
 [lints]
 workspace = true
 
 [dependencies]
-cadcraft-engine = { workspace = true }
-cadcraft-ui-egui = { workspace = true }
-cadcraft-io = { workspace = true }
-# For the shared per-session control-token helper (control_server.rs authentication).
-cadcraft-mcp = { workspace = true }
-eframe = { workspace = true, features = ["clipboard", "wgpu", "accesskit", "wayland", "x11", "links", "persistence"] }
-egui = { workspace = true }
-serde_json = { workspace = true }
+# The native window and the system webview inside it (WebView2, WKWebView, WebKitGTK). Both are
+# MIT OR Apache-2.0. The interface itself is apps/ui's build, embedded by build.rs.
+tao = "0.37"
+wry = "0.57"
 log = { workspace = true }
-chrono = { workspace = true }
-
-[build-dependencies]
-winresource = "0.1"
-
-[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
-winit = { version = "0.30", default-features = false, features = ["x11"] }
-# View ▸ Theme ▸ System: the desktop's light/dark choice from the XDG desktop portal
-# (desktop_theme.rs). Already in Cargo.lock through accesskit; pinned to that version so nothing
-# is built twice.
-zbus = { version = "=5.19.0", default-features = false, features = ["async-io", "blocking-api"] }
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-rfd = { workspace = true }
-sys-locale = "0.3"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-muda = { version = "0.21", default-features = false }
-# View ▸ Accessibility ▸ Animation Effects ▸ Use System Setting: the system's Reduce motion
-# (system_animations.rs). Already in Cargo.lock through muda.
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWorkspace", "NSAccessibility"] }
-
-# Rust HID backends: no proprietary SDK or C HID library.
-[target.'cfg(target_os = "windows")'.dependencies]
-hidapi = { version = "2.6.7", default-features = false, features = ["windows-native"] }
-# View ▸ Accessibility ▸ Animation Effects ▸ Use System Setting: Windows' Animation effects
-# setting (system_animations.rs). Already in Cargo.lock through wgpu's DirectX 12 backend.
-windows = { version = "0.62", features = ["UI_ViewManagement"] }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-hidapi = { version = "2.6.7", default-features = false, features = ["linux-native-basic-udev"] }

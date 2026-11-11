@@ -92,8 +92,9 @@
 - **Open files.** DXF is read and written natively (ASCII and binary, R12 through 2018), and DWG
   files (R13 through 2018) open and save through the open-source acadrust library. Export to SVG
   and PNG today.
-- **Fast and native.** Pure Rust and egui, no Electron, no web view. One binary on macOS
-  (universal), Windows, Linux and FreeBSD, plus a WebAssembly build for the browser.
+- **One interface everywhere.** The engine is pure Rust; the interface is a small SolidJS app
+  that runs it as WebAssembly. The desktop app is that interface in a native window (the
+  system's own webview, no bundled browser), and the same build runs in a browser tab.
 - **Built for agents.** Every menu item, tool and prompt is a command. Agents can type at the
   command line exactly like a person, call any command with JSON, inspect the drawing to verify
   their work, and render it — over MCP, a JSON control channel, or the CLI.
@@ -128,7 +129,8 @@ CADCraft requires Rust 1.95 or later.
 ```sh
 git clone https://github.com/storytold/cadcraft
 cd cadcraft
-cargo run --release -p cadcraft -- --sample       # opens the sample drawing
+cd apps/ui && bun install && bun run build:wasm && bun run build && cd ../..
+cargo run --release -p cadcraft                   # the desktop app, on the sample drawing
 ```
 
 On Windows x64 the repository links with the Rust toolchain's own LLVM linker
@@ -144,78 +146,16 @@ offset 0.25                     then pick the circle and a side
 zoom e                          zoom to extents
 ```
 
-The web build: `cd apps/cadcraft-web && trunk serve` (needs [trunk](https://github.com/trunk-rs/trunk)).
-It is the same UI through eframe's web runner (WebGPU, or WebGL2 with `?webgl`), and it runs
-the same engine — commands, jewelry, everything — in the browser. To build a bundle to deploy,
-`trunk build --release --cargo-profile wasm-release` writes `dist/web` with a size-tuned profile
-(about 40% smaller than the plain release build).
-
-### Fonts
-
-CADCraft has no fonts in its repository; it uses the TrueType/OpenType fonts installed on your
-system. Builds made with the optional [craft-fonts](https://github.com/storytold/craft-fonts)
-input (`CRAFT_FONTS_DIR=<absolute path to a checkout> cargo build --release`) also embed its
-fonts: BIZ UDPGothic, BIZ UDMincho and Shippori Mincho (Japanese) and Noto Sans Arabic (the web
-build, which has no system fonts, only BIZ UDPGothic Regular and Noto Sans Arabic). A text style
-can use them by family name, and they draw characters a text's font lacks when no installed
-wide-coverage CJK font has them. Without `CRAFT_FONTS_DIR` nothing is embedded. SHX
-fonts (including big fonts such as `chineset.shx`) aren't read yet: text in an SHX style is drawn
-with our own stroke font, and any character a text's font lacks (CJK, for example) is drawn from
-an installed font that has it, preferring wide-coverage fonts such as Noto Sans CJK, Source Han
-Sans, WenQuanYi, PingFang or Microsoft JhengHei. Two settings, set with `SETVAR` or (for every
-run) an environment variable, steer this:
-
-| Variable | Environment | Meaning |
-|---|---|---|
-| `FONTALT` | `CADCRAFT_FONTALT` | Font used instead of a text style font that can't be found (an SHX file, a missing TTF), by file or family name, e.g. `Noto Sans CJK TC`. Empty (default) = our stroke font. |
-| `FONTFALLBACK` | `CADCRAFT_FONTFALLBACK` | Fonts tried first for characters a text's font lacks, comma-separated, e.g. `Noto Sans CJK TC, msjh.ttc`. |
-
-`.` clears either one.
-
-**Your own fonts.** Any `.ttf`, `.otf` or `.ttc` font works: install it in the system font folder
-(Windows `C:\Windows\Fonts` or per-user fonts, macOS `/Library/Fonts` or `~/Library/Fonts`,
-Linux and the BSDs `/usr/share/fonts`, `/usr/local/share/fonts`, `~/.local/share/fonts` or
-`~/.fonts`) and name it in a text style (`STYLE`, or `style {"name":"FA","font":"Vazirmatn"}`)
-by file name (`Vazirmatn-Regular.ttf`) or family name (`Vazirmatn`), or inline in MTEXT with
-`\fVazirmatn;`. Restart CADCraft after installing a font: the font folders are scanned once.
-
-**Right-to-left text (Persian, Arabic, Urdu, Hebrew).** TEXT and MTEXT lines are laid out with the
-Unicode Bidirectional Algorithm (the paragraph direction comes from its first letter, so numbers
-and Latin words inside Persian text keep their own order), and Arabic-script text is shaped with
-OpenType (contextual letter forms, lam-alef and other ligatures, ZWNJ / ZWJ, mark positioning).
-Justification (left, centre, right, MTEXT attachment and wrapping) still refers to the text's box.
-Our stroke font has no Arabic letters, so Persian in a stroke-font style is drawn from an
-installed font that has them: Vazirmatn, Noto Naskh Arabic, Noto Sans Arabic, Segoe UI, Tahoma,
-Arial and DejaVu Sans are looked for first. To choose the font, install a free Persian font such
-as [Vazirmatn](https://github.com/rastikerdar/vazirmatn) (SIL Open Font License) and either use it
-in the text style or set `FONTFALLBACK` (`CADCRAFT_FONTFALLBACK="Vazirmatn"`). Formatting changes
-inside a word (an MTEXT colour change in the middle of a Persian word) break the joining at that
-point.
-
-### Logs
-
-The desktop app writes its `log` records to standard error and to `logs/cadcraft.log` in the
-settings directory (Linux and the BSDs `~/.config/cadcraft/logs/`, or
-`$XDG_CONFIG_HOME/cadcraft/logs/`; macOS `~/Library/Application Support/CADCraft/logs/`; Windows
-`%APPDATA%\CADCraft\logs\`; or under `CADCRAFT_CONFIG_DIR`). A start from a desktop menu or the
-Dock has no terminal, so this file is what to attach to a bug report. Each launch moves the
-previous log to `cadcraft.1.log` (and that one to `cadcraft.2.log`), so the log of a run that
-crashed survives the next start. The file stops growing at 16 MiB. `--version` writes no file.
-
-| Variable | Effect |
-|---|---|
-| `CADCRAFT_CONFIG_DIR` | Use this directory instead of the platform settings directory (the log goes to its `logs/`) |
-| `RUST_LOG` | Log levels for standard error and the log file. Default: `info` for CADCraft's own crates, `warn` for everything else. env_logger-style directives replace that, e.g. `RUST_LOG=debug`, `RUST_LOG=warn,cadcraft_io=trace` or `RUST_LOG=info,wgpu_core=warn`; a directive ending in `*` covers every target starting with it (`cadcraft*=debug`). `cadcraft_engine=debug` also logs every command-line message. |
-
-The logger is `apps/cadcraft/src/logging.rs`; the web build logs to the browser console instead.
+In the browser: `cd apps/ui && bun run dev` and open `http://127.0.0.1:5187`. It is the same
+interface and the same engine (compiled to WebAssembly). `bun run build` writes the static site
+to `apps/ui/dist`. While working on the interface, `cargo run -p cadcraft -- --dev` shows the
+dev server in the desktop window, so a change is seen as it is made.
 
 ## Drive it from agents, MCP and the CLI
 
 ```sh
 # MCP server on stdio, headless:
 cadcraft-cli mcp
-# …or bridged to the running app (start it with --control 7979):
-cadcraft-cli mcp --connect 127.0.0.1:7979
 
 # One-shot headless runs:
 cadcraft-cli run --sample --script 'CIRCLE 22,3 1\n' --save out.dxf --export out.png

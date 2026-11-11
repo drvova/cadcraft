@@ -58,12 +58,17 @@ if (-not $env:CADCRAFT_BUILD_DATE) { $env:CADCRAFT_BUILD_DATE = (Get-Date).ToUni
 Write-Output "CADCraft $Version for Windows $Arch ($Target)"
 
 if (-not $SkipBuild) {
+  # The desktop app embeds the interface's build (apps/ui/dist), so it is built before cargo.
+  Push-Location (Join-Path $Root 'apps\ui')
+  try {
+    Invoke-Native 'bun install' { bun install --frozen-lockfile }
+    Invoke-Native 'bun run build:wasm' { bun run build:wasm }
+    Invoke-Native 'bun run build' { bun run build }
+  } finally { Pop-Location }
   # Static CRT: no VC++ redistributable needed. Scoped to the target so host build scripts and
   # proc-macros are unaffected.
   $flagVar = 'CARGO_TARGET_' + ($Target.ToUpper() -replace '-', '_') + '_RUSTFLAGS'
   [Environment]::SetEnvironmentVariable($flagVar, '-C target-feature=+crt-static')
-  # Fail the build (rather than warn) if the icon/VERSIONINFO can't be embedded.
-  $env:CADCRAFT_REQUIRE_WINRES = '1'
   Invoke-Native "cargo build ($Target)" { cargo build --release --locked -p cadcraft -p cadcraft-cli --target $Target }
 }
 

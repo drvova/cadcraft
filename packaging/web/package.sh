@@ -3,8 +3,8 @@
 #
 # Usage: packaging/web/package.sh [--skip-build]
 #
-# Needs: trunk (brew install trunk / cargo install trunk --locked) and the wasm32-unknown-unknown
-# target. The zip holds a self-contained static site in cadcraft-web-<version>/ that works
+# Needs: bun, wasm-bindgen and the wasm32-unknown-unknown target (the interface in apps/ui and its
+# wasm facade). The zip holds a self-contained static site in cadcraft-web-<version>/ that works
 # from any URL path and inside an <iframe>. Hosting notes: packaging/web/README.md.
 set -euo pipefail
 # shellcheck source=../env.sh
@@ -12,13 +12,13 @@ set -euo pipefail
 HERE="$ROOT/packaging/web"
 
 if [[ "${1:-}" != "--skip-build" ]]; then
-  command -v trunk >/dev/null || { echo "error: trunk not found (cargo install trunk --locked)" >&2; exit 1; }
-  (cd "$ROOT/apps/cadcraft-web" && trunk build --release)
+  # Relative URLs, so the site works under any prefix and inside an <iframe>.
+  build_interface --base ./
 fi
 
-SITE="$ROOT/dist/web"
+SITE="$ROOT/apps/ui/dist"
 [[ -f "$SITE/index.html" ]] || { echo "error: $SITE/index.html missing; run without --skip-build" >&2; exit 1; }
-# Paths must be relative so the site works under any prefix (public_url = "./" in Trunk.toml).
+# Paths must be relative so the site works under any prefix (vite's --base ./).
 if grep -Eq '(src|href)="/[^/]' "$SITE/index.html"; then
   echo "error: $SITE/index.html has root-absolute URLs; it would break when served from a sub-path" >&2
   exit 1

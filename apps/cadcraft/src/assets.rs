@@ -14,7 +14,7 @@ pub const NOT_BUILT: &str = "<!doctype html><meta charset=utf-8><title>CADCraft<
 <body style=\"font:14px system-ui;background:#141414;color:#f0f0f0;padding:32px\">\
 <h1 style=\"font-size:18px\">The interface is not in this build</h1>\
 <p>Build it, then build the desktop app again:</p>\
-<pre>cd apps/ui\nbun install\nbun run build:wasm\nbun run build\ncargo build -p cadcraft-desktop</pre>\
+<pre>cd apps/ui\nbun install\nbun run build:wasm\nbun run build\ncargo build -p cadcraft</pre>\
 <p>Or run the interface's dev server and start the app with <code>--dev</code>.</p>";
 
 /// What a request is answered with.

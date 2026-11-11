@@ -8,7 +8,6 @@ mod ico;
 mod layers;
 mod parity;
 mod stats;
-mod system_check;
 mod version;
 
 use std::path::{Path, PathBuf};
@@ -24,17 +23,11 @@ commands:
   ui [--strict]   the interface's gate: bun type check, tests and build in apps/ui (skipped,
                   with a note, where bun is missing; --strict makes that a failure)
   test            cargo nextest run (cargo test without nextest) plus the doctests
-  i18n            print the strings each interface language shows in English (never fails)
-  ci              fmt --check, clippy -D warnings, test, i18n, assets, layers, wasm, ui (stops at first failure)
+  ci              fmt --check, clippy -D warnings, test, assets, layers, wasm, ui (stops at first failure)
   corpus [--download]
                   show where test corpora live; --download fetches PngSuite into corpus/pngsuite
   stats [--exact] count tests and lines per crate (--exact: ask the test harness via `-- --list`)
   parity          recompute the AutoCAD menu-breadth checklist in docs/parity-checklist.md
-  system-check [--root <dir>] [--ratchet <file>] [--ratchet-update] [--warn]
-               [--no-ratchet] [--list-rules] [--list-blind-spots]
-                  the design-system drift check: a literal colour, radius, font or control
-                  height where a token or recipe constant already holds that value. Fails on
-                  new drift; the counts in scripts/check-system-ratchet.json hold today's.
   ico <out.ico> <in.png>...
                   pack square PNGs (<= 256 px) into a Windows .ico (see packaging/icons.sh)
 ";
@@ -48,12 +41,10 @@ fn main() -> ExitCode {
         Some("wasm") => cmd_wasm(),
         Some("ui") => cmd_ui(rest.contains(&"--strict")),
         Some("test") => cmd_test(),
-        Some("i18n") => cmd_i18n(),
         Some("ci") => cmd_ci(),
         Some("corpus") => cmd_corpus(rest.contains(&"--download")),
         Some("stats") => stats::run(&root(), rest.contains(&"--exact")),
         Some("parity") => parity::run(&root()),
-        Some("system-check") => system_check::run(&root(), &rest.iter().map(|s| (*s).to_string()).collect::<Vec<_>>()),
         Some("ico") => ico::run(&rest),
         Some("version") => version::run(&root(), &rest),
         Some("-h" | "--help" | "help") | None => {
@@ -130,14 +121,14 @@ fn cmd_layers() -> Result<(), String> {
     }
 }
 
-/// Workspace packages that must build for wasm32: all L0–L4 crates plus the egui shell and the
-/// JS facade (`crates/wasm`).
+/// Workspace packages that must build for wasm32: all L0–L4 crates plus the JS facade
+/// (`crates/wasm`) the interface runs on.
 fn wasm_set() -> Result<Vec<String>, String> {
     let crates = layers::from_metadata(&metadata()?)?;
     Ok(crates
         .into_iter()
         .filter(|c| match layers::classify(&c.name) {
-            Some(layers::Class::Layer(l)) => l <= 4 || matches!(layers::short_name(&c.name), "ui-egui" | "wasm"),
+            Some(layers::Class::Layer(l)) => l <= 4 || layers::short_name(&c.name) == "wasm",
             Some(layers::Class::Standalone) => true,
             _ => false,
         })
@@ -177,18 +168,6 @@ fn cmd_test() -> Result<(), String> {
     let mut c = cargo();
     c.args(["test", "--workspace", "--doc"]);
     run(c, "cargo test --workspace --doc")
-}
-
-/// The translation gap report (`cadcraft-ui-egui`'s ignored `i18n::tests::translation_gaps`).
-/// A missing translation shows in English and never fails a build, so neither does this step.
-fn cmd_i18n() -> Result<(), String> {
-    let mut c = cargo();
-    // `--workspace` builds the same test binaries as the test step; `-p` alone would rebuild them.
-    c.args(["test", "--workspace", "--lib", "-q", "--", "--ignored", "--exact", "i18n::tests::translation_gaps", "--nocapture"]);
-    if let Err(e) = run(c, "cargo test --workspace --lib -q -- --ignored --exact i18n::tests::translation_gaps --nocapture") {
-        eprintln!("note: the translation gap report did not run: {e}");
-    }
-    Ok(())
 }
 
 /// The interface's own gate: the TypeScript app in `apps/ui` (the engine's is Rust's). Runs its
@@ -255,10 +234,8 @@ fn cmd_ci() -> Result<(), String> {
             }),
         ),
         ("test", Box::new(cmd_test)),
-        ("i18n", Box::new(cmd_i18n)),
         ("assets", Box::new(|| assets::run(&root()))),
         ("layers", Box::new(cmd_layers)),
-        ("system-check", Box::new(|| system_check::run(&root(), &[]))),
         ("wasm", Box::new(cmd_wasm)),
         ("ui", Box::new(|| cmd_ui(false))),
     ];

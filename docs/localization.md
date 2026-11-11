@@ -1,5 +1,7 @@
 # Interface languages
 
+> **2026-11-11:** the egui interface this page describes was removed; the interface is now the SolidJS app in `apps/ui` (in a browser tab, or in the desktop app's native webview). The rows below are the record of what the egui interface did and the checklist for what `apps/ui` still has to reach; they have not been re-measured against it.
+
 Choose **Edit → Interface Language** and select **Auto (system language)**, **English**,
 **Українська**, **Português (Brasil)**, **Deutsch**, **Español**, **Čeština** (Czech), **Русский**, **Français**, **简体中文**, **Italiano**, **한국어** (Korean), **Svenska** (Swedish), **العربية** (Arabic), **Magyar** (Hungarian), **Türkçe** (Turkish), or **Ελληνικά** (Greek).
 The interface updates without restarting, including the native macOS menus.

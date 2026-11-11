@@ -1,5 +1,7 @@
 # UI parity
 
+> **2026-11-11:** the egui interface this page describes was removed; the interface is now the SolidJS app in `apps/ui` (in a browser tab, or in the desktop app's native webview). The rows below are the record of what the egui interface did and the checklist for what `apps/ui` still has to reach; they have not been re-measured against it.
+
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-22 · **Change:** minor (distinct polyline midpoint grips) · **Target:** Autodesk AutoCAD 2027 for Mac (26.0)
 
 How CADCraft's interaction compares with AutoCAD's: point entry, object snaps, tracking, dynamic

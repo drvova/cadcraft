@@ -1,5 +1,7 @@
 # Hardware parity
 
+> **2026-11-11:** the egui interface this page describes was removed; the interface is now the SolidJS app in `apps/ui` (in a browser tab, or in the desktop app's native webview). The rows below are the record of what the egui interface did and the checklist for what `apps/ui` still has to reach; they have not been re-measured against it.
+
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** minor (zoom and pan regenerate in the background) · **Target:** Autodesk AutoCAD 2027 (Mac and Windows)
 
 The hardware AutoCAD uses and how CADCraft compares, per platform. Work items:

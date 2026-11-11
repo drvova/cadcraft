@@ -22,16 +22,17 @@ About 57,000 lines of Rust in 12 library crates, 3 apps and `xtask` (counted 202
 | L3 | `io` | 5,124 | DXF ⇄ document mapping (`dxf_read.rs`, `dxf_write.rs`, CADCraft xdata in `dxf_ext.rs`), PDF plotting, SVG and PNG export |
 | L3 | `dwg` | 149 | DWG through a DXF bridge: the `acadrust` crate (MPL-2.0, unmodified) converts DWG ⇄ DXF bytes; nothing else sees its types. Native only |
 | L4 | `engine` | 25,090 | `Session`, the command registry (`cmd/*`), command-line parser and prompt machines, object snaps and polar/ortho (`snap.rs`), selection (`select.rs`), grips (`grips.rs`), associativity (`assoc.rs`), system variables, units, undo, R-tree spatial index (`spatial.rs`) |
-| L5 | `ui-egui` | 9,849 | The swappable egui front end: GPU canvas (`gpu.rs`, wgpu), menus and shortcuts (`menus.rs`), command line, palettes, Layer Properties Manager and other dialogs, ViewCube, icons drawn in code, themes, the interface string catalog (`i18n/`, English, Ukrainian and German), JSON control channel (`control.rs`) |
+| L5 | `wasm` | | The facade the interface runs on: the engine compiled to WebAssembly behind a small JSON API (`execute`, `cmdline`, `state`, `display`, …), the only door the interface has into the engine |
 | L5 | `ai` | ~1,900 | The one tool (`code.rs`: `run`, which executes AutoLISP in the drawing), the conversation and its OpenAI wire form (`chat.rs`), the streamed transport (`client.rs`), the turn loop (`agent.rs`) |
 | L5 | `mcp` | ~380 | MCP server (JSON-RPC 2.0 over stdio, one `run` tool) on a headless session or bridged to a running app |
-| app | `cadcraft` | 1,102 | Desktop app (eframe/wgpu; DirectX 12 by default on Windows) |
+| app | `cadcraft` | | Desktop app: one native window (tao) whose content is the interface in the system webview (wry); it embeds `apps/ui`'s build and serves it from a table |
 | app | `cadcraft-cli` | 823 | `info`, `convert`, `run` (scripts), `commands`, `sample`, `mcp` |
-| app | `cadcraft-web` | 88 | WASM build of the same UI (no DWG) |
+| app | `ui` | | The interface: SolidJS + TypeScript over the wasm facade (`apps/ui`, a bun app, not a Rust crate); the same build runs in a browser tab and in the desktop window |
 | tool | `xtask` | 1,064 | `ci`, `layers`, `assets`, `wasm`, `parity`, `version`, `stats`, icon generation |
 
-`cargo xtask layers` enforces the layering: nothing below L5 depends on egui, eframe, winit,
-wgpu or rfd.
+`cargo xtask layers` enforces the layering: nothing below the apps depends on a UI toolkit
+(tao, wry, winit, wgpu or rfd). The egui interface (`ui-egui`, and the `cadcraft-web` build of it)
+was removed on 2026-11-11; the interface is `apps/ui`.
 
 ## Data model
 
@@ -51,9 +52,9 @@ wgpu or rfd.
 Every user-visible action is a `CommandSpec` (`crates/engine/src/cmd/mod.rs`): id = AutoCAD's
 command name in lower case, label, menu path, shortcut, aliases, a JSON `run`, an `enabled`
 check and an optional interactive prompt machine. 295 engine commands are registered (128 with
-interactive prompts, counted from source 2026-10-10), plus about 30 UI-only commands in
-`crates/ui-egui/src/menus.rs`. The command line, menus, toolbar, Tool Sets, scripts, CLI, control
-channel and MCP all reach the same commands. JSON calls never open dialogs.
+interactive prompts, counted from source 2026-10-10), plus the interface's own `ui.*` items in
+`apps/ui/src/commands.ts`. The command line, menus, toolbar, scripts, CLI and MCP all reach the
+same commands. JSON calls never open dialogs.
 
 ## Rendering
 
@@ -72,7 +73,7 @@ name. Detail and gaps: [file-format-parity.md](file-format-parity.md).
 
 ## Agent control
 
-- **Control channel:** `cadcraft --control PORT` accepts JSON lines (`cmdline.input`,
+- **Control channel (not served today):** the egui app's `cadcraft --control PORT` accepted JSON lines (`cmdline.input`,
   `engine.execute`, `ui.screenshot`, `ui.render` …); see [control-protocol.md](control-protocol.md).
 - **MCP:** `cadcraft-cli mcp` (headless) or `--connect HOST:PORT` (drive the running app); the
   same one tool; see [mcp.md](mcp.md).

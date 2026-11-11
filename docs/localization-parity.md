@@ -1,5 +1,7 @@
 # Localization parity
 
+> **2026-11-11:** the egui interface this page describes was removed; the interface is now the SolidJS app in `apps/ui` (in a browser tab, or in the desktop app's native webview). The rows below are the record of what the egui interface did and the checklist for what `apps/ui` still has to reach; they have not been re-measured against it.
+
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-22 · **Change:** minor (the command line enables the OS IME and handles composition/commit, so single-line TEXT edits accept CJK input; previously: Brazilian Portuguese row updated and terminology reviewed; previously: Swedish catalog completed with the 95 strings added since; previously: Swedish catalog added: complete catalog, menu headings, native-speaker terminology review; previously: complete current Korean catalog with Hangul font coverage) · **Target:** Autodesk AutoCAD 2027 for Mac (26.0)
 
 How far CADCraft's interface and drawing text are from AutoCAD's languages. Summarised in
