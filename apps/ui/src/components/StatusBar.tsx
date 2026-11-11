@@ -11,6 +11,7 @@
 
 import { For, Show, type JSX } from "solid-js";
 import type { FacadeMode, SettingsState } from "../facade";
+import { Tab } from "../ui/Tab";
 
 /** The boolean drafting settings a status toggle can flip. */
 type ToggleKey = "grid" | "snap" | "ortho" | "polar" | "isodraft" | "otrack" | "osnap" | "lwdisplay" | "transparency" | "dynmode" | "qpmode";
@@ -53,16 +54,9 @@ export function LayoutTabs(props: LayoutTabsProps): JSX.Element {
     <div class="editor-tabs" role="tablist" aria-label="Layouts">
       <For each={tabs()}>
         {(name) => (
-          <button
-            class={props.space === name ? "layout-tab is-active" : "layout-tab"}
-            type="button"
-            role="tab"
-            aria-selected={props.space === name}
-            title={name === "Model" ? "Switch to model space" : `Switch to ${name}`}
-            onClick={() => props.onLayout(name)}
-          >
+          <Tab size="md" selected={props.space === name} title={name === "Model" ? "Switch to model space" : `Switch to ${name}`} onClick={() => props.onLayout(name)}>
             {name}
-          </button>
+          </Tab>
         )}
       </For>
     </div>

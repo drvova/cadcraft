@@ -15,6 +15,7 @@ import { createEffect, createMemo, createSignal, For, on, Show, type Accessor, t
 import { isMacPlatform, shortcutLabel } from "../commands";
 import { ToolIcon } from "../icons";
 import { highlight, rankCommands, type PaletteItem, type PaletteMatch } from "../palette";
+import { Kbd } from "../ui/Kbd";
 import { Row } from "../ui/Row";
 import "../palette.css";
 
@@ -140,7 +141,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
                     <span class="palette-id">{match.item.id}</span>
                   </Show>
                   <Show when={match.item.shortcut !== ""}>
-                    <kbd class="palette-key">{shortcutLabel(match.item.shortcut, mac)}</kbd>
+                    <Kbd>{shortcutLabel(match.item.shortcut, mac)}</Kbd>
                   </Show>
                 </span>
               </Row>

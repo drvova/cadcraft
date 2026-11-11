@@ -52,7 +52,6 @@
 
 .menubar-title:focus-visible,
 .menu-row:focus-visible,
-.layout-tab:focus-visible,
 .status-toggle:focus-visible {
   outline: var(--focus-outline-w) solid var(--accent);
   outline-offset: var(--focus-outline-offset);
@@ -222,31 +221,6 @@
   background: var(--chrome);
   border-bottom: var(--hairline) solid var(--border);
   overflow-x: auto;
-}
-
-/* The measured editor tab (Cursor's `.tab`): 13px on a 10px inset, the active one is the pane's
-   fill (#181818), the inactive ones are transparent, hover is the .08 fill. */
-.layout-tab {
-  flex: 0 0 auto;
-  padding: 0 var(--gap-12);
-  border: none;
-  border-right: var(--hairline) solid var(--border-soft);
-  border-radius: 0;
-  background: transparent;
-  color: var(--text-faint);
-  font-family: var(--font-family);
-  font-size: var(--font-body);
-  cursor: pointer;
-}
-
-.layout-tab:hover {
-  background: var(--hover);
-  color: var(--text);
-}
-
-.layout-tab.is-active {
-  background: var(--tab-active);
-  color: var(--text);
 }
 
 .status-right {

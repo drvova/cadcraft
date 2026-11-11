@@ -110,29 +110,6 @@
   scrollbar-width: none;
 }
 
-.assistant-tab {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 18ch;
-  display: flex;
-  align-items: center;
-}
-
-/* The system's Row is a full-width band; this cell gives it the tab's width and lets it clip. */
-.assistant-tab-row {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.assistant-tab-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--font-small);
-}
-
 .assistant-head-actions {
   flex: 0 0 auto;
   display: flex;
@@ -597,16 +574,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* A key cap beside an action: the shortcut in the mono face on the hairline. */
-.assistant-key {
-  padding: 0 var(--gap-4);
-  border: var(--hairline) solid var(--border-soft);
-  border-radius: var(--radius-small);
-  color: var(--text-disabled);
-  font-family: var(--font-family-mono);
-  font-size: var(--font-chip);
 }
 
 .assistant-box {

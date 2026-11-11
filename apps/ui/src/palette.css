@@ -153,16 +153,6 @@
   font-size: var(--font-chip);
 }
 
-.palette-key {
-  padding: 0 var(--gap-4);
-  border: var(--hairline) solid var(--border-soft);
-  border-radius: var(--radius-small);
-  color: var(--text-faint);
-  font-family: var(--font-family);
-  font-size: var(--font-chip);
-  line-height: var(--gap-16);
-}
-
 .palette-empty {
   padding: var(--gap-12);
   color: var(--text-faint);

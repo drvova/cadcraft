@@ -31,7 +31,9 @@ import { Tooltip } from "../ui/Tooltip";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
 import { IconButton } from "../ui/IconButton";
+import { Kbd } from "../ui/Kbd";
 import { Row } from "../ui/Row";
+import { Tab } from "../ui/Tab";
 import "../assistant.css";
 
 export interface AssistantPaneProps {
@@ -332,14 +334,9 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
           <div class="assistant-tabs" role="tablist" aria-label="Chats">
             <For each={props.chats()}>
               {(title, index) => (
-                <div class={index() === props.chatIndex() ? "assistant-tab is-active" : "assistant-tab"}>
-                  <div class="assistant-tab-row">
-                    <Row selected={index() === props.chatIndex()} title={title} onClick={() => props.onSelectChat(index())}>
-                      <span class="assistant-tab-text">{title}</span>
-                    </Row>
-                  </div>
-                  <IconButton icon="close" size="sm" title={`Close ${title}`} onClick={() => props.onCloseChat(index())} />
-                </div>
+                <Tab size="sm" selected={index() === props.chatIndex()} title={title} onClick={() => props.onSelectChat(index())} onClose={() => props.onCloseChat(index())} closeLabel={`Close ${title}`}>
+                  {title}
+                </Tab>
               )}
             </For>
           </div>
@@ -512,7 +509,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                   <Button variant="ghost" size="sm" onClick={s.stop}>
                     Stop
                   </Button>
-                  <kbd class="assistant-key">esc</kbd>
+                  <Kbd>esc</Kbd>
                 </Show>
               </div>
             </Show>
