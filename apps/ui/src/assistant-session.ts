@@ -15,7 +15,7 @@
 import { createSignal } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import type { AppFacade } from "./facade";
-import { runTurn, type AssistantEvent, type Briefing, type ChatImage, type ChatMessage, type ProviderConfig, type TurnOptions } from "./assistant";
+import { activityLine, runTurn, type AssistantEvent, type Briefing, type ChatImage, type ChatMessage, type ProviderConfig, type TurnOptions } from "./assistant";
 
 export interface ToolEntry {
   kind: "tool";
@@ -45,6 +45,9 @@ export interface QueuedMessage {
 export interface Changes {
   depth: number;
   steps: number;
+  /** What the assistant ran to make them, oldest first: one line per tool call that succeeded
+   *  since the checkpoint (`activityLine` of its code). */
+  labels: string[];
 }
 
 /** What the session needs of the facade (the real `AppFacade` satisfies it). */
@@ -123,6 +126,8 @@ export function createAssistantSession(opts: SessionOptions) {
   let lastEnd: "done" | "stopped" | "failed" = "done";
   /** Tool calls made so far this turn, for the status line. */
   let steps = 0;
+  /** The code of each tool call that succeeded since the open checkpoint. */
+  let ranSince: string[] = [];
 
   const used = (): number => contextUsed(conversation());
   const ready = (): boolean => provider().baseUrl !== "" && provider().model !== "";
@@ -173,6 +178,7 @@ export function createAssistantSession(opts: SessionOptions) {
               entry.ok = e.ok;
               entry.note = e.note;
               entry.report = e.report;
+              if (e.ok) ranSince.push(entry.code);
               break;
             }
           }
@@ -223,7 +229,9 @@ export function createAssistantSession(opts: SessionOptions) {
     const before = changes()?.depth ?? undoDepth();
     turn = run(next).then(() => {
       const now = undoDepth();
-      setChanges(before !== null && now !== null && now > before ? { depth: before, steps: now - before } : null);
+      const changed = before !== null && now !== null && now > before;
+      if (!changed) ranSince = [];
+      setChanges(changed ? { depth: before, steps: now - before, labels: ranSince.map(activityLine) } : null);
       // A queued message goes as soon as the turn before it ended cleanly.
       if (lastEnd === "done") sendQueued(0);
     });
@@ -303,12 +311,14 @@ export function createAssistantSession(opts: SessionOptions) {
     const c = changes();
     if (c === null || running()) return;
     const env = opts.facade.execute("undoto", { depth: c.depth });
+    ranSince = [];
     setChanges(null);
     setStatus(env.ok ? `Drawing restored, ${plural(c.steps, "step", "steps")} undone` : env.error);
     opts.onChanged();
   };
 
   const keepChanges = (): void => {
+    ranSince = [];
     setChanges(null);
   };
 
@@ -320,6 +330,7 @@ export function createAssistantSession(opts: SessionOptions) {
     setConversation([]);
     setAttached([]);
     setInput("");
+    ranSince = [];
     setChanges(null);
     setStatus("");
   };

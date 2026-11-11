@@ -24,13 +24,57 @@
  */
 
 .assistant-panel {
-  width: 340px;
+  /* The width the reader last dragged it to (set on the element); this is where it starts. */
+  --assistant-width: 340px;
+  position: relative;
+  width: var(--assistant-width);
   flex: 0 0 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--panel);
   border-left: var(--hairline) solid var(--border);
+}
+
+/* The panel's left edge is its resize handle: a strip that shows the accent hairline while it
+   is under the pointer, held, or focused. Dragging, the arrow keys and a double click (back to
+   the first width) all work it. */
+.assistant-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(-1 * var(--gap-3));
+  width: var(--gap-6);
+  z-index: 5;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.assistant-resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--gap-3);
+  width: var(--hairline);
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+
+@media (hover: hover) {
+  .assistant-resize:hover::after {
+    opacity: 1;
+  }
+}
+
+.assistant-resize:active::after,
+.assistant-resize:focus-visible::after {
+  opacity: 1;
+}
+
+.assistant-resize:focus-visible {
+  outline: none;
 }
 
 /* ---- The title (the part title's recipe) ---- */
@@ -498,6 +542,23 @@
 .assistant-stack-text {
   flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The opened changes row: what the assistant ran to make them, oldest first, one line each. */
+.assistant-stack-list {
+  margin: 0;
+  padding: var(--gap-4) var(--gap-12) var(--gap-2);
+  list-style: none;
+  color: var(--text-faint);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-mono);
+  line-height: var(--gap-16);
+}
+
+.assistant-stack-list li {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

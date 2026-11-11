@@ -16,3 +16,5 @@ workspace = true
 tao = "0.37"
 wry = "0.57"
 log = { workspace = true }
+# Decodes the committed app icon (PNG) for the window.
+image = { workspace = true }

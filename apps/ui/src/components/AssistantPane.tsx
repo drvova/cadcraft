@@ -24,7 +24,7 @@
  */
 
 import { createEffect, createMemo, createSignal, For, Index, Match, on, onCleanup, onMount, Show, Switch, type JSX } from "solid-js";
-import { activityLine, atEnd, MAX_REQUEST_CHARS, parseBlocks, parseInline, PROVIDER_PRESETS, relativeTime, splitFences, type ChatImage, type ProseBlock, type ProviderConfig } from "../assistant";
+import { activityLine, atEnd, clampPanelWidth, MAX_REQUEST_CHARS, PANEL_WIDTH, parseBlocks, parseInline, PROVIDER_PRESETS, relativeTime, splitFences, type ChatImage, type ProseBlock, type ProviderConfig } from "../assistant";
 import type { AssistantSession } from "../assistant-session";
 import { ToolIcon } from "../icons";
 import { Tooltip } from "../ui/Tooltip";
@@ -75,10 +75,50 @@ const textOf = (b: ProseBlock): string => (b.kind === "list" ? "" : b.text);
 const itemsOf = (b: ProseBlock): readonly string[] => (b.kind === "list" ? b.items : []);
 const orderedList = (b: ProseBlock): boolean => b.kind === "list" && b.ordered;
 
+const WIDTH_KEY = "cadcraft.assistant.width";
+
+/** The panel's width as this browser last left it. */
+function loadWidth(): number {
+  if (typeof localStorage === "undefined") return PANEL_WIDTH.initial;
+  try {
+    const raw = localStorage.getItem(WIDTH_KEY);
+    return raw === null ? PANEL_WIDTH.initial : clampPanelWidth(Number(raw), window.innerWidth);
+  } catch {
+    return PANEL_WIDTH.initial;
+  }
+}
+
+function saveWidth(width: number): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(WIDTH_KEY, String(width));
+  } catch {
+    // a full or blocked storage is not worth failing a resize over
+  }
+}
+
 export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   const s = props.session;
   const [menuOpen, setMenuOpen] = createSignal(false);
   const [draft, setDraft] = createSignal<ProviderConfig>(s.provider());
+  /** The panel's width; the reader drags its left edge, and it is kept for next time. */
+  const [width, setWidth] = createSignal(loadWidth());
+  let drag: { x: number; width: number } | null = null;
+  const resizeTo = (wanted: number): void => {
+    const next = clampPanelWidth(wanted, window.innerWidth);
+    setWidth(next);
+    saveWidth(next);
+  };
+  const onResizeKey = (e: KeyboardEvent): void => {
+    const step = e.shiftKey ? 64 : 16;
+    if (e.key === "ArrowLeft") resizeTo(width() + step);
+    else if (e.key === "ArrowRight") resizeTo(width() - step);
+    else if (e.key === "Home") resizeTo(PANEL_WIDTH.initial);
+    else return;
+    e.preventDefault();
+  };
+  /** The changes row is open: the steps the assistant took are listed above it. */
+  const [changesOpen, setChangesOpen] = createSignal(false);
   /** The transcript keeps to its end only while the reader is there. */
   const [following, setFollowing] = createSignal(true);
   /** The transcript's ages move: the clock is re-read twice a minute. */
@@ -248,10 +288,33 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
       class="assistant-panel"
       role="complementary"
       aria-label="Assistant"
+      style={{ "--assistant-width": `${width()}px` }}
       on:keydown={onEscape}
       onDragOver={(e) => e.preventDefault()}
       onDrop={onDrop}
     >
+      <div
+        class="assistant-resize"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize the assistant"
+        aria-valuemin={PANEL_WIDTH.min}
+        aria-valuemax={PANEL_WIDTH.max}
+        aria-valuenow={width()}
+        tabindex="0"
+        onPointerDown={(e) => {
+          drag = { x: e.clientX, width: width() };
+          e.currentTarget.setPointerCapture(e.pointerId);
+          e.preventDefault();
+        }}
+        onPointerMove={(e) => {
+          if (drag !== null) resizeTo(drag.width + (drag.x - e.clientX));
+        }}
+        onPointerUp={() => (drag = null)}
+        onPointerCancel={() => (drag = null)}
+        onDblClick={() => resizeTo(PANEL_WIDTH.initial)}
+        onKeyDown={onResizeKey}
+      />
       <div class="assistant-head">
         <span class="assistant-title" title={s.title()}>
           {s.title()}
@@ -391,7 +454,18 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             </Show>
             <Show when={s.changes()}>
               {(c) => (
+                <>
+                <Show when={changesOpen()}>
+                  <ol class="assistant-stack-list">
+                    <For each={c().labels}>{(label) => <li>{label}</li>}</For>
+                  </ol>
+                </Show>
                 <div class="assistant-stack-row">
+                  <Show when={c().labels.length > 0}>
+                    <Show when={changesOpen()} fallback={<IconButton icon="chevron-right" size="sm" title="Show what ran" onClick={() => setChangesOpen(true)} />}>
+                      <IconButton icon="chevron-down" size="sm" title="Hide what ran" onClick={() => setChangesOpen(false)} />
+                    </Show>
+                  </Show>
                   <span class="assistant-stack-text">{c().steps === 1 ? "1 change to the drawing" : `${c().steps} changes to the drawing`}</span>
                   <Button variant="ghost" size="sm" disabled={s.running()} onClick={s.undoChanges}>
                     Undo all
@@ -400,6 +474,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                     Keep
                   </Button>
                 </div>
+                </>
               )}
             </Show>
             <Show when={s.running() || s.status() !== ""}>

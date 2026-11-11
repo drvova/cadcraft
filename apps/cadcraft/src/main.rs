@@ -17,8 +17,8 @@ use std::process::ExitCode;
 
 use tao::dpi::LogicalSize;
 use tao::event::{Event, WindowEvent};
-use tao::event_loop::{ControlFlow, EventLoop};
-use tao::window::WindowBuilder;
+use tao::event_loop::{ControlFlow, EventLoopBuilder};
+use tao::window::{Icon, WindowBuilder};
 use wry::http::header::CONTENT_TYPE;
 use wry::http::{Request, Response};
 use wry::{WebContext, WebViewBuilder};
@@ -29,6 +29,23 @@ const SCHEME: &str = "cadcraft";
 const DEV_URL: &str = "http://127.0.0.1:5187";
 
 const USAGE: &str = "CADCraft desktop\n\n  cadcraft              the interface built into this binary\n  cadcraft --dev [URL]  a running dev server (default http://127.0.0.1:5187)\n";
+
+/// The longest window title the page may set (the drawing's name is the reader's own text).
+const MAX_TITLE_CHARS: usize = 200;
+
+/// The app icon the window and the task bar show, from the committed artwork. `None` when it
+/// cannot be decoded: a window without an icon is still a window.
+fn window_icon() -> Option<Icon> {
+    let image = image::load_from_memory(include_bytes!("../../../assets/app-icon/cadcraft-64.png")).ok()?.into_rgba8();
+    let (width, height) = image.dimensions();
+    Icon::from_rgba(image.into_raw(), width, height).ok()
+}
+
+/// The window title for the page's title: one line, bounded, never empty.
+fn window_title(page: &str) -> String {
+    let line: String = page.chars().filter(|c| !c.is_control()).take(MAX_TITLE_CHARS).collect();
+    if line.trim().is_empty() { "CADCraft".to_string() } else { line }
+}
 
 /// What the command line asked for.
 #[derive(Debug, PartialEq, Eq)]
@@ -93,9 +110,13 @@ fn run(start: Start) -> Result<(), Box<dyn Error>> {
         Start::Dev(url) => url,
     };
 
-    let event_loop = EventLoop::new();
+    // The page's title travels to the window through the loop: the webview's callback may run
+    // on another thread, the window may only be touched on this one.
+    let event_loop = EventLoopBuilder::<String>::with_user_event().build();
+    let titles = event_loop.create_proxy();
     let window = WindowBuilder::new()
         .with_title("CADCraft")
+        .with_window_icon(window_icon())
         .with_inner_size(LogicalSize::new(1280.0, 800.0))
         .with_min_inner_size(LogicalSize::new(480.0, 360.0))
         .build(&event_loop)?;
@@ -104,6 +125,11 @@ fn run(start: Start) -> Result<(), Box<dyn Error>> {
     let builder = WebViewBuilder::new_with_web_context(&mut context)
         .with_custom_protocol(SCHEME.to_string(), |_webview, request| serve(&request))
         .with_url(url)
+        .with_document_title_changed_handler(move |title| {
+            if titles.send_event(title).is_err() {
+                log::debug!("the window closed before the page's title reached it");
+            }
+        })
         .with_devtools(cfg!(debug_assertions));
 
     #[cfg(not(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd")))]
@@ -119,8 +145,10 @@ fn run(start: Start) -> Result<(), Box<dyn Error>> {
         // The webview lives as long as the loop that owns its window.
         let _keep = &webview;
         *control_flow = ControlFlow::Wait;
-        if let Event::WindowEvent { event: WindowEvent::CloseRequested, .. } = event {
-            *control_flow = ControlFlow::Exit;
+        match event {
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => *control_flow = ControlFlow::Exit,
+            Event::UserEvent(title) => window.set_title(&window_title(&title)),
+            _ => {}
         }
     })
 }
@@ -163,6 +191,19 @@ mod tests {
     fn a_bad_command_line_is_an_error_not_a_crash() {
         assert!(parse_args(&args(&["--dev", "file:///etc/passwd"])).is_err());
         assert!(parse_args(&args(&["--frobnicate"])).is_err());
+    }
+
+    #[test]
+    fn the_window_title_is_one_bounded_line() {
+        assert_eq!(window_title("Bracket - CADCraft"), "Bracket - CADCraft");
+        assert_eq!(window_title("a\nb\u{7}c"), "abc");
+        assert_eq!(window_title("  "), "CADCraft");
+        assert_eq!(window_title(&"x".repeat(5000)).chars().count(), MAX_TITLE_CHARS);
+    }
+
+    #[test]
+    fn the_app_icon_decodes() {
+        assert!(window_icon().is_some());
     }
 
     #[test]

@@ -138,6 +138,12 @@ export function App(props: AppProps): JSX.Element {
     syncDisplay();
   };
 
+  // The page's title names the drawing; the desktop app shows it as the window's title.
+  createEffect(() => {
+    const d = drawing();
+    document.title = d === null ? "CADCraft" : `${d.title}${d.dirty ? " (modified)" : ""} - CADCraft`;
+  });
+
   // The assistant's session outlives its panel: closing the panel hides the view, not the chat.
   const assistant = createAssistantSession({ facade: props.facade, onChanged: () => refresh() });
   onCleanup(() => assistant.stop());

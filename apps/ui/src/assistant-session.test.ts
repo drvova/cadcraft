@@ -314,7 +314,7 @@ describe("the checkpoint", () => {
   test("a turn that changed the drawing leaves the changes to keep or undo", async () => {
     const session = sessionWith(scriptedFetch(changing()).fetch);
     await say(session, "draw");
-    expect(session.changes()).toEqual({ depth: 0, steps: 1 });
+    expect(session.changes()).toEqual({ depth: 0, steps: 1, labels: ['(cmd "circle")'] });
   });
 
   test("a turn that changed nothing leaves no bar", async () => {
@@ -341,14 +341,14 @@ describe("the checkpoint", () => {
     session.keepChanges();
     expect(session.changes()).toBeNull();
     await say(session, "again");
-    expect(session.changes()).toEqual({ depth: 1, steps: 1 });
+    expect(session.changes()).toEqual({ depth: 1, steps: 1, labels: ['(cmd "circle")'] });
   });
 
   test("unresolved changes accumulate across turns", async () => {
     const session = sessionWith(scriptedFetch([...changing(), ...changing()]).fetch);
     await say(session, "draw");
     await say(session, "again");
-    expect(session.changes()).toEqual({ depth: 0, steps: 2 });
+    expect(session.changes()).toEqual({ depth: 0, steps: 2, labels: ['(cmd "circle")', '(cmd "circle")'] });
   });
 
   test("a facade that names no depth never offers the bar", async () => {

@@ -660,6 +660,23 @@ export function parseBlocks(text: string): ProseBlock[] {
   return blocks;
 }
 
+/** The assistant panel's width, in CSS pixels: where it starts and how far a drag may take it. */
+export const PANEL_WIDTH = { min: 280, initial: 340, max: 720 } as const;
+/** What the drawing keeps beside the panel, however far the panel is dragged. */
+export const STAGE_MIN_WIDTH = 320;
+
+/**
+ * The panel's width for a wanted width in a window `viewport` wide: inside its own limits, and
+ * never so wide that the drawing keeps less than [`STAGE_MIN_WIDTH`]. A value that is not a
+ * number (a stored setting someone edited) is the initial width.
+ */
+export function clampPanelWidth(wanted: number, viewport: number): number {
+  if (!Number.isFinite(wanted)) return PANEL_WIDTH.initial;
+  const room = Number.isFinite(viewport) ? viewport - STAGE_MIN_WIDTH : PANEL_WIDTH.max;
+  const max = Math.max(PANEL_WIDTH.min, Math.min(PANEL_WIDTH.max, room));
+  return Math.round(Math.min(Math.max(wanted, PANEL_WIDTH.min), max));
+}
+
 /** How close to the end counts as "at the end" of the transcript, in CSS pixels. */
 export const FOLLOW_SLACK = 24;
 

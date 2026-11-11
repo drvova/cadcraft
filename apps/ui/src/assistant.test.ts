@@ -3,6 +3,7 @@ import {
   activityLine,
   apiErrorText,
   atEnd,
+  clampPanelWidth,
   parseBlocks,
   checkRunArgs,
   MAX_ROUNDS,
@@ -474,6 +475,23 @@ describe("parseBlocks", () => {
     expect(parseBlocks("**bold** start")).toEqual([{ kind: "para", text: "**bold** start" }]);
     expect(parseBlocks("-5 mm offset")).toEqual([{ kind: "para", text: "-5 mm offset" }]);
     expect(parseBlocks("")).toEqual([]);
+  });
+});
+
+describe("clampPanelWidth", () => {
+  test("a width inside the limits is kept, rounded", () => {
+    expect(clampPanelWidth(400.4, 1600)).toBe(400);
+  });
+  test("the panel's own limits hold", () => {
+    expect(clampPanelWidth(100, 1600)).toBe(280);
+    expect(clampPanelWidth(5000, 4000)).toBe(720);
+  });
+  test("the drawing keeps its room in a small window", () => {
+    expect(clampPanelWidth(600, 800)).toBe(480);
+    expect(clampPanelWidth(600, 300)).toBe(280);
+  });
+  test("a value that is not a number is the initial width", () => {
+    expect(clampPanelWidth(Number.NaN, 1600)).toBe(340);
   });
 });
 
