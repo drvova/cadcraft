@@ -1,5 +1,5 @@
 /*
- * The canonical components: six native elements that carry the system's states, so no surface
+ * The canonical components: native elements that carry the system's states, so no surface
  * paints its own hover, focus or disabled treatment. Every value is a token from tokens.css.
  *
  * The recipes are the measured Cursor 3.27.22 ones
@@ -357,6 +357,94 @@
 .ui-row:disabled {
   color: var(--text-disabled);
   cursor: default;
+}
+
+/* ---- Tab: <button role="tab" class="ui-tab ui-tab--{size}">, in a
+        <span class="ui-tab-closable ui-tab-closable--{size}"> beside its close key ---- */
+
+/* The measured editor tab (Cursor's `.tab`): transparent at the quiet ink, the .08 fill on hover,
+   and the one in front filled with the pane's surface at the full ink. A label that does not fit
+   clips with an ellipsis. */
+.ui-tab {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font-family: var(--font-family);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard);
+}
+
+/* md — the editor tab: it fills its strip's height (the strip is the 35px band), 13px type on a
+   12px inset, a hairline closing it on the right. A strip of them scrolls rather than squeezes. */
+.ui-tab--md {
+  flex: 0 0 auto;
+  align-self: stretch;
+  max-height: var(--control-h-tab);
+  padding: 0 var(--gap-12);
+  border-right: var(--hairline) solid var(--border-soft);
+  font-size: var(--font-body);
+}
+
+/* sm — the compact tab of a pane header: the row height, the small type, a rounded fill. */
+.ui-tab--sm {
+  flex: 0 1 auto;
+  height: var(--control-h-row);
+  max-width: 18ch;
+  padding: 0 var(--gap-6);
+  border-radius: var(--radius-card);
+  font-size: var(--font-small);
+}
+
+.ui-tab:focus-visible {
+  outline: var(--focus-outline-w) solid var(--accent);
+  outline-offset: var(--focus-outline-offset);
+}
+
+@media (hover: hover) {
+  .ui-tab:hover:not([aria-selected="true"]) {
+    background: var(--hover);
+    color: var(--text);
+  }
+}
+
+/* selected — the active tab fill and the full ink; it keeps the fill under the pointer */
+.ui-tab[aria-selected="true"] {
+  background: var(--tab-active);
+  color: var(--text);
+}
+
+/* A tab with a close key: the two sit side by side, and the tab gives way when the strip is tight. */
+.ui-tab-closable {
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.ui-tab-closable--md {
+  align-self: stretch;
+}
+
+/* ---- Kbd: <kbd class="ui-kbd"> ---- */
+
+/* A key cap beside an action: the shortcut at the chip size in the quiet ink, on the hairline. */
+.ui-kbd {
+  padding: 0 var(--gap-4);
+  border: var(--hairline) solid var(--border-soft);
+  border-radius: var(--radius-small);
+  color: var(--text-faint);
+  font-family: var(--font-family);
+  font-size: var(--font-chip);
+  line-height: var(--gap-16);
+  white-space: nowrap;
 }
 
 /* ---- SectionLabel: <h2 class="ui-section-label"> ---- */
