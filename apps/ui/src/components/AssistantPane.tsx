@@ -2,7 +2,7 @@
  * The assistant panel: the agent docked to the right of the workspace. The part title is the
  * classic recipe's (35px, padding 8px); the composer is the glass one measured on Cursor 3.27's
  * composer (`.design-system/research/cursor-recipes-2026-10-28.md` §2): the elevated surface at
- * radius 20, no shadow, a 1px border that turns active on focus, an editor at 15px/24px with a
+ * radius 12 (docked; a floating card would take 20), no shadow, a 1px border that turns active on focus, an editor at 15px/24px with a
  * 64px min-height and 8px/12px padding, and a 40px toolbar row (padding 8px, `gap: 4px`) that
  * holds 24px circles and the pill model chip; send and stop are the inverted circle. Its controls
  * are the system's own: `ui/IconButton` (attach, remove-attachment, stop, send), `ui/Row` (the
@@ -85,6 +85,9 @@ const headingLevel = (b: ProseBlock): number => (b.kind === "heading" ? b.level 
 const textOf = (b: ProseBlock): string => (b.kind === "list" ? "" : b.text);
 const itemsOf = (b: ProseBlock): readonly string[] => (b.kind === "list" ? b.items : []);
 const orderedList = (b: ProseBlock): boolean => b.kind === "list" && b.ordered;
+
+/** A message in the provider's or the engine's words, shown as a sentence: its first letter capital. */
+const sentence = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
 const WIDTH_KEY = "cadcraft.assistant.width";
 
@@ -301,7 +304,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     } catch (e) {
       if (mine.signal.aborted) return;
       setModels([]);
-      setCheckNote({ ok: false, text: e instanceof Error ? e.message : String(e) });
+      setCheckNote({ ok: false, text: sentence(e instanceof Error ? e.message : String(e)) });
     } finally {
       if (checkAbort === mine) setChecking(false);
     }
@@ -477,7 +480,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 </div>
               </Match>
               <Match when={entry.kind === "failed"}>
-                <div class="assistant-failed">{entry.kind === "failed" ? entry.text : ""}</div>
+                <div class="assistant-failed">{entry.kind === "failed" ? sentence(entry.text) : ""}</div>
                 <Show when={index() === s.entries.length - 1 && s.canRetry()}>
                   <div class="assistant-turn-actions">
                     <IconButton icon="retry" size="sm" title="Try again" onClick={s.retry} />
@@ -542,7 +545,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 <SectionLabel>Connection</SectionLabel>
                 <div class="assistant-field">
                   <span>Model</span>
-                  <Field value={draft().model} ariaLabel="Model" placeholder="llama3.2" onInput={(v) => setDraft({ ...draft(), model: v })} />
+                  <Field value={draft().model} ariaLabel="Model" placeholder="e.g. llama3.2" onInput={(v) => setDraft({ ...draft(), model: v })} />
                 </div>
                 <Show when={models().length > 0}>
                   <div class="assistant-setup-models">
@@ -558,13 +561,13 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 <Show when={picked()?.key === true || picked()?.id === "custom" || draft().apiKey !== ""}>
                   <div class="assistant-field">
                     <span>API key</span>
-                    <Field type="password" value={draft().apiKey} ariaLabel="API key" placeholder="sk-..." onInput={(v) => setDraft({ ...draft(), apiKey: v })} />
+                    <Field type="password" value={draft().apiKey} ariaLabel="API key" placeholder="e.g. sk-..." onInput={(v) => setDraft({ ...draft(), apiKey: v })} />
                     <span class="assistant-field-hint">Kept in this browser. Sent only to the address below.</span>
                   </div>
                 </Show>
                 <div class="assistant-field">
                   <span>Base URL</span>
-                  <Field value={draft().baseUrl} ariaLabel="Base URL" placeholder="http://127.0.0.1:11434/v1" onInput={(v) => setDraft({ ...draft(), baseUrl: v })} />
+                  <Field value={draft().baseUrl} ariaLabel="Base URL" placeholder="e.g. http://127.0.0.1:11434/v1" onInput={(v) => setDraft({ ...draft(), baseUrl: v })} />
                   <Show when={picked()?.key === false && picked()?.id !== "custom"}>
                     <span class="assistant-field-hint">A local server needs no key, but it must accept requests from this page.</span>
                   </Show>
@@ -596,7 +599,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         <Show when={s.running() || s.status() !== "" || s.queued.length > 0 || s.changes() !== null}>
           <div class="assistant-stack">
             <Show when={s.queued.length > 0}>
-              <div class="assistant-stack-head">{s.queued.length === 1 ? "1 queued" : `${s.queued.length} queued`}</div>
+              <div class="assistant-stack-head">{`${s.queued.length} in queue`}</div>
               <For each={s.queued}>
                 {(item, index) => (
                   <div class="assistant-stack-row">

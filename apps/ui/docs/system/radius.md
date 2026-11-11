@@ -39,7 +39,7 @@ Surface levels (which surface a floating thing sits on) are the colour tokens `-
 ## Usage
 
 - Corners are ladder steps, never eyeballed: a control is `--radius-control`, a chip `--radius-small` or `--radius-round`, a card `--radius-card`, because mixed corners read as mixed components.
-- The composer and popovers are the only 20px corners (`--radius-elevated`), because the large radius is what marks a floating glass surface.
+- A floating glass surface is the only 20px corner (`--radius-elevated`), because the large radius is what marks a surface that floats. The assistant's composer is docked in its panel, so its card takes `--radius-block`, the corner of the prompt bubble and of the stack that sits on it.
 - One stroke width: every border is `--hairline`; a heavier stroke is a different control, not a different border, because a 2px border reads as focus.
 - The focus ring is 1px, inset (`--focus-outline-offset: -1px`), in `--accent`, because an outset ring shifts a row and an inset ring never does.
 - One shadow, one direction: floating surfaces cast `--shadow`; nothing else does, because a second shadow level invents a third elevation.

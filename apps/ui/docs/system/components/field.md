@@ -12,7 +12,7 @@ Not applicable: hand-rolled — the 24px height, the hairline stroke and the foc
 ## Examples
 `<Field value={name} ariaLabel="Layer name" onInput={setName} />` — the layer name, owned by the panel.
 
-Real uses, 3 call sites (`rg -c "<Field" src/components` → `src/components/AssistantPane.tsx:3`, the provider popover's Base URL, Model and API key):
+Real uses, 3 call sites (`rg -c "<Field" src/components` → `src/components/AssistantPane.tsx:6`, the provider popover's Base URL, Model and API key):
 - `src/components/AssistantPane.tsx` — the composer pilot: the provider popover's Base URL, Model and API key inputs; the composer's own multi-line editor stays a bespoke `<textarea>` (found-not-fixed).
 - (planned) `src/components/PropertiesPanel.tsx:160` — `class="prop-input"` (1 use) moves onto `<Field>` in a later arc; the palette keeps its own input for now.
 - (planned) `src/components/CommandLine.tsx:112` — `class="cmd-input"` (1 use) moves onto `<Field type="search">` in a later arc; the command line keeps its own input for now.
@@ -86,7 +86,7 @@ Real uses, 3 call sites (`rg -c "<Field" src/components` → `src/components/Ass
   - Do: `<Field type="email" ariaLabel="Email" />`
 
 ### Content
-- `rule/field-placeholder-example`: When a placeholder is written, show a real example value rather than an instruction (0,0 — not "Enter a point"), because the placeholder is read as the value's shape, and the instruction belongs in a label. Evidence: single use `src/components/AssistantPane.tsx:567`, the provider popover's Base URL placeholder. Check: review `src/components/AssistantPane.tsx`.
+- `rule/field-placeholder-example`: When a placeholder is written, show a real example value rather than an instruction (0,0 — not "Enter a point"), because the placeholder is read as the value's shape, and the instruction belongs in a label. Evidence: single use `src/components/AssistantPane.tsx:570`, the provider popover's Base URL placeholder. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Field placeholder="Type your point here" />`
   - Do: `<Field ariaLabel="Base point" placeholder="0,0" />`
 

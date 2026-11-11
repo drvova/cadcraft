@@ -12,7 +12,7 @@ Not applicable: hand-rolled — the circle, the .08 hover fill and the 14px glyp
 ## Examples
 `<IconButton icon="close" title="Close the panel" />` — the panel's close control.
 
-Real uses, 22 call sites (`rg -c "<IconButton" src/components` → `src/components/AssistantPane.tsx:14`, `src/components/LayersPanel.tsx:2`, `src/components/PropertiesPanel.tsx:2`, `src/components/ToolStrip.tsx:1`, `src/components/TopBar.tsx:3`):
+Real uses, 22 call sites (`rg -c "<IconButton" src/components` → `src/components/AssistantPane.tsx:17`, `src/components/LayersPanel.tsx:2`, `src/components/PropertiesPanel.tsx:2`, `src/components/ToolStrip.tsx:1`, `src/components/TopBar.tsx:3`):
 - `src/components/AssistantPane.tsx` — the composer pilot: the toolbar's attach (`soft`), stop and send (`inverted`), and each attachment chip's remove circle (`sm`).
 - `src/components/ToolStrip.tsx:80` — every tool in the strip: the glyph from the tool's icon id, the title its label and shortcut, click to invoke it.
 
@@ -94,7 +94,7 @@ Real uses, 22 call sites (`rg -c "<IconButton" src/components` → `src/componen
   - Do: 1 `inverted` send and `ghost` for attach and stop.
 
 ### Content
-- `rule/icon-button-title-sentence`: When `title` is written, name the action in sentence case with no full stop (Close the panel, Send, Stop), because the same string is the tooltip and the accessible name. Evidence: single use `src/components/AssistantPane.tsx:706`, the "Attach a picture (or paste, or drop one)" label. Check: review `src/components/AssistantPane.tsx`.
+- `rule/icon-button-title-sentence`: When `title` is written, name the action in sentence case with no full stop (Close the panel, Send, Stop), because the same string is the tooltip and the accessible name. Evidence: single use `src/components/AssistantPane.tsx:709`, the "Attach a picture (or paste, or drop one)" label. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `title="close panel."`
   - Do: `title="Close the panel"`
 

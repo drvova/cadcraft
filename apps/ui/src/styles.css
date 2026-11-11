@@ -360,6 +360,12 @@ body {
   color: var(--layer-current);
 }
 
+/* In the light theme `--layer-current` is the row's pale fill, not an ink: the current layer's
+   name takes the theme's own "on" green there, which reads on the light panel. */
+:root[data-theme="light"] .layer-row.is-current .ui-row {
+  color: var(--toggle-on);
+}
+
 /* The status column, as the desktop draws it: a small diamond, bright when the layer has
    objects and faint when it does not (`crates/ui-egui/src/layers.rs`, `status_icon`). */
 .layer-used {

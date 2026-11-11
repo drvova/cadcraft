@@ -5,7 +5,7 @@
  *     (§2, `.monaco-workbench .part>.title` + `.title-label h2`);
  *   - the composer box: the glass recipe
  *     (`.design-system/research/cursor-recipes-2026-10-28.md` §2): the elevated surface, radius
- *     20, no shadow, a 1px border that turns active on focus, the editor at 15px/24px with a 64px
+ *     12 (docked; a floating card would take 20), no shadow, a 1px border that turns active on focus, the editor at 15px/24px with a 64px
  *     min-height and 8px/12px padding, a 40px toolbar row (padding 8px, `gap: 4px`);
  *   - the model chip: the pill (radius 9999px, 24px, `padding: 0 8px`, 13px), transparent at
  *     rest, the `.08` hover fill (§2);
@@ -604,7 +604,10 @@
   flex-direction: column;
   background: var(--surface-elevated);
   border: var(--hairline) solid var(--composer-border);
-  border-radius: var(--radius-elevated);
+  /* Docked in the panel, the card takes the block radius, the same corner as the prompt bubble
+     and the stack above it (the reference board's docked composers); the 20px corner is for a
+     surface that floats. */
+  border-radius: var(--radius-block);
   transition: border-color var(--dur-fast) var(--ease-out);
 }
 

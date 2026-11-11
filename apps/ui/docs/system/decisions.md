@@ -59,6 +59,7 @@ Each change and the gate that decided it (cursor-recipes §1 / §5):
 | composer: `--composer-border .08` / `--composer-border-active .12`, `--surface-elevated #212121` | G-05 | §1 / §2 |
 | light mirrors: `--chrome #F8F8F8`, `--chrome-dark #F3F3F3`, `--panel`/`--tab-active`/`--surface-elevated #FCFCFC`, `--on-accent #FCFCFC`, and every alpha role restated over `#141414` (text/ink `.74/.66`, strokes `.12/.08`, fills `.08/.14`, `--snap`/`--toggle-on #007041`, `--warn #A46701`, `--error #BE1744`) | G-06 | §1 |
 | radii: `--radius-elevated 20px` (the only new radius) | G-09 | §2 |
+| the docked composer card: `--radius-elevated` to `--radius-block` (12px), with the stack over it | the person's composer reference board, 2026-11-11 (Cursor's docked composer and 20 of the 30 others draw a tight corner; 20px stays for floating surfaces) | `Composer reference board/`, `src/assistant.css` |
 | motion: `--dur-instant .05s`, `--dur-fast .1s`, `--dur-slow .2s`, `--ease-out-quint cubic-bezier(0.16,1,0.3,1)` | G-10 | §1 motion |
 
 ## What follows the drawing
