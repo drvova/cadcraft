@@ -1,7 +1,8 @@
 /**
- * The status bar: the layout tabs (Model plus the drawing's layouts) on the left, the drafting
- * toggles, the coordinate readout and the selection count on the right — the same order and the
- * same ids as `crates/ui-egui/src/chrome.rs`'s `status_bar`.
+ * The status bar, as the editor's: on the left what the window is working on (which engine is
+ * live, the current layer, how much the drawing holds), on the right the drafting toggles, the
+ * coordinate readout and the selection count. The layout tabs (Model plus the drawing's layouts)
+ * are the editor tabs over the drawing: `LayoutTabs`, below, which the shell places there.
  *
  * A toggle click calls `onCommand(id, { on: !current })`: the shell flips the setting through the
  * engine and pushes the new `settings()` back down. Coordinates are formatted by the facade
@@ -9,7 +10,7 @@
  */
 
 import { For, Show, type JSX } from "solid-js";
-import type { SettingsState } from "../facade";
+import type { FacadeMode, SettingsState } from "../facade";
 
 /** The boolean drafting settings a status toggle can flip. */
 type ToggleKey = "grid" | "snap" | "ortho" | "polar" | "isodraft" | "otrack" | "osnap" | "lwdisplay" | "transparency" | "dynmode" | "qpmode";
@@ -37,38 +38,66 @@ export const STATUS_TOGGLES: readonly StatusToggle[] = [
   { id: "qpmode", label: "Quick Properties", short: "QP", key: "qpmode" },
 ];
 
-export interface StatusBarProps {
-  settings: SettingsState;
+export interface LayoutTabsProps {
   /** The drawing's layout names in tab order (Model is rendered here, first). */
   layouts: readonly string[];
   /** "Model" or the active layout's name. */
   space: string;
+  onLayout: (name: string) => void;
+}
+
+/** The editor tabs over the drawing: Model, then each layout; the active one is the pane's fill. */
+export function LayoutTabs(props: LayoutTabsProps): JSX.Element {
+  const tabs = (): readonly string[] => ["Model", ...props.layouts];
+  return (
+    <div class="editor-tabs" role="tablist" aria-label="Layouts">
+      <For each={tabs()}>
+        {(name) => (
+          <button
+            class={props.space === name ? "layout-tab is-active" : "layout-tab"}
+            type="button"
+            role="tab"
+            aria-selected={props.space === name}
+            title={name === "Model" ? "Switch to model space" : `Switch to ${name}`}
+            onClick={() => props.onLayout(name)}
+          >
+            {name}
+          </button>
+        )}
+      </For>
+    </div>
+  );
+}
+
+export interface StatusBarProps {
+  settings: SettingsState;
+  /** Which engine is live (the wasm facade, or the mock). */
+  mode: FacadeMode;
+  currentLayer: string;
+  entityCount: number;
+  layerCount: number;
   cursor: { x: number; y: number } | null;
   formatPoint: (x: number, y: number) => string;
   selectionCount: number;
   onCommand: (id: string, params?: Record<string, unknown>) => void;
-  onLayout: (name: string) => void;
 }
 
 export function StatusBar(props: StatusBarProps): JSX.Element {
-  const tabs = (): readonly string[] => ["Model", ...props.layouts];
   return (
     <footer class="statusbar">
-      <div class="status-tabs" role="tablist" aria-label="Layouts">
-        <For each={tabs()}>
-          {(name) => (
-            <button
-              class={props.space === name ? "layout-tab is-active" : "layout-tab"}
-              type="button"
-              role="tab"
-              aria-selected={props.space === name}
-              title={name === "Model" ? "Switch to model space" : `Switch to ${name}`}
-              onClick={() => props.onLayout(name)}
-            >
-              {name}
-            </button>
-          )}
-        </For>
+      <div class="status-left">
+        <span class={props.mode.kind === "wasm" ? "status-item status-mode is-wasm" : "status-item status-mode is-mock"} title={props.mode.detail}>
+          {props.mode.kind}
+        </span>
+        <span class="status-item" title="The current layer (CLAYER)">
+          {props.currentLayer}
+        </span>
+        <span class="status-item" title="Objects in the drawing">
+          {props.entityCount === 1 ? "1 object" : `${props.entityCount} objects`}
+        </span>
+        <span class="status-item" title="Layers in the drawing">
+          {props.layerCount === 1 ? "1 layer" : `${props.layerCount} layers`}
+        </span>
       </div>
       <div class="status-right">
         <For each={STATUS_TOGGLES}>

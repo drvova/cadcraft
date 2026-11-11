@@ -13,8 +13,8 @@ Not applicable: hand-rolled — the 11px uppercase header is measured from the r
 `<SectionLabel>Layers</SectionLabel>` — the heading above the layers list.
 
 Real uses, 2 call sites (`rg -c "<SectionLabel" src/components` → `src/components/LayersPanel.tsx:1`, `src/components/PropertiesPanel.tsx:1`):
-- `src/components/LayersPanel.tsx:28` — the "Layers" heading.
-- `src/components/PropertiesPanel.tsx:34` — the "Properties" heading.
+- `src/components/LayersPanel.tsx:34` — the "Layers" heading.
+- `src/components/PropertiesPanel.tsx:41` — the "Properties" heading.
 
 ### Example files
 | File | Covers | Caption |

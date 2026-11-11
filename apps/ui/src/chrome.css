@@ -172,25 +172,65 @@
   display: flex;
   align-items: center;
   gap: 0;
-  height: var(--control-h-button);
+  height: var(--control-h-row);
   padding: 0 var(--gap-6);
-  background: var(--chrome);
+  background: var(--chrome-dark);
   border-top: var(--hairline) solid var(--border);
 }
 
-.status-tabs {
+/* The left of the bar: what the window is working on, as one quiet run of small items. */
+.status-left {
   display: flex;
-  align-items: stretch;
-  height: 100%;
-  gap: 0;
+  align-items: center;
+  gap: var(--gap-12);
+  min-width: 0;
+  overflow: hidden;
 }
 
-/* Layout tabs sit on the bar's own edge, the active one filled like AutoCAD's tab. */
+.status-item {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: var(--font-small);
+  white-space: nowrap;
+}
+
+.status-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-4);
+}
+
+.status-mode::before {
+  content: "";
+  width: var(--gap-6);
+  height: var(--gap-6);
+  border-radius: var(--radius-round);
+  background: var(--warn);
+}
+
+.status-mode.is-wasm::before {
+  background: var(--toggle-on);
+}
+
+/* The editor tabs over the drawing: one 35px strip on the chrome, closed by a hairline. */
+.editor-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  height: var(--control-h-tab);
+  gap: 0;
+  background: var(--chrome);
+  border-bottom: var(--hairline) solid var(--border);
+  overflow-x: auto;
+}
+
 /* The measured editor tab (Cursor's `.tab`): 13px on a 10px inset, the active one is the pane's
    fill (#181818), the inactive ones are transparent, hover is the .08 fill. */
 .layout-tab {
-  padding: 0 var(--gap-10);
+  flex: 0 0 auto;
+  padding: 0 var(--gap-12);
   border: none;
+  border-right: var(--hairline) solid var(--border-soft);
   border-radius: 0;
   background: transparent;
   color: var(--text-faint);

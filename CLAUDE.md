@@ -34,7 +34,7 @@ People trust CADCraft with their drawings; a crash loses their work. **This outr
 - **Quality gates** before every commit: `cargo xtask ci` (fmt, clippy -D warnings, tests, assets, layers, wasm). Commit after every feature arc that builds, and push to `main`.
 
 ## Running and looking at the app
-- The interface is the SolidJS app in `apps/ui`: `cd apps/ui && bun install && bun run build:wasm && bun run dev`, then open `http://127.0.0.1:5187` (`?mock=1` forces the mock facade). Its own rules are in `apps/ui/AGENTS.md`; its gate is `bun run check` and `bun test`.
+- The interface is laid out as an editor (title bar with the menus and the command centre, sidebar, tabs over the drawing, the command line as the panel, the assistant, the status bar; `Ctrl+Shift+P` opens the command palette). It is the SolidJS app in `apps/ui`: `cd apps/ui && bun install && bun run build:wasm && bun run dev`, then open `http://127.0.0.1:5187` (`?mock=1` forces the mock facade). Its own rules are in `apps/ui/AGENTS.md`; its gate is `bun run check` and `bun test`.
 - The desktop app is the same interface in a native window (`apps/cadcraft`, the system webview): `cargo run -p cadcraft -- --dev` shows the running dev server, so a change is seen live; `cargo run --release -p cadcraft` shows the build embedded from `apps/ui/dist` (run `bun run build` there first, or the window says how).
 - **For UI work, look at the result**: capture the page in a browser at 1280 and 390 wide and read the image; compare with `plan/autocad/screenshots/`.
 - Headless: `cadcraft-cli run --sample --script 'LINE 0,0 10,10\n' --export out.png`; `cadcraft-cli info file.dxf`; `cadcraft-cli mcp`.

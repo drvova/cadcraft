@@ -4,9 +4,10 @@
  * invented here — the swatch paints the engine's own `colorRgb`.
  */
 
-import { For, type Accessor, type JSX } from "solid-js";
+import { createSignal, For, Show, type Accessor, type JSX } from "solid-js";
 import type { LayerInfo } from "../facade";
 import { ToolIcon } from "../icons";
+import { IconButton } from "../ui/IconButton";
 import { Row } from "../ui/Row";
 import { SectionLabel } from "../ui/SectionLabel";
 
@@ -22,13 +23,18 @@ function rgb(c: readonly [number, number, number]): string {
 }
 
 export function LayersPanel(props: LayersPanelProps): JSX.Element {
+  /** The section folds to its heading, as the editor's sidebar sections do. */
+  const [open, setOpen] = createSignal(true);
   return (
-    <aside class="layers">
+    <aside class={open() ? "layers" : "layers is-folded"}>
       <div class="layers-head">
+        <Show when={open()} fallback={<IconButton icon="chevron-right" size="sm" title="Show the layers" onClick={() => setOpen(true)} />}>
+          <IconButton icon="chevron-down" size="sm" title="Hide the layers" onClick={() => setOpen(false)} />
+        </Show>
         <SectionLabel>Layers</SectionLabel>
         <span class="layers-count">{props.layers().length}</span>
       </div>
-      <div class="layers-list" role="list">
+      <div class="layers-list" role="list" hidden={!open()}>
         <For each={props.layers()}>
           {(layer) => (
             <div class={layer.current ? "layer-row is-current" : "layer-row"} role="listitem">
@@ -77,7 +83,7 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
           )}
         </For>
       </div>
-      <div class="layers-foot">
+      <div class="layers-foot" hidden={!open()}>
         <span class="hint">Click a name to make it current.</span>
       </div>
     </aside>

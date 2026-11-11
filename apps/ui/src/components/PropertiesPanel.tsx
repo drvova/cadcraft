@@ -9,6 +9,7 @@
 
 import { createEffect, createSignal, For, Index, Show, type Accessor, type JSX } from "solid-js";
 import { buildPatch, type PropRow, type PropertiesReply } from "../props";
+import { IconButton } from "../ui/IconButton";
 import { SectionLabel } from "../ui/SectionLabel";
 import "../interaction.css";
 
@@ -28,13 +29,19 @@ export function PropertiesPanel(props: PropertiesPanelProps): JSX.Element {
     return reply.count === 1 ? "1 object" : `${reply.count} objects`;
   };
 
+  /** The section folds to its heading, as the editor's sidebar sections do. */
+  const [open, setOpen] = createSignal(true);
+
   return (
-    <aside class="properties">
+    <aside class={open() ? "properties" : "properties is-folded"}>
       <div class="properties-head">
+        <Show when={open()} fallback={<IconButton icon="chevron-right" size="sm" title="Show the properties" onClick={() => setOpen(true)} />}>
+          <IconButton icon="chevron-down" size="sm" title="Hide the properties" onClick={() => setOpen(false)} />
+        </Show>
         <SectionLabel>Properties</SectionLabel>
         <span class="properties-state">{title()}</span>
       </div>
-      <div class="properties-body" role="list">
+      <div class="properties-body" role="list" hidden={!open()}>
         <Index each={props.properties?.rows ?? []}>
           {(row) => (
             <PropRowView row={row} layers={props.layers} onSet={props.onSet} onNotice={props.onNotice} />

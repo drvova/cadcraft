@@ -27,14 +27,14 @@
 .properties-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--gap-6);
-  height: var(--control-h-row);
-  padding: 0 var(--gap-8);
+  gap: var(--gap-2);
+  height: var(--control-h-input);
+  padding: 0 var(--gap-8) 0 var(--gap-2);
   border-bottom: var(--hairline) solid var(--border);
 }
 
 .properties-state {
+  margin-left: auto;
   font-size: var(--font-chip);
   color: var(--text-faint);
   white-space: nowrap;

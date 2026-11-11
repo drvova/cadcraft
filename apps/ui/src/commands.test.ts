@@ -143,14 +143,16 @@ describe("classify", () => {
     expect(classify("ui.animations.on")).toBe("animations");
     expect(classify("ui.animations.off")).toBe("animations");
     expect(classify("ui.animations.system")).toBe("animations");
-    expect(classify("ui.dialog.commands")).toBe("none");
+    expect(classify("ui.dialog.commands")).toBe("palette");
     expect(classify("circle")).toBe("engine");
     expect(classify("zoom.extents")).toBe("engine");
     expect(classify("ui.dialog.about")).toBe("engine");
   });
 
-  test("the 'none' command is not in the tree", () => {
-    expect(UI_ITEMS.some((item) => item.id === "ui.dialog.commands")).toBe(false);
+  test("the command palette is a command of its own, in the Help menu", () => {
+    const palette = UI_ITEMS.find((item) => item.id === "ui.dialog.commands");
+    expect(palette?.menu[0]).toBe("Help");
+    expect(palette?.shortcut).toBe("Cmd+Shift+P");
   });
 });
 
@@ -169,6 +171,8 @@ describe("UI_ITEMS", () => {
   test("the subset is exactly the commands the shell honours, transcribed from menus.rs", () => {
     expect([...UI_ITEMS.map((item) => item.id)].sort()).toEqual(
       [
+        "ui.dialog.commands",
+        "ui.toggle.sidebar",
         "ui.open",
         "ui.saveas",
         "ui.sample",

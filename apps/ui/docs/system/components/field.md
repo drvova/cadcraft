@@ -14,7 +14,7 @@ Not applicable: hand-rolled — the 24px height, the hairline stroke and the foc
 
 Real uses, 3 call sites (`rg -c "<Field" src/components` → `src/components/AssistantPane.tsx:3`, the provider popover's Base URL, Model and API key):
 - `src/components/AssistantPane.tsx` — the composer pilot: the provider popover's Base URL, Model and API key inputs; the composer's own multi-line editor stays a bespoke `<textarea>` (found-not-fixed).
-- (planned) `src/components/PropertiesPanel.tsx:153` — `class="prop-input"` (1 use) moves onto `<Field>` in a later arc; the palette keeps its own input for now.
+- (planned) `src/components/PropertiesPanel.tsx:160` — `class="prop-input"` (1 use) moves onto `<Field>` in a later arc; the palette keeps its own input for now.
 - (planned) `src/components/CommandLine.tsx:112` — `class="cmd-input"` (1 use) moves onto `<Field type="search">` in a later arc; the command line keeps its own input for now.
 
 ### Example files

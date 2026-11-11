@@ -14,7 +14,7 @@
 import type { CommandInfo } from "./facade";
 
 /** What the shell does with an invoked id. */
-export type CommandAction = "engine" | "open" | "save" | "sample" | "visibility" | "theme" | "animations" | "none";
+export type CommandAction = "engine" | "open" | "save" | "sample" | "visibility" | "theme" | "animations" | "palette" | "none";
 
 /** One `ui.*` command the web shell can honour, transcribed from `menus.rs`'s `UI_COMMANDS`. */
 export interface UiItem {
@@ -34,6 +34,8 @@ export const UI_ITEMS: readonly UiItem[] = [
   { id: "ui.open", label: "Open...", menu: [], shortcut: "Cmd+O" },
   { id: "ui.saveas", label: "Save As...", menu: [] },
   { id: "ui.sample", label: "Open Sample Drawing", menu: ["Help", "Open Sample Drawing"] },
+  { id: "ui.dialog.commands", label: "Command Palette...", menu: ["Help", "Command Palette..."], shortcut: "Cmd+Shift+P" },
+  { id: "ui.toggle.sidebar", label: "Sidebar", menu: ["Window", "Sidebar"], shortcut: "Cmd+B" },
   { id: "ui.panel.properties", label: "Properties Inspector", menu: ["Window", "Properties Inspector"], shortcut: "Cmd+1" },
   { id: "ui.toggle.assistant", label: "Assistant", menu: ["Window", "Assistant"], shortcut: "Cmd+7" },
   { id: "ui.panel.layers", label: "Layers Palette", menu: ["Window", "Layers Palette"] },
@@ -57,7 +59,7 @@ export function classify(id: string): CommandAction {
   if (id.startsWith("ui.panel.") || id.startsWith("ui.toggle.")) return "visibility";
   if (id.startsWith("ui.theme.")) return "theme";
   if (id.startsWith("ui.animations.")) return "animations";
-  if (id === "ui.dialog.commands") return "none";
+  if (id === "ui.dialog.commands") return "palette";
   return "engine";
 }
 

@@ -18,12 +18,14 @@ import { emptyPrompt, type PromptState } from "./prompt";
 import { padRect, UNIT_RECT, type Rect } from "./view";
 import { pickAperture, toggleHandle } from "./selection";
 import { parseProperties, type PropertiesReply } from "./props";
-import { classify } from "./commands";
+import { classify, isMacPlatform, shortcutLabel, UI_ITEMS } from "./commands";
+import { paletteItems, rememberCommand } from "./palette";
 import { defaultFileName, downloadBytes, pickFile } from "./files";
 import { TopBar } from "./components/TopBar";
 import { MenuBar } from "./components/MenuBar";
 import { ToolStrip } from "./components/ToolStrip";
-import { StatusBar } from "./components/StatusBar";
+import { LayoutTabs, StatusBar } from "./components/StatusBar";
+import { CommandPalette } from "./components/CommandPalette";
 import { AssistantPane } from "./components/AssistantPane";
 import { createAssistantSession } from "./assistant-session";
 import { CanvasView } from "./components/CanvasView";
@@ -48,6 +50,28 @@ const FILE_IDS: Readonly<Record<string, "open" | "save" | "new" | "sample">> = {
   new: "new",
   "ui.sample": "sample",
 };
+
+const RECENT_KEY = "cadcraft.palette.recent";
+
+/** The commands the palette ran last in this browser, newest first. */
+function loadRecent(): string[] {
+  if (typeof localStorage === "undefined") return [];
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string").slice(0, 32) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecent(ids: readonly string[]): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(ids));
+  } catch {
+    // a full or blocked storage is not worth failing a command over
+  }
+}
 
 export function App(props: AppProps): JSX.Element {
   const [drawing, setDrawing] = createSignal<DrawingState | null>(null);
@@ -84,6 +108,10 @@ export function App(props: AppProps): JSX.Element {
   const [showCmdline, setShowCmdline] = createSignal(true);
   const [showLayers, setShowLayers] = createSignal(true);
   const [showAssistant, setShowAssistant] = createSignal(false);
+  /** The left sidebar as a whole (its palettes keep their own switches inside it). */
+  const [showSidebar, setShowSidebar] = createSignal(true);
+  const [paletteOpen, setPaletteOpen] = createSignal(false);
+  const [recentCommands, setRecentCommands] = createSignal<readonly string[]>(loadRecent());
   const [showProperties, setShowProperties] = createSignal(true);
   const [theme, setTheme] = createSignal<ThemeChoice>("dark");
   const [animations, setAnimations] = createSignal<AnimChoice>("on");
@@ -174,9 +202,19 @@ export function App(props: AppProps): JSX.Element {
     // Escape clears the selection (PLAN.md C6); the command line clears its own input.
     // Ctrl/Cmd+7 toggles the assistant, the desktop's ⌘7.
     const onKey = (e: KeyboardEvent): void => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "7") {
+      const mod = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+      // The editor's own keys: the palette, the sidebar, the panel, the assistant.
+      if ((mod && e.shiftKey && key === "p") || e.key === "F1") {
         e.preventDefault();
-        setShowAssistant((v) => !v);
+        setPaletteOpen((v) => !v);
+        return;
+      }
+      if (mod && !e.shiftKey && !e.altKey && (key === "7" || key === "b" || key === "j")) {
+        e.preventDefault();
+        if (key === "7") setShowAssistant((v) => !v);
+        else if (key === "b") setShowSidebar((v) => !v);
+        else setShowCmdline((v) => !v);
         return;
       }
       if (e.key !== "Escape") return;
@@ -296,6 +334,18 @@ export function App(props: AppProps): JSX.Element {
     syncView();
   };
 
+  /** Everything the palette can run: the registry's commands and the shell's own items. */
+  const palette = createMemo(() => paletteItems(commands(), UI_ITEMS));
+
+  /** The palette ran a command: close it, remember the command, and run it like a menu would. */
+  const onPaletteRun = (id: string): void => {
+    setPaletteOpen(false);
+    const next = rememberCommand(recentCommands(), id);
+    setRecentCommands(next);
+    saveRecent(next);
+    onInvoke(id);
+  };
+
   /** A menu/toolbar invocation: classify and dispatch (the contract in the file header). */
   const onInvoke = (id: string): void => {
     const file = FILE_IDS[id];
@@ -328,6 +378,9 @@ export function App(props: AppProps): JSX.Element {
       case "animations":
         setAnimations(id === "ui.animations.off" ? "off" : id === "ui.animations.system" ? "system" : "on");
         return;
+      case "palette":
+        setPaletteOpen(true);
+        return;
       default:
         return;
     }
@@ -343,6 +396,9 @@ export function App(props: AppProps): JSX.Element {
         return;
       case "ui.toggle.assistant":
         setShowAssistant((v) => !v);
+        return;
+      case "ui.toggle.sidebar":
+        setShowSidebar((v) => !v);
         return;
       case "ui.toggle.cmdline":
         setShowCmdline((v) => !v);
@@ -421,76 +477,76 @@ export function App(props: AppProps): JSX.Element {
     refresh();
   };
 
-  /**
-   * Zoom extents: the engine's own `zoom` command fits the drawing's extents to the canvas's
-   * aspect and the facade mirrors the result into the canvas view (`view()`), so adopting the
-   * view and fetching for it is the whole job.
-   */
-  const zoomExtents = (): void => {
-    const env = props.facade.zoomExtents();
-    setNotice(env.ok ? null : env.error);
-    syncView();
-  };
-
   const currentLayer = createMemo(() => drawing()?.currentLayer ?? layers().find((l) => l.current)?.name ?? "0");
 
   return (
     <div class="app">
       <TopBar
         drawing={drawing}
-        mode={props.facade.mode}
-        entityCount={() => drawing()?.entityCount ?? 0}
-        currentLayer={currentLayer}
-        onZoomExtents={zoomExtents}
+        menu={
+          <Show when={showMenubar()}>
+            <MenuBar commands={commands()} onInvoke={onInvoke} />
+          </Show>
+        }
+        paletteShortcut={shortcutLabel("Cmd+Shift+P", isMacPlatform())}
+        onOpenPalette={() => setPaletteOpen(true)}
+        sidebarOpen={showSidebar}
+        onToggleSidebar={() => setShowSidebar((v) => !v)}
+        panelOpen={showCmdline}
+        onTogglePanel={() => setShowCmdline((v) => !v)}
         assistantOpen={showAssistant}
         onToggleAssistant={() => setShowAssistant((v) => !v)}
       />
-      <Show when={showMenubar()}>
-        <MenuBar commands={commands()} onInvoke={onInvoke} />
-      </Show>
       <Show when={showToolbar()}>
         <ToolStrip onInvoke={onInvoke} />
       </Show>
       <div class={showAssistant() ? "workspace has-assistant" : "workspace"}>
-        <main class="stage">
-          <CanvasView
-            facade={props.facade}
-            view={view}
-            display={display}
-            selection={selection}
-            onViewChange={onViewChange}
-            onNotice={setNotice}
-            onPick={onPick}
-            onCursor={setCursor}
-          />
-        </main>
+        <Show when={showSidebar() && (showLayers() || showProperties())}>
+          <aside class="sidebar" aria-label="Drawing">
+            <Show when={showLayers()}>
+              <LayersPanel layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} />
+            </Show>
+            <Show when={showProperties()}>
+              <PropertiesPanel properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={setNotice} />
+            </Show>
+          </aside>
+        </Show>
+        <div class="editor">
+          <LayoutTabs layouts={layouts()} space={space()} onLayout={onLayout} />
+          <main class="stage">
+            <CanvasView
+              facade={props.facade}
+              view={view}
+              display={display}
+              selection={selection}
+              onViewChange={onViewChange}
+              onNotice={setNotice}
+              onPick={onPick}
+              onCursor={setCursor}
+            />
+          </main>
+          <Show when={showCmdline()}>
+            <CommandLine prompt={prompt} notice={notice} onSubmit={onCommand} />
+          </Show>
+        </div>
         <Show when={showAssistant()}>
           <AssistantPane session={assistant} selection={selection} onClose={() => setShowAssistant(false)} />
         </Show>
-        <aside class="rail">
-          <Show when={showLayers()}>
-            <LayersPanel layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} />
-          </Show>
-          <Show when={showProperties()}>
-            <PropertiesPanel properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={setNotice} />
-          </Show>
-        </aside>
       </div>
-      <Show when={showCmdline()}>
-        <CommandLine prompt={prompt} notice={notice} onSubmit={onCommand} />
-      </Show>
       <Show when={showStatusbar()}>
         <StatusBar
           settings={settings()}
-          layouts={layouts()}
-          space={space()}
+          mode={props.facade.mode}
+          currentLayer={currentLayer()}
+          entityCount={drawing()?.entityCount ?? 0}
+          layerCount={drawing()?.layerCount ?? 0}
           cursor={cursor()}
           formatPoint={(x, y) => props.facade.formatPoint(x, y)}
           selectionCount={selection().length}
           onCommand={onStatusCommand}
-          onLayout={onLayout}
         />
       </Show>
+      <CommandPalette open={paletteOpen} items={palette} recent={recentCommands} onRun={onPaletteRun} onClose={() => setPaletteOpen(false)} />
     </div>
   );
 }

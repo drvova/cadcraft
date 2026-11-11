@@ -1,20 +1,28 @@
 /**
- * The top bar: the drawing's title and dirty state from `state()`, a few counts, which facade is
- * live (wasm or mock), Zoom extents, and the key that docks the assistant. Pure flex layout.
+ * The title bar, laid out as the editor's: the menus on the left, the command centre in the
+ * middle (the drawing's name; a click, Ctrl+Shift+P or F1 opens the command palette), and on the
+ * right the three keys that fold the window's parts away: the sidebar, the command line and the
+ * assistant. What the drawing holds (its layer, its counts, which engine is live) is the status
+ * bar's to say.
  */
 
 import { Show, type Accessor, type JSX } from "solid-js";
-import type { DrawingState, FacadeMode } from "../facade";
+import type { DrawingState } from "../facade";
+import { ToolIcon } from "../icons";
 import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
 
 export interface TopBarProps {
   drawing: Accessor<DrawingState | null>;
-  mode: FacadeMode;
-  entityCount: Accessor<number>;
-  currentLayer: Accessor<string>;
-  onZoomExtents: () => void;
-  /** Whether the assistant panel is docked, and the key that docks it. */
+  /** The menu bar, when the in-window menus are shown. */
+  menu?: JSX.Element;
+  /** The palette's shortcut in this platform's words ("Ctrl+Shift+P"). */
+  paletteShortcut: string;
+  onOpenPalette: () => void;
+  sidebarOpen: Accessor<boolean>;
+  onToggleSidebar: () => void;
+  panelOpen: Accessor<boolean>;
+  onTogglePanel: () => void;
   assistantOpen: Accessor<boolean>;
   onToggleAssistant: () => void;
 }
@@ -22,37 +30,27 @@ export interface TopBarProps {
 export function TopBar(props: TopBarProps): JSX.Element {
   const title = (): string => props.drawing()?.title ?? "Untitled";
   const dirty = (): boolean => props.drawing()?.dirty ?? false;
-  const layerCount = (): number => props.drawing()?.layerCount ?? 0;
   return (
-    <header class="topbar">
-      <span class="doc-title" title={title()}>
-        {title()}
-      </span>
-      <span class={dirty() ? "dirty is-dirty" : "dirty"} title={dirty() ? "Unsaved changes" : "No unsaved changes"}>
-        {dirty() ? "modified" : "saved"}
-      </span>
-      <span class="topbar-spacer" />
-      <span class="chip" title="The current layer (CLAYER)">
-        layer {props.currentLayer()}
-      </span>
-      <span class="chip" title="Objects in the drawing">
-        {props.entityCount()} objects
-      </span>
-      <span class="chip" title="Layers in the drawing">
-        {layerCount()} layers
-      </span>
-      <Show when={props.drawing() !== null}>
-        <span class="chip" title="The active space">
-          {props.drawing()?.space ?? "model"}
-        </span>
-      </Show>
-      <span class={props.mode.kind === "wasm" ? "chip mode is-wasm" : "chip mode is-mock"} title={props.mode.detail}>
-        {props.mode.kind}
-      </span>
-      <Button size="sm" title="Zoom extents" onClick={() => props.onZoomExtents()}>
-        Zoom extents
-      </Button>
-      <IconButton icon="assistant" title="Assistant (Ctrl+7)" selected={props.assistantOpen()} onClick={() => props.onToggleAssistant()} />
+    <header class="titlebar">
+      <div class="titlebar-start">{props.menu}</div>
+      <div class="titlebar-center">
+        <Button size="sm" title={`Search commands (${props.paletteShortcut})`} onClick={() => props.onOpenPalette()}>
+          <span class="command-center">
+            <span class="command-center-icon">
+              <ToolIcon id="search" />
+            </span>
+            <span class="command-center-title">{title()}</span>
+            <Show when={dirty()}>
+              <span class="command-center-dirty" title="Unsaved changes" />
+            </Show>
+          </span>
+        </Button>
+      </div>
+      <div class="titlebar-end">
+        <IconButton icon="ui.toggle.palettes" title="Sidebar (Ctrl+B)" selected={props.sidebarOpen()} onClick={() => props.onToggleSidebar()} />
+        <IconButton icon="layout.bottom" title="Command line (Ctrl+J)" selected={props.panelOpen()} onClick={() => props.onTogglePanel()} />
+        <IconButton icon="assistant" title="Assistant (Ctrl+7)" selected={props.assistantOpen()} onClick={() => props.onToggleAssistant()} />
+      </div>
     </header>
   );
 }

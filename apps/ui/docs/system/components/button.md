@@ -14,7 +14,7 @@ Not applicable: hand-rolled — the recipe is the app's own `src/ui/ui.css`, mea
 
 Real uses, 6 call sites (`rg -c "<Button" src/components` → `src/components/AssistantPane.tsx:5`, `src/components/TopBar.tsx:1`):
 - `src/components/AssistantPane.tsx` — the assistant's call sites: the provider popover's Cancel (`variant="ghost"`) and Save (`variant="primary"`), and the stack over the composer: Stop on the run row and Undo all on the changes row (`variant="ghost" size="sm"`), and Keep beside it (`size="sm"`).
-- `src/components/TopBar.tsx:52` — Zoom extents (`size="sm"`), the bar's one action.
+- `src/components/TopBar.tsx:37` — the title bar's command centre (`size="sm"`): the drawing's name, opening the command palette.
 
 ### Example files
 | File | Covers | Caption |
@@ -34,12 +34,12 @@ Real uses, 6 call sites (`rg -c "<Button" src/components` → `src/components/As
 
 ### variant
 - `primary`: the one action of the pane or dialog; the accent fill. Used at 1 call site (the provider popover's Save).
-- `secondary`: the default action; the `.08` fill that Cursor's own default button draws. Used at 2 call sites (the top bar's Zoom extents and the changes row's Keep).
+- `secondary`: the default action; the `.08` fill that Cursor's own default button draws. Used at 2 call sites (the title bar's command centre and the changes row's Keep).
 - `ghost`: a quiet action on a tool bar or in a list; no resting fill. Used at 3 call sites (the provider popover's Cancel, the run row's Stop and the changes row's Undo all).
 - `danger`: a destructive action; the error fill. Used at 0 call sites.
 
 ### size
-- `sm`: the 24px control, for a button beside a field or inside a row. Used at 4 call sites (the top bar's Zoom extents, and the stack's Stop, Undo all and Keep).
+- `sm`: the 24px control, for a button beside a field or inside a row. Used at 4 call sites (the title bar's command centre, and the stack's Stop, Undo all and Keep).
 - `md`: the 28px default, for a dialog footer or a pane header. Used at 2 call sites (the provider popover's Cancel and Save).
 
 ## States
@@ -91,7 +91,7 @@ Real uses, 6 call sites (`rg -c "<Button" src/components` → `src/components/As
   - Do: `.ui-button--secondary:hover { background: var(--fill-active) }`
 
 ### Content
-- `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Zoom extents` — because the label is the action's name and the accessible name comes from it. Evidence: app 6/6 labels are verbs or verb phrases, `src/components/TopBar.tsx:52`, the label "Zoom extents". Check: review `src/components/TopBar.tsx`.
+- `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Undo all` — because the label is the action's name and the accessible name comes from it. Evidence: app 5/6 labels are verbs or verb phrases, `src/components/AssistantPane.tsx:470`, the label "Undo all" (the sixth, the command centre, is labelled with the drawing's name and names its action in its `title`). Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Button>SAVE</Button>`
   - Do: `<Button>Save</Button>`
 

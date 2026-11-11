@@ -95,6 +95,10 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
   "layer.locked": "M6 11h12v9H6z M8.5 11V8a3.5 3.5 0 0 1 7 0v3",
   /** A padlock with its shackle swung open: the layer is unlocked. */
   "layer.unlocked": "M6 11h12v9H6z M8.5 11V8a3.5 3.5 0 0 1 6.8-1",
+  /** A magnifier: the command centre and the palette's field. */
+  search: "M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13 M15.5 15.5L20 20",
+  /** A window with a band along its foot: the command line's panel. */
+  "layout.bottom": "M4 5h16v14H4z M4 14.5h16",
   /** A four-point spark with a small plus: the assistant's toggle in the top bar. */
   assistant: "M11 4l1.8 5.2L18 11l-5.2 1.8L11 18l-1.8-5.2L4 11l5.2-1.8z M19 15v4 M17 17h4",
 };
@@ -106,8 +110,9 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
  */
 export const COMPOSER_ICONS: readonly string[] = ["send", "stop", "plus", "close", "chevron-right", "chevron-down", "copy", "retry", "circle", "pick", "assistant"];
 
-/** The layers palette's state glyphs (`LayersPanel.tsx`): on, frozen and locked, each with its opposite. */
-export const PANEL_ICONS: readonly string[] = ["layer.on", "layer.off", "layer.frozen", "layer.thawed", "layer.locked", "layer.unlocked"];
+/** The shell's own glyphs: the layers palette's states (on, frozen and locked, each with its
+ *  opposite; `LayersPanel.tsx`), the command centre's magnifier and the panel key (`TopBar.tsx`). */
+export const PANEL_ICONS: readonly string[] = ["layer.on", "layer.off", "layer.frozen", "layer.thawed", "layer.locked", "layer.unlocked", "search", "layout.bottom"];
 
 /** The path for a toolbar id, or null when there is none. */
 export function iconPath(id: string): string | null {

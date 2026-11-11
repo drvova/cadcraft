@@ -1,0 +1,170 @@
+/*
+ * The command palette: the editor's own quick-open, dropped from the title bar. One elevated box
+ * (the popover's surface, stroke, radius and shadow), a field on top, and under it flat rows on
+ * the system's Row. The matched letters take the accent; where a command lives, its name and its
+ * shortcut sit quiet at the row's end. Every value is a token.
+ */
+
+.palette {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding: var(--gap-6) var(--gap-8) 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  overflow: hidden;
+}
+
+/* The window behind stays as it is: the palette is a tool over the work, not a curtain. */
+.palette::backdrop {
+  background: transparent;
+}
+
+.palette-box {
+  display: flex;
+  flex-direction: column;
+  width: min(76ch, 100%);
+  max-height: min(60vh, 100%);
+  margin: 0 auto;
+  background: var(--surface-elevated);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-block);
+  box-shadow: var(--shadow-popover);
+  overflow: hidden;
+  animation: palette-in var(--dur-med) var(--ease-out-quint);
+}
+
+@keyframes palette-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--gap-4)));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.palette-field {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-8);
+  height: var(--control-h-tab);
+  padding: 0 var(--gap-12);
+  border-bottom: var(--hairline) solid var(--border-soft);
+}
+
+.palette-field-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--icon);
+}
+
+.palette-field-icon .tool-icon {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+}
+
+.palette-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  caret-color: var(--accent);
+  font-family: var(--font-family);
+  /* Never under 16px on a touch screen, or the browser zooms the page into the field. */
+  font-size: max(var(--font-body), 1em);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .palette-input {
+    font-size: var(--font-body);
+  }
+}
+
+.palette-input::placeholder {
+  color: var(--text-faint);
+}
+
+.palette-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--gap-4);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* The row is the system's Row; these are its three parts. */
+.palette-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0 var(--gap-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.palette-hit {
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.palette-path {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-disabled);
+  font-size: var(--font-label);
+}
+
+.palette-trail {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: var(--gap-12);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-8);
+}
+
+.palette-tag {
+  color: var(--text-disabled);
+  font-size: var(--font-chip);
+}
+
+.palette-id {
+  color: var(--text-faint);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-chip);
+}
+
+.palette-key {
+  padding: 0 var(--gap-4);
+  border: var(--hairline) solid var(--border-soft);
+  border-radius: var(--radius-small);
+  color: var(--text-faint);
+  font-family: var(--font-family);
+  font-size: var(--font-chip);
+  line-height: var(--gap-16);
+}
+
+.palette-empty {
+  padding: var(--gap-12);
+  color: var(--text-faint);
+  font-size: var(--font-body);
+}
