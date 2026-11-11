@@ -8,16 +8,18 @@ file records the picks and the reasons, so the next surface does not re-litigate
 
 ## Canonical picks
 
-The web UI grows six canonical components under `src/ui/`, each a thin wrapper over the native
+The web UI grows eight canonical components under `src/ui/`, each a thin wrapper over the native
 element. The per-surface hand-rolled classes they replace are named below; a class loses because it
 is a one-off with no shared API and no states.
 
 - **Button** — pick `ui/Button.tsx` (native `<button>`). Variants `primary | secondary | ghost | danger`, default `secondary` (Cursor's own default button). Loses: `.button` (TopBar — one call site), `.assistant-send` / `.assistant-save` / `.assistant-ghost` (assistant-only, their own colours), `.assistant-preset` (a suggestion chip wearing a button), `.tool-button` (ToolStrip — a grid cell, no variants), `.menu-row` (a menu item, not a general button).
-- **IconButton** — pick `ui/IconButton.tsx` (native `<button>`, a drawn icon + label). Variants `ghost | soft | inverted`; sizes `md` (24px) and `sm` (20px). Loses: `.assistant-icon` (three uses, fixed 24px, no variant), `.assistant-attachment-x` (one-off), `.layer-toggles` buttons (LayersPanel — a toggle cluster with its own semantics), `.status-toggle` (StatusBar — tab-ish, keeps `role="tab"`).
+- **IconButton** — pick `ui/IconButton.tsx` (native `<button>`, a drawn icon + label). Variants `ghost | soft | inverted`; sizes `md` (24px) and `sm` (20px). Loses: `.assistant-icon` (three uses, fixed 24px, no variant), `.assistant-attachment-x` (one-off), `.layer-toggles` buttons (LayersPanel — a toggle cluster with its own semantics), `.status-toggle` (StatusBar — a drafting toggle with its own short-label face, an `aria-pressed` switch).
 - **Chip** — pick `ui/Chip.tsx` (native `<button>` when interactive, `<span>` when not). Loses: `.chip` (TopBar — a static fact, no interaction), `.keyword-chip` (CommandLine — interactive, no tone/size API), `.cmd-chips` (a container, not a chip).
 - **Field** — pick `ui/Field.tsx` (native `<input>`, single-line). Loses: `.assistant-input`, `.cmd-input`, `.prop-input` (each one surface's own padding and border), `.assistant-field` (a label wrapper, not the control). The composer's auto-growing `<textarea>` and the properties palette's `<select>` stay bespoke for now (found-not-fixed).
 - **Row** — pick `ui/Row.tsx` (native `<button>`, the full-width clickable band). Loses: `.prop-row`, `.menu-row`, `.assistant-row`, `.assistant-tool` (each repeats hover/selected padding by hand). A grid row carrying nested controls of its own (`.layer-row` with its toggle cluster) stays bespoke — a button cannot nest buttons. The pilot kept `.assistant-row` (the composer's toolbar is a container with nested buttons) and `.assistant-tool` (a transcript disclosure row, not a menu band) bespoke for the same reason; `row.md` records it.
 - **SectionLabel** — pick `ui/SectionLabel.tsx` (native `<h2>` — a heading, so a screen reader can jump between panels). Loses: `.section-label` (already shared but untyped — the pick is its typed home), `.properties-head` / `.layers-head` (the surrounding bar, not the label), `.assistant-title` (a pane title, a different role).
+- **Tab** — pick `ui/Tab.tsx` (native `<button>` with `role="tab"`, `aria-selected` on the one in front; an optional close key as a sibling button). Sizes `md` (the editor tab, selected at `--tab-active`) and `sm` (the compact tab of a pane header, selected at `--fill-active`). Loses: `.layout-tab` (StatusBar's layout strip — a raw button with its own class), the chat tabs' `Row` workaround (AssistantPane — a `Row` in a width cell beside a close `IconButton`).
+- **Kbd** — pick `ui/Kbd.tsx` (native `<kbd>`, one recipe, no variants). Loses: `.assistant-key` (AssistantPane — the mono face at the disabled ink), `.palette-key` (CommandPalette — the recipe kept, now the pick's own).
 
 ## Prop vocabulary
 

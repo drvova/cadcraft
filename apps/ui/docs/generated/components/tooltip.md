@@ -100,7 +100,7 @@ One shape; two placements (above the child by default, below for a control at a 
 - `rule/tooltip-not-a-name`: When a control carries a tooltip, give the control its own `aria-label`, because a `role="tooltip"` is a description, not an accessible name, and a control named only by its tooltip is unnamed to a screen reader. Evidence: app 2/2 tooltip hosts name their button, `src/components/AssistantPane.tsx:346` and `src/components/AssistantPane.tsx:351`. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Tooltip text="Close"><button>✕</button></Tooltip>`
   - Do: `<Tooltip text="Close the panel"><button aria-label="Close the panel">✕</button></Tooltip>`
-- `rule/tooltip-never-blocks`: When the tooltip shows, the box keeps `pointer-events: none`, because it sits above the control and a hint that takes the click is worse than 0 hints. Evidence: single use `src/ui/ui.css:488`, `pointer-events: none` on the box. Check: review `src/ui/ui.css`.
+- `rule/tooltip-never-blocks`: When the tooltip shows, the box keeps `pointer-events: none`, because it sits above the control and a hint that takes the click is worse than 0 hints. Evidence: single use `src/ui/ui.css:494`, `pointer-events: none` on the box. Check: review `src/ui/ui.css`.
   - Don't: a tooltip box with a hover handler of its own.
   - Do: `pointer-events: none` on `.ui-tooltip`.
 
@@ -115,7 +115,7 @@ One shape; two placements (above the child by default, below for a control at a 
   - Do: `<Tooltip text="Close the panel"><IconButton icon="close" /></Tooltip>`
 
 ### Limits
-- `rule/tooltip-length-limit`: When a hint runs past 40 characters, move the explanation into the control's label or help text, because the box is `white-space: nowrap` and a long hint runs past the viewport edge on a narrow pane. Evidence: measured 147px box at 12px type, `src/ui/ui.css:471`. Check: review `src/ui/ui.css`.
+- `rule/tooltip-length-limit`: When a hint runs past 40 characters, move the explanation into the control's label or help text, because the box is `white-space: nowrap` and a long hint runs past the viewport edge on a narrow pane. Evidence: measured 147px box at 12px type, `src/ui/ui.css:477`. Check: review `src/ui/ui.css`.
   - Don't: a 60-character hint over the composer.
   - Do: a 3-word hint and a visible label for the rest.
 

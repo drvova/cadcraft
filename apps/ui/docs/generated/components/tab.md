@@ -57,8 +57,8 @@ export default function InLayoutTabs() {
 ## Variants
 
 ### size
-- `sm`: the compact tab of a pane header: the 22px row height, 11.5px type, a 4px-radius fill, clipped at 18ch. Used at 1 call site (the assistant's chat tabs).
-- `md`: the editor tab; the default: it fills its strip's height (the strip is the 35px band), 13px type on a 12px inset, a hairline on its right. Used at 1 call site (the layout tabs over the drawing).
+- `sm`: the compact tab of a pane header: the 22px row height, 11.5px type, a 4px-radius fill, clipped at 18ch; selected, it takes the layer's selected fill `--fill-active` (the fill `Row` gives its current row), because the pane's own surface is `--tab-active`. Used at 1 call site (the assistant's chat tabs).
+- `md`: the editor tab; the default: it fills its strip's height (the strip is the 35px band), 13px type on a 12px inset, a hairline on its right; selected, it takes `--tab-active`. Used at 1 call site (the layout tabs over the drawing).
 
 Example: The editor tab of the 35px strip. (`docs/system/examples/tab/size-md.tsx`)
 
@@ -91,7 +91,7 @@ export default function SizeSm() {
 | Hover | The pointer is over a tab that is not in front, on a device with a hover pointer. | Click it. | Pointer only, colour change: the `.08` fill and the full ink; the cursor is a pointer. | by hand |
 | Pressed | The pointer is held down. | Release to bring the tab to the front. | Nothing beyond hover: a tab's press runs on release. | by hand |
 | Focused | Keyboard focus arrives by Tab. | Enter or Space brings the tab to the front. | The 1px accent ring at offset -1. | by hand |
-| Selected | The caller passes `selected` (the tab in front). | Read it; move to another tab; close it when it has a close key. | `aria-selected="true"`; the active fill and the full ink. | test |
+| Selected | The caller passes `selected` (the tab in front). | Read it; move to another tab; close it when it has a close key. | `aria-selected="true"`; the selected fill (`--tab-active` on `md`, `--fill-active` on `sm`) and the full ink. | test |
 | Closable | The caller passes `onClose`. | Click the close key, or Tab to it and press Enter. | A trailing close glyph in its own 20px button, named by `closeLabel`. | test |
 
 Example: The tab in front at the active fill, announced as selected. (`docs/system/examples/tab/selected.tsx`)
@@ -130,7 +130,7 @@ export default function Selected() {
 | `size?` | `TabSize` |  | The size. |
 | `title?` | `string` |  | A tooltip, for what the tab switches to or for a clipped label. |
 
-- `selected`: the tab in front; sets `aria-selected="true"` (and `"false"` otherwise) and the active fill.
+- `selected`: the tab in front; sets `aria-selected="true"` (and `"false"` otherwise) and the selected fill of its size.
 - `size`: `sm` or `md`; defaults to `md`.
 - `title`: a tooltip: what the tab switches to, or the full label when it clips.
 - `onClick`: runs on click; the caller brings this tab to the front.
@@ -202,7 +202,8 @@ Rests on the native `<button>` element with `role="tab"`: Enter and Space and fo
 | The tab | sm | `--control-h-row`, `--gap-6`, `--font-small`, `--radius-card` |
 | The fill | hover | `--hover` |
 | The label | hover | `--text` |
-| The fill | selected | `--tab-active` |
+| The fill | selected, md | `--tab-active` |
+| The fill | selected, sm | `--fill-active` |
 | The label | selected | `--text` |
 | The ring | focus-visible | `--focus-outline-w`, `--accent`, `--focus-outline-offset` |
 | The motion | hover, selected | `--dur-fast`, `--ease-standard` |

@@ -531,7 +531,6 @@ body {
 /* The interface's transitions; the shell sets data-animations="off" (View ▸ Accessibility ▸
    Animation Effects), which turns every one of them off, exactly as the desktop's setting does. */
 button,
-.layout-tab,
 .status-toggle,
 .layer-row,
 .prop-row,

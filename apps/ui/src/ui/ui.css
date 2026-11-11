@@ -421,6 +421,12 @@
   color: var(--text);
 }
 
+/* The compact tab sits on the pane's own surface, which is the active tab fill: it takes the
+   layer's selected fill (the one Row's current row takes) so the tab in front can be told apart. */
+.ui-tab--sm[aria-selected="true"] {
+  background: var(--fill-active);
+}
+
 /* A tab with a close key: the two sit side by side, and the tab gives way when the strip is tight. */
 .ui-tab-closable {
   display: flex;

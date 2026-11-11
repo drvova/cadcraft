@@ -83,7 +83,7 @@
   caret-color: var(--accent);
   font-family: var(--font-family);
   /* Never under 16px on a touch screen, or the browser zooms the page into the field. */
-  font-size: max(var(--font-body), 1em);
+  font-size: max(16px, 1em);
 }
 
 @media (hover: hover) and (pointer: fine) {
