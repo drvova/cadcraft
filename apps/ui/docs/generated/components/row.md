@@ -15,7 +15,7 @@ Not applicable: hand-rolled — the 22px row, the 4px inset and the .14 selected
 
 Real uses, 2 call sites (`rg -c "<Row" src/components` → `src/components/AssistantPane.tsx:1`, `src/components/LayersPanel.tsx:1`):
 - `src/components/AssistantPane.tsx` — the composer pilot: the provider popover's preset rows; the transcript's tool rows and the composer's toolbar row stay bespoke (the toolbar is a container, and the tool row carries a disclosure arrow and a note).
-- `src/components/LayersPanel.tsx:35` — each layer's name band (`is-current` marks the current one); the toggle cluster beside it stays native buttons.
+- `src/components/LayersPanel.tsx:36` — each layer's name band (`is-current` marks the current one); the toggle cluster beside it stays native buttons.
 - (planned) `src/components/MenuBar.tsx` — `.menu-row` (1 use) moves onto `<Row>` once `Row` can carry the `menuitem` roles; the rows stay native buttons for now.
 - (planned) `src/components/PropertiesPanel.tsx:168` — `.prop-row` (1 use) moves onto `<Row>` when the palette's rows become clickable; today they are display rows with an inline editor.
 - `.layer-row` (LayersPanel) stays bespoke because its row nests a toggle cluster, and a button cannot nest buttons.

@@ -108,16 +108,15 @@
   },
   "src/styles.css": {
     "rule/css-px": {
-      "font-size: 10px": 1,
       "height: 10px": 2,
       "height: 5px": 1,
-      "height: 6px": 2,
+      "height: 6px": 1,
       "height: 7px": 1,
       "max-height: 84px": 1,
       "width: 10px": 2,
       "width: 252px": 1,
       "width: 5px": 1,
-      "width: 6px": 2,
+      "width: 6px": 1,
       "width: 7px": 1
     }
   }

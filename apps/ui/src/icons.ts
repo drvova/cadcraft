@@ -83,6 +83,18 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
   retry: "M20 12a8 8 0 1 1-2.6-5.9 M20 4v5h-5",
   /** A pointer arrow: the canvas selection riding in the composer. */
   pick: "M5 3l14 8-6.5 1.8L10 19z",
+  /** An open eye: the layer is on. */
+  "layer.on": "M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z M12 9.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5z",
+  /** The eye struck through: the layer is off. */
+  "layer.off": "M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z M4 4l16 16",
+  /** A snowflake: the layer is frozen. */
+  "layer.frozen": "M12 3v18 M4.2 7.5l15.6 9 M19.8 7.5l-15.6 9 M9.5 4.5L12 7l2.5-2.5 M9.5 19.5L12 17l2.5 2.5",
+  /** A sun: the layer is thawed. */
+  "layer.thawed": "M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8z M12 2v3 M12 19v3 M2 12h3 M19 12h3 M5 5l2 2 M17 17l2 2 M19 5l-2 2 M7 17l-2 2",
+  /** A closed padlock: the layer is locked. */
+  "layer.locked": "M6 11h12v9H6z M8.5 11V8a3.5 3.5 0 0 1 7 0v3",
+  /** A padlock with its shackle swung open: the layer is unlocked. */
+  "layer.unlocked": "M6 11h12v9H6z M8.5 11V8a3.5 3.5 0 0 1 6.8-1",
   /** A four-point spark with a small plus: the assistant's toggle in the top bar. */
   assistant: "M11 4l1.8 5.2L18 11l-5.2 1.8L11 18l-1.8-5.2L4 11l5.2-1.8z M19 15v4 M17 17h4",
 };
@@ -93,6 +105,9 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
  * an orphan one.
  */
 export const COMPOSER_ICONS: readonly string[] = ["send", "stop", "plus", "close", "chevron-right", "chevron-down", "copy", "retry", "circle", "pick", "assistant"];
+
+/** The layers palette's state glyphs (`LayersPanel.tsx`): on, frozen and locked, each with its opposite. */
+export const PANEL_ICONS: readonly string[] = ["layer.on", "layer.off", "layer.frozen", "layer.thawed", "layer.locked", "layer.unlocked"];
 
 /** The path for a toolbar id, or null when there is none. */
 export function iconPath(id: string): string | null {

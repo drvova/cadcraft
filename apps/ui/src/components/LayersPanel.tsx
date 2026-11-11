@@ -6,6 +6,7 @@
 
 import { For, type Accessor, type JSX } from "solid-js";
 import type { LayerInfo } from "../facade";
+import { ToolIcon } from "../icons";
 import { Row } from "../ui/Row";
 import { SectionLabel } from "../ui/SectionLabel";
 
@@ -51,7 +52,7 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
                   aria-pressed={layer.on}
                   onClick={() => props.onToggle(layer.name, "on", !layer.on)}
                 >
-                  <span class="dot" />
+                  <ToolIcon id={layer.on ? "layer.on" : "layer.off"} />
                 </button>
                 <button
                   class={layer.frozen ? "toggle is-frozen" : "toggle"}
@@ -60,7 +61,7 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
                   aria-pressed={layer.frozen}
                   onClick={() => props.onToggle(layer.name, "frozen", !layer.frozen)}
                 >
-                  F
+                  <ToolIcon id={layer.frozen ? "layer.frozen" : "layer.thawed"} />
                 </button>
                 <button
                   class={layer.locked ? "toggle is-locked" : "toggle"}
@@ -69,7 +70,7 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
                   aria-pressed={layer.locked}
                   onClick={() => props.onToggle(layer.name, "locked", !layer.locked)}
                 >
-                  L
+                  <ToolIcon id={layer.locked ? "layer.locked" : "layer.unlocked"} />
                 </button>
               </span>
             </div>
