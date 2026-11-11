@@ -154,8 +154,9 @@
   }
 }
 
-/* The keyboard's row and the row whose submenu is open hold the same fill as the pointer's. */
-.menu-row.is-active:not(.is-disabled),
+/* The keyboard's row (the focus itself is on it) and the row whose submenu is open hold the same
+   fill as the pointer's. A row that is not available takes the focus ring and no fill. */
+.menu-row:focus-visible:not(.is-disabled),
 .menu-row[aria-expanded="true"] {
   background: var(--hover);
 }
@@ -289,9 +290,7 @@
 
 /* A layout's name can be a sheet's whole title: a tab holds the first of it and clips the rest
    with an ellipsis (its tooltip has the full name), so a dozen layouts stay a strip of tabs. */
-.editor-tabs .ui-tab {
-  max-width: 24ch;
-}
+
 
 /* ---- The status bar ---- */
 

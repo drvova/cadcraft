@@ -41,7 +41,11 @@
     "--fill-pressed",
     "--fill-disabled",
     "--text-disabled",
-    "--on-accent"
+    "--on-accent",
+    "--on-error",
+    "--focus-ring",
+    "--dur-fast",
+    "--ease-standard"
    ],
    "replaces": []
   },
@@ -69,7 +73,8 @@
    },
    "states": [
     "disabled",
-    "selected"
+    "selected",
+    "expanded"
    ],
    "tokens": [
     "--control-h-input",
@@ -84,7 +89,11 @@
     "--fill-disabled",
     "--text",
     "--text-disabled",
-    "--on-accent"
+    "--on-accent",
+    "--focus-ring",
+    "--dur-fast",
+    "--dur-press",
+    "--ease-standard"
    ],
    "replaces": []
   },
@@ -112,10 +121,14 @@
     "--gap-8",
     "--font-chip",
     "--text-faint",
-    "--accent",
+    "--text-accent",
     "--accent-soft",
     "--hover",
-    "--fill-active"
+    "--fill-active",
+    "--control-h-input",
+    "--focus-ring",
+    "--dur-fast",
+    "--ease-standard"
    ],
    "replaces": []
   },
@@ -150,10 +163,10 @@
     "--control",
     "--border-soft",
     "--hairline",
-    "--accent",
     "--text",
     "--text-faint",
-    "--text-disabled"
+    "--text-disabled",
+    "--focus-ring"
    ],
    "replaces": []
   },
@@ -182,7 +195,9 @@
     "--hover",
     "--fill-active",
     "--text",
-    "--text-disabled"
+    "--text-disabled",
+    "--focus-ring",
+    "--control-h-input"
    ],
    "replaces": []
   },
@@ -265,7 +280,9 @@
     "--tab-active",
     "--text",
     "--dur-fast",
-    "--ease-standard"
+    "--ease-standard",
+    "--focus-ring",
+    "--control-h-input"
    ],
    "replaces": []
   },

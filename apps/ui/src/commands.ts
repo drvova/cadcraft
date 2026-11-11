@@ -14,7 +14,7 @@
 import type { CommandInfo } from "./facade";
 
 /** What the shell does with an invoked id. */
-export type CommandAction = "engine" | "open" | "save" | "sample" | "visibility" | "theme" | "animations" | "palette" | "none";
+export type CommandAction = "engine" | "open" | "save" | "sample" | "visibility" | "theme" | "animations" | "palette" | "focus" | "none";
 
 /** One `ui.*` command the web shell can honour, transcribed from `menus.rs`'s `UI_COMMANDS`. */
 export interface UiItem {
@@ -46,6 +46,11 @@ export const UI_ITEMS: readonly UiItem[] = [
   { id: "ui.toggle.statusbar", label: "Status Bar", menu: ["Window", "Status Bar"] },
   { id: "ui.toggle.cmdline", label: "Command Line", menu: ["Window", "Command Line"], shortcut: "Cmd+9" },
   { id: "ui.toggle.menubar", label: "In-window Menu Bar", menu: ["Window", "In-window Menu Bar"] },
+  // The shell's own focus keys (the web shell's, not transcribed from the desktop): where the
+  // keyboard goes, as an editor's Focus commands.
+  { id: "ui.focus.cmdline", label: "Focus Command Line", menu: ["Window", "Focus Command Line"], shortcut: "Cmd+J" },
+  { id: "ui.focus.next", label: "Focus Next Part", menu: ["Window", "Focus Next Part"], shortcut: "F6" },
+  { id: "ui.focus.previous", label: "Focus Previous Part", menu: ["Window", "Focus Previous Part"], shortcut: "Shift+F6" },
   { id: "ui.theme.system", label: "Use System Setting", menu: ["View", "Interface Theme", "Use System Setting"] },
   { id: "ui.theme.light", label: "Light", menu: ["View", "Interface Theme", "Light"] },
   { id: "ui.theme.dark", label: "Dark", menu: ["View", "Interface Theme", "Dark"] },
@@ -59,6 +64,7 @@ export function classify(id: string): CommandAction {
   if (id.startsWith("ui.panel.") || id.startsWith("ui.toggle.")) return "visibility";
   if (id.startsWith("ui.theme.")) return "theme";
   if (id.startsWith("ui.animations.")) return "animations";
+  if (id.startsWith("ui.focus.")) return "focus";
   if (id === "ui.dialog.commands") return "palette";
   return "engine";
 }

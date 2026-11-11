@@ -41,11 +41,11 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
   return (
     <aside class={open() ? "layers" : "layers is-folded"}>
       <div class="layers-head">
-        <IconButton icon="chevron-down" size="sm" title={open() ? "Hide the layers" : "Show the layers"} onClick={() => setOpen(!open())} />
+        <IconButton icon="chevron-down" size="sm" title={open() ? "Hide the layers" : "Show the layers"} expanded={open()} controls="layers-list" onClick={() => setOpen(!open())} />
         <SectionLabel>Layers</SectionLabel>
         <span class="layers-count">{props.layers().length}</span>
       </div>
-      <div class="layers-list" role="list" aria-label="Layers" hidden={!open()}>
+      <div class="layers-list" id="layers-list" role="list" aria-label="Layers" hidden={!open()}>
         <Index each={props.layers()}>
           {(layer) => (
             <div class={layer().current ? "layer-row is-current" : "layer-row"} role="listitem" aria-current={layer().current ? "true" : undefined}>

@@ -51,6 +51,50 @@ const FILE_IDS: Readonly<Record<string, "open" | "save" | "new" | "sample">> = {
   "ui.sample": "sample",
 };
 
+/**
+ * The command the shell starts to cancel a running one. The facade has no cancel of its own:
+ * starting any command ends the running one through the engine's own cancel (the one its Escape
+ * uses), whatever the prompt was asking for, and this command does nothing else to the drawing.
+ */
+const CANCEL_VIA = "redraw";
+
+/** What takes the keyboard's focus inside a region when nothing names a better control. */
+const FOCUSABLE = "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])";
+
+/** The shell's regions in the order F6 walks them; `first` is the control that takes the focus. */
+const REGIONS: readonly { root: string; first: string | null }[] = [
+  { root: ".sidebar", first: FOCUSABLE },
+  { root: ".canvas-stage", first: null },
+  { root: ".cmdline", first: ".cmd-input" },
+  { root: ".assistant-panel", first: "textarea" },
+];
+
+/** Where a key belongs to what has the focus: fields, the palette, the assistant, the menus. */
+const OWN_KEYS = "input, textarea, select, [contenteditable], dialog, .assistant-panel, [role='menubar'], [role='menu']";
+
+/** Whether an element is drawn (a region folded away or hidden by the window's width is not). */
+function isShown(el: Element): boolean {
+  return el.getClientRects().length > 0;
+}
+
+/** The control a region hands the focus to; null when the region is not on screen. */
+function regionTarget(region: { root: string; first: string | null }): HTMLElement | null {
+  const root = document.querySelector<HTMLElement>(region.root);
+  if (root === null || !isShown(root)) return null;
+  if (region.first === null) return root;
+  for (const el of root.querySelectorAll<HTMLElement>(region.first)) {
+    if (isShown(el)) return el;
+  }
+  return null;
+}
+
+/** Whether a keydown types a character (and is not a shortcut or part of a composition). */
+function typesCharacter(e: KeyboardEvent): boolean {
+  if (e.key.length !== 1 || e.key === " " || e.isComposing) return false;
+  // AltGr reports Ctrl+Alt on Windows and still types ("@" on many layouts).
+  return !(e.ctrlKey || e.metaKey || e.altKey) || e.getModifierState("AltGraph");
+}
+
 const RECENT_KEY = "cadcraft.palette.recent";
 
 /** The commands the palette ran last in this browser, newest first. */
@@ -217,8 +261,13 @@ export function App(props: AppProps): JSX.Element {
     // The facade starts showing its own default view; keep the canvas on it.
     if (initial !== null) props.facade.setView(initial);
 
-    // Escape clears the selection (PLAN.md C6); the command line clears its own input.
-    // Ctrl/Cmd+7 toggles the assistant, the desktop's ⌘7.
+    // A menu or the palette that is open when Escape goes down takes that Escape; by the time the
+    // key reaches the shell's handler it has already closed, so the fact is read on the way in.
+    let overlayTookEscape = false;
+    const onKeyCapture = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") overlayTookEscape = document.querySelector(".menu-drop, dialog[open]") !== null;
+    };
+    // The shell's keys. A key that is not handled here is left alone (no preventDefault).
     const onKey = (e: KeyboardEvent): void => {
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
@@ -228,22 +277,104 @@ export function App(props: AppProps): JSX.Element {
         setPaletteOpen((v) => !v);
         return;
       }
-      if (mod && !e.shiftKey && !e.altKey && (key === "7" || key === "b" || key === "j")) {
+      // Ctrl+1 and Ctrl+9 are the keys the Window menu prints beside Properties Inspector and
+      // Command Line (the desktop's; a browser keeps them for its tabs, the desktop window does not).
+      if (mod && !e.shiftKey && !e.altKey && (key === "7" || key === "b" || key === "j" || key === "1" || key === "9")) {
         e.preventDefault();
         if (key === "7") setShowAssistant((v) => !v);
         else if (key === "b") setShowSidebar((v) => !v);
-        else setShowCmdline((v) => !v);
+        else if (key === "1") setShowProperties((v) => !v);
+        else if (key === "9") setShowCmdline((v) => !v);
+        else panelKey();
         return;
       }
-      if (e.key !== "Escape") return;
-      if (selection().length > 0) {
+      // F6 / Shift+F6 walk the regions, as the editor does.
+      if (e.key === "F6" && !mod && !e.altKey) {
+        e.preventDefault();
+        focusRegion(e.shiftKey ? -1 : 1);
+        return;
+      }
+      if (e.defaultPrevented) return;
+      const target = e.target instanceof Element ? e.target : null;
+      // Typing with the drawing (or nothing editable) in focus starts at the command line: the
+      // focus moves during the keydown, so the character itself lands in the field.
+      if (typesCharacter(e) && target?.closest(OWN_KEYS) == null) {
+        focusCommandLine();
+        return;
+      }
+      if (e.key !== "Escape" || overlayTookEscape) return;
+      // Escape cancels the running command; with none running it clears the selection (PLAN.md C6).
+      if (prompt().running !== null) {
+        e.preventDefault();
+        cancelCommand();
+      } else if (selection().length > 0) {
+        e.preventDefault();
         props.facade.execute("select", { clear: true });
         refresh();
       }
     };
+    window.addEventListener("keydown", onKeyCapture, true);
     window.addEventListener("keydown", onKey);
-    onCleanup(() => window.removeEventListener("keydown", onKey));
+    onCleanup(() => {
+      window.removeEventListener("keydown", onKeyCapture, true);
+      window.removeEventListener("keydown", onKey);
+    });
   });
+
+  /** Show the command line if it is folded away and put the keyboard in its field. */
+  const focusCommandLine = (): void => {
+    setShowCmdline(true);
+    regionTarget({ root: ".cmdline", first: ".cmd-input" })?.focus();
+  };
+
+  /**
+   * Ctrl+J, the panel's key: it brings the command line up and takes the keyboard there; pressed
+   * while the keyboard is already in it, it folds the panel away and hands the focus to the drawing.
+   */
+  const panelKey = (): void => {
+    if (showCmdline() && document.activeElement?.closest(".cmdline") != null) {
+      setShowCmdline(false);
+      regionTarget({ root: ".canvas-stage", first: null })?.focus();
+    } else {
+      focusCommandLine();
+    }
+  };
+
+  /** Move the focus to the next (+1) or previous (-1) region on screen, wrapping round. */
+  const focusRegion = (step: 1 | -1): void => {
+    const targets = REGIONS.map((region) => ({ region, target: regionTarget(region) })).filter(
+      (r): r is { region: (typeof REGIONS)[number]; target: HTMLElement } => r.target !== null,
+    );
+    if (targets.length === 0) return;
+    const here = targets.findIndex((r) => document.activeElement?.closest(r.region.root) != null);
+    const next = here === -1 ? (step === 1 ? 0 : targets.length - 1) : (here + step + targets.length) % targets.length;
+    targets[next]?.target.focus();
+  };
+
+  /**
+   * Cancel the running command, as Escape does in a CAD program. The engine cancels it when
+   * another command starts (see [`CANCEL_VIA`]); the lines that start adds to the history are
+   * taken out again, so the history reads `*Cancel*` as it does on the desktop.
+   */
+  const cancelCommand = (): void => {
+    setNotice(null);
+    const before = prompt();
+    repeatOnEnter = before.running;
+    const started = props.facade.start(CANCEL_VIA, before);
+    if (started.running !== null) {
+      // A facade that does not know the command (the stand-in engine): an empty Enter ends its prompts.
+      setPrompt(props.facade.cmdline("", before));
+    } else {
+      // The start adds its echo, the engine's `*Cancel*` and its own `Command:` line (a full
+      // history is capped, so the count of new lines is not always the difference in length).
+      const added = Math.max(3, started.output.length - before.output.length);
+      const own = new Set([CANCEL_VIA, `Command: ${CANCEL_VIA.toUpperCase()}`]);
+      const kept = started.output.slice(0, -added);
+      const tail = started.output.slice(-added).filter((line) => !own.has(line));
+      setPrompt({ ...started, output: [...kept, ...tail], error: null });
+    }
+    refresh();
+  };
 
   // The theme: dark/light/system; "system" follows the browser live.
   const systemDark = (): MediaQueryList | null => (typeof window === "undefined" ? null : window.matchMedia("(prefers-color-scheme: dark)"));
@@ -289,15 +420,25 @@ export function App(props: AppProps): JSX.Element {
     if (!regionCovers(displayRegion, rect, engineRevision)) fetchDisplay(rect);
   };
 
+  /**
+   * The command Escape cancelled last, until another line is entered. The engine's empty Enter
+   * repeats the last command started, which after a cancel is the shell's own [`CANCEL_VIA`]:
+   * the shell sends the cancelled command's name instead, so Enter repeats what the user ran.
+   */
+  let repeatOnEnter: string | null = null;
+
   const onCommand = (text: string): void => {
     setNotice(null);
-    setPrompt(props.facade.cmdline(text, prompt()));
+    const line = text.trim() === "" && prompt().running === null && repeatOnEnter !== null ? repeatOnEnter : text;
+    repeatOnEnter = null;
+    setPrompt(props.facade.cmdline(line, prompt()));
     refresh();
   };
 
   /** Start a command by id, exactly as the desktop menu does; the prompt becomes interactive. */
   const startCommand = (id: string): void => {
     setNotice(null);
+    repeatOnEnter = null;
     const state = props.facade.start(id, prompt());
     setPrompt(state);
     if (state.error !== null) setNotice(state.error);
@@ -398,6 +539,10 @@ export function App(props: AppProps): JSX.Element {
         return;
       case "palette":
         setPaletteOpen(true);
+        return;
+      case "focus":
+        if (id === "ui.focus.cmdline") focusCommandLine();
+        else focusRegion(id === "ui.focus.previous" ? -1 : 1);
         return;
       default:
         return;

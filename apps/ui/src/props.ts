@@ -13,6 +13,20 @@
  *
  * `buildPatch` converts the edited rows into the exact parameter names `properties.set` reads:
  * `layer`, `color`, `linetype`, `lineweight`, `ltscale`, `transparency`, `thickness`, `visible`.
+ *
+ * Numbers, both ways:
+ *   - shown (`numberText`): plain digits with six decimals at most while the magnitude is from
+ *     1e-6 up to (not including) 1e15; outside that, exponent form with seven significant digits
+ *     at most (`1.5e+21`, `2.5e-9`); zero is `0`. A NaN or an infinity is never shown as a
+ *     number: it reads `Not a number`, `Infinite` or `-Infinite`.
+ *   - typed (`readNumber`): an optional sign, digits with at most one decimal mark, an optional
+ *     exponent. Full-width forms are folded to ASCII first, and the typographic minus is a minus.
+ *     The decimal mark is a dot, or a single comma followed by digits when the text has no dot
+ *     (`2,5` is 2.5). Anything with more separators (`1,234,567`, `1.234,5`, `2,`) is refused,
+ *     because a comma is also a thousands separator and CAD's coordinate separator. Hex, a
+ *     trailing unit, inner spaces, `Infinity` and a value past the float range are refused.
+ *   - `judgeDraft` is the one judgement of typed text against a row: it and `buildPatch` both
+ *     read numbers through `readNumber`, so what is "unchanged" and what is sent cannot disagree.
  */
 
 import { asNumber, isRecord } from "./json";
@@ -24,6 +38,11 @@ export interface PropRow {
   editable: boolean;
   kind: "text" | "number" | "bool" | "choice";
   choices?: readonly string[];
+  /** A number row's lowest value; with `minExclusive` the value must be above it. */
+  min?: number;
+  minExclusive?: boolean;
+  /** A number row's highest value (inclusive). Absent: the top is open. */
+  max?: number;
 }
 
 export type PropertiesReply =
@@ -83,22 +102,88 @@ function humanize(key: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+/** What a number that is not one reads as: words, so it is never mistaken for a value. */
+export const NOT_A_NUMBER = "Not a number";
+export const INFINITE = "Infinite";
+
+/** Plain digits below this magnitude (fifteen integer digits), exponent form from it up. */
+const PLAIN_BELOW = 1e15;
+/** Plain digits from this magnitude up: anything smaller would round to a false zero. */
+const PLAIN_FROM = 1e-6;
+
 /** A JSON scalar as the palette shows it; anything else is the empty string. */
 function scalarText(value: unknown): string {
   if (typeof value === "string") return value;
   if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "number" && Number.isFinite(value)) return numberText(value);
+  if (typeof value === "number") return numberText(value);
   return "";
 }
 
-/** A finite number for display: six decimals at most, so a computed float stays readable. */
-function numberText(value: number): string {
-  const rounded = Math.round(value * 1e6) / 1e6;
-  return String(rounded);
+/** `1.500000e+21` as `1.5e+21`: the fraction's trailing zeros say nothing. */
+function trimExponent(text: string): string {
+  return text.replace(/\.?0+e/, "e");
 }
 
-/** The control a row gets, and its choice list where one applies. */
-function kindFor(key: string, layers: readonly string[]): Pick<PropRow, "kind" | "choices"> {
+/**
+ * A number for display, by the rule in this file's header: plain digits with six decimals at
+ * most for ordinary magnitudes, exponent form for the very large and the very small, and words
+ * for a NaN or an infinity.
+ */
+export function numberText(value: number): string {
+  if (Number.isNaN(value)) return NOT_A_NUMBER;
+  if (!Number.isFinite(value)) return value > 0 ? INFINITE : `-${INFINITE}`;
+  const size = Math.abs(value);
+  if (size === 0) return "0";
+  if (size >= PLAIN_BELOW || size < PLAIN_FROM) return trimExponent(value.toExponential(6));
+  return String(Number(value.toFixed(6)));
+}
+
+/** Why typed text is not a number the palette takes. */
+export type NumberFault = "empty" | "separators" | "unit" | "range" | "form";
+
+export type NumberReading = { ok: true; value: number } | { ok: false; fault: NumberFault };
+
+/** An optional sign, digits with at most one dot, an optional exponent. Nothing else. */
+const NUMBER_FORM = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
+/** The same with one comma where the dot would be, and digits after it. */
+const COMMA_DECIMAL_FORM = /^[+-]?\d*,\d+(?:e[+-]?\d+)?$/i;
+/** Only what a number with separators is made of: the text is a number written ambiguously. */
+const SEPARATED_FORM = /^[+-]?[\d.,]*\d[\d.,]*$/;
+/** A number, then letters or a unit mark. */
+const UNIT_FORM = /^[+-]?(?:\d+[.,]?\d*|[.,]\d+)\s*(?:[a-zµ]+|["'%°])$/i;
+
+/**
+ * Typed text as a number, by the rule in this file's header. Never throws; a non-string reads
+ * as `form`.
+ */
+export function readNumber(raw: string): NumberReading {
+  if (typeof raw !== "string") return { ok: false, fault: "form" };
+  const text = raw.normalize("NFKC").replace(/−/g, "-").trim();
+  if (text === "") return { ok: false, fault: "empty" };
+  let plain: string;
+  if (NUMBER_FORM.test(text)) plain = text;
+  else if (COMMA_DECIMAL_FORM.test(text)) plain = text.replace(",", ".");
+  else if (SEPARATED_FORM.test(text)) return { ok: false, fault: "separators" };
+  else if (UNIT_FORM.test(text)) return { ok: false, fault: "unit" };
+  else return { ok: false, fault: "form" };
+  const value = Number(plain);
+  if (!Number.isFinite(value)) return { ok: false, fault: "range" };
+  return { ok: true, value: value === 0 ? 0 : value };
+}
+
+/** The bounds of the number rows the engine limits, by key. */
+const NUMBER_BOUNDS: Readonly<Record<string, Pick<PropRow, "min" | "minExclusive" | "max">>> = {
+  // `properties.set` leaves the scale as it was for anything not above zero and still answers
+  // ok (`run_set`: `.filter(|x| *x > 0.0)`), and the LTSCALE command says "scale must be
+  // positive". Neither states a top, so the top is open.
+  ltscale: { min: 0, minExclusive: true },
+  linetypeScale: { min: 0, minExclusive: true },
+  // The THICKNESS command's range (`MAX_THICKNESS`, "thickness is out of range (-1e12 to 1e12)").
+  thickness: { min: -1e12, max: 1e12 },
+};
+
+/** The control a row gets, its choice list where one applies, and a number row's bounds. */
+function kindFor(key: string, layers: readonly string[]): Pick<PropRow, "kind" | "choices" | "min" | "minExclusive" | "max"> {
   switch (key) {
     case "color":
       return { kind: "choice", choices: COLOR_CHOICES };
@@ -110,7 +195,7 @@ function kindFor(key: string, layers: readonly string[]): Pick<PropRow, "kind" |
     case "linetypeScale":
     case "thickness":
     case "textHeight":
-      return { kind: "number" };
+      return { kind: "number", ...NUMBER_BOUNDS[key] };
     case "visible":
       return { kind: "bool" };
     default:
@@ -119,10 +204,7 @@ function kindFor(key: string, layers: readonly string[]): Pick<PropRow, "kind" |
 }
 
 function makeRow(key: string, value: string, editable: boolean, layers: readonly string[]): PropRow {
-  const { kind, choices } = kindFor(key, layers);
-  const row: PropRow = { key, label: humanize(key), value, editable, kind };
-  if (choices !== undefined) row.choices = choices;
-  return row;
+  return { key, label: humanize(key), value, editable, ...kindFor(key, layers) };
 }
 
 /** The no-selection rows: the drawing's current defaults, read-only (there is nothing to set). */
@@ -198,31 +280,78 @@ export function parseProperties(reply: unknown, layers: readonly string[]): Prop
 }
 
 /**
- * Edited row values into `properties.set` parameters: a finite number stays a number, the
- * exact strings "true"/"false" become booleans, everything else stays a string. Only the keys
- * the caller edited are included; a non-string value is skipped rather than coerced.
+ * Edited row values into `properties.set` parameters, by what each key is: a number row's text
+ * becomes a number (`readNumber`), the tick's "true"/"false" a boolean, and every other row
+ * stays a string with the space around it removed. A layer called "0" or "true" therefore stays
+ * a name (the engine reads `layer` only as a string and silently skips anything else). Number
+ * text that is not a number stays a string, so nothing is invented for it. Only the keys the
+ * caller edited are included; a non-string value is skipped rather than coerced.
  */
 export function buildPatch(edits: Readonly<Record<string, string>>): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   for (const [key, raw] of Object.entries(edits)) {
     if (typeof raw !== "string") continue;
     const text = raw.trim();
-    if (text === "true") {
-      patch[key] = true;
-      continue;
+    const { kind } = kindFor(key, []);
+    if (kind === "number") {
+      const reading = readNumber(text);
+      patch[key] = reading.ok ? reading.value : text;
+    } else if (kind === "bool" && (text === "true" || text === "false")) {
+      patch[key] = text === "true";
+    } else {
+      patch[key] = text;
     }
-    if (text === "false") {
-      patch[key] = false;
-      continue;
-    }
-    if (text !== "") {
-      const n = Number(text);
-      if (Number.isFinite(n)) {
-        patch[key] = n;
-        continue;
-      }
-    }
-    patch[key] = raw;
   }
   return patch;
+}
+
+/** What becomes of text typed into a row: nothing to send, a refusal to say, or the patch. */
+export type DraftVerdict = { kind: "keep" } | { kind: "refuse"; message: string } | { kind: "send"; patch: Record<string, unknown> };
+
+/** A bound as a person reads it: `1e12` rather than thirteen digits. */
+function boundText(value: number): string {
+  return Math.abs(value) >= 1e6 ? trimExponent(value.toExponential()).replace("e+", "e") : numberText(value);
+}
+
+/** The range a number row takes, in words; empty when the row has no bounds. */
+function rangeText(row: PropRow): string {
+  const above = row.minExclusive === true;
+  const low = row.min === undefined ? "" : `${above ? "above" : "from"} ${boundText(row.min)}`;
+  if (row.max === undefined) return low === "" || above ? low : `${low} up`;
+  if (low === "") return `up to ${boundText(row.max)}`;
+  return above ? `${low}, up to ${boundText(row.max)}` : `${low} to ${boundText(row.max)}`;
+}
+
+function inRange(row: PropRow, n: number): boolean {
+  if (row.min !== undefined && (row.minExclusive === true ? n <= row.min : n < row.min)) return false;
+  return row.max === undefined || n <= row.max;
+}
+
+/** Why a number row refused its text, with what to type instead. */
+function numberRefusal(row: PropRow, fault: NumberFault): string {
+  if (fault === "separators") return `${row.label}: type it like 1234.5, with one decimal mark and no thousands separators`;
+  if (fault === "unit") return `${row.label} takes a number without a unit`;
+  if (fault === "range" && row.max === undefined) return `${row.label} is past the largest number a drawing holds`;
+  const range = rangeText(row);
+  return range === "" ? `${row.label} needs a number` : `${row.label} needs a number ${range}`;
+}
+
+/**
+ * Judges `draft` against the row it was typed into. An unchanged value, an emptied number and
+ * the same number written another way ("2.50" or "2,5" over "2.5") keep the engine's value; a
+ * number row takes only what `readNumber` reads, inside the row's bounds; a text row's value is
+ * compared and sent without the space around it; everything else is sent as `buildPatch` has it.
+ */
+export function judgeDraft(row: PropRow, draft: string): DraftVerdict {
+  if (draft === row.value) return { kind: "keep" };
+  if (row.kind === "number") {
+    const reading = readNumber(draft);
+    if (!reading.ok) return reading.fault === "empty" ? { kind: "keep" } : { kind: "refuse", message: numberRefusal(row, reading.fault) };
+    if (!inRange(row, reading.value)) return { kind: "refuse", message: numberRefusal(row, "form") };
+    const held = readNumber(row.value);
+    if (held.ok && held.value === reading.value) return { kind: "keep" };
+    return { kind: "send", patch: { [row.key]: reading.value } };
+  }
+  if (row.kind === "text" && draft.trim() === row.value.trim()) return { kind: "keep" };
+  return { kind: "send", patch: buildPatch({ [row.key]: draft }) };
 }

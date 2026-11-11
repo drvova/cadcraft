@@ -138,6 +138,9 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   };
   /** The changes row is open: the steps the assistant took are listed above it. */
   const [changesOpen, setChangesOpen] = createSignal(false);
+  /** The queue folds to its heading. It starts open and only the reader folds it. The fold key is
+   *  one element in both states (the stylesheet turns its chevron), so it keeps the keyboard's focus. */
+  const [queueOpen, setQueueOpen] = createSignal(true);
   /** The transcript keeps to its end only while the reader is there. */
   const [following, setFollowing] = createSignal(true);
   /** The transcript's ages move: the clock is re-read twice a minute. */
@@ -181,7 +184,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     if (pictures.length === 0) return;
     const room = MAX_ATTACHMENTS - s.attached().length;
     if (room <= 0) {
-      s.setStatus(`At most ${MAX_ATTACHMENTS} pictures per message.`);
+      s.setStatus(`At most ${MAX_ATTACHMENTS} pictures per message`);
       return;
     }
     const accepted: ChatImage[] = [];
@@ -444,8 +447,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               <ToolIcon id="plus" />
             </button>
           </Tooltip>
-          <Tooltip text="Close the panel" placement="bottom" align="end">
-            <button class="assistant-icon" type="button" aria-label="Close the panel" onClick={() => props.onClose()}>
+          <Tooltip text="Close the assistant" placement="bottom" align="end">
+            <button class="assistant-icon" type="button" aria-label="Close the assistant" onClick={() => props.onClose()}>
               <ToolIcon id="close" />
             </button>
           </Tooltip>
@@ -638,30 +641,38 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         <Show when={s.running() || s.status() !== "" || s.queued.length > 0 || s.changes() !== null}>
           <div class="assistant-stack">
             <Show when={s.queued.length > 0}>
-              <div class="assistant-stack-head">{`${s.queued.length} in queue`}</div>
-              <For each={s.queued}>
-                {(item, index) => (
-                  <div class="assistant-stack-row">
-                    <span class="assistant-stack-text" title={item.text}>{item.text}</span>
-                    <IconButton icon="send" size="sm" title="Send this now" disabled={s.running()} onClick={() => s.sendQueued(index())} />
-                    <IconButton icon="close" size="sm" title="Remove from the queue" onClick={() => s.unqueue(index())} />
-                  </div>
-                )}
-              </For>
+              <div class={queueOpen() ? "assistant-stack-head" : "assistant-stack-head is-folded"}>
+                <IconButton icon="chevron-down" size="sm" title={queueOpen() ? "Hide the queue" : "Show the queue"} expanded={queueOpen()} controls="assistant-queue" onClick={() => setQueueOpen(!queueOpen())} />
+                <span class="assistant-stack-count">{`${s.queued.length} in queue`}</span>
+              </div>
+              <div class="assistant-stack-queue" id="assistant-queue" hidden={!queueOpen()}>
+                <For each={s.queued}>
+                  {(item, index) => (
+                    <div class="assistant-stack-row">
+                      <span class="assistant-stack-text" title={item.text}>{item.text}</span>
+                      <IconButton icon="send" size="sm" title="Send this now" disabled={s.running()} onClick={() => s.sendQueued(index())} />
+                      <IconButton icon="close" size="sm" title="Remove from the queue" onClick={() => s.unqueue(index())} />
+                    </div>
+                  )}
+                </For>
+              </div>
             </Show>
             <Show when={s.changes()}>
               {(c) => (
                 <>
-                <Show when={changesOpen()}>
-                  <ol class="assistant-stack-list">
-                    <For each={c().labels}>{(label) => <li>{label}</li>}</For>
-                  </ol>
-                </Show>
-                <div class="assistant-stack-row">
+                <ol class="assistant-stack-list" id="assistant-changes" hidden={!changesOpen()}>
+                  <For each={c().labels}>{(label) => <li>{label}</li>}</For>
+                </ol>
+                <div class={changesOpen() ? "assistant-stack-row" : "assistant-stack-row is-folded"}>
                   <Show when={c().labels.length > 0}>
-                    <Show when={changesOpen()} fallback={<IconButton icon="chevron-right" size="sm" title="Show what ran" onClick={() => setChangesOpen(true)} />}>
-                      <IconButton icon="chevron-down" size="sm" title="Hide what ran" onClick={() => setChangesOpen(false)} />
-                    </Show>
+                    <IconButton
+                      icon="chevron-down"
+                      size="sm"
+                      title={changesOpen() ? "Hide what ran" : "Show what ran"}
+                      expanded={changesOpen()}
+                      controls="assistant-changes"
+                      onClick={() => setChangesOpen(!changesOpen())}
+                    />
                   </Show>
                   <span class="assistant-stack-text">{c().steps === 1 ? "1 change to the drawing" : `${c().steps} changes to the drawing`}</span>
                   <Button variant="ghost" size="sm" disabled={s.running()} onClick={s.undoChanges}>
@@ -679,7 +690,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 <Show when={s.running()}>
                   <span class="assistant-ripple" />
                 </Show>
-                <span class="assistant-stack-text">{s.status() === "" ? "Working…" : s.status()}</span>
+                <span class="assistant-stack-text">{s.status() === "" ? "Working…" : sentence(s.status())}</span>
                 <Show when={s.running()}>
                   <Button variant="ghost" size="sm" onClick={s.stop}>
                     Stop

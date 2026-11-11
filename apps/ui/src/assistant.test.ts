@@ -93,7 +93,7 @@ describe("the provider", () => {
 
   test("readiness names what is missing", () => {
     expect(providerReady({ baseUrl: "", model: "m", apiKey: "" })).toContain("base URL");
-    expect(providerReady({ baseUrl: "ftp://x", model: "m", apiKey: "" })).toContain("http://");
+    expect(providerReady({ baseUrl: "ftp://x", model: "m", apiKey: "" })).toBe('The base URL must start with http:// or https://, not "ftp://x".');
     expect(providerReady({ baseUrl: "http://x", model: "", apiKey: "" })).toContain("model name");
     expect(providerReady(PROVIDER)).toBeNull();
   });
@@ -134,11 +134,11 @@ describe("setting a provider up", () => {
 
   test("a refusal, an unreachable server and a strange answer each say so", async () => {
     const refused = fetchOf(new Response(JSON.stringify({ error: { message: "bad key" } }), { status: 401 }));
-    await expect(listModels(PROVIDER, signal, refused.fetch)).rejects.toThrow("401: bad key");
+    await expect(listModels(PROVIDER, signal, refused.fetch)).rejects.toThrow("The provider refused the request (401). Check the API key in the model setup. The provider said: bad key.");
     const down = fetchOf(new TypeError("Failed to fetch"));
-    await expect(listModels(PROVIDER, signal, down.fetch)).rejects.toThrow("could not be reached");
+    await expect(listModels(PROVIDER, signal, down.fetch)).rejects.toThrow("The provider at http://127.0.0.1:11434/v1/models could not be reached. Check that the server is running and accepts requests from this page.");
     const odd = fetchOf(new Response("<html>", { status: 200 }));
-    await expect(listModels(PROVIDER, signal, odd.fetch)).rejects.toThrow("not with a model list");
+    await expect(listModels(PROVIDER, signal, odd.fetch)).rejects.toThrow("The provider answered, but not with a model list. Type the model's name and save.");
     await expect(listModels({ baseUrl: "", model: "", apiKey: "" }, signal, odd.fetch)).rejects.toThrow("base URL");
   });
 });
@@ -312,19 +312,20 @@ describe("the stream assembler", () => {
 
   test("an error payload throws; a non-JSON line throws", () => {
     expect(() => new StreamAssembler().feed(JSON.stringify({ error: { message: "nope" } }))).toThrow("nope");
-    expect(() => new StreamAssembler().feed("<html>")).toThrow("not JSON");
+    expect(() => new StreamAssembler().feed("<html>")).toThrow("The provider's reply could not be read. The base URL may not point to an OpenAI-compatible server.");
+    expect(() => oneShot("<html>", () => {})).toThrow("The provider's reply could not be read. The base URL may not point to an OpenAI-compatible server.");
   });
 
   test("a call without a name is refused at the end, not mid-stream", () => {
     const a = new StreamAssembler();
     a.feed(JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: "c", function: { arguments: "{}" } }] } }] }));
-    expect(() => a.finishReply()).toThrow("without naming it");
+    expect(() => a.finishReply()).toThrow("The model asked to run code, but its request could not be read. Ask again, or try another model.");
   });
 
   test("parseToolArgs: empty is {}, malformed throws", () => {
     expect(parseToolArgs("  ")).toEqual({});
     expect(parseToolArgs('{"a":1}')).toEqual({ a: 1 });
-    expect(() => parseToolArgs("{oops")).toThrow("not JSON");
+    expect(() => parseToolArgs("{oops")).toThrow("The model asked to run code, but its request could not be read. Ask again, or try another model.");
   });
 
   test("a one-shot (non-streamed) reply is read as one object", () => {
@@ -439,7 +440,19 @@ describe("runTurn", () => {
     const failed = events.find((e) => e.type === "failed");
     expect(failed?.type).toBe("failed");
     if (failed?.type === "failed") expect(failed.error).toContain("bad key");
-    expect(apiErrorText(401, '{"error":{"message":"bad key"}}')).toBe("the provider answered 401: bad key");
+    expect(apiErrorText(401, '{"error":{"message":"bad key"}}')).toBe("The provider refused the request (401). Check the API key in the model setup. The provider said: bad key.");
+  });
+
+  test("each status says what happened and the way out, and keeps the provider's own message", () => {
+    expect(apiErrorText(403, "")).toBe("The provider refused the request (403). Check the API key in the model setup.");
+    expect(apiErrorText(404, '{"error":{"message":"The model `x` does not exist."}}')).toBe(
+      "The provider did not find what was asked for (404). The base URL or the model name may be wrong. The provider said: The model `x` does not exist.",
+    );
+    expect(apiErrorText(429, "")).toBe("The provider is limiting requests (429). Wait a moment, then ask again.");
+    expect(apiErrorText(503, "nope")).toBe("The provider is having trouble (503). Ask again in a moment. The provider said: nope.");
+    expect(apiErrorText(400, "")).toBe("The provider answered with an error (400).");
+    // An error inside an answer that arrived (a stream's error payload) has no status worth naming.
+    expect(apiErrorText(200, '{"error":{"message":"overloaded"}}')).toBe("The provider reported an error. The provider said: overloaded.");
   });
 
   test("a model that only calls tools forever is stopped at MAX_ROUNDS", async () => {
@@ -456,7 +469,7 @@ describe("runTurn", () => {
     });
     const failed = events[events.length - 1];
     expect(failed?.type).toBe("failed");
-    if (failed?.type === "failed") expect(failed.error).toContain("without answering");
+    if (failed?.type === "failed") expect(failed.error).toBe(`The assistant ran code ${MAX_ROUNDS} times in a row without answering, so it was stopped. Ask it to continue, or say what to do differently.`);
   });
 
   test("an abort mid-stream ends the turn as stopped", async () => {

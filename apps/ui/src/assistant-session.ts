@@ -165,7 +165,7 @@ export function createAssistantSession(opts: SessionOptions) {
     }
     if (e.type === "call") {
       steps += 1;
-      setStatus(`Working, ${plural(steps, "step", "steps")}`);
+      setStatus(`Working, ${plural(steps, "step", "steps")}…`);
       setEntries(produce((list) => void list.push({ kind: "tool", name: e.name, code: e.code, report: "", ok: true, note: "running…", open: false, at: Date.now() })));
       return;
     }
@@ -313,7 +313,7 @@ export function createAssistantSession(opts: SessionOptions) {
     const env = opts.facade.execute("undoto", { depth: c.depth });
     ranSince = [];
     setChanges(null);
-    setStatus(env.ok ? `Drawing restored, ${plural(c.steps, "step", "steps")} undone` : env.error);
+    setStatus(env.ok ? `Undid ${plural(c.steps, "change", "changes")} to the drawing` : env.error);
     opts.onChanged();
   };
 

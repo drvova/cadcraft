@@ -1,7 +1,7 @@
 /**
  * IconButton's contract: a native button whose accessible name is the `title`, the code-drawn
- * glyph inside, the size/variant classes, `aria-pressed` when selected, and no click when
- * disabled.
+ * glyph inside, the size/variant classes, `aria-pressed` when selected, `aria-expanded` and
+ * `aria-controls` on a fold key, and no click when disabled.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -50,5 +50,21 @@ describe("IconButton", () => {
     expect(off.getAttribute("aria-pressed")).toBe("false");
     const plain = buttonIn(mount(() => <IconButton icon="list" title="List" />));
     expect(plain.hasAttribute("aria-pressed")).toBe(false);
+  });
+
+  test("a fold key announces whether its region is showing, and which region it is", () => {
+    const open = buttonIn(mount(() => <IconButton icon="chevron-down" title="Fold the layers" expanded controls="layers-body" />));
+    expect(open.getAttribute("aria-expanded")).toBe("true");
+    expect(open.getAttribute("aria-controls")).toBe("layers-body");
+    expect(open.hasAttribute("aria-pressed")).toBe(false);
+    const folded = buttonIn(mount(() => <IconButton icon="chevron-down" title="Unfold the layers" expanded={false} controls="layers-body" />));
+    expect(folded.getAttribute("aria-expanded")).toBe("false");
+    expect(folded.getAttribute("aria-controls")).toBe("layers-body");
+  });
+
+  test("a key that folds nothing carries neither disclosure attribute", () => {
+    const plain = buttonIn(mount(() => <IconButton icon="close" title="Close" />));
+    expect(plain.hasAttribute("aria-expanded")).toBe(false);
+    expect(plain.hasAttribute("aria-controls")).toBe(false);
   });
 });

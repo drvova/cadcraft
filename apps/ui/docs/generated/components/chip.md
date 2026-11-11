@@ -83,8 +83,8 @@ export default function ToneAccent() {
 | Static | The caller passes no handler. | Read it. It is a `<span>`: no tab stop, no pointer. | The pill's text; no cursor change. | test |
 | Rest | The caller passes `onClick`. | Click it, or Tab to it. | The pill is a `<button>`; the cursor is a pointer. | test |
 | Hover | The pointer is over the interactive chip, on a device with a hover pointer. | Click it. | The `.08` fill. | by hand |
-| Pressed | The pointer is held down. | Release to run the handler. | The `.14` fill. | by hand |
-| Focused | Keyboard focus arrives by Tab. | Enter or Space runs the handler. | The 1px accent ring at offset -1, following the pill. | by hand |
+| Pressed | The pointer is held down. | Release to run the handler. | The `.14` fill; an `accent` chip holds the `.08` hover fill, where its ink still reads. | by hand |
+| Focused | Keyboard focus arrives by Tab. | Enter or Space runs the handler. | The 1px ring in the focus ink at offset -1, following the pill. | by hand |
 
 ### State precedence
 - Static and Hover: Not applicable: a static chip is a `<span>` and takes no pointer or hover styles.
@@ -94,7 +94,7 @@ export default function ToneAccent() {
 ### Motion
 | Trigger | Kind | Preset | Properties | Reduced motion |
 |---|---|---|---|---|
-| The pointer enters or leaves an interactive chip | input | hover / focus feedback (`--dur-fast` + `--ease-out`) | background-color | The fill changes at once: the shell's `:root[data-animations="off"] *` rule removes the transition. |
+| The pointer enters or leaves an interactive chip | input | hover / focus feedback (`--dur-fast` + `--ease-standard`) | background-color | The fill changes at once: the shell's `:root[data-animations="off"] *` rule removes the transition. |
 
 ## Props
 
@@ -144,6 +144,9 @@ export default function ToneAccent() {
 - `rule/chip-row-limit`: When a chip row holds more than 6 chips, wrap the row or move the rest behind a "More" chip, because the measured chip is 20px tall with 8px side padding and a 608px composer row fits 6 of them before the row wraps. Evidence: measured 20px chip and 608px composer, `docs/system/decisions.md`. Check: review `src/components/CommandLine.tsx`.
   - Don't: 9 chips in one unwrapped row.
   - Do: 6 chips and a "More" chip that opens the rest.
+- `rule/chip-touch-target`: When interactive chips sit in a row, keep at least 4px between them and between 2 rows of them, because under a coarse pointer each 20px pill keeps its drawn size and takes a 24px target from an invisible `::after` 2px past every edge, and closer pills overlap their targets. Evidence: measured 20px pill with a 24px `::after` target, `src/ui/ui.css:580`. Check: review `src/ui/ui.css`.
+  - Don't: `.my-chips { display: flex; gap: 0 }`
+  - Do: `.my-chips { display: flex; flex-wrap: wrap; gap: var(--gap-4) }`
 
 ## Accessibility
 Rests on the native element each form renders: a `<span>` for the static chip, a `<button>` for the interactive one.
@@ -167,11 +170,13 @@ Rests on the native element each form renders: a `<span>` for the static chip, a
 | The pill | all | `--control-h-chip`, `--radius-round`, `--gap-8`, `--font-chip`, `--gap-4` |
 | The text (`neutral`) | all | `--text-faint` |
 | The fill (`accent`) | all | `--accent-soft` |
-| The text (`accent`) | all | `--accent` |
+| The text (`accent`) | all | `--text-accent` |
 | The fill (interactive) | hover | `--hover` |
 | The fill (interactive) | pressed | `--fill-active` |
-| The ring | focus-visible | `--focus-outline-w`, `--accent`, `--focus-outline-offset` |
-| The motion | hover | `--dur-fast`, `--ease-out` |
+| The fill (interactive, `accent`) | pressed | `--hover` |
+| The ring | focus-visible | `--focus-outline-w`, `--focus-ring`, `--focus-outline-offset` |
+| The motion | hover | `--dur-fast`, `--ease-standard` |
+| The target (interactive) | coarse pointer | `--control-h-input` |
 
 ## Related
 - `Button`: when the action needs a label and a full control height.

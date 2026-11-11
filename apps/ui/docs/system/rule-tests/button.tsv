@@ -4,3 +4,4 @@ rule/button-state-ladder	pass	pass	n/a: falsify and sweep cover it	pass	ship
 rule/button-label-verb	pass	pass	n/a: falsify and sweep cover it	pass	ship	
 rule/button-canonical-element	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
 rule/button-row-limit	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/button-aria-label-value	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: the command centre moves onto the prop at integration; its file is not this worker's	ship	

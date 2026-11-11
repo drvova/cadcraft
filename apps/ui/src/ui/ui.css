@@ -8,6 +8,11 @@
  * borders are alpha strokes. Hover styles sit behind `@media (hover: hover)` so a touch device
  * never flashes a hover state (trap/touch-hover-flash). Reduced motion is the shell's:
  * `:root[data-animations="off"] *` in styles.css kills every transition below.
+ *
+ * Every state transition is the measured `.1s ease` (`--dur-fast` + `--ease-standard`, §8). The
+ * ring's ink is `--focus-ring`; on a control filled with an action colour or with the ink itself,
+ * where an accent ring at the edge has nothing to show against, the ring is the fill's own label
+ * ink drawn inside the edge. The last section gives a coarse pointer its 24px targets.
  */
 
 /* ---- Button: <button class="ui-button ui-button--{variant} ui-button--{size}"> ---- */
@@ -36,12 +41,24 @@
 }
 
 .ui-button:focus-visible {
-  outline: var(--focus-outline-w) solid var(--accent);
+  outline: var(--focus-outline-w) solid var(--focus-ring);
   outline-offset: var(--focus-outline-offset);
 }
 
 .ui-button:disabled {
   cursor: default;
+}
+
+/* On an action fill the accent ring at the edge is the fill's own colour (1.0:1 on primary), so
+   the ring is the label's ink, drawn inside the edge with the fill on both sides of it. */
+.ui-button--primary:focus-visible {
+  outline-color: var(--on-accent);
+  outline-offset: calc(var(--focus-outline-offset) * 3);
+}
+
+.ui-button--danger:focus-visible {
+  outline-color: var(--on-error);
+  outline-offset: calc(var(--focus-outline-offset) * 3);
 }
 
 /* secondary — the default: the .08 fill, .14 on hover, .20 pressed */
@@ -66,7 +83,7 @@
   color: var(--text-disabled);
 }
 
-/* primary — the accent fill, mixed 10% toward white on hover, 20% pressed */
+/* primary — the accent fill, stepped 10% away from the surface on hover, 20% pressed */
 .ui-button--primary {
   background: var(--accent);
   color: var(--on-accent);
@@ -107,10 +124,10 @@
   color: var(--text-disabled);
 }
 
-/* danger — the error fill, mixed 10% toward white on hover, 20% pressed */
+/* danger — the error fill, stepped 10% away from the surface on hover, 20% pressed */
 .ui-button--danger {
   background: var(--error);
-  color: var(--on-accent);
+  color: var(--on-error);
 }
 
 @media (hover: hover) {
@@ -170,7 +187,7 @@
 }
 
 .ui-icon-button:focus-visible {
-  outline: var(--focus-outline-w) solid var(--accent);
+  outline: var(--focus-outline-w) solid var(--focus-ring);
   outline-offset: var(--focus-outline-offset);
 }
 
@@ -184,9 +201,9 @@
   color: var(--text);
 }
 
-/* ghost — transparent, the .08 fill on hover */
+/* ghost — transparent, the .08 fill on hover; a selected one keeps its .14 fill under the pointer */
 @media (hover: hover) {
-  .ui-icon-button--ghost:hover:not(:disabled) {
+  .ui-icon-button--ghost:hover:not(:disabled):not([aria-pressed="true"]) {
     background: var(--hover);
     color: var(--text);
   }
@@ -229,6 +246,13 @@
   color: var(--on-accent);
 }
 
+/* The accent ring measures 2.51 against the ink fill (dark): the ring is the glyph's ink, drawn
+   inside the edge. */
+.ui-icon-button--inverted:focus-visible {
+  outline-color: var(--on-accent);
+  outline-offset: calc(var(--focus-outline-offset) * 3);
+}
+
 @media (hover: hover) {
   .ui-icon-button--inverted:hover:not(:disabled) {
     background: var(--text-dim);
@@ -264,7 +288,7 @@
 
 .ui-chip--accent {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--text-accent);
 }
 
 /* The interactive form is a <button>: it takes the pointer and the focus ring. */
@@ -274,7 +298,7 @@
 }
 
 .ui-chip--interactive:focus-visible {
-  outline: var(--focus-outline-w) solid var(--accent);
+  outline: var(--focus-outline-w) solid var(--focus-ring);
   outline-offset: var(--focus-outline-offset);
 }
 
@@ -288,6 +312,12 @@
   background: var(--fill-active);
 }
 
+/* The accent ink measures 3.74 on the .14 fill (dark, over the elevated surface): the accent
+   chip holds the hover rung while pressed, as the quiet Button does. */
+.ui-chip--accent.ui-chip--interactive:active {
+  background: var(--hover);
+}
+
 /* ---- Field: <input class="ui-field"> ---- */
 
 .ui-field {
@@ -299,7 +329,7 @@
   color: var(--text);
   font-family: var(--font-family);
   font-size: var(--font-body);
-  transition: border-color var(--dur-fast) var(--ease-out);
+  transition: border-color var(--dur-fast) var(--ease-standard);
 }
 
 .ui-field::placeholder {
@@ -307,8 +337,8 @@
 }
 
 .ui-field:focus {
-  border-color: var(--accent);
-  outline: var(--focus-outline-w) solid var(--accent);
+  border-color: var(--focus-ring);
+  outline: var(--focus-outline-w) solid var(--focus-ring);
   outline-offset: var(--focus-outline-offset);
 }
 
@@ -338,7 +368,7 @@
 }
 
 .ui-row:focus-visible {
-  outline: var(--focus-outline-w) solid var(--accent);
+  outline: var(--focus-outline-w) solid var(--focus-ring);
   outline-offset: var(--focus-outline-offset);
 }
 
@@ -383,10 +413,12 @@
 }
 
 /* md — the editor tab: it fills its strip's height (the strip is the 35px band), 13px type on a
-   12px inset, a hairline closing it on the right. A strip of them scrolls rather than squeezes. */
+   12px inset, a hairline closing it on the right. A strip of them scrolls rather than squeezes,
+   and a long name clips at 24ch so one layout never takes the strip. */
 .ui-tab--md {
   flex: 0 0 auto;
   align-self: stretch;
+  max-width: 24ch;
   max-height: var(--control-h-tab);
   padding: 0 var(--gap-12);
   border-right: var(--hairline) solid var(--border-soft);
@@ -404,7 +436,7 @@
 }
 
 .ui-tab:focus-visible {
-  outline: var(--focus-outline-w) solid var(--accent);
+  outline: var(--focus-outline-w) solid var(--focus-ring);
   outline-offset: var(--focus-outline-offset);
 }
 
@@ -528,4 +560,36 @@
 
 .ui-tooltip-host:focus-within .ui-tooltip {
   animation: tooltip-in var(--dur-fast) var(--ease-standard) forwards;
+}
+
+/* ---- Touch: a coarse pointer gets a target of at least 24 by 24 (WCAG 2.5.8) ---- */
+
+/* The drawn size never changes for a mouse, and where it can stay it stays for a finger too: the
+   20px controls (the small icon button, the interactive chip) keep their box and take the missing
+   2px a side as an invisible ::after, so a chip row and a pane header keep their rhythm. Two
+   controls cannot take a pseudo-element: rows stack with no gap, so an overhang would only
+   overlap the next row, and a compact tab clips its own overflow for the ellipsis. Those two grow
+   from 22px to the 24px control height instead. Button (28/24), the 24px icon button, Field (24)
+   and the editor tab (the 35px strip) already meet the size. */
+@media (pointer: coarse) {
+  .ui-icon-button--sm,
+  .ui-chip--interactive {
+    position: relative;
+  }
+
+  .ui-icon-button--sm::after,
+  .ui-chip--interactive::after {
+    content: "";
+    position: absolute;
+    inset: calc((var(--control-h-chip) - var(--control-h-input)) / 2);
+  }
+
+  .ui-row,
+  .ui-tab--sm {
+    height: var(--control-h-input);
+  }
+
+  .ui-tab--sm {
+    min-width: var(--control-h-input);
+  }
 }

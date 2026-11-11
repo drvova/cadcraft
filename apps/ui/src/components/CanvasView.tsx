@@ -8,6 +8,8 @@
  *
  * The canvas is pointer-only by nature, so its wrapper is exposed as an image named "Drawing"
  * whose description says how to work without a pointer: the command line is the keyboard path.
+ * The wrapper takes the keyboard's focus (Tab, F6) so the drawing is a place the keyboard can be:
+ * the shell sends what is typed there to the command line and cancels on Escape.
  *
  * The props accept the value or the accessor form (the shell may hand either); the component
  * reads both.
@@ -43,7 +45,7 @@ const FALLBACK_PALETTE: Palette = { canvas: "#181818", gridMinor: "#202020", gri
 
 /** What the canvas is and how to work on it without a pointer: its accessible description. */
 export const CANVAS_HELP =
-  "The drawing area. With a pointer: drag to pan, turn the wheel to zoom, click an object to select it. With the keyboard: type commands in the command line, such as LINE, ZOOM or PAN.";
+  "The drawing area. With a pointer: drag to pan, turn the wheel to zoom, click an object to select it. With the keyboard: type a command, such as LINE, ZOOM or PAN, and it goes to the command line; Escape cancels the running command; F6 moves to the next part of the window.";
 
 /** Read a prop that may be a value or an accessor. */
 function read<T>(value: T | Accessor<T> | undefined): T | undefined {
@@ -173,7 +175,7 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
   };
 
   return (
-    <div class="canvas-stage" ref={stage} role="img" aria-label="Drawing" aria-describedby={helpId}>
+    <div class="canvas-stage" ref={stage} role="img" aria-label="Drawing" aria-describedby={helpId} tabindex="0">
       <canvas
         ref={canvas}
         class="canvas"

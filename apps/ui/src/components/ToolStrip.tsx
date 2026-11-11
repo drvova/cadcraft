@@ -9,6 +9,7 @@
 
 import { For, onCleanup, Show, type JSX } from "solid-js";
 import { isMacPlatform, shortcutLabel } from "../commands";
+import { rovingIndex } from "../roving";
 import { IconButton } from "../ui/IconButton";
 
 /**
@@ -40,6 +41,52 @@ export function scrollBand(band: HTMLElement): () => void {
     band.removeEventListener("wheel", onWheel);
   });
   return mark;
+}
+
+/**
+ * Makes a band of controls one Tab stop (the tool strip, the status toggles, the editor tabs):
+ * exactly one item holds `tabindex="0"` and Left, Right, Home and End move the focus between the
+ * items, wrapping at the ends (`rovingIndex`). The Tab stop is the item last focused, or `home()`
+ * when the band has one (a tab strip's selected tab) and the focus is elsewhere. It is managed
+ * from the container because the system's `IconButton` and `Tab` take no `tabindex`: the items
+ * are whatever matches `selector` inside the band, so dividers are never stops, and the stop is
+ * set again whenever the items or their selection change. Call it from a component's `ref`.
+ */
+export function rovingBand(band: HTMLElement, selector: string, home?: () => HTMLElement | null): void {
+  let last: HTMLElement | null = null;
+  const items = (): HTMLElement[] => Array.from(band.querySelectorAll<HTMLElement>(selector));
+  const sync = (): void => {
+    const list = items();
+    const focused = list.find((item) => item === document.activeElement);
+    const stop = focused ?? home?.() ?? (last !== null && list.includes(last) ? last : list[0]);
+    for (const item of list) item.tabIndex = item === stop ? 0 : -1;
+  };
+  const onFocusIn = (event: FocusEvent): void => {
+    if (!(event.target instanceof HTMLElement) || !items().includes(event.target)) return;
+    last = event.target;
+    sync();
+  };
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || !(event.target instanceof HTMLElement)) return;
+    const list = items();
+    const next = rovingIndex(event.key, list.indexOf(event.target), list.length, "horizontal");
+    if (next === null || !list.includes(event.target)) return;
+    event.preventDefault();
+    // Focusing a key the band has scrolled away brings it into view (the browser's own scroll).
+    list[next]?.focus();
+  };
+  const observer = new MutationObserver(sync);
+  observer.observe(band, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-selected"] });
+  band.addEventListener("focusin", onFocusIn);
+  band.addEventListener("focusout", sync);
+  band.addEventListener("keydown", onKeyDown);
+  onCleanup(() => {
+    observer.disconnect();
+    band.removeEventListener("focusin", onFocusIn);
+    band.removeEventListener("focusout", sync);
+    band.removeEventListener("keydown", onKeyDown);
+  });
+  sync();
 }
 
 /** One toolbar button: the icon id, the command id it invokes, the label, and the shortcut. */
@@ -99,7 +146,15 @@ export interface ToolStripProps {
 
 export function ToolStrip(props: ToolStripProps): JSX.Element {
   return (
-    <nav class="toolstrip" role="toolbar" aria-label="Tool bar" ref={scrollBand}>
+    <nav
+      class="toolstrip"
+      role="toolbar"
+      aria-label="Tool bar"
+      ref={(element) => {
+        scrollBand(element);
+        rovingBand(element, "button");
+      }}
+    >
       <For each={TOOLBAR}>
         {(group, index) => (
           <>

@@ -23,6 +23,13 @@ export interface ButtonProps {
   disabled?: boolean;
   /** A tooltip. Also the accessible name when the children are an icon. */
   title?: string;
+  /**
+   * The accessible name, when the visible label is a value rather than the action (the command
+   * centre shows the drawing's name and is the "Search commands" button). Start it with the
+   * action and keep the visible text inside it, so speech input can still say what is on the
+   * key. Never pass it over a label that already names the action.
+   */
+  ariaLabel?: string;
   /** The native type. Defaults to `button` so the button never submits a form implicitly. */
   type?: "button" | "submit" | "reset";
   /** Runs on click. A disabled button never fires it. */
@@ -38,6 +45,7 @@ export function Button(props: ButtonProps): JSX.Element {
       class={`ui-button ui-button--${props.variant ?? "secondary"} ui-button--${props.size ?? "md"}`}
       disabled={props.disabled}
       title={props.title}
+      aria-label={props.ariaLabel}
       onClick={(event) => {
         if (!props.disabled) props.onClick?.(event);
       }}

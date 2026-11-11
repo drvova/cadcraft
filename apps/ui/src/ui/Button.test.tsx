@@ -1,7 +1,7 @@
 /**
  * Button's contract, as a user observes it: a native button with an accessible name, the variant
- * and size classes the recipe defines, `type="button"` by default, and a disabled button that
- * takes no click.
+ * and size classes the recipe defines, `type="button"` by default, a disabled button that
+ * takes no click, and an `ariaLabel` that names the action over a label that is a value.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -46,5 +46,16 @@ describe("Button", () => {
   test("a caller can pass a submit type into a form", () => {
     const button = buttonIn(mount(() => <Button type="submit">Send</Button>));
     expect(button.getAttribute("type")).toBe("submit");
+  });
+
+  test("ariaLabel names the action when the visible label is a value", () => {
+    const button = buttonIn(mount(() => <Button ariaLabel="Search commands, plan.dxf">plan.dxf</Button>));
+    expect(button.getAttribute("aria-label")).toBe("Search commands, plan.dxf");
+    expect(button.textContent).toBe("plan.dxf");
+  });
+
+  test("a button whose label is the action carries no aria-label", () => {
+    const button = buttonIn(mount(() => <Button>Save</Button>));
+    expect(button.hasAttribute("aria-label")).toBe(false);
   });
 });

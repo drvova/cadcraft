@@ -144,6 +144,9 @@ describe("classify", () => {
     expect(classify("ui.animations.off")).toBe("animations");
     expect(classify("ui.animations.system")).toBe("animations");
     expect(classify("ui.dialog.commands")).toBe("palette");
+    expect(classify("ui.focus.cmdline")).toBe("focus");
+    expect(classify("ui.focus.next")).toBe("focus");
+    expect(classify("ui.focus.previous")).toBe("focus");
     expect(classify("circle")).toBe("engine");
     expect(classify("zoom.extents")).toBe("engine");
     expect(classify("ui.dialog.about")).toBe("engine");
@@ -183,6 +186,9 @@ describe("UI_ITEMS", () => {
         "ui.toggle.statusbar",
         "ui.toggle.toolbar",
         "ui.toggle.menubar",
+        "ui.focus.cmdline",
+        "ui.focus.next",
+        "ui.focus.previous",
         "ui.theme.light",
         "ui.theme.dark",
         "ui.theme.system",
@@ -204,6 +210,22 @@ describe("UI_ITEMS", () => {
     expect(byId.get("ui.toggle.menubar")?.label).toBe("In-window Menu Bar");
     expect(byId.get("ui.theme.dark")?.menu).toEqual(["View", "Interface Theme", "Dark"]);
     expect(byId.get("ui.animations.off")?.menu).toEqual(["View", "Accessibility", "Animation Effects", "Off"]);
+  });
+
+  test("the shell's focus keys sit in the Window menu with the keys the shell answers", () => {
+    const byId = new Map(UI_ITEMS.map((item) => [item.id, item]));
+    expect(byId.get("ui.focus.cmdline")?.shortcut).toBe("Cmd+J");
+    expect(byId.get("ui.focus.next")?.shortcut).toBe("F6");
+    expect(byId.get("ui.focus.previous")?.shortcut).toBe("Shift+F6");
+    const rows = menu("Window", [])?.children ?? [];
+    for (const id of ["ui.focus.cmdline", "ui.focus.next", "ui.focus.previous"]) {
+      expect(byId.get(id)?.menu[0]).toBe("Window");
+      expect(rows.find((n) => n.id === id)?.label).toBe(byId.get(id)?.label);
+    }
+    expect(rows.find((n) => n.id === "ui.focus.previous")?.shortcut).toBe("Shift+F6");
+    expect(shortcutLabel("Shift+F6", false)).toBe("Shift+F6");
+    expect(shortcutLabel("Shift+F6", true)).toBe("⇧F6");
+    expect(shortcutLabel("Cmd+J", false)).toBe("Ctrl+J");
   });
 
   test("every UI item with a path lands in the built tree exactly once", () => {

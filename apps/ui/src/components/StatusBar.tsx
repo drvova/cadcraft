@@ -12,7 +12,7 @@
 import { createEffect, For, Show, type JSX } from "solid-js";
 import type { FacadeMode, SettingsState } from "../facade";
 import { Tab } from "../ui/Tab";
-import { scrollBand } from "./ToolStrip";
+import { rovingBand, scrollBand } from "./ToolStrip";
 
 /** The boolean drafting settings a status toggle can flip. */
 type ToggleKey = "grid" | "snap" | "ortho" | "polar" | "isodraft" | "otrack" | "osnap" | "lwdisplay" | "transparency" | "dynmode" | "qpmode";
@@ -69,6 +69,11 @@ export function LayoutTabs(props: LayoutTabsProps): JSX.Element {
       ref={(element) => {
         strip = element;
         mark = scrollBand(element);
+        // The tabs pattern with manual activation: the strip is one Tab stop (the tab in front),
+        // the arrows only move the focus, and Enter or Space (the tab's own click) switches.
+        // Moving does not select because a switch redraws the whole drawing, which is slow on a
+        // large one: walking past three layouts must not load each of them.
+        rovingBand(element, '[role="tab"]', () => element.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]'));
       }}
     >
       <For each={tabs()}>
@@ -113,7 +118,15 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
         </span>
       </div>
       <div class="status-right">
-        <div class="status-toggles" role="group" aria-label="Drafting settings" ref={scrollBand}>
+        <div
+          class="status-toggles"
+          role="toolbar"
+          aria-label="Drafting settings"
+          ref={(element) => {
+            scrollBand(element);
+            rovingBand(element, "button");
+          }}
+        >
           <For each={STATUS_TOGGLES}>
             {(toggle) => (
               <button

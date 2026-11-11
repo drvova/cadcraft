@@ -157,6 +157,13 @@ body {
   overflow: hidden;
 }
 
+/* The drawing with the keyboard in it (Tab, F6): the accent edge inside its own box, so the
+   regions around it do not move and the ring is not clipped. */
+.canvas-stage:focus-visible {
+  outline: var(--focus-outline-w) solid var(--accent);
+  outline-offset: var(--focus-outline-offset);
+}
+
 .canvas {
   display: block;
   width: 100%;

@@ -4,3 +4,5 @@ rule/icon-button-one-inverted	pass	pass	n/a: falsify and sweep cover it	pass	shi
 rule/icon-button-title-sentence	pass	pass	n/a: falsify and sweep cover it	pass	ship	
 rule/icon-button-canonical-element	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
 rule/icon-button-row-limit	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/icon-button-fold-expanded	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: the 3 fold keys move onto the props at integration; their files are not this worker's	ship	
+rule/icon-button-touch-target	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	

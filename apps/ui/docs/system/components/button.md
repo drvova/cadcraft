@@ -48,7 +48,7 @@ Real uses, 8 call sites (`rg -c "<Button" src/components` → `src/components/As
 | Rest | Nothing is over the button. | Click it, or Tab to it. | The variant's resting fill and the label. | by hand |
 | Hover | The pointer is over the button, on a device with a hover pointer. | Click it. | The fill steps up one rung (`.08` to `.14`, `.14` to `.20`); the cursor is a pointer. | by hand |
 | Pressed | The pointer is held down on the button. | Release to run the action. | The quiet fill stays on the hover rung (`.14`, measured); the accent variants take their measured press step. | by hand |
-| Focused | Keyboard focus arrives by Tab. | Enter or Space runs the action. | The 1px accent ring at offset -1, following the 2px radius. | by hand |
+| Focused | Keyboard focus arrives by Tab. | Enter or Space runs the action. | The 1px ring in the focus ink at offset -1, following the 2px radius; on `primary` and `danger`, the ring is the label's ink drawn 3px inside the edge. | by hand |
 | Disabled | The caller's condition is false. | Nothing: no click, no hover, no focus ring. | The ink drops to the disabled step and the fill to the disabled step. | test |
 
 ### State precedence
@@ -60,8 +60,8 @@ Real uses, 8 call sites (`rg -c "<Button" src/components` → `src/components/As
 ### Motion
 | Trigger | Kind | Preset | Properties | Reduced motion |
 |---|---|---|---|---|
-| The pointer enters or leaves | input | hover / focus feedback (`--dur-fast` + `--ease-out`) | background-color | The fill changes at once: the shell's `:root[data-animations="off"] *` rule removes the transition. |
-| The pointer presses down | input | press (`--dur-instant` + `--ease-out`) | background-color | The fill changes at once. |
+| The pointer enters or leaves | input | hover / focus feedback (`--dur-fast` + `--ease-standard`) | background-color | The fill changes at once: the shell's `:root[data-animations="off"] *` rule removes the transition. |
+| The pointer presses down | input | hover / focus feedback (`--dur-fast` + `--ease-standard`) | background-color | The fill changes at once, by the same rule. |
 
 ## Props
 - `variant`: the purpose of the action; the token layer picks the look. Defaults to `secondary`.
@@ -69,6 +69,7 @@ Real uses, 8 call sites (`rg -c "<Button" src/components` → `src/components/As
 - `type`: defaults to `button` so a button inside a form never submits by accident.
 - `disabled`: blocks the click and drops the ink to the disabled step.
 - `title`: a tooltip; it is not a substitute for the label.
+- `ariaLabel`: the accessible name, only for a button whose visible label is a value rather than its action.
 - `onClick`: runs on click; a disabled button never fires it.
 
 ## Usage
@@ -94,6 +95,9 @@ Real uses, 8 call sites (`rg -c "<Button" src/components` → `src/components/As
 - `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Undo all` — because the label is the action's name and the accessible name comes from it. Evidence: app 5/6 labels are verbs or verb phrases, `src/components/AssistantPane.tsx:667`, the label "Undo all" (the sixth, the command centre, is labelled with the drawing's name and names its action in its `title`). Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Button>SAVE</Button>`
   - Do: `<Button>Save</Button>`
+- `rule/button-aria-label-value`: When a button's visible label is a value rather than its action, pass `ariaLabel` starting with the action and holding the visible text, and pass it on 0 other buttons, because a drawing's name alone is announced as "Bracket, button" with no action in it, while an `aria-label` over a verb label hides the word a speech-input user says to press it. Evidence: single use `src/components/TopBar.tsx:40`, the command centre labelled with the drawing's name. Check: test `src/ui/Button.test.tsx`.
+  - Don't: `<Button ariaLabel="Store the drawing">Save</Button>`
+  - Do: `<Button size="sm" ariaLabel={"Search commands, " + title()}>{title()}</Button>`
 
 ### Anti-slop
 - `rule/button-canonical-element`: When a surface needs a button, render `Button` rather than a raw `<button>` with its own class, because the replaced classes paint 6 different hover fills and 3 different radii by hand. Evidence: app 22/22 lines across `assistant.css` and `AssistantPane.tsx`, `rg -c "assistant-send|assistant-save|assistant-ghost|assistant-preset" src`. Check: review `src/ui/Button.tsx`.
@@ -119,7 +123,7 @@ Rests on the native `<button>` element: role, Enter and Space, `disabled`, and f
 ### ARIA
 | Part | Role | Accessible name from | States and properties | Announced | Checked by |
 |---|---|---|---|---|---|
-| The button | `button` (native) | Its text content | `disabled` when blocked; `type="button"` by default | "Save, button" | test |
+| The button | `button` (native) | Its text content; `ariaLabel` when the label is a value | `disabled` when blocked; `type="button"` by default | "Save, button" / "Search commands, Bracket, button" | test |
 
 ## Tokens
 | Part | State | Token |
@@ -136,11 +140,14 @@ Rests on the native `<button>` element: role, Enter and Space, `disabled`, and f
 | The fill (`danger`) | hover | `--error-hover` |
 | The fill (`danger`) | pressed | `--error-pressed` |
 | The label | rest | `--text` |
-| The label (`primary`, `danger`) | rest | `--on-accent` |
+| The label (`primary`) | rest | `--on-accent` |
+| The label (`danger`) | rest | `--on-error` |
 | The label | disabled | `--text-disabled` |
 | The fill | disabled | `--fill-disabled` |
-| The ring | focus-visible | `--focus-outline-w`, `--accent`, `--focus-outline-offset` |
-| The motion | hover, pressed | `--dur-fast`, `--dur-instant`, `--ease-out` |
+| The ring | focus-visible | `--focus-outline-w`, `--focus-ring`, `--focus-outline-offset` |
+| The ring (`primary`) | focus-visible | `--on-accent` |
+| The ring (`danger`) | focus-visible | `--on-error` |
+| The motion | hover, pressed | `--dur-fast`, `--ease-standard` |
 
 ## Related
 - `IconButton`: when the action is one glyph with a tooltip and no label.

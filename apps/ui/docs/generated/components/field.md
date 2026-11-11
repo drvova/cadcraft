@@ -15,7 +15,7 @@ Not applicable: hand-rolled — the 24px height, the hairline stroke and the foc
 
 Real uses, 3 call sites (`rg -c "<Field" src/components` → `src/components/AssistantPane.tsx:6`, the provider popover's Base URL, Model and API key):
 - `src/components/AssistantPane.tsx` — the composer pilot: the provider popover's Base URL, Model and API key inputs; the composer's own multi-line editor stays a bespoke `<textarea>` (found-not-fixed).
-- (planned) `src/components/PropertiesPanel.tsx:259` — `class="prop-input"` (1 use) moves onto `<Field>` in a later arc; the palette keeps its own input for now.
+- (planned) `src/components/PropertiesPanel.tsx:226` — `class="prop-input"` (1 use) moves onto `<Field>` in a later arc; the palette keeps its own input for now.
 - (planned) `src/components/CommandLine.tsx:127` — `class="cmd-input"` (1 use) moves onto `<Field type="search">` in a later arc; the command line keeps its own input for now.
 
 ### Example files
@@ -107,7 +107,7 @@ export default function TypePassword() {
 |---|---|---|---|---|
 | Rest | The field is empty or holds a value. | Type, select, paste, Tab away. | The value at the full ink; the placeholder at the faint ink. | test |
 | Hover | The pointer is over the field, on a device with a hover pointer. | Click to place the caret. | Nothing beyond the text cursor: the stroke stays at the hairline. | by hand |
-| Focused | The field takes focus by click or Tab. | Type; Tab away. | The stroke turns accent and the 1px accent ring draws at offset -1. | by hand |
+| Focused | The field takes focus by click or Tab. | Type; Tab away. | The stroke takes the focus ink and the 1px ring draws in it at offset -1. | by hand |
 | Filled | The value is not empty. | Edit it. | The value at the full ink; the placeholder is gone. | test |
 | Disabled | The caller passes `disabled`. | Nothing: no typing, no focus. | The value at the disabled ink; no focus ring. | test |
 
@@ -130,7 +130,7 @@ export default function Disabled() {
 ### Motion
 | Trigger | Kind | Preset | Properties | Reduced motion |
 |---|---|---|---|---|
-| Focus arrives or leaves | input | hover / focus feedback (`--dur-fast` + `--ease-out`) | border-color | The stroke changes at once: the shell's `:root[data-animations="off"] *` rule removes the transition. |
+| Focus arrives or leaves | input | hover / focus feedback (`--dur-fast` + `--ease-standard`) | border-color | The stroke changes at once: the shell's `:root[data-animations="off"] *` rule removes the transition. |
 
 ## Props
 
@@ -210,12 +210,12 @@ Rests on the native `<input>` element: typing, selection, IME and autofill come 
 | The box | all | `--control-h-input`, `--radius-control`, `--field-pad-y`, `--field-pad-x`, `--font-body` |
 | The fill | all | `--control` |
 | The stroke | rest | `--border-soft`, `--hairline` |
-| The stroke | focus | `--accent` |
+| The stroke | focus | `--focus-ring` |
 | The text | all | `--text` |
 | The placeholder | all | `--text-faint` |
 | The text | disabled | `--text-disabled` |
-| The ring | focus | `--focus-outline-w`, `--accent`, `--focus-outline-offset` |
-| The motion | focus | `--dur-fast`, `--ease-out` |
+| The ring | focus | `--focus-outline-w`, `--focus-ring`, `--focus-outline-offset` |
+| The motion | focus | `--dur-fast`, `--ease-standard` |
 
 ## Related
 - `Chip`: when the text is a fact rather than an editable value.

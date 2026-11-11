@@ -53,7 +53,7 @@ export function providerEndpoint(baseUrl: string): string {
 export function providerReady(provider: ProviderConfig): string | null {
   if (provider.baseUrl.trim() === "") return "Set a base URL in the model setup.";
   if (!provider.baseUrl.trim().startsWith("http://") && !provider.baseUrl.trim().startsWith("https://")) {
-    return `The assistant's base URL must start with http:// or https://, not \`${provider.baseUrl.trim()}\`.`;
+    return `The base URL must start with http:// or https://, not "${provider.baseUrl.trim()}".`;
   }
   if (provider.model.trim() === "") return "Set a model name in the model setup.";
   return null;
@@ -73,6 +73,15 @@ export function modelsEndpoint(baseUrl: string): string {
     .replace(/\/chat\/completions$/, "");
   return `${base}/models`;
 }
+
+/** The connection check's answer when the server replied with something that is not a model list. */
+const NOT_A_MODEL_LIST = "The provider answered, but not with a model list. Type the model's name and save.";
+
+/** A reply that is not the chat protocol: the address usually points somewhere else. */
+const UNREADABLE_REPLY = "The provider's reply could not be read. The base URL may not point to an OpenAI-compatible server.";
+
+/** A tool call the model sent broken (no name, or arguments that do not parse): the turn fails. */
+const UNREADABLE_CALL = "The model asked to run code, but its request could not be read. Ask again, or try another model.";
 
 /** The most model names a provider's list contributes (some hosts list thousands). */
 export const MAX_LISTED_MODELS = 200;
@@ -94,18 +103,18 @@ export async function listModels(provider: ProviderConfig, signal: AbortSignal, 
     resp = await fetchImpl(url, { method: "GET", headers, signal });
   } catch (e) {
     if (signal.aborted) throw new Error("stopped");
-    throw new Error(`${friendlyError(e)} (${url})`);
+    throw new Error(unreachableText(e, url));
   }
   if (!resp.ok) throw new Error(apiErrorText(resp.status, await resp.text().catch(() => "")));
   let body: unknown;
   try {
     body = JSON.parse(await resp.text());
   } catch {
-    throw new Error("the provider answered, but not with a model list. Type the model's name and save");
+    throw new Error(NOT_A_MODEL_LIST);
   }
   const root = asRecord(body);
   const rows = Array.isArray(root["data"]) ? root["data"] : Array.isArray(root["models"]) ? root["models"] : Array.isArray(body) ? body : null;
-  if (rows === null) throw new Error("the provider answered, but not with a model list. Type the model's name and save");
+  if (rows === null) throw new Error(NOT_A_MODEL_LIST);
   const ids: string[] = [];
   for (const row of rows.slice(0, MAX_LISTED_MODELS)) {
     const r = asRecord(row);
@@ -397,7 +406,7 @@ export class StreamAssembler {
     try {
       v = JSON.parse(payload);
     } catch {
-      throw new Error("the provider sent a line that is not JSON");
+      throw new Error(UNREADABLE_REPLY);
     }
     const root = asRecord(v);
     const err = root["error"];
@@ -439,7 +448,7 @@ export class StreamAssembler {
   finishReply(): Reply {
     const toolCalls: ToolCall[] = [];
     for (const [index, p] of [...this.calls.entries()].sort((a, b) => a[0] - b[0])) {
-      if (p.name === "") throw new Error(`the model asked for a tool (call ${index}) without naming it`);
+      if (p.name === "") throw new Error(UNREADABLE_CALL);
       toolCalls.push({ id: p.id === "" ? `call_${index}` : p.id, name: p.name, args: parseToolArgs(p.args) });
     }
     return { text: this.text, toolCalls, finish: this.finish };
@@ -452,7 +461,7 @@ export function parseToolArgs(raw: string): unknown {
   try {
     return JSON.parse(raw);
   } catch {
-    throw new Error(`the model's tool arguments are not JSON: ${clip(raw, 120)}`);
+    throw new Error(UNREADABLE_CALL);
   }
 }
 
@@ -533,7 +542,7 @@ export async function runTurn(opts: TurnOptions): Promise<void> {
   }
   onEvent({
     type: "failed",
-    error: `The assistant asked to run tools ${MAX_ROUNDS} times without answering. Ask it to continue, or say what to do differently.`,
+    error: `The assistant ran code ${MAX_ROUNDS} times in a row without answering, so it was stopped. Ask it to continue, or say what to do differently.`,
   });
 }
 
@@ -780,7 +789,7 @@ export async function requestChat(
     resp = await fetchImpl(providerEndpoint(provider.baseUrl), { method: "POST", headers, body: JSON.stringify(body), signal });
   } catch (e) {
     if (signal.aborted) throw new Error("stopped");
-    throw new Error(`${friendlyError(e)} (${providerEndpoint(provider.baseUrl)})`);
+    throw new Error(unreachableText(e, providerEndpoint(provider.baseUrl)));
   }
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
@@ -829,7 +838,7 @@ export function oneShot(body: string, onText: (fragment: string) => void): Reply
   try {
     v = JSON.parse(body);
   } catch {
-    throw new Error("the provider's reply is not JSON");
+    throw new Error(UNREADABLE_REPLY);
   }
   const root = asRecord(v);
   const err = root["error"];
@@ -855,7 +864,20 @@ export function oneShot(body: string, onText: (fragment: string) => void): Reply
   return { text: content, toolCalls, finish };
 }
 
-/** The message a non-2xx answer carries, as the pane's own words. */
+/**
+ * What a status means, and the way out, in the pane's own words. A 2xx status is an error the
+ * provider reported inside an answer that otherwise arrived, so there is no number worth naming.
+ */
+function statusText(status: number): string {
+  if (status === 401 || status === 403) return `The provider refused the request (${status}). Check the API key in the model setup.`;
+  if (status === 404) return `The provider did not find what was asked for (${status}). The base URL or the model name may be wrong.`;
+  if (status === 429) return `The provider is limiting requests (${status}). Wait a moment, then ask again.`;
+  if (status >= 500) return `The provider is having trouble (${status}). Ask again in a moment.`;
+  if (status >= 200 && status < 300) return "The provider reported an error.";
+  return `The provider answered with an error (${status}).`;
+}
+
+/** The message a failed answer carries: what the status means, then the provider's own message. */
 export function apiErrorText(status: number, body: string): string {
   const trimmed = body.trim();
   let detail = trimmed === "" ? "" : clip(trimmed, 400);
@@ -863,20 +885,25 @@ export function apiErrorText(status: number, body: string): string {
     const v = asRecord(JSON.parse(trimmed));
     const e = asRecord(v["error"]);
     const m = e["message"];
-    if (typeof m === "string") detail = m;
+    if (typeof m === "string") detail = m.trim();
   } catch {
     // not JSON; the clipped body stands
   }
-  return detail === "" ? `the provider answered ${status}` : `the provider answered ${status}: ${detail}`;
+  if (detail === "") return statusText(status);
+  return `${statusText(status)} The provider said: ${/[.!?…]$/.test(detail) ? detail : `${detail}.`}`;
 }
 
-/** A network failure in one line (the browser's own messages name the cause well enough). */
-function friendlyError(e: unknown): string {
+/**
+ * A request that never got an answer, as one message that names the address. The browser reports
+ * an unreachable server as a bare "Failed to fetch"; anything else is its own words, with the
+ * address after them.
+ */
+function unreachableText(e: unknown, url: string): string {
   const m = message(e);
   if (/Failed to fetch|NetworkError|load failed/i.test(m)) {
-    return "the provider could not be reached. Check that the server is running and accepts requests from this page";
+    return `The provider at ${url} could not be reached. Check that the server is running and accepts requests from this page.`;
   }
-  return m;
+  return `${m} (${url})`;
 }
 
 // ---- Small helpers ----------------------------------------------------------------------------------

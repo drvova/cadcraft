@@ -606,12 +606,51 @@
   overflow-y: auto;
 }
 
+/* The queue's heading is its fold key and its count on one line. The key is a 20px circle around
+   a 12px glyph, so it steps out by the glyph's margin and the glyph sits on the rows' text column
+   (the same step the changes row's chevron takes). */
 .assistant-stack-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-2);
   flex-shrink: 0;
-  padding: var(--gap-4) var(--gap-8) 0 var(--gap-4);
+  padding: var(--gap-2) var(--gap-8) 0 var(--gap-4);
   color: var(--text-disabled);
   font-size: var(--font-chip);
   line-height: var(--gap-16);
+}
+
+.assistant-stack-head > .ui-icon-button:first-child {
+  flex-shrink: 0;
+  margin-left: calc(-1 * var(--gap-4));
+}
+
+.assistant-stack-count {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The fold key is one element in both states (it keeps the keyboard's focus when the queue
+   folds): the chevron that points down turns to point right. */
+.assistant-stack-head.is-folded .ui-icon-button .tool-icon,
+.assistant-stack-row.is-folded .ui-icon-button:first-child .tool-icon {
+  transform: rotate(-90deg);
+}
+
+/* The queued rows. `hidden` takes a folded queue out of the page and the tab order (a class that
+   only hid it would leave its keys focusable). */
+.assistant-stack-queue {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.assistant-stack-queue[hidden],
+.assistant-stack-list[hidden] {
+  display: none;
 }
 
 .assistant-stack-row {
@@ -719,7 +758,7 @@
 
 .assistant-attachment--context .assistant-attachment-name,
 .assistant-attachment--context .assistant-attachment-icon {
-  color: var(--accent);
+  color: var(--text-accent);
 }
 
 .assistant-attachment-icon {
@@ -915,7 +954,7 @@
 
 .assistant-slash-hit {
   background: transparent;
-  color: var(--accent);
+  color: var(--text-accent);
   font-weight: 600;
 }
 

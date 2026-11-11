@@ -7,6 +7,7 @@
  */
 
 import { Show, type Accessor, type JSX } from "solid-js";
+import { isMacPlatform, shortcutLabel } from "../commands";
 import type { DrawingState } from "../facade";
 import { ToolIcon } from "../icons";
 import { Button } from "../ui/Button";
@@ -30,11 +31,13 @@ export interface TopBarProps {
 export function TopBar(props: TopBarProps): JSX.Element {
   const title = (): string => props.drawing()?.title ?? "Untitled";
   const dirty = (): boolean => props.drawing()?.dirty ?? false;
+  /** A layout key's shortcut in this platform's words, as the menus print it. */
+  const key = (shortcut: string): string => shortcutLabel(shortcut, isMacPlatform());
   return (
     <header class="titlebar">
       <div class="titlebar-start">{props.menu}</div>
       <div class="titlebar-center">
-        <Button size="sm" title={`Search commands (${props.paletteShortcut})`} onClick={() => props.onOpenPalette()}>
+        <Button size="sm" ariaLabel={`Search commands, ${title()}`} title={`Search commands (${props.paletteShortcut})`} onClick={() => props.onOpenPalette()}>
           <span class="command-center">
             <span class="command-center-icon">
               <ToolIcon id="search" />
@@ -47,9 +50,9 @@ export function TopBar(props: TopBarProps): JSX.Element {
         </Button>
       </div>
       <div class="titlebar-end">
-        <IconButton icon="ui.toggle.palettes" title="Sidebar (Ctrl+B)" selected={props.sidebarOpen()} onClick={() => props.onToggleSidebar()} />
-        <IconButton icon="layout.bottom" title="Command line (Ctrl+J)" selected={props.panelOpen()} onClick={() => props.onTogglePanel()} />
-        <IconButton icon="assistant" title="Assistant (Ctrl+7)" selected={props.assistantOpen()} onClick={() => props.onToggleAssistant()} />
+        <IconButton icon="ui.toggle.palettes" title={`Sidebar (${key("Cmd+B")})`} selected={props.sidebarOpen()} onClick={() => props.onToggleSidebar()} />
+        <IconButton icon="layout.bottom" title={`Command line (${key("Cmd+J")})`} selected={props.panelOpen()} onClick={() => props.onTogglePanel()} />
+        <IconButton icon="assistant" title={`Assistant (${key("Cmd+7")})`} selected={props.assistantOpen()} onClick={() => props.onToggleAssistant()} />
       </div>
     </header>
   );

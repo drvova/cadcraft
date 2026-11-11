@@ -28,6 +28,7 @@ Real uses, 20 call sites (`rg -c "<IconButton" src/components` → `src/componen
 | `docs/system/examples/icon-button/size-md.tsx` | size=md | The 24px circle with the 14px glyph. |
 | `docs/system/examples/icon-button/disabled.tsx` | state:disabled | A blocked tool at the disabled ink. |
 | `docs/system/examples/icon-button/selected.tsx` | state:selected | A toggled tool at the .14 fill, announced pressed. |
+| `docs/system/examples/icon-button/expanded.tsx` | state:expanded | A fold key over the region it folds, announced expanded. |
 | `docs/system/examples/icon-button/matrix-variant-size.tsx` | matrix:variant,size | Every variant at both sizes. |
 | `docs/system/examples/icon-button/in-assistant-pane.tsx` | composition:AssistantPane | The composer's toolbar row: attach, stop, send. |
 
@@ -143,8 +144,9 @@ export default function SizeMd() {
 | Rest | Nothing is over the circle. | Click it, or Tab to it. | The variant's resting fill, or none on `ghost`. | by hand |
 | Hover | The pointer is over the circle, on a device with a hover pointer. | Click it. | The fill steps up one rung; the cursor is a pointer. | by hand |
 | Pressed | The pointer is held down. | Release to run the action. | The next fill rung up. | by hand |
-| Focused | Keyboard focus arrives by Tab. | Enter or Space runs the action. | The 1px accent ring at offset -1, following the circle. | by hand |
+| Focused | Keyboard focus arrives by Tab. | Enter or Space runs the action. | The 1px ring in the focus ink at offset -1, following the circle; on `inverted`, the ring is the glyph's ink drawn 3px inside the edge. | by hand |
 | Selected | The caller passes `selected` (a toggle). | Click it again to turn the tool off. | The `.14` fill, the full ink, and `aria-pressed="true"`. | test |
+| Expanded | The caller passes `expanded` (a fold key), with `controls` naming the region. | Click it to fold the region away; click again to bring it back. | `aria-expanded="true"` while the region shows and `"false"` while it is folded, and `aria-controls` holding the region's `id`; the look is the variant's own. | test |
 | Disabled | The caller's condition is false. | Nothing: no click, no hover. | The glyph drops to the disabled ink; the fill to the disabled step. | test |
 
 Example: A blocked tool at the disabled ink. (`docs/system/examples/icon-button/disabled.tsx`)
@@ -167,10 +169,27 @@ export default function Selected() {
 }
 ```
 
+Example: A fold key over the region it folds, announced expanded. (`docs/system/examples/icon-button/expanded.tsx`)
+
+```tsx
+import { IconButton } from "../../../../src/ui/IconButton";
+
+export default function Expanded() {
+  return (
+    <section>
+      <IconButton icon="chevron-down" size="sm" title="Hide the layers" expanded controls="layers-body" />
+      <div id="layers-body">Outline, Center, Hidden</div>
+    </section>
+  );
+}
+```
+
 ### State precedence
 - Hover and Focused: Focused wins. The ring stays drawn while the pointer is over the circle; hover only steps the fill.
 - Hover and Disabled: Disabled wins. A disabled circle keeps its resting look under the pointer and takes no click.
-- Selected and Hover: both show. The `.14` selected fill stays; hover adds the pointer cursor and takes the fill to the pressed rung on press.
+- Selected and Hover: both show. The `.14` selected fill stays under the pointer; hover adds the pointer cursor and nothing to the fill.
+- Selected and Expanded: Not applicable: a key is a toggle or a fold key, never both; the caller passes one of the two props.
+- Expanded and Disabled: Disabled wins. A disabled fold key keeps `aria-expanded` and takes no click.
 - Selected and Disabled: Disabled wins. A disabled toggle drops to the disabled ink and takes no click.
 - Pressed and Focused: both show. The ring stays drawn while the circle is held down.
 
@@ -178,8 +197,8 @@ export default function Selected() {
 | Trigger | Kind | Preset | Properties | Reduced motion |
 |---|---|---|---|---|
 | The pointer enters or leaves | input | hover / focus feedback (`--dur-fast` + `--ease-standard`) | background-color, color | The fill and the ink change at once: the shell's `:root[data-animations="off"] *` rule removes the transition. |
-| The pointer is held down | input | the measured press (`--dur-press` + `--ease-standard`) | transform | The circle stays at rest: the shell's `:root[data-animations="off"] *` rule removes the transition. |
-| The pointer presses down | input | press (`--dur-instant` + `--ease-out`) | background-color | The fill changes at once. |
+| The pointer is held down | input | press (`--dur-press` + `--ease-standard`) | transform | The circle stays at rest: the shell's `:root[data-animations="off"] *` rule removes the transition. |
+| The pointer presses down | input | hover / focus feedback (`--dur-fast` + `--ease-standard`) | background-color | The fill changes at once, by the same rule. |
 
 ## Props
 
@@ -188,7 +207,9 @@ export default function Selected() {
 |---|---|---|---|
 | `icon` | `string` |  | The id from `../icons.ts`; the glyph is drawn in code. |
 | `title` | `string` |  | The accessible name (also `aria-label`), and the tooltip. |
+| `controls?` | `string` |  | The `id` of the region a fold key shows and hides: sets `aria-controls`. |
 | `disabled?` | `boolean` |  | Blocks the click and drops the glyph to the disabled ink. |
+| `expanded?` | `boolean` |  | A fold key: sets `aria-expanded` to whether the region it folds is showing now. |
 | `onClick?` | `((event: MouseEvent) => void)` |  | Runs on click. |
 | `selected?` | `boolean` |  | A toggle-style icon button: sets `aria-pressed` and the .14 selected fill. |
 | `size?` | `IconButtonSize` |  | The box size. |
@@ -199,6 +220,8 @@ export default function Selected() {
 - `variant`: the look; defaults to `ghost`.
 - `size`: the circle; `md` is 24px with a 14px glyph, `sm` is 20px with a 12px glyph.
 - `selected`: sets `aria-pressed` and the `.14` selected fill.
+- `expanded`: a fold key; sets `aria-expanded` to whether the region it folds is showing.
+- `controls`: the `id` of the region a fold key shows and hides; sets `aria-controls`.
 - `disabled`: blocks the click and drops the glyph to the disabled ink.
 - `onClick`: runs on click; a disabled circle never fires it.
 
@@ -220,6 +243,9 @@ export default function Selected() {
 - `rule/icon-button-one-inverted`: When a toolbar row holds icon buttons, keep at most 1 `inverted` circle, because the ink-coloured circle is the row's primary action and a second one splits the eye. Evidence: measured 1 inverted send button in the composer toolbar, `docs/system/decisions.md`. Check: review `src/ui/ui.css`.
   - Don't: two `variant="inverted"` circles in the composer row.
   - Do: 1 `inverted` send and `ghost` for attach and stop.
+- `rule/icon-button-fold-expanded`: When an icon button folds and unfolds a region, pass `expanded` with the region's state and `controls` with the region's `id`, and leave `selected` unset, because a title that flips between Show and Hide is the only signal otherwise, and a screen reader hears 2 unrelated buttons where there is 1 key that is collapsed or expanded. Evidence: app 3/3 fold keys (the layers, the properties, the changes row), `src/components/LayersPanel.tsx`. Check: test `src/ui/IconButton.test.tsx`.
+  - Don't: `<IconButton icon="chevron-down" size="sm" title={open() ? "Hide the layers" : "Show the layers"} selected={open()} />`
+  - Do: `<IconButton icon="chevron-down" size="sm" title={open() ? "Hide the layers" : "Show the layers"} expanded={open()} controls="layers-body" />`
 
 ### Content
 - `rule/icon-button-title-sentence`: When `title` is written, name the action in sentence case with no full stop (Close the panel, Send, Stop), because the same string is the tooltip and the accessible name. Evidence: single use `src/components/AssistantPane.tsx:767`, the "Attach a picture (or paste, or drop one)" label. Check: review `src/components/AssistantPane.tsx`.
@@ -235,6 +261,9 @@ export default function Selected() {
 - `rule/icon-button-row-limit`: When a toolbar row holds more than 5 icon buttons, move the rest into a menu, because the measured composer row holds 3 at 24px each with 4px gaps and the row starts crowding the input past 5. Evidence: measured 3 actions at 24px with 4px gaps, `docs/system/decisions.md`. Check: review `src/components/AssistantPane.tsx`.
   - Don't: 6 circles in the composer's toolbar row.
   - Do: 3 circles in the row and the rest inside a menu.
+- `rule/icon-button-touch-target`: When 2 `sm` icon buttons sit side by side, keep at least 4px between them, because under a coarse pointer each 20px circle keeps its drawn size and takes a 24px target from an invisible `::after` 2px past every edge, and closer circles overlap their targets. Evidence: measured 20px circle with a 24px `::after` target, `src/ui/ui.css:580`. Check: review `src/ui/ui.css`.
+  - Don't: `.my-row .ui-icon-button--sm + .ui-icon-button--sm { margin-left: 0 }` — two 24px targets on a 20px pitch.
+  - Do: `.my-row { display: flex; gap: var(--gap-4) }`
 
 ## Accessibility
 Rests on the native `<button>` element, with the drawn glyph hidden from assistive tech.
@@ -249,7 +278,7 @@ Rests on the native `<button>` element, with the drawn glyph hidden from assisti
 ### ARIA
 | Part | Role | Accessible name from | States and properties | Announced | Checked by |
 |---|---|---|---|---|---|
-| The circle | `button` (native) | `aria-label` (the same string as `title`) | `aria-pressed` when `selected`; `disabled` when blocked | "Close the panel, button" / "Stop, pressed button" | test |
+| The circle | `button` (native) | `aria-label` (the same string as `title`) | `aria-pressed` when `selected`; `aria-expanded` and `aria-controls` on a fold key; `disabled` when blocked | "Close the panel, button" / "Stop, pressed button" / "Hide the layers, expanded, button" | test |
 | The glyph | `svg` with `aria-hidden="true"` | — | Hidden from the accessibility tree | Nothing: the name is the button's | test |
 
 ## Tokens
@@ -269,8 +298,10 @@ Rests on the native `<button>` element, with the drawn glyph hidden from assisti
 | The glyph | selected | `--text` |
 | The glyph | disabled | `--text-disabled` |
 | The fill | disabled | `--fill-disabled` |
-| The ring | focus-visible | `--focus-outline-w`, `--accent`, `--focus-outline-offset` |
-| The motion | hover, pressed | `--dur-fast`, `--dur-instant`, `--ease-out` |
+| The ring | focus-visible | `--focus-outline-w`, `--focus-ring`, `--focus-outline-offset` |
+| The ring (`inverted`) | focus-visible | `--on-accent` |
+| The motion | hover, pressed | `--dur-fast`, `--dur-press`, `--ease-standard` |
+| The target (`sm`) | coarse pointer | `--control-h-input` |
 
 ## Related
 - `Button`: when the action needs a visible label.

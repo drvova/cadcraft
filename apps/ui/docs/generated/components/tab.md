@@ -58,7 +58,7 @@ export default function InLayoutTabs() {
 
 ### size
 - `sm`: the compact tab of a pane header: the 22px row height, 11.5px type, a 4px-radius fill, clipped at 18ch; selected, it takes the layer's selected fill `--fill-active` (the fill `Row` gives its current row), because the pane's own surface is `--tab-active`. Used at 1 call site (the assistant's chat tabs).
-- `md`: the editor tab; the default: it fills its strip's height (the strip is the 35px band), 13px type on a 12px inset, a hairline on its right; selected, it takes `--tab-active`. Used at 1 call site (the layout tabs over the drawing).
+- `md`: the editor tab; the default: it fills its strip's height (the strip is the 35px band), 13px type on a 12px inset, a hairline on its right, clipped at 24ch; selected, it takes `--tab-active`. Used at 1 call site (the layout tabs over the drawing).
 
 Example: The editor tab of the 35px strip. (`docs/system/examples/tab/size-md.tsx`)
 
@@ -90,7 +90,7 @@ export default function SizeSm() {
 | Rest | Nothing is over the tab and it is not the one in front. | Click it, or Tab to it. | The label at the quiet ink on no fill; `aria-selected="false"`. | test |
 | Hover | The pointer is over a tab that is not in front, on a device with a hover pointer. | Click it. | Pointer only, colour change: the `.08` fill and the full ink; the cursor is a pointer. | by hand |
 | Pressed | The pointer is held down. | Release to bring the tab to the front. | Nothing beyond hover: a tab's press runs on release. | by hand |
-| Focused | Keyboard focus arrives by Tab. | Enter or Space brings the tab to the front. | The 1px accent ring at offset -1. | by hand |
+| Focused | Keyboard focus arrives by Tab. | Enter or Space brings the tab to the front. | The 1px ring in the focus ink at offset -1. | by hand |
 | Selected | The caller passes `selected` (the tab in front). | Read it; move to another tab; close it when it has a close key. | `aria-selected="true"`; the selected fill (`--tab-active` on `md`, `--fill-active` on `sm`) and the full ink. | test |
 | Closable | The caller passes `onClose`. | Click the close key, or Tab to it and press Enter. | A trailing close glyph in its own 20px button, named by `closeLabel`. | test |
 
@@ -172,9 +172,15 @@ export default function Selected() {
   - Do: `<Tab selected>Model</Tab>`
 
 ### Limits
-- `rule/tab-label-limit`: When an `sm` tab's label runs past 18 characters, keep the full text in `title`, because the tab clips at `max-width: 18ch` with an ellipsis and the 20-character "Summarise the layers" shows as "Summarise the la…". Evidence: measured 111.6px clipped `sm` tab at 1280px, `src/ui/ui.css:400`. Check: review `src/components/AssistantPane.tsx`.
+- `rule/tab-label-limit`: When an `sm` tab's label runs past 18 characters, keep the full text in `title`, because the tab clips at `max-width: 18ch` with an ellipsis and the 20-character "Summarise the layers" shows as "Summarise the la…". Evidence: measured 111.6px clipped `sm` tab at 1280px, `src/ui/ui.css:432`. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Tab size="sm">Summarise the layers</Tab>` — the clipped label has no full text anywhere.
   - Do: `<Tab size="sm" title="Summarise the layers">Summarise the layers</Tab>`
+- `rule/tab-md-label-limit`: When an `md` tab's label runs past 24 characters, keep the full text in `title`, because the tab clips at `max-width: 24ch` with an ellipsis, and uncapped the 56-character "A1 Ground floor general arrangement plan, sheet 12 of 40" draws a 357.8px tab that pushes the other layouts out of the strip. Evidence: measured 168.2px clipped `md` tab at 1280px, `src/ui/ui.css:421`. Check: review `src/components/StatusBar.tsx`.
+  - Don't: `<Tab>A1 Ground floor general arrangement plan, sheet 12 of 40</Tab>` — the clipped label has no full text anywhere.
+  - Do: `<Tab title="A1 Ground floor general arrangement plan, sheet 12 of 40">A1 Ground floor general arrangement plan, sheet 12 of 40</Tab>`
+- `rule/tab-touch-target`: When `sm` tabs are laid out in a pane header, leave the header room for a 24px tab, because under a coarse pointer the 22px tab grows to the 24px control height (it clips its own overflow for the ellipsis, so it cannot take an overhanging target) and a header fixed at 22px would cut it. Evidence: measured 22px `sm` tab, 24px under a coarse pointer, `src/ui/ui.css:587`. Check: review `src/ui/ui.css`.
+  - Don't: `.my-head { height: var(--control-h-row); overflow: hidden }`
+  - Do: `.my-head { min-height: var(--control-h-button); align-items: center }`
 
 ## Accessibility
 Rests on the native `<button>` element with `role="tab"`: Enter and Space and focus come from the platform. Every tab stays in the tab order; the strip has no arrow-key handler, so a tab is reached by Tab, not by the arrow keys. The caller owns the `tablist` container, and no `tabpanel` is wired (`aria-controls` is not set).
@@ -205,8 +211,9 @@ Rests on the native `<button>` element with `role="tab"`: Enter and Space and fo
 | The fill | selected, md | `--tab-active` |
 | The fill | selected, sm | `--fill-active` |
 | The label | selected | `--text` |
-| The ring | focus-visible | `--focus-outline-w`, `--accent`, `--focus-outline-offset` |
+| The ring | focus-visible | `--focus-outline-w`, `--focus-ring`, `--focus-outline-offset` |
 | The motion | hover, selected | `--dur-fast`, `--ease-standard` |
+| The tab | sm, coarse pointer | `--control-h-input` |
 
 ## Related
 - `Row`: when the item is one band of a full-width list rather than one view of a strip.

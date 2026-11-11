@@ -1,7 +1,8 @@
 /**
  * The properties palette: the engine's `properties` rows over `properties.set`. The rows are
  * parsed by `../props` (the shell calls `parseProperties`); this component renders them and
- * commits an edit on blur/Enter as `onSet(buildPatch({ [key]: value }))`.
+ * commits an edit on blur/Enter as `onSet(patch)`, where `judgeDraft` (in `../props`) decides what
+ * the typed text is: nothing to send, a refusal, or the patch. No property is named here.
  *
  * What a row holds against: text being typed survives a refresh from elsewhere and is dropped when
  * the selection changes; a number that cannot be one is refused on the row (`aria-invalid`, the
@@ -14,7 +15,7 @@
  */
 
 import { createEffect, createMemo, createSignal, For, Index, Match, onCleanup, Show, Switch, untrack, type Accessor, type JSX } from "solid-js";
-import { buildPatch, VARIES, type PropRow, type PropertiesReply } from "../props";
+import { judgeDraft, VARIES, type PropRow, type PropertiesReply } from "../props";
 import { IconButton } from "../ui/IconButton";
 import { SectionLabel } from "../ui/SectionLabel";
 import "../interaction.css";
@@ -22,6 +23,7 @@ import "../interaction.css";
 export interface PropertiesPanelProps {
   properties: PropertiesReply | null;
   selectionCount: number;
+  /** The drawing's layer names. The shell gives the same list to `parseProperties`, so the layer row already carries it. */
   layers: readonly string[];
   onSet: (patch: Record<string, unknown>) => void;
   onNotice?: (message: string) => void;
@@ -49,16 +51,16 @@ export function PropertiesPanel(props: PropertiesPanelProps): JSX.Element {
   return (
     <aside class={open() ? "properties" : "properties is-folded"}>
       <div class="properties-head">
-        <IconButton icon="chevron-down" size="sm" title={open() ? "Hide the properties" : "Show the properties"} onClick={() => setOpen(!open())} />
+        <IconButton icon="chevron-down" size="sm" title={open() ? "Hide the properties" : "Show the properties"} expanded={open()} controls="properties-body" onClick={() => setOpen(!open())} />
         <SectionLabel>Properties</SectionLabel>
         <span class="properties-state" title={title()}>
           {title()}
         </span>
       </div>
-      <div class="properties-body" role="list" hidden={!open()}>
+      <div class="properties-body" id="properties-body" role="list" hidden={!open()}>
         <Index each={props.properties?.rows ?? []}>
           {(row) => (
-            <PropRowView row={row} subject={subject} layers={props.layers} onSet={props.onSet} onNotice={props.onNotice} />
+            <PropRowView row={row} subject={subject} onSet={props.onSet} onNotice={props.onNotice} />
           )}
         </Index>
         <Show when={(props.properties?.rows.length ?? 0) === 0}>
@@ -72,42 +74,8 @@ export function PropertiesPanel(props: PropertiesPanelProps): JSX.Element {
 interface PropRowViewProps {
   row: Accessor<PropRow>;
   subject: Accessor<string>;
-  layers: readonly string[];
   onSet: (patch: Record<string, unknown>) => void;
   onNotice?: (message: string) => void;
-}
-
-/**
- * The number rows the engine only takes above zero: `properties.set` leaves the value as it was
- * for anything else and still answers ok, so the row has to say it.
- */
-const POSITIVE_KEYS: ReadonlySet<string> = new Set(["ltscale"]);
-
-/** The options of a choice row: the caller's layer names win for the layer row, else the row's own. */
-function optionsFor(row: PropRow, layers: readonly string[]): readonly string[] {
-  if (row.key === "layer" && layers.length > 0) return layers;
-  return row.choices ?? [];
-}
-
-/** What becomes of text typed into a row: nothing to send, a refusal to say, or the patch. */
-export type DraftVerdict = { kind: "keep" } | { kind: "refuse"; message: string } | { kind: "send"; patch: Record<string, unknown> };
-
-/**
- * Judges `draft` against the row it was typed into. An unchanged value, an emptied number and the
- * same number written another way ("2.50" over "2.5") keep the engine's value; a number row takes
- * only a finite number (above zero where the engine needs one); everything else is sent.
- */
-export function judgeDraft(row: PropRow, draft: string): DraftVerdict {
-  if (draft === row.value) return { kind: "keep" };
-  if (row.kind === "number") {
-    const text = draft.trim();
-    if (text === "") return { kind: "keep" };
-    const n = Number(text);
-    if (!Number.isFinite(n)) return { kind: "refuse", message: `${row.label} needs a number` };
-    if (POSITIVE_KEYS.has(row.key) && n <= 0) return { kind: "refuse", message: `${row.label} needs a number above 0` };
-    if (row.value.trim() !== "" && n === Number(row.value)) return { kind: "keep" };
-  }
-  return { kind: "send", patch: buildPatch({ [row.key]: draft }) };
 }
 
 function PropRowView(props: PropRowViewProps): JSX.Element {
@@ -192,7 +160,8 @@ function PropRowView(props: PropRowViewProps): JSX.Element {
 
   /** Which control the row gets; the control is kept across refreshes, so focus survives one. */
   const mode = createMemo((): "readonly" | PropRow["kind"] => (props.row().editable ? props.row().kind : "readonly"));
-  const options = createMemo(() => optionsFor(props.row(), props.layers));
+  /** A choice row's options, as `parseProperties` set them (the layer row's are the drawing's layers). */
+  const options = createMemo((): readonly string[] => props.row().choices ?? []);
   /** A tick box over objects that disagree (or a value that is neither) is neither on nor off. */
   const mixed = (): boolean => draft() !== "true" && draft() !== "false";
 

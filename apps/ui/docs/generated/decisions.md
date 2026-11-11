@@ -8,7 +8,7 @@ file records the picks and the reasons, so the next surface does not re-litigate
 
 ## Canonical picks
 
-The web UI grows eight canonical components under `src/ui/`, each a thin wrapper over the native
+The web UI grows nine canonical components under `src/ui/`, each a thin wrapper over the native
 element. The per-surface hand-rolled classes they replace are named below; a class loses because it
 is a one-off with no shared API and no states.
 
@@ -18,6 +18,7 @@ is a one-off with no shared API and no states.
 - **Field** — pick `ui/Field.tsx` (native `<input>`, single-line). Loses: `.assistant-input`, `.cmd-input`, `.prop-input` (each one surface's own padding and border), `.assistant-field` (a label wrapper, not the control). The composer's auto-growing `<textarea>` and the properties palette's `<select>` stay bespoke for now (found-not-fixed).
 - **Row** — pick `ui/Row.tsx` (native `<button>`, the full-width clickable band). Loses: `.prop-row`, `.menu-row`, `.assistant-row`, `.assistant-tool` (each repeats hover/selected padding by hand). A grid row carrying nested controls of its own (`.layer-row` with its toggle cluster) stays bespoke — a button cannot nest buttons. The pilot kept `.assistant-row` (the composer's toolbar is a container with nested buttons) and `.assistant-tool` (a transcript disclosure row, not a menu band) bespoke for the same reason; `row.md` records it.
 - **SectionLabel** — pick `ui/SectionLabel.tsx` (native `<h2>` — a heading, so a screen reader can jump between panels). Loses: `.section-label` (already shared but untyped — the pick is its typed home), `.properties-head` / `.layers-head` (the surrounding bar, not the label), `.assistant-title` (a pane title, a different role).
+- **Tooltip** — pick `ui/Tooltip.tsx` (a `<span>` wrapper around the control, the hint in a sibling `<span role="tooltip">`; the child keeps its own element and its own accessible name). Placements `top | bottom`, alignments `center | end`; it shows on the wrapper's hover and on focus inside it, and never takes the pointer. Loses: the native `title` attribute as the only hint on the assistant header's icon keys (it arrives on the platform's own delay, in the platform's own box, and never on keyboard focus), and any per-surface hover label a panel would draw for itself.
 - **Tab** — pick `ui/Tab.tsx` (native `<button>` with `role="tab"`, `aria-selected` on the one in front; an optional close key as a sibling button). Sizes `md` (the editor tab, selected at `--tab-active`) and `sm` (the compact tab of a pane header, selected at `--fill-active`). Loses: `.layout-tab` (StatusBar's layout strip — a raw button with its own class), the chat tabs' `Row` workaround (AssistantPane — a `Row` in a width cell beside a close `IconButton`).
 - **Kbd** — pick `ui/Kbd.tsx` (native `<kbd>`, one recipe, no variants). Loses: `.assistant-key` (AssistantPane — the mono face at the disabled ink), `.palette-key` (CommandPalette — the recipe kept, now the pick's own).
 
@@ -26,6 +27,8 @@ is a one-off with no shared API and no states.
 - `variant`: `primary | secondary | ghost | danger` (default `secondary`) — purpose, not appearance.
 - `size`: `sm | md` (default `md`).
 - plus `disabled`, `selected`, `title`.
+- IconButton `expanded` and `controls`: a fold key says whether the region it folds is showing (`aria-expanded`) and which region it is (`aria-controls`, the region's `id`). A key is a fold key or a `selected` toggle, never both.
+- Button `ariaLabel` (the name Field already uses for the same job): the accessible name, only where the visible label is a value rather than the action; it starts with the action and holds the visible text.
 - Chip `tone`: `neutral | accent`.
 - No boolean style props (`round`, `big`, `blue`): a prop names a purpose; the token layer picks the look.
 
@@ -33,8 +36,8 @@ is a one-off with no shared API and no states.
 
 One job, one preset (durations and easings from `tokens.css`):
 
-- **press** → `--dur-instant` + `--ease-out`.
-- **hover / focus feedback** → `--dur-fast` + `--ease-out`.
+- **press** → `--dur-press` + `--ease-standard`: the transform channel only (the icon button's scale to .98). A fill that changes under a press takes the hover preset.
+- **hover / focus feedback** → `--dur-fast` + `--ease-standard`: the measured state transition, `.1s ease` (research §8: 24 declarations in the glass UI, and the button families' `color, background-color` channels). This line read `--ease-out` until 2026-11-11; the measurement and `src/tokens.css` say `ease`, the layer (`src/ui/ui.css`) already drew it, and the page was the side that moved.
 - **open** (menu, popover, composer focus) → `--dur-med` + `--ease-out-quint`.
 - **close** → `--dur-fast` + `--ease-out`.
 - **panel / larger change** → `--dur-slow` + `--ease-out`.
@@ -62,6 +65,10 @@ Each change and the gate that decided it (cursor-recipes §1 / §5):
 | radii: `--radius-elevated 20px` (the only new radius) | G-09 | §2 |
 | the docked composer card: `--radius-elevated` to `--radius-block` (12px), with the stack over it | the person's composer reference board, 2026-11-11 (Cursor's docked composer and 20 of the 30 others draw a tight corner; 20px stays for floating surfaces) | `Composer reference board/`, `src/assistant.css` |
 | motion: `--dur-instant .05s`, `--dur-fast .1s`, `--dur-slow .2s`, `--ease-out-quint cubic-bezier(0.16,1,0.3,1)` | G-10 | §1 motion |
+| `--text-accent` (new): the accent as a text ink, `#599CE7` dark (the accent itself), `#005DA4` light (the accent's hue and chroma at OKLCH L .47); Chip `tone="accent"` takes it | WCAG 1.4.3: the light accent chip measured 3.37:1 at 11px over the command line, 4.93 now; dark is unchanged at 5.01 | measured in the browser 2026-11-11, `colors.md` "The layer's pairs" |
+| `--focus-ring` (new): `var(--accent)` dark, `#005DA4` light; every ring in `src/ui/ui.css` takes it | WCAG 1.4.11: the light accent ring measured 2.83:1 against the `.14` selected fill over `--control`, 4.14 now | the same table |
+| `--on-error` (new): `#121418` dark, `#FCFCFC` light; the danger button's label | WCAG 1.4.3: `--on-accent` measured 4.37:1 on the dark `--error` fill, 4.72 now | the same table |
+| light `--accent-hover #226CAE`, `--accent-pressed #1E609A`, `--error-hover #AB153D`, `--error-pressed #981236`: the action fills step 10% and 20% toward black on light surfaces (they stepped toward white, as dark does) | WCAG 1.4.3: the `--on-accent` label measured 3.77 and 3.20 on the old accent steps and 4.46 on the old error press; 5.35, 6.41 and 8.27 now | the same table |
 
 ## What follows the drawing
 

@@ -190,7 +190,7 @@ describe("send", () => {
     const holder: { session?: AssistantSession } = {};
     holder.session = sessionWith(scriptedFetch([toolReply("(+ 1 2)"), textReply("Three.")]).fetch, fake, () => seen.push(holder.session?.status() ?? ""));
     await say(holder.session, "add");
-    expect(seen).toEqual(["Working, 1 step"]);
+    expect(seen).toEqual(["Working, 1 step…"]);
     expect(holder.session.status()).toBe("");
   });
 
@@ -332,7 +332,7 @@ describe("the checkpoint", () => {
     expect(fake.undone).toEqual([0]);
     expect(session.changes()).toBeNull();
     expect(changed).toBe(2);
-    expect(session.status()).toBe("Drawing restored, 1 step undone");
+    expect(session.status()).toBe("Undid 1 change to the drawing");
   });
 
   test("Keep dismisses the bar and the next turn starts a new checkpoint", async () => {

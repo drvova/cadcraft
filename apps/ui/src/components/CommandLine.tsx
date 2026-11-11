@@ -1,7 +1,8 @@
 /**
  * The command line: the engine's prompt as the input's placeholder (so a two-step command shows
  * "Specify center point for circle:" then "Specify radius of circle:"), Enter submits through the
- * shell, Escape clears, Up/Down walk the submitted lines (most recent first, typing resets the
+ * shell, Escape clears typed text (and on an empty field goes on to the shell, which cancels the
+ * running command), Up/Down walk the submitted lines (most recent first, typing resets the
  * walk), and the prompt's keywords render as clickable chips that submit the keyword. The output
  * tail sits above in a scrollback. Pure flex column.
  *
@@ -78,11 +79,13 @@ export function CommandLine(props: CommandLineProps): JSX.Element {
       e.preventDefault();
       submit(input?.value ?? "");
     } else if (e.key === "Escape") {
-      e.preventDefault();
+      // Typed text is what Escape takes first: the field is cleared and the key stops here. On
+      // an empty field the key is the shell's, which cancels the running command.
       walk = -1;
-      if (input !== undefined) {
+      if (input !== undefined && input.value !== "") {
+        e.preventDefault();
+        e.stopPropagation();
         input.value = "";
-        input.focus();
       }
     } else if (e.key === "ArrowUp") {
       e.preventDefault();

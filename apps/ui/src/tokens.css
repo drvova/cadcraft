@@ -35,6 +35,7 @@
   --text-dim: rgba(240, 240, 240, 0.74);
   --text-faint: rgba(240, 240, 240, 0.60);
   --text-disabled: rgba(240, 240, 240, 0.36); /* the disabled ink (Cursor §5) */
+  --text-accent: #599CE7; /* the accent as a text ink (Chip tone=accent); the accent itself here */
   --icon: rgba(240, 240, 240, 0.66);
   --icon-accent: #599CE7;
   --icon-point: #f1b467;
@@ -45,6 +46,8 @@
   --accent-pressed: #7AB0EC; /* the same at 20%: the primary button's pressed fill */
   --accent-soft: rgba(89, 156, 231, 0.12); /* the accent-tinted chip fill (Chip tone=accent) */
   --selection: #599CE7;
+  /* The focus ring's ink: the accent wherever it holds 3:1 against the fills a ring crosses. */
+  --focus-ring: var(--accent);
   /* The one hover fill (Cursor §5: hover is a fill, never a colour change). */
   --hover: rgba(240, 240, 240, 0.08);
   --fill-active: rgba(240, 240, 240, 0.14); /* the pressed/selected fill */
@@ -98,6 +101,7 @@
 
   /* ---- Misc (on_accent, crosshair, paper) ---- */
   --on-accent: #191C22;
+  --on-error: #121418; /* the ink on the error fill: --on-accent measures 4.37 there, this 4.72 */
   --crosshair: #e4e4e4;
   --paper: #fcfcfc;
 
@@ -201,12 +205,18 @@
      nearest measured step that passes is the icon ink .66 (5.45). */
   --text-faint: rgba(20, 20, 20, 0.66);
   --text-disabled: rgba(20, 20, 20, 0.36); /* the disabled ink (Cursor §5) */
+  /* The accent as a text ink. The accent fill (#2678C1) measures 3.28 on its own tint over the
+     #e8e8e8 control; this is the same hue and chroma at OKLCH L .47 (the accent is .56), the
+     first step that holds 4.5 there and over the .08 hover fill (4.80 and 4.71). */
+  --text-accent: #005DA4;
   --icon: rgba(20, 20, 20, 0.66);
   --icon-accent: #2678C1;
   --icon-point: #b8791f;
   --accent: #2678C1;
-  --accent-hover: #3C86C7; /* the accent mixed 10% toward white: the primary button's hover */
-  --accent-pressed: #5193CD; /* the same at 20%: the primary button's pressed fill */
+  /* On light surfaces the action fills step toward black, not white: the --on-accent label
+     measured 3.77 and 3.20 on the white-mixed steps, and holds 5.35 and 6.41 on these. */
+  --accent-hover: #226CAE; /* the accent mixed 10% toward black: the primary button's hover */
+  --accent-pressed: #1E609A; /* the same at 20%: the primary button's pressed fill */
   --accent-soft: rgba(38, 120, 193, 0.12); /* the accent-tinted chip fill (Chip tone=accent) */
   --cmd-bg: #ebebeb;
   --cmd-border: #c9c9c9;
@@ -215,6 +225,9 @@
   --cmd-keyword-hover: rgba(38, 120, 193, 0.12);
   --shadow: rgba(0, 0, 0, 0.18);
   --selection: #2678C1;
+  /* The accent ring measures 2.83 against the .14 selected fill over the control; the accent's
+     text step holds 4.14 there. */
+  --focus-ring: #005DA4;
   --snap: #007041;
   --list-bg: #ffffff;
   --list-row: var(--fill-active);
@@ -225,13 +238,14 @@
   --toggle-on: #007041;
   --warn: #A46701;
   --error: #BE1744;
-  --error-hover: #C52E57; /* the error fill mixed 10% toward white: the danger button's hover */
-  --error-pressed: #CB4569; /* the same at 20% */
+  --error-hover: #AB153D; /* the error fill mixed 10% toward black: the danger button's hover */
+  --error-pressed: #981236; /* the same at 20% (the white-mixed step measured 4.46 under the label) */
   --layer-current: #d5dfe9;
   --grip-hot: #e34671;
   --scrollbar: rgba(20, 20, 20, 0.14);
   --scrollbar-hover: rgba(20, 20, 20, 0.22);
   --on-accent: #FCFCFC;
+  --on-error: #FCFCFC;
   --composer-border: rgba(20, 20, 20, 0.08);
   --composer-border-active: rgba(20, 20, 20, 0.12);
 }

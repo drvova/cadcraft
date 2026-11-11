@@ -65,7 +65,7 @@ Not applicable: no variant axes — a row is one band; the selected and disabled
 | Rest | Nothing is over the row. | Click it, or Tab to it. | The label at the dim ink; the full width is the hit area. | test |
 | Hover | The pointer is over the row, on a device with a hover pointer. | Click it. | The `.08` fill; the cursor is a pointer. | by hand |
 | Pressed | The pointer is held down. | Release to run the action. | Nothing beyond hover: a row's press runs on release. | by hand |
-| Focused | Keyboard focus arrives by Tab. | Enter or Space runs the action. | The 1px accent ring at offset -1, following the 4px radius. | by hand |
+| Focused | Keyboard focus arrives by Tab. | Enter or Space runs the action. | The 1px ring in the focus ink at offset -1, following the 4px radius. | by hand |
 | Selected | The caller passes `selected` (the current row). | Click it; move to another row. | The `.14` fill, the full ink, and `aria-current="true"`. | test |
 | Disabled | The caller passes `disabled`. | Nothing: no click, no hover. | The label at the disabled ink; the cursor stays default. | test |
 
@@ -99,7 +99,7 @@ export default function Disabled() {
 ### Motion
 | Trigger | Kind | Preset | Properties | Reduced motion |
 |---|---|---|---|---|
-| The pointer enters or leaves | input | hover / focus feedback (`--dur-fast` + `--ease-out`) | background-color | The fill changes at once: the shell's `:root[data-animations="off"]` rule removes the transition. |
+| The pointer enters or leaves | input | hover / focus feedback (`--dur-fast` + `--ease-standard`) | background-color | The fill changes at once: the shell's `:root[data-animations="off"]` rule removes the transition. |
 
 ## Props
 
@@ -151,6 +151,9 @@ export default function Disabled() {
 - `rule/row-label-limit`: When a row's label runs past 40 characters at the 260px sidebar, clip it with an ellipsis and keep the full text in `title`, because the measured row is 22px tall and the sidebar 260px wide. Evidence: measured 22px row and 260px sidebar, `docs/system/decisions.md`. Check: review `src/styles.css`.
   - Don't: a 60-character layer name that overflows the row.
   - Do: a clipped label with the full name in `title`.
+- `rule/row-touch-target`: When rows stack in a list, let the list's height follow its rows rather than fixing it to a multiple of 22px, because under a coarse pointer each row grows from 22px to the 24px control height (rows stack with 0 gap, so an overhanging target would only overlap the next row) and a fixed list would cut its last rows. Evidence: measured 22px row, 24px under a coarse pointer, `src/ui/ui.css:587`. Check: review `src/ui/ui.css`.
+  - Don't: `.my-list { height: calc(var(--control-h-row) * 8); overflow: hidden }`
+  - Do: `.my-list { max-height: calc(var(--control-h-input) * 8); overflow-y: auto }`
 
 ## Accessibility
 Rests on the native `<button>` element: role, Enter and Space, `disabled` and focus come from the platform.
@@ -177,8 +180,9 @@ Rests on the native `<button>` element: role, Enter and Space, `disabled` and fo
 | The fill | selected | `--fill-active` |
 | The label | selected | `--text` |
 | The label | disabled | `--text-disabled` |
-| The ring | focus-visible | `--focus-outline-w`, `--accent`, `--focus-outline-offset` |
-| The motion | hover | `--dur-fast`, `--ease-out` |
+| The ring | focus-visible | `--focus-outline-w`, `--focus-ring`, `--focus-outline-offset` |
+| The motion | hover | `--dur-fast`, `--ease-standard` |
+| The band | coarse pointer | `--control-h-input` |
 
 ## Related
 - `Button`: when the control is an action rather than a list item.
