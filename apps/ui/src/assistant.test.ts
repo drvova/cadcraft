@@ -13,6 +13,9 @@ import {
   parseToolArgs,
   relativeTime,
   splitFences,
+  listModels,
+  modelsEndpoint,
+  presetFor,
   providerEndpoint,
   providerReady,
   reportText,
@@ -93,6 +96,50 @@ describe("the provider", () => {
     expect(providerReady({ baseUrl: "ftp://x", model: "m", apiKey: "" })).toContain("http://");
     expect(providerReady({ baseUrl: "http://x", model: "", apiKey: "" })).toContain("model name");
     expect(providerReady(PROVIDER)).toBeNull();
+  });
+});
+
+describe("setting a provider up", () => {
+  const signal = new AbortController().signal;
+  const fetchOf = (response: Response | Error): { fetch: typeof fetch; seen: Array<{ url: string; auth: string | null }> } => {
+    const seen: Array<{ url: string; auth: string | null }> = [];
+    const fn = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      seen.push({ url: String(input), auth: new Headers(init?.headers).get("authorization") });
+      if (response instanceof Error) throw response;
+      return response;
+    }) as typeof fetch;
+    return { fetch: fn, seen };
+  };
+
+  test("a base URL names its preset; an unknown one is Other", () => {
+    expect(presetFor("https://api.openai.com/v1/")?.id).toBe("openai");
+    expect(presetFor("http://127.0.0.1:11434/v1")?.id).toBe("ollama");
+    expect(presetFor("https://example.test/v1")?.id).toBe("custom");
+    expect(presetFor("")?.id).toBe("custom");
+  });
+
+  test("the model list lives beside the chat route", () => {
+    expect(modelsEndpoint("http://127.0.0.1:11434/v1/")).toBe("http://127.0.0.1:11434/v1/models");
+    expect(modelsEndpoint("https://x.test/v1/chat/completions")).toBe("https://x.test/v1/models");
+  });
+
+  test("the check lists the server's models and sends the key when there is one", async () => {
+    const ok = fetchOf(new Response(JSON.stringify({ data: [{ id: "llama3.2" }, { id: "qwen2.5" }, { nope: 1 }] }), { status: 200 }));
+    expect(await listModels({ ...PROVIDER, apiKey: "k" }, signal, ok.fetch)).toEqual(["llama3.2", "qwen2.5"]);
+    expect(ok.seen).toEqual([{ url: "http://127.0.0.1:11434/v1/models", auth: "Bearer k" }]);
+    const bare = fetchOf(new Response(JSON.stringify({ models: [{ name: "a" }, "b"] }), { status: 200 }));
+    expect(await listModels({ ...PROVIDER, model: "" }, signal, bare.fetch)).toEqual(["a", "b"]);
+    expect(bare.seen[0]?.auth).toBeNull();
+  });
+
+  test("a refusal, an unreachable server and a strange answer each say so", async () => {
+    const refused = fetchOf(new Response(JSON.stringify({ error: { message: "bad key" } }), { status: 401 }));
+    await expect(listModels(PROVIDER, signal, refused.fetch)).rejects.toThrow("401: bad key");
+    const down = fetchOf(new TypeError("Failed to fetch"));
+    await expect(listModels(PROVIDER, signal, down.fetch)).rejects.toThrow("could not be reached");
+    const odd = fetchOf(new Response("<html>", { status: 200 }));
+    await expect(listModels(PROVIDER, signal, odd.fetch)).rejects.toThrow("not with a model list");
+    await expect(listModels({ baseUrl: "", model: "", apiKey: "" }, signal, odd.fetch)).rejects.toThrow("base URL");
   });
 });
 

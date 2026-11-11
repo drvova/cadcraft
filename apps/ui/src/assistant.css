@@ -26,6 +26,12 @@
 .assistant-panel {
   /* The width the reader last dragged it to (set on the element); this is where it starts. */
   --assistant-width: 340px;
+  /* The panel's two measures. The gutter is from the panel's edge to a card (the prompt bubble,
+     a code block, the composer); the inset is from a card's edge to the text inside it. Prose
+     that sits on the panel itself is indented by both, so every line of text in the panel, in a
+     card or out of one, starts on the same column. */
+  --assistant-gutter: var(--gap-8);
+  --assistant-inset: calc(var(--gap-12) + var(--hairline));
   position: relative;
   width: var(--assistant-width);
   flex: 0 0 auto;
@@ -84,7 +90,7 @@
   align-items: center;
   gap: var(--gap-6);
   height: 35px;
-  padding: 0 var(--gap-8);
+  padding: 0 var(--gap-8) 0 calc(var(--assistant-gutter) + var(--assistant-inset));
   border-bottom: var(--hairline) solid var(--border);
 }
 
@@ -151,11 +157,21 @@
 
 /* ---- The transcript ---- */
 
+/* The transcript and the setup sheet share this region: the sheet covers the transcript while
+   it is open, and the transcript (and its scroll position) stays underneath. */
+.assistant-main {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .assistant-body {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--gap-16);
+  padding: var(--gap-12) var(--assistant-gutter);
   display: flex;
   flex-direction: column;
   gap: var(--gap-14);
@@ -187,7 +203,7 @@
 
 .assistant-empty p {
   margin: 0 0 var(--gap-6);
-  padding: 0 var(--gap-10);
+  padding: 0 var(--assistant-inset);
   color: var(--text-faint);
   font-size: var(--font-body);
   line-height: 1.5;
@@ -201,7 +217,7 @@
   gap: var(--gap-8);
   width: 100%;
   height: var(--control-h-suggestion);
-  padding: 0 var(--gap-10);
+  padding: 0 var(--assistant-inset);
   border: none;
   border-radius: var(--radius-popover);
   background: transparent;
@@ -277,6 +293,7 @@
 
 /* The model's words: prose on the surface at the transcript's 15px/24px (research §2). */
 .assistant-text {
+  padding: 0 var(--assistant-inset);
   color: var(--text);
   font-size: var(--composer-font);
   line-height: var(--composer-leading);
@@ -288,6 +305,7 @@
    (more above than below, so a heading belongs to what follows it). */
 .assistant-heading {
   margin: var(--gap-4) 0 calc(-1 * var(--gap-6));
+  padding: 0 var(--assistant-inset);
   color: var(--text);
   font-size: var(--composer-font);
   font-weight: 600;
@@ -302,7 +320,7 @@
 /* A reply's lists: the prose's own type, hung on quiet markers. */
 .assistant-list {
   margin: 0;
-  padding-left: var(--gap-16);
+  padding: 0 var(--assistant-inset) 0 calc(var(--assistant-inset) + var(--gap-16));
   display: flex;
   flex-direction: column;
   gap: var(--gap-4);
@@ -335,7 +353,7 @@
 }
 
 .assistant-failed {
-  padding: var(--gap-6) var(--gap-8);
+  padding: var(--gap-6) var(--assistant-inset);
   border-radius: var(--radius-card);
   background: var(--control);
   color: var(--error);
@@ -353,7 +371,7 @@
   gap: var(--gap-6);
   width: 100%;
   min-height: var(--control-h-input);
-  padding: 0;
+  padding: 0 var(--assistant-inset);
   border: none;
   border-radius: 0;
   background: transparent;
@@ -497,10 +515,13 @@
 }
 
 /* The turn's actions: the measured 24px icon row, the 13px timestamp at .36 (research §2). */
+/* The row's first key is a 20px circle around a 12px glyph: pulling it left by the glyph's own
+   margin puts the glyph, not the circle's edge, on the text column. */
 .assistant-turn-actions {
   display: flex;
   align-items: center;
   gap: var(--gap-6);
+  padding: 0 var(--assistant-inset) 0 calc(var(--assistant-inset) - var(--gap-4));
   min-height: var(--control-h-input);
 }
 
@@ -535,7 +556,7 @@
 }
 
 .assistant-stack-head {
-  padding: var(--gap-4) var(--gap-12) 0;
+  padding: var(--gap-4) var(--gap-4) 0;
   color: var(--text-disabled);
   font-size: var(--font-chip);
 }
@@ -546,7 +567,8 @@
   gap: var(--gap-6);
   flex-shrink: 0;
   min-height: var(--control-h-button);
-  padding: 0 var(--gap-8) 0 var(--gap-12);
+  /* The stack is inset from the card by the gutter; 4px more puts its text on the column. */
+  padding: 0 var(--gap-8) 0 var(--gap-4);
   color: var(--text-faint);
   font-size: var(--font-body);
 }
@@ -562,7 +584,7 @@
 /* The opened changes row: what the assistant ran to make them, oldest first, one line each. */
 .assistant-stack-list {
   margin: 0;
-  padding: var(--gap-4) var(--gap-12) var(--gap-2);
+  padding: var(--gap-4) var(--gap-8) var(--gap-2) var(--gap-4);
   list-style: none;
   color: var(--text-faint);
   font-family: var(--font-family-mono);
@@ -705,7 +727,8 @@
   align-items: center;
   gap: var(--gap-4);
   height: var(--composer-toolbar-height);
-  padding: var(--gap-8);
+  /* The model pill carries 8px of its own inset: 4px here puts its label on the text column. */
+  padding: var(--gap-8) var(--gap-8) var(--gap-8) var(--gap-4);
 }
 
 .assistant-actions {
@@ -766,33 +789,56 @@
   font-size: var(--font-chip);
 }
 
-/* ---- The provider popover (the elevated popover, research §2) ---- */
+/* ---- The setup sheet ---- */
 
-.assistant-menu {
+/* Setting a model up is a sheet over the transcript, not a popover in the composer: the three
+   things it asks for (which provider, which model, which key) and the check that proves them are
+   all in view at once, and Save and Cancel never scroll away. */
+.assistant-setup {
   position: absolute;
-  bottom: calc(100% + var(--gap-4));
-  left: 0;
-  right: 0;
-  padding: var(--gap-4);
+  inset: 0;
+  z-index: 10;
   display: flex;
   flex-direction: column;
-  gap: var(--gap-2);
-  background: var(--surface-elevated);
-  border: var(--hairline) solid var(--border-soft);
-  border-radius: var(--radius-popover);
-  box-shadow: var(--shadow-popover);
-  z-index: 50;
-  max-height: 340px;
-  overflow-y: auto;
+  background: var(--panel);
+  animation: assistant-setup-in var(--dur-med) var(--ease-out-quint);
 }
 
-.assistant-menu-title {
-  padding: var(--gap-2) var(--gap-6);
-  flex-shrink: 0;
-  color: var(--text-faint);
-  font-size: var(--font-chip);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+@keyframes assistant-setup-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--gap-4));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.assistant-setup-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--gap-12) var(--assistant-gutter);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-16);
+}
+
+/* A group's heading, fields and notes start on the panel's text column. */
+.assistant-setup-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-8);
+  padding: 0 var(--assistant-inset);
+}
+
+/* The system's Row carries 4px of its own inset: the list steps out by it, so the names sit on
+   the column and the selected fill reaches a little past them, as a list's highlight does. */
+.assistant-setup-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0 calc(-1 * var(--gap-4));
 }
 
 /* The preset rows are the system's `Row`; its children carry the two inks. */
@@ -816,22 +862,74 @@
   font-size: var(--font-chip);
 }
 
-/* The provider inputs are the system's `Field`; this is only their labelled wrapper. */
+/* A labelled field of the sheet: the name, the system's `Field`, and a quiet line of help. */
 .assistant-field {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-2);
-  padding: var(--gap-2) var(--gap-6);
-  /* The menu scrolls; a labelled field never squashes with it. */
-  flex-shrink: 0;
+  gap: var(--gap-4);
   color: var(--text-faint);
   font-size: var(--font-chip);
 }
 
-.assistant-menu-actions {
+.assistant-field-hint {
+  color: var(--text-disabled);
+  font-size: var(--font-chip);
+  line-height: var(--gap-16);
+}
+
+/* The models the server listed, as chips to pick from; the one in the field is marked. */
+.assistant-setup-models {
   display: flex;
-  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--gap-2);
+  margin: 0 calc(-1 * var(--gap-8));
+}
+
+/* The sheet's foot stays put: what the check found, then Check on the left and the two answers
+   on the right. */
+.assistant-setup-foot {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-6);
+  padding: var(--gap-8) var(--assistant-gutter);
+  border-top: var(--hairline) solid var(--border);
+}
+
+.assistant-setup-note {
+  margin: 0;
+  min-height: var(--gap-16);
+  padding: 0 var(--assistant-inset);
+  color: var(--text-faint);
+  font-size: var(--font-label);
+  line-height: var(--gap-16);
+  overflow-wrap: anywhere;
+}
+
+.assistant-setup-note.is-failed {
+  color: var(--error);
+}
+
+/* The ghost Check button carries its own inset: stepping out by it puts its word on the column. */
+.assistant-setup-actions {
+  display: flex;
+  align-items: center;
   gap: var(--gap-4);
-  padding-top: var(--gap-4);
-  flex-shrink: 0;
+  padding-left: calc(var(--assistant-inset) - var(--button-pad-x));
+}
+
+.assistant-setup-spacer {
+  flex: 1 1 auto;
+}
+
+/* The empty state when no model is connected: what is missing, and the one key that fixes it. */
+.assistant-empty-setup {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--gap-8);
+  padding: var(--gap-2) var(--assistant-inset) var(--gap-12);
+  color: var(--text-dim);
+  font-size: var(--font-body);
+  line-height: 1.5;
 }

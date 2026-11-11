@@ -13,8 +13,8 @@ Not applicable: hand-rolled — the recipe is the app's own `src/ui/ui.css`, mea
 ## Examples
 `<Button variant="primary">Save</Button>` — the one action of a dialog or a pane.
 
-Real uses, 6 call sites (`rg -c "<Button" src/components` → `src/components/AssistantPane.tsx:5`, `src/components/TopBar.tsx:1`):
-- `src/components/AssistantPane.tsx` — the assistant's call sites: the provider popover's Cancel (`variant="ghost"`) and Save (`variant="primary"`), and the stack over the composer: Stop on the run row and Undo all on the changes row (`variant="ghost" size="sm"`), and Keep beside it (`size="sm"`).
+Real uses, 8 call sites (`rg -c "<Button" src/components` → `src/components/AssistantPane.tsx:7`, `src/components/TopBar.tsx:1`):
+- `src/components/AssistantPane.tsx` — the assistant's call sites: the empty state's Set up a model (`variant="primary"`, shown while no model is connected), the setup sheet's Check and Cancel (`variant="ghost"`) and Save (`variant="primary"`), and the stack over the composer: Stop on the run row and Undo all on the changes row (`variant="ghost" size="sm"`), and Keep beside it (`size="sm"`).
 - `src/components/TopBar.tsx:37` — the title bar's command centre (`size="sm"`): the drawing's name, opening the command palette.
 
 ### Example files
@@ -84,9 +84,9 @@ export default function InTopBar() {
 ## Variants
 
 ### variant
-- `primary`: the one action of the pane or dialog; the accent fill. Used at 1 call site (the provider popover's Save).
+- `primary`: the one action of the pane or dialog; the accent fill. Used at 2 call sites (the setup sheet's Save, and the empty state's Set up a model, which shows only until a model is connected).
 - `secondary`: the default action; the `.08` fill that Cursor's own default button draws. Used at 2 call sites (the title bar's command centre and the changes row's Keep).
-- `ghost`: a quiet action on a tool bar or in a list; no resting fill. Used at 3 call sites (the provider popover's Cancel, the run row's Stop and the changes row's Undo all).
+- `ghost`: a quiet action on a tool bar or in a list; no resting fill. Used at 4 call sites (the setup sheet's Check and Cancel, the run row's Stop and the changes row's Undo all).
 - `danger`: a destructive action; the error fill. Used at 0 call sites.
 
 Example: The accent fill, the one action of a pane. (`docs/system/examples/button/variant-primary.tsx`)
@@ -131,7 +131,7 @@ export default function VariantDanger() {
 
 ### size
 - `sm`: the 24px control, for a button beside a field or inside a row. Used at 4 call sites (the title bar's command centre, and the stack's Stop, Undo all and Keep).
-- `md`: the 28px default, for a dialog footer or a pane header. Used at 2 call sites (the provider popover's Cancel and Save).
+- `md`: the 28px default, for a dialog footer or a pane header. Used at 4 call sites (the setup sheet's Check, Cancel and Save, and the empty state's Set up a model).
 
 Example: The 24px button that sits beside a field. (`docs/system/examples/button/size-sm.tsx`)
 
@@ -224,7 +224,7 @@ export default function Disabled() {
   - Do: `.ui-button--secondary:hover { background: var(--fill-active) }`
 
 ### Content
-- `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Undo all` — because the label is the action's name and the accessible name comes from it. Evidence: app 5/6 labels are verbs or verb phrases, `src/components/AssistantPane.tsx:492`, the label "Undo all" (the sixth, the command centre, is labelled with the drawing's name and names its action in its `title`). Check: review `src/components/AssistantPane.tsx`.
+- `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Undo all` — because the label is the action's name and the accessible name comes from it. Evidence: app 5/6 labels are verbs or verb phrases, `src/components/AssistantPane.tsx:625`, the label "Undo all" (the sixth, the command centre, is labelled with the drawing's name and names its action in its `title`). Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Button>SAVE</Button>`
   - Do: `<Button>Save</Button>`
 

@@ -13,7 +13,8 @@ Not applicable: hand-rolled — the pill radius, the 20px height and the accent 
 ## Examples
 `<Chip>26 objects</Chip>` — the selection count as a static fact.
 
-Real uses, 1 call site (`rg -c "<Chip" src/components` → `src/components/CommandLine.tsx:1`):
+Real uses, 2 call sites (`rg -c "<Chip" src/components` → `src/components/AssistantPane.tsx:1`, `src/components/CommandLine.tsx:1`):
+- `src/components/AssistantPane.tsx:551` — the setup sheet's model chips: one per model the connection check listed, click to put it in the Model field; the one in the field takes `tone="accent"`, the rest `neutral`.
 - `src/components/CommandLine.tsx:100` — the command line's keyword row (`tone="accent"`): one chip per keyword the open command offers, click to submit it.
 
 ### Example files
@@ -53,8 +54,8 @@ export default function InCommandLine() {
 ## Variants
 
 ### tone
-- `neutral`: a quiet fact or a value; transparent, at the faint ink. Used at 0 call sites.
-- `accent`: a keyword or a suggestion the user can pick; the accent-tinted fill. Used at 1 call site (the command line's keyword chip).
+- `neutral`: a quiet fact or a value; transparent, at the faint ink. Used at 1 call site (the setup sheet's model chips that are not the chosen one).
+- `accent`: a keyword or a suggestion the user can pick; the accent-tinted fill. Used at 2 call sites (the command line's keyword chip, and the setup sheet's chosen model).
 
 Example: The quiet fact at the faint ink. (`docs/system/examples/chip/tone-neutral.tsx`)
 

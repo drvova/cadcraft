@@ -59,6 +59,62 @@ export function providerReady(provider: ProviderConfig): string | null {
   return null;
 }
 
+/** The preset a base URL belongs to, or the "Other" preset when it matches none. */
+export function presetFor(baseUrl: string): ProviderPreset | undefined {
+  const base = baseUrl.trim().replace(/\/+$/, "");
+  return PROVIDER_PRESETS.find((p) => p.baseUrl !== "" && p.baseUrl === base) ?? PROVIDER_PRESETS.find((p) => p.id === "custom");
+}
+
+/** Where a provider lists its models (`GET {base}/models`, the OpenAI shape). */
+export function modelsEndpoint(baseUrl: string): string {
+  const base = baseUrl
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/chat\/completions$/, "");
+  return `${base}/models`;
+}
+
+/** The most model names a provider's list contributes (some hosts list thousands). */
+export const MAX_LISTED_MODELS = 200;
+
+/**
+ * Ask the provider which models it serves: the setup's connection check. Resolves with the model
+ * ids (possibly none: some servers answer the route with an empty list); rejects with a message
+ * in the pane's own words when the server cannot be reached, refuses the key, or answers with
+ * something that is not a model list.
+ */
+export async function listModels(provider: ProviderConfig, signal: AbortSignal, fetchImpl: typeof fetch = fetch): Promise<string[]> {
+  const missing = providerReady({ ...provider, model: provider.model.trim() === "" ? "any" : provider.model });
+  if (missing !== null) throw new Error(missing);
+  const url = modelsEndpoint(provider.baseUrl);
+  const headers: Record<string, string> = {};
+  if (provider.apiKey.trim() !== "") headers["authorization"] = `Bearer ${provider.apiKey.trim()}`;
+  let resp: Response;
+  try {
+    resp = await fetchImpl(url, { method: "GET", headers, signal });
+  } catch (e) {
+    if (signal.aborted) throw new Error("stopped");
+    throw new Error(`${friendlyError(e)} (${url})`);
+  }
+  if (!resp.ok) throw new Error(apiErrorText(resp.status, await resp.text().catch(() => "")));
+  let body: unknown;
+  try {
+    body = JSON.parse(await resp.text());
+  } catch {
+    throw new Error("the provider answered, but not with a model list");
+  }
+  const root = asRecord(body);
+  const rows = Array.isArray(root["data"]) ? root["data"] : Array.isArray(root["models"]) ? root["models"] : Array.isArray(body) ? body : null;
+  if (rows === null) throw new Error("the provider answered, but not with a model list");
+  const ids: string[] = [];
+  for (const row of rows.slice(0, MAX_LISTED_MODELS)) {
+    const r = asRecord(row);
+    const id = typeof row === "string" ? row : typeof r["id"] === "string" ? r["id"] : typeof r["name"] === "string" ? r["name"] : "";
+    if (id !== "") ids.push(id);
+  }
+  return ids;
+}
+
 // ---- The tool: one, and only one -----------------------------------------------------------------
 
 export const RUN_TOOL = "run";

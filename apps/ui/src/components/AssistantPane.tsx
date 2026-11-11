@@ -24,15 +24,17 @@
  */
 
 import { createEffect, createMemo, createSignal, For, Index, Match, on, onCleanup, onMount, Show, Switch, type JSX } from "solid-js";
-import { activityLine, atEnd, clampPanelWidth, MAX_REQUEST_CHARS, PANEL_WIDTH, parseBlocks, parseInline, PROVIDER_PRESETS, relativeTime, splitFences, type ChatImage, type ProseBlock, type ProviderConfig } from "../assistant";
+import { activityLine, atEnd, clampPanelWidth, MAX_REQUEST_CHARS, PANEL_WIDTH, listModels, parseBlocks, parseInline, presetFor, PROVIDER_PRESETS, relativeTime, splitFences, type ChatImage, type ProseBlock, type ProviderConfig } from "../assistant";
 import type { AssistantSession } from "../assistant-session";
 import { ToolIcon } from "../icons";
 import { Tooltip } from "../ui/Tooltip";
 import { Button } from "../ui/Button";
+import { Chip } from "../ui/Chip";
 import { Field } from "../ui/Field";
 import { IconButton } from "../ui/IconButton";
 import { Kbd } from "../ui/Kbd";
 import { Row } from "../ui/Row";
+import { SectionLabel } from "../ui/SectionLabel";
 import { Tab } from "../ui/Tab";
 import "../assistant.css";
 
@@ -204,8 +206,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   const send = (): void => {
     const outcome = s.send();
     if (outcome === "unconfigured") {
-      setDraft(s.provider());
-      setMenuOpen(true);
+      openSetup();
       return;
     }
     if (outcome === "empty") return;
@@ -234,8 +235,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   const onEscape = (e: KeyboardEvent): void => {
     if (e.key !== "Escape") return;
     if (menuOpen()) {
-      setMenuOpen(false);
-      inputEl?.focus();
+      closeSetup();
     } else if (s.running()) {
       s.stop();
     } else {
@@ -245,16 +245,71 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     e.stopPropagation();
   };
 
+  /** The setup sheet: what the connection check found, and the models the server listed. */
+  const [models, setModels] = createSignal<readonly string[]>([]);
+  const [checkNote, setCheckNote] = createSignal<{ ok: boolean; text: string } | null>(null);
+  const [checking, setChecking] = createSignal(false);
+  let checkAbort: AbortController | null = null;
+  onCleanup(() => checkAbort?.abort());
+  /** The preset the draft's base URL belongs to ("Other" when it is nobody's). */
+  const picked = createMemo(() => presetFor(draft().baseUrl));
+  const draftReady = (): boolean => draft().baseUrl.trim() !== "" && draft().model.trim() !== "";
+
+  const openSetup = (): void => {
+    setDraft(s.provider());
+    setModels([]);
+    setCheckNote(null);
+    setMenuOpen(true);
+  };
+
+  const closeSetup = (): void => {
+    checkAbort?.abort();
+    setMenuOpen(false);
+    inputEl?.focus();
+  };
+
   const applyPreset = (id: string): void => {
     const preset = PROVIDER_PRESETS.find((p) => p.id === id);
     if (preset === undefined) return;
     setDraft({ baseUrl: preset.baseUrl, model: preset.model, apiKey: draft().apiKey });
+    setModels([]);
+    setCheckNote(null);
+  };
+
+  /** Ask the server for its models: proof the address and the key work before they are saved. */
+  const checkConnection = async (): Promise<void> => {
+    checkAbort?.abort();
+    const mine = new AbortController();
+    checkAbort = mine;
+    setChecking(true);
+    setCheckNote(null);
+    try {
+      const ids = await listModels(draft(), mine.signal);
+      if (mine.signal.aborted) return;
+      setModels(ids);
+      const model = draft().model.trim();
+      const count = ids.length === 1 ? "1 model" : `${ids.length} models`;
+      setCheckNote({
+        ok: true,
+        text:
+          ids.length === 0
+            ? "Reached. The server lists no models; type the model's name."
+            : ids.includes(model)
+              ? `Reached. ${count}, ${model} among them.`
+              : `Reached. ${count}. Pick one, or keep the name you typed.`,
+      });
+    } catch (e) {
+      if (mine.signal.aborted) return;
+      setModels([]);
+      setCheckNote({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      if (checkAbort === mine) setChecking(false);
+    }
   };
 
   const saveDraft = (): void => {
-    s.setProvider(draft());
-    setMenuOpen(false);
-    inputEl?.focus();
+    s.setProvider({ baseUrl: draft().baseUrl.trim(), model: draft().model.trim(), apiKey: draft().apiKey.trim() });
+    closeSetup();
   };
 
   /** The model's words, with inline `code` and **bold** runs rendered as elements. */
@@ -355,6 +410,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         </div>
       </div>
 
+      <div class="assistant-main">
       <div
         class="assistant-body"
         ref={body}
@@ -363,6 +419,14 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         <Show when={s.entries.length === 0}>
           <div class="assistant-empty">
             <p>The assistant works in the open drawing: it draws, measures and changes it, and reports the numbers.</p>
+            <Show when={!s.ready()}>
+              <div class="assistant-empty-setup">
+                <span>It needs a model first: a hosted one with your key, or one running on this machine.</span>
+                <Button variant="primary" onClick={openSetup}>
+                  Set up a model
+                </Button>
+              </div>
+            </Show>
             <For each={EXAMPLES}>
               {(example) => (
                 <button
@@ -456,6 +520,75 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               <IconButton icon="chevron-down" variant="soft" title="Jump to the latest" onClick={() => setFollowing(true)} />
             </span>
           </div>
+        </Show>
+      </div>
+        <Show when={menuOpen()}>
+          <section class="assistant-setup" aria-label="Model setup">
+            <div class="assistant-setup-scroll">
+              <div class="assistant-setup-group">
+                <SectionLabel>Provider</SectionLabel>
+                <div class="assistant-setup-list">
+                  <For each={PROVIDER_PRESETS}>
+                    {(preset) => (
+                      <Row selected={picked()?.id === preset.id} onClick={() => applyPreset(preset.id)}>
+                        <span class="assistant-preset-label">{preset.label}</span>
+                        <span class="assistant-preset-url">{preset.id === "custom" ? "any server" : preset.key ? "needs a key" : "no key"}</span>
+                      </Row>
+                    )}
+                  </For>
+                </div>
+              </div>
+              <div class="assistant-setup-group">
+                <SectionLabel>Connection</SectionLabel>
+                <div class="assistant-field">
+                  <span>Model</span>
+                  <Field value={draft().model} ariaLabel="Model" placeholder="llama3.2" onInput={(v) => setDraft({ ...draft(), model: v })} />
+                </div>
+                <Show when={models().length > 0}>
+                  <div class="assistant-setup-models">
+                    <For each={models().slice(0, 12)}>
+                      {(id) => (
+                        <Chip tone={draft().model.trim() === id ? "accent" : "neutral"} title={`Use ${id}`} onClick={() => setDraft({ ...draft(), model: id })}>
+                          {id}
+                        </Chip>
+                      )}
+                    </For>
+                  </div>
+                </Show>
+                <Show when={picked()?.key === true || picked()?.id === "custom" || draft().apiKey !== ""}>
+                  <div class="assistant-field">
+                    <span>API key</span>
+                    <Field type="password" value={draft().apiKey} ariaLabel="API key" placeholder="sk-..." onInput={(v) => setDraft({ ...draft(), apiKey: v })} />
+                    <span class="assistant-field-hint">Kept in this browser. Sent only to the address below.</span>
+                  </div>
+                </Show>
+                <div class="assistant-field">
+                  <span>Base URL</span>
+                  <Field value={draft().baseUrl} ariaLabel="Base URL" placeholder="http://127.0.0.1:11434/v1" onInput={(v) => setDraft({ ...draft(), baseUrl: v })} />
+                  <Show when={picked()?.key === false && picked()?.id !== "custom"}>
+                    <span class="assistant-field-hint">A local server needs no key, but it must accept requests from this page.</span>
+                  </Show>
+                </div>
+              </div>
+            </div>
+            <div class="assistant-setup-foot">
+              <p class={checkNote()?.ok === false ? "assistant-setup-note is-failed" : "assistant-setup-note"} role="status">
+                {checking() ? "Checking the connection" : (checkNote()?.text ?? "")}
+              </p>
+              <div class="assistant-setup-actions">
+                <Button variant="ghost" disabled={checking() || draft().baseUrl.trim() === ""} onClick={() => void checkConnection()}>
+                  Check
+                </Button>
+                <span class="assistant-setup-spacer" />
+                <Button variant="ghost" onClick={closeSetup}>
+                  Cancel
+                </Button>
+                <Button variant="primary" disabled={!draftReady()} onClick={saveDraft}>
+                  Save
+                </Button>
+              </div>
+            </div>
+          </section>
         </Show>
       </div>
 
@@ -559,10 +692,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               class="assistant-ghost"
               type="button"
               title={s.ready() ? `${s.provider().baseUrl} · ${s.provider().model}` : "Choose a provider and model"}
-              onClick={() => {
-                setDraft(s.provider());
-                setMenuOpen((v) => !v);
-              }}
+              onClick={() => (menuOpen() ? closeSetup() : openSetup())}
             >
               <span class="assistant-ghost-label">{s.ready() ? s.provider().model : "Set up model"}</span>
               <span class="assistant-ghost-caret">
@@ -602,39 +732,6 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               void addFiles(files);
             }}
           />
-          <Show when={menuOpen()}>
-            <div class="assistant-menu">
-              <div class="assistant-menu-title">Provider</div>
-              <For each={PROVIDER_PRESETS}>
-                {(preset) => (
-                  <Row onClick={() => applyPreset(preset.id)}>
-                    <span class="assistant-preset-label">{preset.label}</span>
-                    <span class="assistant-preset-url">{preset.baseUrl === "" ? "—" : preset.baseUrl.replace(/^https?:\/\//, "")}</span>
-                  </Row>
-                )}
-              </For>
-              <div class="assistant-field">
-                <span>Base URL</span>
-                <Field value={draft().baseUrl} ariaLabel="Base URL" placeholder="http://127.0.0.1:11434/v1" onInput={(v) => setDraft({ ...draft(), baseUrl: v })} />
-              </div>
-              <div class="assistant-field">
-                <span>Model</span>
-                <Field value={draft().model} ariaLabel="Model" placeholder="llama3.2" onInput={(v) => setDraft({ ...draft(), model: v })} />
-              </div>
-              <div class="assistant-field">
-                <span>API key</span>
-                <Field type="password" value={draft().apiKey} ariaLabel="API key" placeholder="left empty for a local server" onInput={(v) => setDraft({ ...draft(), apiKey: v })} />
-              </div>
-              <div class="assistant-menu-actions">
-                <Button variant="ghost" onClick={() => setMenuOpen(false)}>
-                  Cancel
-                </Button>
-                <Button variant="primary" onClick={saveDraft}>
-                  Save
-                </Button>
-              </div>
-            </div>
-          </Show>
         </div>
       </div>
     </aside>

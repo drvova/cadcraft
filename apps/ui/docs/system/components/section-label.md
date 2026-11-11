@@ -12,7 +12,8 @@ Not applicable: hand-rolled — the 11px uppercase header is measured from the r
 ## Examples
 `<SectionLabel>Layers</SectionLabel>` — the heading above the layers list.
 
-Real uses, 2 call sites (`rg -c "<SectionLabel" src/components` → `src/components/LayersPanel.tsx:1`, `src/components/PropertiesPanel.tsx:1`):
+Real uses, 4 call sites (`rg -c "<SectionLabel" src/components` → `src/components/AssistantPane.tsx:2`, `src/components/LayersPanel.tsx:1`, `src/components/PropertiesPanel.tsx:1`):
+- `src/components/AssistantPane.tsx:529` and `:542` — the setup sheet's "Provider" and "Connection" headings.
 - `src/components/LayersPanel.tsx:34` — the "Layers" heading.
 - `src/components/PropertiesPanel.tsx:41` — the "Properties" heading.
 
