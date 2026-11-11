@@ -362,12 +362,12 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
           {title()}
         </span>
         <div class="assistant-head-actions">
-          <Tooltip text="New chat">
+          <Tooltip text="New chat" placement="bottom">
             <button class="assistant-icon" type="button" aria-label="New chat" onClick={newChat}>
               <ToolIcon id="plus" />
             </button>
           </Tooltip>
-          <Tooltip text="Close the panel">
+          <Tooltip text="Close the panel" placement="bottom">
             <button class="assistant-icon" type="button" aria-label="Close the panel" onClick={() => props.onClose()}>
               <ToolIcon id="close" />
             </button>

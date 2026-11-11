@@ -764,7 +764,7 @@ export default function InAssistantHead() {
   );
 }</code></pre>
 <h3 id="components-tooltip-variants">Variants</h3>
-<p>None: one shape, one placement (above the child, centred).</p>
+<p>One shape; two placements (above the child by default, below for a control at a pane's top edge).</p>
 <h3 id="components-tooltip-states">States</h3>
 <table><tr><th>State</th><th>Trigger</th><th>What the user can do</th><th>Shown by, besides color</th><th>Checked by</th></tr><tr><td>Rest</td><td>The pointer is away and nothing inside has focus.</td><td>Use the child.</td><td>The box is <code>opacity: 0; visibility: hidden</code> and takes no pointer.</td><td>by hand</td></tr><tr><td>Shown</td><td>The pointer is over the child on a device with a hover pointer, or anything inside the child has focus.</td><td>Read the hint; the child keeps the pointer.</td><td>The box fades in over 0.1s at <code>role=&quot;tooltip&quot;</code>.</td><td>by hand</td></tr></table>
 <h4 id="components-tooltip-state-precedence">State precedence</h4>
@@ -772,8 +772,8 @@ export default function InAssistantHead() {
 <h4 id="components-tooltip-motion">Motion</h4>
 <table><tr><th>Trigger</th><th>Kind</th><th>Preset</th><th>Properties</th><th>Reduced motion</th></tr><tr><td>The pointer enters the host, or focus arrives inside it</td><td>input</td><td>the measured <code>fadein</code> (<code>--dur-fast</code> + <code>--ease-standard</code>)</td><td>opacity</td><td>The box appears at once: the shell's <code>:root[data-animations=&quot;off&quot;] *</code> rule removes the animation.</td></tr></table>
 <h3 id="components-tooltip-props">Props</h3>
-<table><tr><th>Prop</th><th>Type</th><th>Default</th><th>Purpose</th></tr><tr><td><code>children</code></td><td><code>Element</code></td><td></td><td>The control the hint describes.</td></tr><tr><td><code>text</code></td><td><code>string</code></td><td></td><td>The hint.</td></tr></table>
-<ul><li><code>text</code>: the hint. A short fragment: &quot;New chat&quot;, &quot;Copy the code&quot;.</li><li><code>children</code>: the control the hint describes. Give it its own <code>aria-label</code> — the tooltip is not the name.</li></ul>
+<table><tr><th>Prop</th><th>Type</th><th>Default</th><th>Purpose</th></tr><tr><td><code>children</code></td><td><code>Element</code></td><td></td><td>The control the hint describes.</td></tr><tr><td><code>text</code></td><td><code>string</code></td><td></td><td>The hint.</td></tr><tr><td><code>placement?</code></td><td><code>&quot;top&quot; | &quot;bottom&quot;</code></td><td></td><td>Where the box sits.</td></tr></table>
+<ul><li><code>text</code>: the hint. A short fragment: &quot;New chat&quot;, &quot;Copy the code&quot;.</li><li><code>placement</code>: <code>top</code> (the default) or <code>bottom</code>, for a control at the top edge of a pane.</li><li><code>children</code>: the control the hint describes. Give it its own <code>aria-label</code> — the tooltip is not the name.</li></ul>
 <h3 id="components-tooltip-usage">Usage</h3>
 <h4 id="components-tooltip-when-to-use">When to use</h4>
 <ul><li>The control is icon-only and its meaning is not obvious from the glyph.</li><li>A truncated value needs its full text on hover.</li></ul>

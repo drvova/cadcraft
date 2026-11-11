@@ -24,7 +24,7 @@ Real uses, 2 call sites (`rg -c "<Tooltip" src/components` → `src/components/A
 
 ## Variants
 
-None: one shape, one placement (above the child, centred).
+One shape; two placements (above the child by default, below for a control at a pane's top edge).
 
 ## States
 | State | Trigger | What the user can do | Shown by, besides color | Checked by |
@@ -42,6 +42,7 @@ None: one shape, one placement (above the child, centred).
 
 ## Props
 - `text`: the hint. A short fragment: "New chat", "Copy the code".
+- `placement`: `top` (the default) or `bottom`, for a control at the top edge of a pane.
 - `children`: the control the hint describes. Give it its own `aria-label` — the tooltip is not the name.
 
 ## Usage

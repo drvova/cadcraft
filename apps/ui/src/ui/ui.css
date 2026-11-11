@@ -401,6 +401,12 @@
   z-index: 60;
 }
 
+/* A control at the top edge flips the box below itself, as Cursor's hover does. */
+.ui-tooltip--bottom {
+  top: calc(100% + var(--gap-6));
+  bottom: auto;
+}
+
 @keyframes tooltip-in {
   from {
     opacity: 0;

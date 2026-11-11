@@ -14,6 +14,9 @@ import type { JSX } from "solid-js";
 export interface TooltipProps {
   /** The hint. Keep it a short sentence fragment: "New chat", "Copy the code". */
   text: string;
+  /** Where the box sits. `top` (the default) suits a control away from the pane's edge; `bottom`
+   *  flips it below, as a control at the top of a pane needs. */
+  placement?: "top" | "bottom";
   /** The control the hint describes. */
   children: JSX.Element;
 }
@@ -22,7 +25,7 @@ export function Tooltip(props: TooltipProps): JSX.Element {
   return (
     <span class="ui-tooltip-host">
       {props.children}
-      <span class="ui-tooltip" role="tooltip">
+      <span class={props.placement === "bottom" ? "ui-tooltip ui-tooltip--bottom" : "ui-tooltip"} role="tooltip">
         {props.text}
       </span>
     </span>
