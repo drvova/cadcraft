@@ -229,6 +229,69 @@
     "--ease-standard"
    ],
    "replaces": []
+  },
+  {
+   "id": "tab",
+   "name": "Tab",
+   "import": "../../../../src/ui/Tab",
+   "source": "src/ui/Tab.tsx",
+   "page": "/system/components/tab",
+   "twin": "/system/components/tab.md",
+   "docs": "/system/components/tab",
+   "markdown": "/system/components/tab.md",
+   "entry": "docs/system/components/tab.md",
+   "status": "ready",
+   "variants": {
+    "size": [
+     "sm",
+     "md"
+    ]
+   },
+   "states": [
+    "selected"
+   ],
+   "tokens": [
+    "--control-h-tab",
+    "--control-h-row",
+    "--radius-card",
+    "--gap-12",
+    "--gap-6",
+    "--font-body",
+    "--font-small",
+    "--hairline",
+    "--border-soft",
+    "--text-faint",
+    "--hover",
+    "--tab-active",
+    "--text",
+    "--dur-fast",
+    "--ease-standard"
+   ],
+   "replaces": []
+  },
+  {
+   "id": "kbd",
+   "name": "Kbd",
+   "import": "../../../../src/ui/Kbd",
+   "source": "src/ui/Kbd.tsx",
+   "page": "/system/components/kbd",
+   "twin": "/system/components/kbd.md",
+   "docs": "/system/components/kbd",
+   "markdown": "/system/components/kbd.md",
+   "entry": "docs/system/components/kbd.md",
+   "status": "ready",
+   "variants": {},
+   "states": [],
+   "tokens": [
+    "--hairline",
+    "--border-soft",
+    "--radius-small",
+    "--gap-4",
+    "--gap-16",
+    "--font-chip",
+    "--text-faint"
+   ],
+   "replaces": []
   }
  ]
 }

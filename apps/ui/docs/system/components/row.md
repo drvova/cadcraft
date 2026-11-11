@@ -12,9 +12,9 @@ Not applicable: hand-rolled — the 22px row, the 4px inset and the .14 selected
 ## Examples
 `<Row onClick={pick}>Layer 1</Row>` — one layer in the layers list.
 
-Real uses, 4 call sites (`rg -c "<Row" src/components` → `src/components/AssistantPane.tsx:2`, `src/components/CommandPalette.tsx:1`, `src/components/LayersPanel.tsx:1`):
-- `src/components/AssistantPane.tsx` — the provider popover's preset rows, and each chat's tab in the header when more than one is open (`selected` marks the one in front); the transcript's tool rows and the composer's toolbar row stay bespoke (the toolbar is a container, and the tool row carries a disclosure arrow and a note).
-- `src/components/CommandPalette.tsx:125` — each command in the palette's list; `selected` marks the one the arrow keys are on, `disabled` the ones that cannot run now.
+Real uses, 3 call sites (`rg -c "<Row" src/components` → `src/components/AssistantPane.tsx:1`, `src/components/CommandPalette.tsx:1`, `src/components/LayersPanel.tsx:1`):
+- `src/components/AssistantPane.tsx` — the provider popover's preset rows (the chat tabs in the header moved onto `Tab`); the transcript's tool rows and the composer's toolbar row stay bespoke (the toolbar is a container, and the tool row carries a disclosure arrow and a note).
+- `src/components/CommandPalette.tsx:126` — each command in the palette's list; `selected` marks the one the arrow keys are on, `disabled` the ones that cannot run now.
 - `src/components/LayersPanel.tsx:42` — each layer's name band (`is-current` marks the current one); the toggle cluster beside it stays native buttons.
 - (planned) `src/components/MenuBar.tsx` — `.menu-row` (1 use) moves onto `<Row>` once `Row` can carry the `menuitem` roles; the rows stay native buttons for now.
 - (planned) `src/components/PropertiesPanel.tsx:175` — `.prop-row` (1 use) moves onto `<Row>` when the palette's rows become clickable; today they are display rows with an inline editor.
@@ -129,3 +129,5 @@ Rests on the native `<button>` element: role, Enter and Space, `disabled` and fo
 - `SectionLabel`: when the band is the heading above a list rather than a row in it.
 - `IconButton`: when the row's trailing control is a glyph action.
 - `Tooltip`: when a row's glyph control needs its hint on hover rather than in the row text.
+- `Tab`: when the control brings one view of a strip to the front rather than being one band of a list.
+- `Kbd`: when the text is the key that runs an action, shown at the end of the row.

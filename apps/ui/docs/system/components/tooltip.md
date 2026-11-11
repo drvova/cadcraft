@@ -13,8 +13,8 @@ Not applicable: hand-rolled — the hover box is measured from the running Curso
 `<Tooltip text="Close the panel"><IconButton icon="close" title="Close the panel" /></Tooltip>` — a hint over an icon-only control.
 
 Real uses, 2 call sites (`rg -c "<Tooltip" src/components` → `src/components/AssistantPane.tsx:2`):
-- `src/components/AssistantPane.tsx:348` — New chat.
-- `src/components/AssistantPane.tsx:353` — Close the panel.
+- `src/components/AssistantPane.tsx:345` — New chat.
+- `src/components/AssistantPane.tsx:350` — Close the panel.
 
 ### Example files
 | File | Covers | Caption |
@@ -56,25 +56,25 @@ One shape; two placements (above the child by default, below for a control at a 
 - The content is rich, interactive or long. Use `Row` rows inside a menu instead.
 
 ### Rules
-- `rule/tooltip-not-a-name`: When a control carries a tooltip, give the control its own `aria-label`, because a `role="tooltip"` is a description, not an accessible name, and a control named only by its tooltip is unnamed to a screen reader. Evidence: app 2/2 tooltip hosts name their button, `src/components/AssistantPane.tsx:349` and `src/components/AssistantPane.tsx:354`. Check: review `src/components/AssistantPane.tsx`.
+- `rule/tooltip-not-a-name`: When a control carries a tooltip, give the control its own `aria-label`, because a `role="tooltip"` is a description, not an accessible name, and a control named only by its tooltip is unnamed to a screen reader. Evidence: app 2/2 tooltip hosts name their button, `src/components/AssistantPane.tsx:346` and `src/components/AssistantPane.tsx:351`. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Tooltip text="Close"><button>✕</button></Tooltip>`
   - Do: `<Tooltip text="Close the panel"><button aria-label="Close the panel">✕</button></Tooltip>`
-- `rule/tooltip-never-blocks`: When the tooltip shows, the box keeps `pointer-events: none`, because it sits above the control and a hint that takes the click is worse than 0 hints. Evidence: single use `src/ui/ui.css:400`, `pointer-events: none` on the box. Check: review `src/ui/ui.css`.
+- `rule/tooltip-never-blocks`: When the tooltip shows, the box keeps `pointer-events: none`, because it sits above the control and a hint that takes the click is worse than 0 hints. Evidence: single use `src/ui/ui.css:488`, `pointer-events: none` on the box. Check: review `src/ui/ui.css`.
   - Don't: a tooltip box with a hover handler of its own.
   - Do: `pointer-events: none` on `.ui-tooltip`.
 
 ### Content
-- `rule/tooltip-text-fragment`: When the hint's text is written, keep it a fragment of 1 to 4 words in sentence case with no full stop ("Copy the code", not "Click here to copy."), because the box is 25px tall and a sentence is read as a paragraph. Evidence: app 2/2 hints are fragments, `src/components/AssistantPane.tsx:348` and `src/components/AssistantPane.tsx:353`. Check: review `src/components/AssistantPane.tsx`.
+- `rule/tooltip-text-fragment`: When the hint's text is written, keep it a fragment of 1 to 4 words in sentence case with no full stop ("Copy the code", not "Click here to copy."), because the box is 25px tall and a sentence is read as a paragraph. Evidence: app 2/2 hints are fragments, `src/components/AssistantPane.tsx:345` and `src/components/AssistantPane.tsx:350`. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Tooltip text="This button will close the assistant panel.">`
   - Do: `<Tooltip text="Close the panel">`
 
 ### Anti-slop
-- `rule/tooltip-one-hint`: When a control already shows a native `title`, wrap it in `Tooltip` instead of keeping both, because two hints stack and the native one arrives on its own delay. Evidence: app 2/2 wrapped buttons dropped their `title`, `src/components/AssistantPane.tsx:349`. Check: review `src/components/AssistantPane.tsx`.
+- `rule/tooltip-one-hint`: When a control already shows a native `title`, wrap it in `Tooltip` instead of keeping both, because two hints stack and the native one arrives on its own delay. Evidence: app 2/2 wrapped buttons dropped their `title`, `src/components/AssistantPane.tsx:346`. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Tooltip text="Close"><IconButton icon="close" title="Close" /></Tooltip>`
   - Do: `<Tooltip text="Close the panel"><IconButton icon="close" /></Tooltip>`
 
 ### Limits
-- `rule/tooltip-length-limit`: When a hint runs past 40 characters, move the explanation into the control's label or help text, because the box is `white-space: nowrap` and a long hint runs past the viewport edge on a narrow pane. Evidence: measured 147px box at 12px type, `src/ui/ui.css:383`. Check: review `src/ui/ui.css`.
+- `rule/tooltip-length-limit`: When a hint runs past 40 characters, move the explanation into the control's label or help text, because the box is `white-space: nowrap` and a long hint runs past the viewport edge on a narrow pane. Evidence: measured 147px box at 12px type, `src/ui/ui.css:471`. Check: review `src/ui/ui.css`.
   - Don't: a 60-character hint over the composer.
   - Do: a 3-word hint and a visible label for the rest.
 
@@ -103,3 +103,4 @@ The box is an extra description; the control keeps its own name. The host is a p
 ## Related
 - `IconButton`: the usual child; its `title` already provides the native hint, so use one or the other.
 - `Chip`: the pickable keyword form.
+- `Kbd`: when the text is the key that runs an action and should stay on the surface rather than show on hover.

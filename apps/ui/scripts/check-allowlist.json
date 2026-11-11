@@ -80,7 +80,7 @@
   },
   "src/components/StatusBar.tsx": {
     "trap/native-control": {
-      "<button> where the system has Button": 2
+      "<button> where the system has Button": 1
     }
   },
   "src/facade.test.ts": {

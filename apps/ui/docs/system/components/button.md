@@ -91,7 +91,7 @@ Real uses, 6 call sites (`rg -c "<Button" src/components` → `src/components/As
   - Do: `.ui-button--secondary:hover { background: var(--fill-active) }`
 
 ### Content
-- `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Undo all` — because the label is the action's name and the accessible name comes from it. Evidence: app 5/6 labels are verbs or verb phrases, `src/components/AssistantPane.tsx:495`, the label "Undo all" (the sixth, the command centre, is labelled with the drawing's name and names its action in its `title`). Check: review `src/components/AssistantPane.tsx`.
+- `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Undo all` — because the label is the action's name and the accessible name comes from it. Evidence: app 5/6 labels are verbs or verb phrases, `src/components/AssistantPane.tsx:492`, the label "Undo all" (the sixth, the command centre, is labelled with the drawing's name and names its action in its `title`). Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Button>SAVE</Button>`
   - Do: `<Button>Save</Button>`
 
@@ -148,3 +148,5 @@ Rests on the native `<button>` element: role, Enter and Space, `disabled`, and f
 - `Chip`: when the text is a fact or a value, not an action.
 - `Field`: when the control holds an editable value rather than performing an action.
 - `SectionLabel`: when the text names a group rather than performing an action.
+- `Tab`: when the control brings one view of a strip to the front rather than running an action.
+- `Kbd`: when the text is the key that runs an action beside the button, not the action itself.

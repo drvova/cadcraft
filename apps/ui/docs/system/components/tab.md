@@ -1,0 +1,141 @@
+# Tab
+
+## Description
+It brings one view of a strip to the front: a layout over the drawing or a chat in the assistant, marked selected when it is the one showing.
+
+`import { Tab } from "../../../../src/ui/Tab";`, source `src/ui/Tab.tsx`, status `ready`.
+Foundation: hand-rolled. Traps checked: trap/button-div, trap/role-button, trap/native-control, trap/current-unmarked, trap/control-height, trap/focus-ring-shape, trap/hover-beats-focus, trap/touch-hover-flash, trap/hover-unguarded, trap/link-wraps-button (n/a: a tab is never a link; the close key is a sibling button, not a nested one), trap/disabled-still-hovers (n/a: a tab has no disabled state).
+
+### Foundation
+Not applicable: hand-rolled — the editor tab (13px type on a 12px inset in the 35px strip, the active one filled with `--tab-active`, the `.08` fill on hover, a hairline between tabs) is measured from the running Cursor 3.27.22 (`docs/system/decisions.md`), and no registry item ships it. It replaces two hand-built tabs: the raw `<button class="layout-tab" role="tab">` of the layout strip, and a `Row` in a width cell beside a close `IconButton` in the assistant's header.
+
+## Examples
+`<Tab selected onClick={show}>Model</Tab>` — the model-space tab over the drawing.
+
+Real uses, 2 call sites (`rg -c "<Tab" src/components` → `src/components/AssistantPane.tsx:1`, `src/components/StatusBar.tsx:1`):
+- `src/components/StatusBar.tsx:57` — `LayoutTabs`, the editor tabs over the drawing (`size="md"`): Model, then each layout; `selected` marks the space in front, `title` says what the tab switches to.
+- `src/components/AssistantPane.tsx:337` — the chat tabs in the assistant's header when more than one chat is open (`size="sm"`): `selected` marks the chat in front, `onClose` closes that chat, `closeLabel` names it ("Close hello"), `title` carries the full chat title when the label clips.
+- The menu titles in `src/components/MenuBar.tsx` stay native buttons: they open menus, a different role.
+- `.status-toggle` in `src/components/StatusBar.tsx` stays bespoke: a drafting toggle is an `aria-pressed` switch, not a tab.
+
+### Example files
+| File | Covers | Caption |
+|---|---|---|
+| `docs/system/examples/tab/default.tsx` | default | One editor tab at rest. |
+| `docs/system/examples/tab/size-md.tsx` | size=md | The editor tab of the 35px strip. |
+| `docs/system/examples/tab/size-sm.tsx` | size=sm | The compact tab of a pane header, with its close key. |
+| `docs/system/examples/tab/selected.tsx` | state:selected | The tab in front at the active fill, announced as selected. |
+| `docs/system/examples/tab/in-layout-tabs.tsx` | composition:LayoutTabs | The layout strip over the drawing: Model in front, two layouts behind. |
+
+## Variants
+
+### size
+- `sm`: the compact tab of a pane header: the 22px row height, 11.5px type, a 4px-radius fill, clipped at 18ch. Used at 1 call site (the assistant's chat tabs).
+- `md`: the editor tab; the default: it fills its strip's height (the strip is the 35px band), 13px type on a 12px inset, a hairline on its right. Used at 1 call site (the layout tabs over the drawing).
+
+## States
+| State | Trigger | What the user can do | Shown by, besides color | Checked by |
+|---|---|---|---|---|
+| Rest | Nothing is over the tab and it is not the one in front. | Click it, or Tab to it. | The label at the quiet ink on no fill; `aria-selected="false"`. | test |
+| Hover | The pointer is over a tab that is not in front, on a device with a hover pointer. | Click it. | Pointer only, colour change: the `.08` fill and the full ink; the cursor is a pointer. | by hand |
+| Pressed | The pointer is held down. | Release to bring the tab to the front. | Nothing beyond hover: a tab's press runs on release. | by hand |
+| Focused | Keyboard focus arrives by Tab. | Enter or Space brings the tab to the front. | The 1px accent ring at offset -1. | by hand |
+| Selected | The caller passes `selected` (the tab in front). | Read it; move to another tab; close it when it has a close key. | `aria-selected="true"`; the active fill and the full ink. | test |
+| Closable | The caller passes `onClose`. | Click the close key, or Tab to it and press Enter. | A trailing close glyph in its own 20px button, named by `closeLabel`. | test |
+
+### State precedence
+- Hover and Selected: Selected wins. The active fill stays under the pointer; hover adds nothing to the tab in front.
+- Hover and Focused: both show. The ring stays drawn over the hover fill.
+- Selected and Focused: both show. The ring draws around the active fill.
+- Pressed and Focused: both show. The ring stays drawn while the tab is held down.
+- Closable and Selected: both show. Every closable tab keeps its close key, in front or behind.
+
+### Motion
+| Trigger | Kind | Preset | Properties | Reduced motion |
+|---|---|---|---|---|
+| The pointer enters or leaves | input | hover / focus feedback (`--dur-fast` + `--ease-standard`) | background-color, color | The fill and ink change at once: the shell's `:root[data-animations="off"]` rule removes the transition. |
+| The tab comes to the front or goes behind | input | hover / focus feedback (`--dur-fast` + `--ease-standard`) | background-color, color | The fill and ink change at once, by the same rule. |
+
+## Props
+- `selected`: the tab in front; sets `aria-selected="true"` (and `"false"` otherwise) and the active fill.
+- `size`: `sm` or `md`; defaults to `md`.
+- `title`: a tooltip: what the tab switches to, or the full label when it clips.
+- `onClick`: runs on click; the caller brings this tab to the front.
+- `onClose`: draws the trailing close key and runs when it is clicked; the tab's `onClick` does not run.
+- `closeLabel`: the close key's accessible name and tooltip; defaults to "Close".
+- `children`: the tab's label.
+
+## Usage
+
+### When to use
+- Several views share one area and one shows at a time: the model space and the layouts over the drawing, the open chats in the assistant.
+- The view in front must be marked for a screen reader as well as the eye.
+
+### When not to use
+- The control runs an action rather than showing a view. Use `Button` instead.
+- The item is one band of a full-width list (a layer, a menu item, a command). Use `Row` instead.
+- The control flips a setting on and off (a drafting toggle). Use `IconButton` with `selected` instead.
+- The label is a short fact with no view behind it. Use `Chip` instead.
+
+### Rules
+- `rule/tab-selected-marked`: When a strip has a tab in front, pass `selected` on it, because the fill alone is colour and a screen reader needs `aria-selected="true"` to hear which view shows. Evidence: app 2/2 strips mark the tab in front, `src/components/StatusBar.tsx:57` and `src/components/AssistantPane.tsx:337`. Check: test `src/ui/Tab.test.tsx`.
+  - Don't: `<Tab onClick={show}>Model</Tab>` for the tab whose view is showing.
+  - Do: `<Tab selected onClick={show}>Model</Tab>`
+- `rule/tab-in-tablist`: When tabs are rendered, place them in 1 container carrying `role="tablist"` and an `aria-label`, because a `tab` role outside a `tablist` is announced without its strip and its position. Evidence: app 2/2 strips, `src/components/StatusBar.tsx:54` and `src/components/AssistantPane.tsx:334`. Check: review `src/components/StatusBar.tsx`.
+  - Don't: `<div class="editor-tabs"><Tab selected>Model</Tab></div>`
+  - Do: `<div class="editor-tabs" role="tablist" aria-label="Layouts"><Tab selected>Model</Tab></div>`
+- `rule/tab-close-sibling`: When a tab can be closed, pass `onClose` rather than putting a button in the tab's children, because a `<button>` cannot nest a `<button>` and `Tab` renders the close key as a sibling. Evidence: single use `src/components/AssistantPane.tsx:337`, the one closable strip. Check: test `src/ui/Tab.test.tsx`.
+  - Don't: `<Tab onClick={show}>hello<IconButton icon="close" title="Close hello" onClick={close} /></Tab>`
+  - Do: `<Tab onClick={show} onClose={close} closeLabel="Close hello">hello</Tab>`
+
+### Content
+- `rule/tab-close-label-names`: When `onClose` is passed, pass `closeLabel` as "Close" plus the tab's label ("Close hello"), because 2 close keys both named "Close" in one strip cannot be told apart by a screen reader. Evidence: single use `src/components/AssistantPane.tsx:337`. Check: review `src/components/AssistantPane.tsx`.
+  - Don't: `<Tab onClose={close}>hello</Tab>` in a strip of 2 closable tabs.
+  - Do: `<Tab onClose={close} closeLabel="Close hello">hello</Tab>`
+
+### Anti-slop
+- `rule/tab-canonical-element`: When a surface needs a tab, render `Tab` rather than a raw `<button role="tab">` with its own class or a `Row` in a width cell, because the 2 replaced recipes painted 2 different selected fills and only 1 of them set `aria-selected`. Evidence: app 2/2 hand-built tabs replaced (`.layout-tab` and `.assistant-tab-row`), `src/components/StatusBar.tsx:57` and `src/components/AssistantPane.tsx:337`. Check: review `src/ui/Tab.tsx`.
+  - Don't: `<button class="layout-tab is-active" role="tab">Model</button>`
+  - Do: `<Tab selected>Model</Tab>`
+
+### Limits
+- `rule/tab-label-limit`: When an `sm` tab's label runs past 18 characters, keep the full text in `title`, because the tab clips at `max-width: 18ch` with an ellipsis and the 20-character "Summarise the layers" shows as "Summarise the la…". Evidence: measured 111.6px clipped `sm` tab at 1280px, `src/ui/ui.css:400`. Check: review `src/components/AssistantPane.tsx`.
+  - Don't: `<Tab size="sm">Summarise the layers</Tab>` — the clipped label has no full text anywhere.
+  - Do: `<Tab size="sm" title="Summarise the layers">Summarise the layers</Tab>`
+
+## Accessibility
+Rests on the native `<button>` element with `role="tab"`: Enter and Space and focus come from the platform. Every tab stays in the tab order; the strip has no arrow-key handler, so a tab is reached by Tab, not by the arrow keys. The caller owns the `tablist` container, and no `tabpanel` is wired (`aria-controls` is not set).
+
+### Keyboard
+| Key | Where focus is | Effect | Focus after | Checked by |
+|---|---|---|---|---|
+| Tab | A tab, in document order. | Moves focus to the next tab, then to that tab's close key when it has one. | On the next stop. | by hand |
+| Enter | The focused tab. | Brings the tab to the front. | Stays on the tab. | by hand |
+| Space | The focused tab. | Brings the tab to the front on release. | Stays on the tab. | by hand |
+| Enter | The focused close key. | Runs `onClose`; the tab's `onClick` does not run. | The caller decides: the closed tab leaves the strip. | by hand |
+| ArrowRight | The focused tab. | Nothing: the strip has no arrow-key handler. | Stays on the tab. | by hand |
+
+### ARIA
+| Part | Role | Accessible name from | States and properties | Announced | Checked by |
+|---|---|---|---|---|---|
+| The tab | `tab` (on a native `<button>`) | Its text content | `aria-selected="true"` on the tab in front, `"false"` on the others | "Model, tab, selected" | test |
+| The close key | `button` (native, an `IconButton`) | `closeLabel` as `aria-label` | none | "Close hello, button" | test |
+
+## Tokens
+| Part | State | Token |
+|---|---|---|
+| The label | rest | `--text-faint`, `--font-family` |
+| The tab | md | `--control-h-tab`, `--gap-12`, `--font-body`, `--hairline`, `--border-soft` |
+| The tab | sm | `--control-h-row`, `--gap-6`, `--font-small`, `--radius-card` |
+| The fill | hover | `--hover` |
+| The label | hover | `--text` |
+| The fill | selected | `--tab-active` |
+| The label | selected | `--text` |
+| The ring | focus-visible | `--focus-outline-w`, `--accent`, `--focus-outline-offset` |
+| The motion | hover, selected | `--dur-fast`, `--ease-standard` |
+
+## Related
+- `Row`: when the item is one band of a full-width list rather than one view of a strip.
+- `IconButton`: the close key a closable tab draws; and the pick for an on/off toggle.
+- `Button`: when the control runs an action rather than showing a view.
+- `Kbd`: when a tab's action has a shortcut to show beside it.
