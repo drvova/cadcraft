@@ -5,16 +5,24 @@
  *
  * The icons come from `icons.ts` (original code-drawn paths); the table below is transcribed from
  * the Rust table, egui types removed.
+ *
+ * A window narrower than the strip keeps the leading groups that fit, whole, and folds the rest
+ * behind one overflow key at the strip's end, which opens them as a menu (`MenuKey`, `./Menu.tsx`):
+ * each row is the tool's glyph, its label and its shortcut, walked by the keys of every menu. The
+ * strip never scrolls. The keys drawn and the overflow key are one Tab stop (`rovingBand`); a
+ * tool run from the menu returns the focus to the overflow key.
  */
 
-import { For, onCleanup, Show, type JSX } from "solid-js";
+import { createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import { isMacPlatform, shortcutLabel } from "../commands";
+import { leadingFit, type MenuItem } from "../menu";
 import { rovingIndex } from "../roving";
 import { IconButton } from "../ui/IconButton";
+import { MenuKey } from "./Menu";
 
 /**
- * Wires a band that scrolls sideways without a scrollbar (the tool strip, the editor tabs, the
- * status toggles): it marks the edges that hide something (`data-clip-start`, `data-clip-end`;
+ * Wires a band that scrolls sideways without a scrollbar (the editor tabs; the tool strip folds
+ * its keys into a menu instead): it marks the edges that hide something (`data-clip-start`, `data-clip-end`;
  * chrome.css fades the band there) and turns a mouse's vertical wheel along the band, which a
  * sideways-only scroller otherwise ignores. Call it from a component's `ref`. Returns the marking
  * function, for a caller whose content changes without the band's own box changing.
@@ -149,20 +157,95 @@ export interface ToolStripProps {
   onInvoke: (id: string) => void;
 }
 
+/** The strip's own keys: the tools drawn and the overflow key, not the rows of the overflow menu. */
+const STRIP_KEYS = ":scope > button, :scope > .tool-more > button";
+
+/**
+ * Decides by measurement how many leading groups of the strip are drawn as keys, and tells
+ * `apply`. The strip is measured when its box changes (a `ResizeObserver`, so once a frame at
+ * most, after layout and before paint) and when the pointer's kind changes the gap between keys.
+ * A key's and a divider's sizes are read from the ones drawn and kept for the frames that draw
+ * none; the groups' widths follow from them (`leadingFit`), so a folded group is never laid out
+ * to be measured. Call it from the strip's `ref`.
+ */
+function fitGroups(band: HTMLElement, groups: readonly number[], apply: (count: number) => void): void {
+  let key = 0;
+  let divider = 0;
+  const measure = (): void => {
+    const style = getComputedStyle(band);
+    const button = band.querySelector<HTMLElement>(STRIP_KEYS);
+    const rule = band.querySelector<HTMLElement>(":scope > .tool-divider");
+    if (button !== null && button.offsetWidth > 0) key = button.offsetWidth;
+    if (rule !== null) {
+      const margins = getComputedStyle(rule);
+      divider = rule.offsetWidth + (Number.parseFloat(margins.marginLeft) || 0) + (Number.parseFloat(margins.marginRight) || 0);
+    }
+    // A strip that is not drawn has nothing to measure: what it shows stays as it was.
+    if (key === 0 || band.clientWidth === 0) return;
+    const gap = Number.parseFloat(style.columnGap) || 0;
+    const room = band.clientWidth - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0);
+    const between = gap + divider + gap;
+    apply(
+      leadingFit(
+        groups.map((keys) => keys * key + (keys - 1) * gap),
+        room,
+        between,
+        between + key,
+      ),
+    );
+  };
+  const observer = new ResizeObserver(measure);
+  observer.observe(band);
+  const coarse = window.matchMedia("(pointer: coarse)");
+  coarse.addEventListener("change", measure);
+  onCleanup(() => {
+    observer.disconnect();
+    coarse.removeEventListener("change", measure);
+  });
+}
+
 export function ToolStrip(props: ToolStripProps): JSX.Element {
+  let strip: HTMLElement | undefined;
+  /** How many leading groups are drawn as keys; the rest are the overflow menu's rows. */
+  const [shown, setShown] = createSignal(TOOLBAR.length);
+  const [moreOpen, setMoreOpen] = createSignal(false);
+  const moreKey = (): HTMLElement | null => strip?.querySelector<HTMLElement>(":scope > .tool-more > button") ?? null;
+
+  const folded = createMemo((): MenuItem[] =>
+    TOOLBAR.slice(shown())
+      .flat()
+      .map((entry) => ({ label: entry.label, id: entry.id, shortcut: entry.shortcut, enabled: true, children: [], icon: entry.icon })),
+  );
+
+  const fit = (count: number): void => {
+    if (count === shown()) return;
+    const held = strip?.contains(document.activeElement) === true;
+    // The menu listed the tools folded at the other width: it closes.
+    setMoreOpen(false);
+    setShown(count);
+    // A key folded away (or a row gone with the menu) while it had the focus hands it on: to the
+    // overflow key, or to the first key when every tool is drawn again.
+    if (held && strip?.contains(document.activeElement) !== true) (moreKey() ?? strip?.querySelector<HTMLElement>(STRIP_KEYS))?.focus();
+  };
+
   return (
     <nav
       class="toolstrip"
       role="toolbar"
       aria-label="Tool bar"
       ref={(element) => {
-        scrollBand(element);
-        rovingBand(element, "button");
+        strip = element;
+        fitGroups(
+          element,
+          TOOLBAR.map((group) => group.length),
+          fit,
+        );
+        rovingBand(element, STRIP_KEYS);
       }}
     >
       <For each={TOOLBAR}>
         {(group, index) => (
-          <>
+          <Show when={index() < shown()}>
             <Show when={index() > 0}>
               <span class="tool-divider" aria-hidden="true" />
             </Show>
@@ -176,9 +259,26 @@ export function ToolStrip(props: ToolStripProps): JSX.Element {
                 />
               )}
             </For>
-          </>
+          </Show>
         )}
       </For>
+      <Show when={shown() < TOOLBAR.length}>
+        <MenuKey
+          class="tool-more"
+          icon="chevron-down"
+          title="More tools"
+          items={folded()}
+          open={moreOpen()}
+          onOpen={() => setMoreOpen(true)}
+          onClose={() => setMoreOpen(false)}
+          stacked
+          onInvoke={(id) => {
+            // The row that ran the tool is gone with the menu: the focus returns to the key.
+            moreKey()?.focus();
+            props.onInvoke(id);
+          }}
+        />
+      </Show>
     </nav>
   );
 }

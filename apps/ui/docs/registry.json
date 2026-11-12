@@ -452,6 +452,73 @@
    "replaces": []
   },
   {
+   "id": "toggle",
+   "name": "Toggle",
+   "import": "../../../../src/ui/Toggle",
+   "source": "src/ui/Toggle.tsx",
+   "page": "/system/components/toggle",
+   "twin": "/system/components/toggle.md",
+   "docs": "/system/components/toggle",
+   "markdown": "/system/components/toggle.md",
+   "entry": "docs/system/components/toggle.md",
+   "status": "ready",
+   "variants": {
+    "variant": [
+     "glyph",
+     "text"
+    ],
+    "size": [
+     "sm",
+     "md"
+    ],
+    "tone": [
+     "neutral",
+     "absent",
+     "info",
+     "caution"
+    ]
+   },
+   "states": [
+    "pressed",
+    "disabled"
+   ],
+   "tokens": [
+    "--control-h-chip",
+    "--control-h-row",
+    "--control-h-input",
+    "--radius-small",
+    "--icon-size-sm",
+    "--icon-size-md",
+    "--font-chip",
+    "--font-label",
+    "--font-family",
+    "--gap-3",
+    "--gap-4",
+    "--gap-6",
+    "--gap-8",
+    "--hairline",
+    "--text-faint",
+    "--text",
+    "--text-dim",
+    "--text-accent",
+    "--text-disabled",
+    "--icon",
+    "--icon-layer-off",
+    "--icon-layer-frozen",
+    "--icon-locked",
+    "--warn",
+    "--toggle-on",
+    "--hover",
+    "--fill-active",
+    "--focus-ring",
+    "--focus-outline-w",
+    "--focus-outline-offset",
+    "--dur-fast",
+    "--ease-standard"
+   ],
+   "replaces": []
+  },
+  {
    "id": "kbd",
    "name": "Kbd",
    "import": "../../../../src/ui/Kbd",

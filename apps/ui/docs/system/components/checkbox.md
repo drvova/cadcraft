@@ -143,5 +143,6 @@ Rests on the native `<input type="checkbox">` inside a `<label>`: role, Space, t
 ## Related
 - `Select`: when the value is one of several rather than yes or no.
 - `IconButton`: when the switch is a glyph on a tool bar (`selected`).
+- `Toggle`: when the setting takes effect the moment it is pressed, as a glyph in a list row or a word in a bar.
 - `Button`: when the control runs an action.
 - `Field`: when the value is typed.

@@ -12,7 +12,7 @@
 import { createEffect, createMemo, For, Show, type JSX } from "solid-js";
 import type { FacadeMode, SettingsState } from "../facade";
 import { Tab } from "../ui/Tab";
-import { ariaKeyShortcuts } from "../ui/Tooltip";
+import { Toggle } from "../ui/Toggle";
 import { rovingBand, scrollBand } from "./ToolStrip";
 
 /** The boolean drafting settings a status toggle can flip. */
@@ -126,8 +126,9 @@ export interface StatusBarProps {
  * value's place are in a `status-label`, which is not drawn.
  *
  * Every hint here is the system's (`data-hint`, opening above the bar), never a native `title`.
- * A toggle's is its full name with its function key as a key cap; the name is its `aria-label`
- * and the key its `aria-keyshortcuts`. A fact's hint is for the pointer only (a `<span>` takes no
+ * A toggle is the layer's `Toggle` with the word as its face: its hint is its full name with its
+ * function key as a key cap; the name is its `aria-label` and the key its `aria-keyshortcuts`.
+ * The run is one Tab stop (`rovingBand` sets each key's `tabIndex`). A fact's hint is for the pointer only (a `<span>` takes no
  * focus), so it holds nothing a keyboard user needs: the fact itself is the text.
  */
 export function StatusBar(props: StatusBarProps): JSX.Element {
@@ -167,19 +168,18 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
       <div class="status-toggles" role="toolbar" aria-label="Drafting settings" ref={(element) => rovingBand(element, "button")}>
         <For each={STATUS_TOGGLES}>
           {(toggle) => (
-            <button
-              class={props.settings[toggle.key] ? "status-toggle is-on" : "status-toggle"}
-              type="button"
-              aria-label={toggle.label}
-              data-hint={toggle.label}
-              data-hint-keys={toggle.shortcut}
-              data-hint-placement="top"
-              aria-keyshortcuts={toggle.shortcut === undefined ? undefined : ariaKeyShortcuts(toggle.shortcut)}
-              aria-pressed={props.settings[toggle.key]}
-              onClick={() => props.onCommand(toggle.id, { on: !props.settings[toggle.key] })}
+            <Toggle
+              variant="text"
+              size="sm"
+              ariaLabel={toggle.label}
+              hint={toggle.label}
+              shortcut={toggle.shortcut}
+              placement="top"
+              pressed={props.settings[toggle.key]}
+              onChange={(on) => props.onCommand(toggle.id, { on })}
             >
               {toggle.short}
-            </button>
+            </Toggle>
           )}
         </For>
       </div>

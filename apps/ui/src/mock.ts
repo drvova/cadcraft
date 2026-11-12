@@ -54,6 +54,11 @@ function parsePoint(text: string): { x: number; y: number } | null {
   return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
 }
 
+/** An ordinate the engine's pointer calls take: finite and within its `MAX_COORD` (1e15). */
+function usableOrdinate(v: number): boolean {
+  return Number.isFinite(v) && Math.abs(v) <= 1e15;
+}
+
 function parseNumber(text: string): number | null {
   const n = Number(text.trim());
   return Number.isFinite(n) ? n : null;
@@ -71,9 +76,10 @@ export class MockFacade implements RawFacade {
   /** The last command that opened a prompt: what an empty Enter starts again. */
   private lastAsked: string | null = null;
   private selected: string[] = [];
-  private grid = true;
-  private snap = false;
-  private ortho = false;
+  /** The canvas size in CSS pixels (`set_viewport`); the engine's default until it is told. */
+  private viewport: [number, number] = [1200, 800];
+  /** The drafting toggles the status bar shows (GRID, SNAP, ORTHO). */
+  private toggles = { grid: true, snap: false, ortho: false };
 
   constructor() {
     this.reset();
@@ -430,8 +436,8 @@ export class MockFacade implements RawFacade {
       case "snap":
       case "ortho": {
         const key = id === "grid" ? "grid" : id === "snap" ? "snap" : "ortho";
-        const on = typeof params["on"] === "boolean" ? params["on"] : !this[key];
-        this[key] = on;
+        const on = typeof params["on"] === "boolean" ? params["on"] : !this.toggles[key];
+        this.toggles[key] = on;
         return envelope(true, { on, message: `<${id} ${on ? "on" : "off"}>` });
       }
       case "layout.list":
@@ -561,8 +567,8 @@ export class MockFacade implements RawFacade {
     }
     if (name === "grid" || name === "snap" || name === "ortho") {
       const key = name === "grid" ? "grid" : name === "snap" ? "snap" : "ortho";
-      const on = !this[key];
-      this[key] = on;
+      const on = !this.toggles[key];
+      this.toggles[key] = on;
       return this.replyWith([`Command: ${name.toUpperCase()}`, `<${name} ${on ? "on" : "off"}>`]);
     }
     return this.replyWith([], `Unknown command "${id}". Press F1 for a list of commands.`);
@@ -574,9 +580,9 @@ export class MockFacade implements RawFacade {
 
   settings(): string {
     return JSON.stringify({
-      grid: this.grid,
-      snap: this.snap,
-      ortho: this.ortho,
+      grid: this.toggles.grid,
+      snap: this.toggles.snap,
+      ortho: this.toggles.ortho,
       polar: false,
       isodraft: false,
       otrack: false,
@@ -689,6 +695,55 @@ export class MockFacade implements RawFacade {
 
   view(): string {
     return JSON.stringify({ min: [this.currentView.x0, this.currentView.y0], max: [this.currentView.x1, this.currentView.y1] });
+  }
+
+  /** The canvas size is kept as the engine keeps it: refused unless positive, each edge in 1..=32768. */
+  set_viewport(width: number, height: number): string {
+    if (!Number.isFinite(width) || !Number.isFinite(height)) return envelope(false, { error: "the canvas size is not finite" });
+    if (width <= 0 || height <= 0) return envelope(false, { error: "the canvas size must be positive" });
+    const edge = (v: number): number => Math.min(32768, Math.max(1, v));
+    this.viewport = [edge(width), edge(height)];
+    return JSON.stringify({ ok: true, viewport: this.viewport });
+  }
+
+  /** The mock has no direct distance entry, so the cursor is only checked, as the engine checks it. */
+  set_cursor(x: number, y: number): string {
+    if (!usableOrdinate(x) || !usableOrdinate(y)) return envelope(false, { error: "the point is not a usable world coordinate" });
+    return JSON.stringify({ ok: true });
+  }
+
+  /** The mock draws no rubber band: the empty preview, with `error` for a point it refuses. */
+  preview(x: number, y: number): string {
+    const empty = { verts: [], prims: [], drag: null };
+    return JSON.stringify(usableOrdinate(x) && usableOrdinate(y) ? empty : { ...empty, error: "the point is not a usable world coordinate" });
+  }
+
+  /** The canned pick, as a hover reads it: the entity under the point, the selection untouched. */
+  pick(x: number, y: number, aperture: number): string {
+    if (!usableOrdinate(x) || !usableOrdinate(y)) return JSON.stringify({ handles: [], error: "the point is not a usable world coordinate" });
+    if (!Number.isFinite(aperture) || aperture < 0) return JSON.stringify({ handles: [], error: "the aperture must be a finite world distance, 0 or more" });
+    const hit = this.handleAt(x, y);
+    return JSON.stringify({ handles: hit === null ? [] : [hit] });
+  }
+
+  /** The mock has no object snap: never a hit, with `error` for input it refuses. */
+  snap(x: number, y: number, aperture: number): string {
+    if (!usableOrdinate(x) || !usableOrdinate(y)) return JSON.stringify({ snap: null, error: "the point is not a usable world coordinate" });
+    if (!Number.isFinite(aperture) || aperture < 0) return JSON.stringify({ snap: null, error: "the aperture must be a finite world distance, 0 or more" });
+    return JSON.stringify({ snap: null });
+  }
+
+  /**
+   * A click given to the running prompt: the point itself (there is no snap), answered as the
+   * typed point is. With no prompt up it does nothing, as the engine's does.
+   */
+  click(x: number, y: number, aperture: number): string {
+    const refuse = (error: string): string => JSON.stringify({ ...this.promptJson(), output: [], error, snap: null });
+    if (!usableOrdinate(x) || !usableOrdinate(y)) return refuse("the point is not a usable world coordinate");
+    if (!Number.isFinite(aperture) || aperture < 0) return refuse("the aperture must be a finite world distance, 0 or more");
+    const reply = this.pending === null ? this.replyWith([]) : this.feed(`${x},${y}`);
+    const parsed: unknown = JSON.parse(reply);
+    return JSON.stringify({ ...(typeof parsed === "object" && parsed !== null ? parsed : {}), snap: null });
   }
 
   open_bytes(name: string, bytes: Uint8Array): string {

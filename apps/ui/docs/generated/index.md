@@ -3,7 +3,7 @@
 
 ## Description
 
-The CADCraft web interface's design system: the tokens, the twelve canonical components and the rules the interface is built from, serving the SolidJS app in `apps/ui` over the cadcraft-wasm facade. Foundation: hand-rolled — the system is the app's own, measured from the running Cursor 3.27.22, and no registry item ships it.
+The CADCraft web interface's design system: the tokens, the thirteen canonical components and the rules the interface is built from, serving the SolidJS app in `apps/ui` over the cadcraft-wasm facade. Foundation: hand-rolled — the system is the app's own, measured from the running Cursor 3.27.22, and no registry item ships it.
 
 ## Importing a component
 
@@ -79,6 +79,7 @@ Ask only for an amount or a limit the task did not give (a new size, a new durat
 - [Select](docs/generated/components/select.md): It lets the user pick one value from a short, known list, and hands the pick back to the caller, who owns the value.
 - [Tab](docs/generated/components/tab.md): It brings one view of a strip to the front: a layout over the drawing or a chat in the assistant, marked selected when it is the one show...
 - [TextArea](docs/generated/components/textarea.md): It takes several lines of text, grows to hold them up to a limit, and hands every edit back to the caller, who owns the text.
+- [Toggle](docs/generated/components/toggle.md): It switches one setting on or off in place, under a name that never changes, and says which it is through its pressed state.
 - [Tooltip](docs/generated/components/tooltip.md): It is the layer's one hint: a small box beside a control under the pointer or under keyboard focus, saying what the control does not alre...
 
 ## Rules

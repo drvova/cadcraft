@@ -57,8 +57,7 @@
 }
 
 .menubar-title:focus-visible,
-.menu-row:focus-visible,
-.status-toggle:focus-visible {
+.menu-row:focus-visible {
   outline: var(--focus-outline-w) solid var(--focus-ring);
   outline-offset: var(--focus-outline-offset);
 }
@@ -101,7 +100,7 @@
 .menu-drop {
   --menu-inset: var(--gap-4);
   --menu-row-h: var(--control-h-input);
-  /* How far the menu is pulled back to stay inside the window: MenuBar.tsx measures the opened
+  /* How far the menu is pulled back to stay inside the window: Menu.tsx measures the opened
      box and sets the overhang here (none when it fits). Restated on every menu, so a submenu does
      not inherit its parent's pull. */
   --menu-shift-x: 0;
@@ -120,7 +119,7 @@
   grid-template-rows: repeat(auto-fit, var(--menu-row-h));
   grid-auto-columns: minmax(30ch, max-content);
   column-gap: var(--menu-inset);
-  /* A menu ends above the status bar: MenuBar.tsx measures the bar and sets `--menu-floor` (the
+  /* A menu ends above the status bar: Menu.tsx measures the bar and sets `--menu-floor` (the
      bar's height under a finger until then). */
   max-height: calc(100dvh - var(--control-h-tab) - var(--menu-floor, var(--control-h-button)) - var(--gap-8));
   padding: var(--menu-inset);
@@ -150,7 +149,7 @@
   position: relative;
 }
 
-/* The compact menu in a window with no room for a submenu beside its parent (MenuBar.tsx sets
+/* The compact menu in a window with no room for a submenu beside its parent (Menu.tsx sets
    `is-stacked`): one column of a fixed width that scrolls, each submenu opened in place under its
    row as an indented group. Nothing opens beside a row here, so the box may scroll. The row that
    opened a group stays above it with its chevron turned down, and a hairline down the group's
@@ -240,6 +239,24 @@
   text-overflow: ellipsis;
 }
 
+/* A row's glyph (the tool strip's overflow menu: each row is a key of the strip), in the icon ink
+   at the strip's size, half the row's gap from its label. */
+.menu-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  margin-inline-end: calc(var(--gap-8) - var(--gap-16));
+  color: var(--icon);
+}
+
+.menu-icon .tool-icon {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+}
+
+.menu-row.is-disabled .menu-icon {
+  color: inherit;
+}
+
 .menu-shortcut {
   flex: 0 0 auto;
   color: var(--text-faint);
@@ -275,27 +292,22 @@
   padding: 0 var(--gap-6);
   background: var(--chrome);
   border-bottom: var(--hairline) solid var(--border);
-  /* A window narrower than the strip scrolls it sideways (wheel, touch, or focus moving along
-     the keys); a scrollbar would cost the 28px band a third of its height, so none is drawn. */
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
+  /* A window narrower than the strip does not scroll it: ToolStrip.tsx measures the strip, draws
+     the leading groups that fit and folds the rest behind the overflow key at its end. Nothing is
+     clipped here, so the key's menu can open under the strip. */
+  min-width: 0;
 }
 
-.toolstrip::-webkit-scrollbar,
 .editor-tabs::-webkit-scrollbar {
   display: none;
 }
 
-/* The two bands that scroll sideways with no scrollbar (this one and the editor tabs) say so at
-   the edge that hides something: the band fades out over one key's width there, and only there.
-   `scrollBand` (ToolStrip.tsx) marks the clipped edges as the band scrolls or the window resizes,
-   and turns the mouse's wheel along the band. A finger pans it sideways and nothing else, so a
-   double tap does not zoom. The fade's width is kept clear when the band scrolls a key or a tab
-   into view (the keyboard's focus moving along it): the key stops past the fade, its focus ring
-   whole. A divider can only meet an edge inside a fade, where it is not drawn alone. */
-.toolstrip,
+/* The band that scrolls sideways with no scrollbar (the editor tabs) says so at the edge that
+   hides something: the band fades out over one key's width there, and only there. `scrollBand`
+   (ToolStrip.tsx) marks the clipped edges as the band scrolls or the window resizes, and turns
+   the mouse's wheel along the band. A finger pans it sideways and nothing else, so a double tap
+   does not zoom. The fade's width is kept clear when the band scrolls a tab into view (the
+   keyboard's focus moving along it): the tab stops past the fade, its focus ring whole. */
 .editor-tabs {
   --fade-start: 0;
   --fade-end: 0;
@@ -304,12 +316,10 @@
   touch-action: pan-x;
 }
 
-.toolstrip[data-clip-start],
 .editor-tabs[data-clip-start] {
   --fade-start: var(--control-h-input);
 }
 
-.toolstrip[data-clip-end],
 .editor-tabs[data-clip-end] {
   --fade-end: var(--control-h-input);
 }
@@ -321,9 +331,28 @@
   }
 }
 
-/* The strip's cells never squeeze: the band scrolls instead. */
+/* The strip's cells never squeeze: the groups that do not fit are folded away whole. */
 .toolstrip .ui-icon-button {
   flex: 0 0 auto;
+}
+
+/* The overflow key's host, at the strip's end whatever the groups before it leave: the box its
+   menu opens from. The menu hangs from the key's own end, so it opens into the window. */
+.tool-more {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  margin-inline-start: auto;
+}
+
+/* The menu opens under the strip, a band lower than a title's: its height gives the strip's up as
+   well, so a long list scrolls under its key instead of being pulled over it. */
+.tool-more > .menu-drop {
+  left: auto;
+  right: 0;
+  max-height: calc(100dvh - var(--control-h-tab) - var(--control-h-button) - var(--menu-floor, var(--control-h-button)) - var(--gap-8));
 }
 
 /* A group's divider: the glyphs' height, with the same room on each side. */
@@ -512,8 +541,13 @@
 /* The toggles' run stands at the end of the bar's room (the auto margin is the bar's slack) and
    keeps every word whole. It is the last thing to give way, and it gives way by wrapping: a
    toggle that has to be swiped to is a toggle not found, so the run takes a second line and the
-   bar grows by it. Every toggle is on screen, each line one line's height. */
+   bar grows by it. Every toggle is on screen, each line one line's height.
+
+   The toggles are the layer's `Toggle` with a word as its face (ui.css): quiet when off; on, the
+   full ink over a rule in the on-green. Each is as tall as the bar's line (`--ui-toggle-line`),
+   so the target is the whole line and not the word's own box. */
 .status-toggles {
+  --ui-toggle-line: var(--status-line);
   flex: 0 1 auto;
   display: flex;
   flex-wrap: wrap;
@@ -523,72 +557,10 @@
   margin-inline-start: auto;
 }
 
-/* Micro toggles: a word the height of the bar, quiet when off; on, the full ink over a rule in
-   the on-green under the word. No pills, no borders, no fills: on and off differ in lightness as
-   well as in hue. The target is the bar's whole line, not the word's line box. */
-.status-toggle {
-  position: relative;
-  flex: 0 0 auto;
-  height: var(--status-line);
-  padding: 0 var(--gap-4);
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  color: var(--text-faint);
-  font-family: var(--font-family);
-  font-size: var(--font-chip);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  cursor: pointer;
-  /* A tap is a tap: no double-tap zoom on a control (and none of its wait). */
-  touch-action: manipulation;
-}
-
-/* Under a finger the bar is the button's height, each word has more room around it and the
-   shortest words ("LW", "QP") are still a target 24 wide. The run's gap keeps two targets apart. */
+/* Under a finger the bar is the button's height, and the run's gap keeps two targets apart. */
 @media (pointer: coarse) {
   .statusbar {
     --status-h: var(--control-h-button);
-  }
-
-  .status-toggle {
-    min-width: var(--control-h-input);
-    padding: 0 var(--gap-8);
-  }
-}
-
-@media (hover: hover) {
-  .status-toggle:hover {
-    background: var(--hover);
-    color: var(--text);
-  }
-}
-
-.status-toggle:active {
-  background: var(--fill-active);
-}
-
-.status-toggle.is-on {
-  color: var(--text);
-}
-
-.status-toggle.is-on::after {
-  content: "";
-  position: absolute;
-  left: var(--gap-4);
-  right: var(--gap-4);
-  bottom: var(--gap-3);
-  height: var(--hairline);
-  background: var(--toggle-on);
-}
-
-/* The taller bar under a finger: the rule keeps its distance from the word, and its width. */
-@media (pointer: coarse) {
-  .status-toggle.is-on::after {
-    left: var(--gap-8);
-    right: var(--gap-8);
-    bottom: var(--gap-6);
   }
 }
 

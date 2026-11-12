@@ -53,7 +53,7 @@ The newest pair, each drawn at both control sizes in the default ink (`eye`: a p
 - Three sizes only (`12/14/16`), matched to the control ladder, because a fourth size is a different control.
 - Icons are drawn, never imported: every path is original code on the 24×24 grid, because third-party icon sets carry licences and a foreign stroke grammar.
 - A glyph that means the same thing keeps its id everywhere (`save` is the floppy, `zoom.extents` the four corners), because two drawings for one action is a bug a reader reads as two actions. The three eyes are three meanings, so three ids: `preview` is the plot preview, `layer.on` and `layer.off` a layer's visibility, `eye` and `eye-off` a masked value shown and hidden.
-- Status glyphs keep their fixed layer colours (`--icon-layer-*`, `--icon-locked`) in both themes, because a layer's state must survive the chrome's theme.
+- Status glyphs take the layer colours (`--icon-layer-*`, `--icon-locked`) on the dark surfaces and the theme's own stepped inks on the light ones, through `Toggle`'s `tone`, because the pale layer colours measure under 3:1 on a light row and a state must be seen in both themes.
 
 ## Accessibility
 

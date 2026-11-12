@@ -393,8 +393,8 @@ body {
 
 .layer-swatch {
   justify-self: center;
-  width: 10px;
-  height: 10px;
+  width: var(--gap-10);
+  height: var(--gap-10);
   border: var(--hairline) solid var(--swatch-border);
   border-radius: var(--radius-small);
 }
@@ -456,8 +456,8 @@ body {
    not. The two inks are one step apart, too close to tell by eye, so the fill carries the state. */
 .layer-used {
   justify-self: center;
-  width: 7px;
-  height: 7px;
+  width: calc(var(--gap-4) + var(--gap-3));
+  height: calc(var(--gap-4) + var(--gap-3));
   border: var(--hairline) solid currentColor;
   border-radius: 1px;
   color: var(--text-faint);
@@ -476,76 +476,13 @@ body {
   gap: 0;
 }
 
-/* The on/freeze/lock toggles are drawn glyphs, each with its opposite; the quiet state is the
-   quiet ink (the disabled ink measured under 3:1, and these keys are live), the state worth
-   noticing (off, frozen, locked) takes its colour. Each key is a cell of the row's full height,
-   so the three make one even column down the list. */
-.toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--control-h-chip);
-  height: var(--control-h-row);
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-small);
-  background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-}
-
-.toggle .tool-icon {
-  width: var(--icon-size-sm);
-  height: var(--icon-size-sm);
-}
-
-@media (hover: hover) {
-  .toggle:hover {
-    background: var(--hover);
-    color: var(--text);
+/* The on/freeze/lock keys are the layer's `Toggle` (glyph, small): each a cell of the row's full
+   height, so the three make one even column down the list. Under a finger each cell takes a 24px
+   target past its own edges, and the keys stand a gap apart so two targets do not overlap. */
+@media (pointer: coarse) {
+  .layer-toggles {
+    gap: var(--gap-4);
   }
-}
-
-.toggle:focus-visible {
-  outline: var(--focus-outline-w) solid var(--focus-ring);
-  outline-offset: var(--focus-outline-offset);
-}
-
-/* On is the ordinary state, so it stays quiet; off is the one that explains a missing layer. */
-.toggle.is-on {
-  color: var(--icon);
-}
-
-/* The off ink alone measures 2.81:1 when the key is hovered on the current row (two fills under
-   it), under the 3:1 a state needs: it steps a seventh of the way to the ink. */
-.toggle[aria-pressed="false"]:first-child {
-  color: color-mix(in srgb, var(--icon-layer-off) 85%, var(--text));
-}
-
-.toggle.is-frozen {
-  color: var(--icon-layer-frozen);
-}
-
-.toggle.is-locked {
-  color: var(--icon-locked);
-}
-
-/* The three state inks are pale colours made for the dark panel; on the light one they measure
-   under 3:1 (frozen 1.5, locked 1.9, off 2.6 on the current row). There the states take the
-   theme's own inks: the stronger grey for off, the accent's ink step for frozen, the warning for
-   locked. The accent fill and the warning alone hold 3:1 on the row but not when the key is
-   hovered on the current row (2.87 and 2.88), so frozen takes the text step and the warning
-   steps a fifth of the way to the ink. */
-:root[data-theme="light"] .toggle[aria-pressed="false"]:first-child {
-  color: var(--text-dim);
-}
-
-:root[data-theme="light"] .toggle.is-frozen {
-  color: var(--text-accent);
-}
-
-:root[data-theme="light"] .toggle.is-locked {
-  color: color-mix(in srgb, var(--warn) 80%, var(--text));
 }
 
 /* ---- The command line ---- */

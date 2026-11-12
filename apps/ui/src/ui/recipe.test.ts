@@ -107,6 +107,8 @@ describe("the layer's contrast, from the tokens", () => {
     ["an inline select's value at rest, and a checkbox's label, on the surface", "text", []],
     ["an inline mixed select's placeholder at rest, and a bare text area's placeholder, on the surface", "text-faint", []],
     ["an option's label on the listbox's highlight", "text", ["fill-active"]],
+    ["a text toggle's word, on or under the pointer, on the hover fill", "text", ["hover"]],
+    ["a text toggle's word on the pressed fill", "text", ["fill-active"]],
   ];
   /** Not text: a glyph, or the edge that alone tells a control from its surface (WCAG 1.4.11). */
   const graphics: [string, string, string[]][] = [
@@ -119,6 +121,12 @@ describe("the layer's contrast, from the tokens", () => {
     ["a ticked checkbox's mark on the hovered fill", "on-accent", ["accent-hover"]],
     ["a ticked checkbox's mark on the pressed fill", "on-accent", ["accent-pressed"]],
     ["a refused select's and text area's error edge against the field fill", "error", ["control"]],
+    ["a glyph toggle at rest on the surface", "text-faint", []],
+    ["a glyph toggle at rest on a selected row", "text-faint", ["fill-active"]],
+    ["an on glyph of the absent tone, hovered on a selected row", "icon", ["fill-active", "hover"]],
+    ["the rule under an on word", "toggle-on", []],
+    ["the rule under an on word, hovered", "toggle-on", ["hover"]],
+    ["the rule under an on word, pressed", "toggle-on", ["fill-active"]],
   ];
   for (const [name, theme] of Object.entries(themes)) {
     for (const [what, ink, fills] of text) {
@@ -162,6 +170,12 @@ describe("the layer's contrast, from the tokens", () => {
       expect(lowest(theme, "selection", [], ["canvas"])).toBeGreaterThanOrEqual(3);
     });
   }
+
+  test("dark: the info and caution inks of a glyph toggle hold 3:1 hovered on a selected row, on every surface", () => {
+    for (const ink of ["icon-layer-frozen", "icon-locked"]) {
+      expect(lowest(dark, ink, ["fill-active", "hover"], [...SURFACES, "control-hover"])).toBeGreaterThanOrEqual(3);
+    }
+  });
 
   test("light: a frozen layer's key, the accent ink, holds 3:1 hovered on the current row of the sidebar", () => {
     const light = themes["light"];
@@ -328,6 +342,39 @@ describe("the layer's recipe, from the stylesheet", () => {
     expect(uiCss).toContain('.ui-icon-button--ghost:hover:not([aria-disabled="true"]):not([aria-pressed="true"])');
   });
 
+  test("a toggle draws no fill at rest, on or off: the state is the face's ink, and the word's rule", () => {
+    expect(rule(uiCss, ".ui-toggle")).toContain("background: transparent");
+    const pressed = [...uiCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => (m[1] ?? "").includes(".ui-toggle") && (m[1] ?? "").includes('[aria-pressed="true"]') && !(m[1] ?? "").includes("::"));
+    expect(pressed.length).toBeGreaterThan(0);
+    for (const m of pressed) expect(m[2]).not.toContain("background");
+    expect(rule(uiCss, '.ui-toggle[aria-pressed="true"]')).toContain("color: var(--ui-toggle-ink-on)");
+    const mark = rule(uiCss, '.ui-toggle--text[aria-pressed="true"]::before');
+    expect(mark).toContain("background: var(--toggle-on)");
+    expect(mark).toContain("height: var(--hairline)");
+    expect(mark).toContain("left: var(--ui-toggle-pad)");
+  });
+
+  test("a toggle's state ink outlasts the hover, and the disabled ink outlasts them all: one weight, in this order", () => {
+    const order = [".ui-toggle:hover {", '.ui-toggle[aria-pressed="true"] {', '.ui-toggle--absent[aria-pressed="false"] {', '.ui-toggle[aria-disabled="true"] {'].map((head) => uiCss.indexOf(head));
+    for (const at of order) expect(at).toBeGreaterThan(-1);
+    expect([...order].sort((x, y) => x - y)).toEqual(order);
+    const disabled = rule(uiCss, '.ui-toggle[aria-disabled="true"]');
+    expect(disabled).toContain("color: var(--text-disabled)");
+    expect(disabled).toContain("background: transparent");
+    // No colour rule of a toggle outweighs the disabled one: the tones and the light theme set inks, never `color`.
+    const tones = [...uiCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => /\.ui-toggle--(absent|info|caution)\s*$/.test((m[1] ?? "").trim()));
+    expect(tones.length).toBe(6);
+    for (const m of tones) expect(m[2]).not.toMatch(/(?<![\w-])color:/);
+  });
+
+  test("the small glyph toggle is a row's cell, and the small word is as tall as the line that holds it", () => {
+    const cell = rule(uiCss, ".ui-toggle--glyph.ui-toggle--sm");
+    expect(cell).toContain("width: var(--control-h-chip)");
+    expect(cell).toContain("height: var(--control-h-row)");
+    expect(rule(uiCss, ".ui-toggle--sm .tool-icon")).toContain("width: var(--icon-size-sm)");
+    expect(rule(uiCss, ".ui-toggle--text.ui-toggle--sm")).toContain("height: var(--ui-toggle-line, var(--control-h-row))");
+  });
+
   test("the editor tab clips at 24ch and the compact tab at 18ch", () => {
     expect(rule(uiCss, ".ui-tab--md")).toContain("max-width: 24ch");
     expect(rule(uiCss, ".ui-tab--sm")).toContain("max-width: 18ch");
@@ -373,6 +420,12 @@ describe("the layer's recipe, from the stylesheet", () => {
       "inset: calc((var(--control-h-chip) - var(--control-h-input)) / 2)",
     );
     expect(rule(coarse, ".ui-row, .ui-tab--sm")).toContain("height: var(--control-h-input)");
+    expect(rule(coarse, ".ui-toggle--glyph.ui-toggle--sm::after")).toContain(
+      "inset: calc((var(--control-h-row) - var(--control-h-input)) / 2) calc((var(--control-h-chip) - var(--control-h-input)) / 2)",
+    );
+    const word = rule(coarse, ".ui-toggle--text");
+    expect(word).toContain("min-width: var(--control-h-input)");
+    expect(word).toContain("min-height: var(--control-h-input)");
     expect(dark["control-h-input"]).toBe("24px");
     expect(dark["control-h-chip"]).toBe("20px");
     expect(uiCss.slice(0, at)).not.toContain("::after");

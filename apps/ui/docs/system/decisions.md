@@ -7,12 +7,12 @@ file records the picks and the reasons, so the next surface does not re-litigate
 
 ## Canonical picks
 
-The web UI grows twelve canonical components under `src/ui/`, each a thin wrapper over the native
+The web UI grows thirteen canonical components under `src/ui/`, each a thin wrapper over the native
 element. The per-surface hand-rolled classes they replace are named below; a class loses because it
 is a one-off with no shared API and no states.
 
 - **Button** — pick `ui/Button.tsx` (native `<button>`). Variants `primary | secondary | ghost | danger`, default `secondary` (Cursor's own default button). Loses: `.button` (TopBar — one call site), `.assistant-send` / `.assistant-save` / `.assistant-ghost` (assistant-only, their own colours), `.assistant-preset` (a suggestion chip wearing a button), `.tool-button` (ToolStrip — a grid cell, no variants), `.menu-row` (a menu item, not a general button).
-- **IconButton** — pick `ui/IconButton.tsx` (native `<button>`, a drawn icon + label). Variants `ghost | soft | inverted`; sizes `md` (24px) and `sm` (20px). Loses: `.assistant-icon` (three uses, fixed 24px, no variant), `.assistant-attachment-x` (one-off), `.layer-toggles` buttons (LayersPanel — a toggle cluster with its own semantics), `.status-toggle` (StatusBar — a drafting toggle with its own short-label face, an `aria-pressed` switch).
+- **IconButton** — pick `ui/IconButton.tsx` (native `<button>`, a drawn icon + label). Variants `ghost | soft | inverted`; sizes `md` (24px) and `sm` (20px). Loses: `.assistant-icon` (three uses, fixed 24px, no variant), `.assistant-attachment-x` (one-off). The layer list's state keys and the status bar's drafting toggles were listed here as its losers until 2026-11-11 and never moved: they are `Toggle`'s (below).
 - **Chip** — pick `ui/Chip.tsx` (native `<button>` when interactive, `<span>` when not). Loses: `.chip` (TopBar — a static fact, no interaction), `.keyword-chip` (CommandLine — interactive, no tone/size API), `.cmd-chips` (a container, not a chip).
 - **Field** — pick `ui/Field.tsx` (native `<input>`, single-line). Variants `field | inline`, sizes `md` (24px) and `sm` (20px), `align` `start | end`, as Select ("A value in a dense row" below). Loses: `.assistant-input`, `.cmd-input`, `.prop-input` (each one surface's own padding and border), `.assistant-field` (a label wrapper, not the control). The composer's auto-growing `<textarea>` and the properties palette's `<select>` were found-not-fixed here until 2026-11-11; `TextArea` and `Select` below are their picks.
 - **Select** — pick `ui/Select.tsx` (a native `<select>` under a drawn face: keyboard, type-ahead, a phone's picker and every system webview's own list are the platform's; no hand-built listbox). Variants `field | inline`, sizes `md` (24px) and `sm` (20px), `align` `start | end`. The value is drawn in a `<span>` over the control, which is what lets it end in an ellipsis before the arrow, end on the arrow's side and read quieter while `mixed` the same way in all three webviews. Loses: `.prop-select` (PropertiesPanel — `appearance: none` with no arrow drawn in its place, a long value cut with no ellipsis, the off-list option and the `*VARIES*` ink done by hand).
@@ -22,6 +22,7 @@ is a one-off with no shared API and no states.
 - **SectionLabel** — pick `ui/SectionLabel.tsx` (native `<h2>` — a heading, so a screen reader can jump between panels). Loses: `.section-label` (already shared but untyped — the pick is its typed home), `.properties-head` / `.layers-head` (the surrounding bar, not the label), `.assistant-title` (a pane title, a different role).
 - **Tooltip** — pick `ui/Tooltip.tsx`: the layer's one hint, a single box on `<body>` placed beside whichever control carries `data-hint`. Every layer component that takes `title` carries it; the `<Tooltip>` wrapper (a `<span>` host; the child keeps its own element and its own accessible name) and the bare `data-hint` attribute give it to a surface's own element. Placements `bottom | top`, flipped and held inside the window by itself; it never takes the pointer. Loses: the native `title` attribute as an icon key's hint (it arrives on the platform's own delay, in the platform's own box, and never on keyboard focus), and any per-surface hover label a panel would draw for itself. The reasons are under "The hint" below.
 - **Tab** — pick `ui/Tab.tsx` (native `<button>` with `role="tab"`, `aria-selected` on the one in front; an optional close key as a sibling button). Sizes `md` (the editor tab, selected at `--tab-active`) and `sm` (the compact tab of a pane header, selected at `--fill-active`). Loses: `.layout-tab` (StatusBar's layout strip — a raw button with its own class), the chat tabs' `Row` workaround (AssistantPane — a `Row` in a width cell beside a close `IconButton`).
+- **Toggle** — pick `ui/Toggle.tsx` (native `<button aria-pressed>`, the state drawn by the face alone). Variants `glyph | text`; sizes `sm` (the cell of a 22px row, the status bar's line) and `md` (24px); tones `neutral | absent | info | caution`. Loses: `.toggle` with `.is-on` / `.is-frozen` / `.is-locked` (LayersPanel — three raw buttons per row, the tone picked by `:first-child` and a class), `.status-toggle` (StatusBar — a raw button with its own hover, ring and on rule). The reasons are under "A setting switched in place" below.
 - **Kbd** — pick `ui/Kbd.tsx` (native `<kbd>`, one recipe, no variants). Loses: `.assistant-key` (AssistantPane — the mono face at the disabled ink), `.palette-key` (CommandPalette — the recipe kept, now the pick's own).
 
 ## Prop vocabulary
@@ -53,6 +54,10 @@ is a one-off with no shared API and no states.
 - Row `option`, with `id` and `onPointerMove`: the row is one option of a listbox that owns the focus and the highlight.
 - Row `title`: the hint and the row's description in both forms, as on Button; the name stays the row's text.
 - Chip `tone`: `neutral | accent`.
+- Toggle `pressed` and `onChange(pressed)`: the state and the state a press asks for, as `checked` and `onChange` on Checkbox; the caller owns it. `selected` stays IconButton's word for a key that is lit while on.
+- Toggle `ariaLabel` and `hint`: the fixed name and the hint are two props because they are two strings ("Outline frozen", "Thaw"). `title` is not taken: on every other component it is the hint and also the name or the description, and a toggle's hint is neither. `description`, `shortcut` and `disabled` mean what they mean on IconButton, and `placement` what it means on Tooltip.
+- Toggle `variant`: `glyph | text`, the face. Toggle `tone`: `neutral | absent | info | caution`, which state is the one to notice and its ink; it names the meaning, and the token layer picks the colour per theme.
+- Toggle `icon` and `iconOn`: the glyph of each state. Toggle `tabIndex`: the one pass-through for a group that is one Tab stop; unset, the component writes no attribute.
 - No boolean style props (`round`, `big`, `blue`): a prop names a purpose; the token layer picks the look.
 
 ## Motion presets
@@ -264,6 +269,73 @@ the native `disabled` attribute; the component refuses the click.
 - **Scope.** Field keeps the native `disabled` (a field one cannot type in should not take the
   caret), and Row keeps it too (a disabled row in a menu or the palette is skipped by the list's
   own arrow-key handling, and nothing asks a row to explain itself yet).
+
+## A setting switched in place
+
+Decided 2026-11-11, with `Toggle`. The last hand-drawn controls in the shell were the layer
+list's three state keys per row and the status bar's eleven drafting toggles: four raw
+`<button aria-pressed>` call sites in two files, two recipes.
+
+- **Why not `IconButton selected`.** It was tried and does not fit, for four reasons. Its `title`
+  is both the name and the hint, and a state key needs a name that never changes ("Outline
+  frozen", with `aria-pressed` carrying the state) and a different hint (the action, "Thaw").
+  `selected` paints the `.14` fill, and "on" is pressed on nearly every row, so every row would
+  gain a fill. The state inks (off, frozen, locked, each with a light-theme step) have no prop.
+  And its box is a circle, where the key is a 20 by 22 cell as tall as the row.
+- **The state is the face's alone.** No fill at rest, on or off. A glyph toggle swaps its glyph
+  (`icon`, `iconOn`) and takes the tone's ink; a text toggle takes the full ink and a hairline
+  rule in `--toggle-on` under the word. Neither is colour alone. The fills are the layer's own:
+  `.08` under the pointer and `.14` while held, which the layer keys did not have before.
+- **`tone` is a closed set of four, mapped to tokens the app already had.** `neutral`: off
+  `--text-faint`, on `--text`. `absent`: on `--icon`, off `--icon-layer-off` stepped 15% to the
+  ink (light: `--text-dim`). `info`: on `--icon-layer-frozen` (light: `--text-accent`).
+  `caution`: on `--icon-locked` (light: `--warn` stepped 20% to the ink). The light steps are in
+  `src/ui/ui.css` under `:root[data-theme="light"]`, the layer's first theme selector: the two
+  mixes are not single token values, and a token per tone and state would have been six new
+  tokens for one component. No colour was added.
+- **The hint is for the eye and is not the description.** Every other component exposes its hint
+  to assistive tech, as the name or the description, because the hint box is `aria-hidden`. A
+  toggle's hint is the action a press takes now, which the name and `aria-pressed` already say:
+  "Outline frozen, pressed, Thaw" says the state twice. What a screen reader must also hear (why
+  the toggle is blocked) goes in `description`, as on IconButton.
+- **One Tab stop is the container's.** The status bar and the tool strip rove from the container
+  through a ref (`rovingBand`, `src/components/ToolStrip.tsx`), which sets `tabIndex` on each
+  element. Toggle takes `tabIndex` as a prop for a container that roves through props, and writes
+  no attribute when the prop is unset, so the two never fight.
+- **A small word is as tall as its line.** The status bar's line is its row less its top
+  hairline, and it grows under a finger; a component cannot know either. The container sets
+  `--ui-toggle-line`, and the word falls back to the row height. It is the one custom property a
+  caller sets for a layer component, and it sets a size the component cannot measure, never a
+  look.
+- **Under a finger.** The small glyph keeps its 20 by 22 cell and takes the rest of 24 by 24 as an
+  overhang; the layer list keeps its three keys 4px apart there so the targets do not overlap
+  (they stood flush, with 20 by 22 targets). The word is at least 24 by 24.
+- **Disabled.** As Button and IconButton: `aria-disabled`, focusable, the click refused, the face
+  at the disabled ink in every tone. No call site disables a toggle yet.
+- **The curve.** The hand-drawn keys eased on the shell's `button` rule (`--ease-out`); a Toggle
+  eases on the layer's measured `--ease-standard`, as every other component. Same 0.1s.
+
+### What stays local in a layer row
+
+Looked at with `Toggle`, 2026-11-11: the row's colour swatch and its "has objects" mark, both
+`role="img"` spans drawn by `src/styles.css`.
+
+- **The swatch stays local.** A `Swatch` needs a second use, and the candidate was the properties
+  palette's Color row, which shows a colour's name with no colour beside it. A swatch there would
+  help: "ByLayer" says nothing about which colour the object is drawn in. But the row cannot draw
+  one honestly today. The palette's rows carry the colour as a name (`COLOR_CHOICES` in
+  `src/props.ts`: `ByLayer`, `ByBlock`, `Red` and the rest) and no RGB, and the layer list's rule
+  is that no colour is invented in the interface: the swatch paints the engine's own `colorRgb`.
+  A swatch beside "ByLayer" would mean resolving the layer's colour in TypeScript. The component
+  follows the data: when the engine's property rows carry `colorRgb` beside the name, build
+  `Swatch` (a `role="img"` box named by the colour, `--swatch-border`, 10px) and give it the layer
+  row and the palette row together. Until then one call site is a local rule.
+- **The used mark stays local.** One use, two states, no interaction, and its only rule is that
+  the fill carries the state where the two inks are a step apart. If a second list grows a
+  per-row status mark, it is a component then.
+
+Their sizes moved onto the ladder in passing (10px is `--gap-10`; 7px is `--gap-4` plus
+`--gap-3`), with no change to what is drawn.
 
 ## A row in a listbox
 

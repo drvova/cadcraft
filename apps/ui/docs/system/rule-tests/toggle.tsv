@@ -1,0 +1,14 @@
+rule_id	falsify	negation	two_agent	sweep	verdict	notes
+rule/toggle-name-fixed	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/toggle-state-in-face	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/toggle-owns-nothing	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/toggle-tone-meaning	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/toggle-group-one-stop	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/toggle-no-native-title	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/toggle-disabled-reason	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/toggle-label-setting	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/toggle-text-short	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/toggle-canonical-element	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/toggle-no-fill	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/toggle-touch-target	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/toggle-line-height	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	

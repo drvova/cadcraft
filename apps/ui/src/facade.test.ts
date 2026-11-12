@@ -5,7 +5,21 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { AppFacade, layerColor, parseCommands, parseDrawingState, parseEnvelope, parseLayers, parseHexColor } from "./facade";
+import {
+  AppFacade,
+  EMPTY_PREVIEW,
+  NO_ANCHOR,
+  layerColor,
+  parseCommands,
+  parseDrawingState,
+  parseEnvelope,
+  parseHexColor,
+  parseLayers,
+  parsePick,
+  parsePreview,
+  parsePromptAnchor,
+  parseSnap,
+} from "./facade";
 import { MockFacade } from "./mock";
 import { emptyPrompt, promptText } from "./prompt";
 
@@ -178,6 +192,9 @@ describe("AppFacade over the mock", () => {
   });
 
   test("a facade that throws is reported, not propagated", () => {
+    const trap = (): string => {
+      throw new Error("trap");
+    };
     const facade = new AppFacade(
       {
         execute: () => {
@@ -197,6 +214,12 @@ describe("AppFacade over the mock", () => {
         display: () => "",
         set_view: () => "",
         view: () => "",
+        set_viewport: trap,
+        set_cursor: trap,
+        preview: trap,
+        pick: trap,
+        snap: trap,
+        click: trap,
         open_bytes: () => "",
         load_sample: () => "",
         save_bytes: () => new Uint8Array(),
@@ -208,6 +231,167 @@ describe("AppFacade over the mock", () => {
     expect(env.ok).toBe(false);
     if (!env.ok) expect(env.error).toContain("trap");
     expect(facade.displayList().prims).toEqual([]);
+    // The pointer calls run on every frame: a trap in one is a quiet nothing, never a throw.
+    const sized = facade.setViewport(800, 600);
+    expect(sized.ok).toBe(false);
+    if (!sized.ok) expect(sized.error).toContain("trap");
+    expect(facade.setCursor({ x: 1, y: 2 }).ok).toBe(false);
+    expect(facade.preview({ x: 1, y: 2 })).toBe(EMPTY_PREVIEW);
+    expect(facade.pick({ x: 1, y: 2 })).toEqual([]);
+    expect(facade.snap({ x: 1, y: 2 })).toBeNull();
+    const clicked = facade.click({ x: 1, y: 2 });
+    expect(clicked.snap).toBeNull();
+    expect(clicked.state.running).toBeNull();
+  });
+});
+
+describe("the pointer replies", () => {
+  test("parsePreview reads the rubber band's verts and prims", () => {
+    const band = parsePreview('{"drag":null,"prims":[{"alpha":255,"color":[255,255,255],"handle":0,"kind":"polyline","len":2,"lw":0.25,"start":0}],"verts":[[0,5],[4,7]]}');
+    expect(band.verts).toEqual([{ x: 0, y: 5 }, { x: 4, y: 7 }]);
+    expect(band.prims).toEqual([{ kind: "polyline", start: 0, len: 2, color: [255, 255, 255], lw: 0.25, alpha: 1, handle: 0 }]);
+    expect(band.drag).toBeNull();
+  });
+
+  test("parsePreview reads a drag's handles and matrix", () => {
+    const move = parsePreview('{"drag":{"clipboard":false,"handles":[18,26],"matrix":[1,0,0,1,3,4]},"prims":[],"verts":[]}');
+    expect(move.drag).toEqual({ handles: [18, 26], matrix: [1, 0, 0, 1, 3, 4], clipboard: false });
+    // A drag is a preview even with no rubber-band geometry of its own.
+    expect(move).not.toBe(EMPTY_PREVIEW);
+    // A matrix that is short, or holds anything but finite numbers, is no drag at all.
+    expect(parsePreview('{"drag":{"handles":[18],"matrix":[1,0,0,1,3]},"prims":[],"verts":[]}')).toBe(EMPTY_PREVIEW);
+    expect(parsePreview('{"drag":{"handles":[18],"matrix":[1,0,0,1,3,null]},"prims":[],"verts":[]}')).toBe(EMPTY_PREVIEW);
+    expect(parsePreview('{"drag":{"handles":[18],"matrix":"1 0 0 1 3 4"},"prims":[],"verts":[]}')).toBe(EMPTY_PREVIEW);
+    // Handles that are not numbers are dropped, the drag stays.
+    expect(parsePreview('{"drag":{"handles":["1A",-3,7.2,null],"matrix":[1,0,0,1,0,0]},"prims":[],"verts":[]}').drag?.handles).toEqual([7]);
+  });
+
+  test("parsePreview answers the empty preview for a refusal or anything unreadable", () => {
+    for (const raw of ["", "junk", "null", "[]", "42", '{"ok":false,"error":"trap"}', '{"verts":[],"prims":[],"drag":null,"error":"the point is not a usable world coordinate"}', '{"prims":[{"kind":"polyline","start":0,"len":9}],"verts":[[0,0]]}']) {
+      expect(parsePreview(raw)).toBe(EMPTY_PREVIEW);
+    }
+  });
+
+  test("parsePick keeps the hex handles, in order, and nothing else", () => {
+    expect(parsePick('{"handles":["1A","2B"]}')).toEqual(["1A", "2B"]);
+    expect(parsePick('{"handles":[1,"",null,"C",{}]}')).toEqual(["C"]);
+    expect(parsePick('{"handles":[],"error":"the aperture must be a finite world distance, 0 or more"}')).toEqual([]);
+    for (const raw of ["", "junk", "null", "[]", '{"handles":"1A"}', '{"ok":false,"error":"trap"}']) expect(parsePick(raw)).toEqual([]);
+    // A reply longer than the engine ever sends is cut, not trusted.
+    expect(parsePick(JSON.stringify({ handles: Array.from({ length: 500 }, (_, i) => i.toString(16)) })).length).toBe(64);
+  });
+
+  test("parseSnap reads the point, the mode and its name, or null", () => {
+    expect(parseSnap('{"snap":{"deferred":false,"mode":1,"name":"Endpoint","point":[10,0]}}')).toEqual({ point: { x: 10, y: 0 }, mode: 1, name: "Endpoint", deferred: false });
+    expect(parseSnap('{"snap":{"deferred":true,"mode":256,"name":"Tangent","point":[5,0]}}')?.deferred).toBe(true);
+    // A click reply carries the same field beside the command-line state.
+    expect(parseSnap('{"prompt":"LINE Specify next point:","running":"line","snap":{"mode":2,"name":"Midpoint","point":[5,0]}}')).toEqual({ point: { x: 5, y: 0 }, mode: 2, name: "Midpoint", deferred: false });
+    for (const raw of ["", "junk", "null", '{"snap":null}', '{"snap":null,"error":"x"}', '{"snap":{"mode":1}}', '{"snap":{"point":[1]}}', '{"snap":{"point":["a","b"]}}', '{"snap":[1,2]}', '{"ok":false,"error":"trap"}']) {
+      expect(parseSnap(raw)).toBeNull();
+    }
+  });
+
+  test("parsePromptAnchor reads the base, corner and distance of a command-line reply", () => {
+    expect(parsePromptAnchor('{"base":[2,3],"corner":false,"deferred":false,"distance":false,"running":"line"}')).toEqual({ base: { x: 2, y: 3 }, corner: false, distance: false, deferred: false });
+    expect(parsePromptAnchor('{"base":[4,5],"corner":true,"deferred":false,"distance":false}').corner).toBe(true);
+    expect(parsePromptAnchor('{"base":[1,1],"distance":true}').distance).toBe(true);
+    expect(parsePromptAnchor('{"base":null,"deferred":true}')).toEqual({ base: null, corner: false, distance: false, deferred: true });
+    // An older package, the mock, or junk: no anchor.
+    for (const raw of ["", "junk", "null", "[]", '{"prompt":"Command:"}', '{"base":[1],"corner":"yes","distance":1}']) expect(parsePromptAnchor(raw)).toEqual(NO_ANCHOR);
+  });
+});
+
+describe("the pointer calls over the mock", () => {
+  test("setViewport keeps a real size and refuses a hidden or hostile one", () => {
+    const facade = mockFacade();
+    expect(facade.setViewport(1280, 800).ok).toBe(true);
+    for (const [w, h] of [[0, 0], [0, 600], [800, -1], [NaN, 600], [800, Infinity], [-Infinity, NaN]] as const) {
+      expect(facade.setViewport(w, h).ok, `${w} x ${h}`).toBe(false);
+    }
+    // The mock clamps as the engine does.
+    expect(JSON.parse(new MockFacade().set_viewport(0.25, 1e9))).toEqual({ ok: true, viewport: [1, 32768] });
+  });
+
+  test("setCursor takes a finite point and refuses the rest", () => {
+    const facade = mockFacade();
+    expect(facade.setCursor({ x: 3, y: 4 }).ok).toBe(true);
+    for (const p of [{ x: NaN, y: 0 }, { x: 0, y: Infinity }, { x: 1e308, y: 0 }]) expect(facade.setCursor(p).ok).toBe(false);
+  });
+
+  test("preview is empty in the mock, at rest and mid-command", () => {
+    const facade = mockFacade();
+    expect(facade.preview({ x: 1, y: 1 })).toBe(EMPTY_PREVIEW);
+    let state = facade.start("line");
+    state = facade.cmdline("0,0", state);
+    expect(facade.preview({ x: 5, y: 5 })).toBe(EMPTY_PREVIEW);
+    expect(facade.preview({ x: NaN, y: 5 })).toBe(EMPTY_PREVIEW);
+    expect(JSON.parse(new MockFacade().preview(Infinity, 0)).error).toContain("usable");
+  });
+
+  test("pick names what is under the pointer and leaves the selection alone", () => {
+    const facade = mockFacade();
+    const revision = facade.drawingState()?.revision;
+    // (50,5) is inside the plate (the mock's handle 1) and outside both bores.
+    expect(facade.pick({ x: 50, y: 5 })).toEqual(["1"]);
+    expect(facade.pick({ x: -500, y: -500 })).toEqual([]);
+    expect(facade.selection()).toEqual({ count: 0, handles: [] });
+    expect(facade.drawingState()?.revision).toBe(revision);
+    // It is the handle a click there selects.
+    facade.execute("select", { at: [50, 5] });
+    expect(facade.selection().handles).toEqual(["1"]);
+    facade.pick({ x: -500, y: -500 });
+    expect(facade.selection().handles).toEqual(["1"]);
+    // Hostile numbers: nothing, quietly.
+    expect(facade.pick({ x: NaN, y: 0 })).toEqual([]);
+    expect(facade.pick({ x: 50, y: 5 }, -1)).toEqual([]);
+    expect(facade.pick({ x: 50, y: 5 }, Infinity)).toEqual([]);
+    expect(JSON.parse(new MockFacade().pick(1e308, 0, 1)).error).toContain("usable");
+    expect(JSON.parse(new MockFacade().pick(0, 0, -1)).error).toContain("aperture");
+  });
+
+  test("snap never hits in the mock", () => {
+    const facade = mockFacade();
+    expect(facade.snap({ x: 0, y: 0 })).toBeNull();
+    expect(facade.snap({ x: 0, y: 0 }, 5)).toBeNull();
+    expect(facade.snap({ x: NaN, y: 0 })).toBeNull();
+    expect(facade.snap({ x: 0, y: 0 }, -1)).toBeNull();
+    expect(JSON.parse(new MockFacade().snap(0, 0, NaN)).error).toContain("aperture");
+  });
+
+  test("click answers the running prompt with its point, and does nothing at rest", () => {
+    const facade = mockFacade();
+    const before = facade.displayList().prims.length;
+    const idle = facade.click({ x: 5, y: 5 });
+    expect(idle.state.running).toBeNull();
+    expect(idle.state.error).toBeNull();
+    expect(idle.snap).toBeNull();
+    expect(facade.displayList().prims.length).toBe(before);
+
+    let state = facade.start("line");
+    let clicked = facade.click({ x: 1.5, y: -2 }, 0, state, "1.5,-2");
+    state = clicked.state;
+    expect(state.running).toBe("line");
+    expect(promptText(state)).toBe("Specify next point or [Undo]:");
+    expect(state.output.at(-1)).toBe("1.5,-2");
+    clicked = facade.click({ x: 8, y: 3 }, 0, state);
+    expect(clicked.state.error).toBeNull();
+    expect(clicked.snap).toBeNull();
+    expect(facade.displayList().prims.length).toBe(before + 1);
+
+    // A hostile click is refused before it reaches the facade, and the prompt stays up.
+    const refused = facade.click({ x: NaN, y: 0 }, 0, clicked.state);
+    expect(refused.state.error).toContain("refused");
+    expect(refused.state.running).toBe("line");
+    expect(facade.click({ x: 0, y: 0 }, -1, clicked.state).state.error).toContain("refused");
+    const raw: unknown = JSON.parse(new MockFacade().click(Infinity, 0, 0));
+    expect(raw).toMatchObject({ snap: null, output: [] });
+  });
+
+  test("promptAnchor has no base in the mock (it does not say one)", () => {
+    const facade = mockFacade();
+    expect(facade.promptAnchor()).toEqual(NO_ANCHOR);
+    facade.start("line");
+    expect(facade.promptAnchor()).toEqual(NO_ANCHOR);
   });
 });
 
@@ -339,6 +523,12 @@ describe("the extended facade contract over the mock", () => {
       display: () => "",
       set_view: () => "",
       view: () => "",
+      set_viewport: () => "",
+      set_cursor: () => "[]",
+      preview: () => '{"verts":"none","prims":7,"drag":{"matrix":[1]}}',
+      pick: () => '{"handles":{"0":"1A"}}',
+      snap: () => '{"snap":{"point":[null,2],"mode":"end"}}',
+      click: () => "not json",
       open_bytes: () => "",
       load_sample: () => "",
       save_bytes: () => new Uint8Array(),
@@ -366,6 +556,16 @@ describe("the extended facade contract over the mock", () => {
     // A start reply that is not JSON keeps the previous state and raises the error line.
     const state = facade.start("circle", emptyPrompt());
     expect(state.error).toContain("unreadable");
+    // The pointer replies: each malformed one is the inert answer.
+    expect(facade.setViewport(800, 600)).toEqual({ ok: false, error: "unreadable reply from set_viewport" });
+    expect(facade.setCursor({ x: 0, y: 0 })).toEqual({ ok: false, error: "unreadable reply from set_cursor" });
+    expect(facade.preview({ x: 0, y: 0 })).toBe(EMPTY_PREVIEW);
+    expect(facade.pick({ x: 0, y: 0 })).toEqual([]);
+    expect(facade.snap({ x: 0, y: 0 })).toBeNull();
+    const clicked = facade.click({ x: 0, y: 0 }, 0, state);
+    expect(clicked.state.error).toContain("unreadable");
+    expect(clicked.snap).toBeNull();
+    expect(facade.promptAnchor()).toEqual(NO_ANCHOR);
   });
 
   test("MockFacade satisfies every RawFacade method the shim uses", () => {
@@ -386,6 +586,12 @@ describe("the extended facade contract over the mock", () => {
       "display",
       "set_view",
       "view",
+      "set_viewport",
+      "set_cursor",
+      "preview",
+      "pick",
+      "snap",
+      "click",
       "open_bytes",
       "load_sample",
       "save_bytes",
@@ -410,6 +616,12 @@ describe("the extended facade contract over the mock", () => {
     expect(typeof mock.display(0.5)).toBe("string");
     expect(typeof mock.set_view(0, 0, 1, 1)).toBe("string");
     expect(typeof mock.view()).toBe("string");
+    expect(typeof mock.set_viewport(NaN, -1)).toBe("string");
+    expect(typeof mock.set_cursor(NaN, Infinity)).toBe("string");
+    expect(typeof mock.preview(NaN, 1e308)).toBe("string");
+    expect(typeof mock.pick(NaN, 0, -1)).toBe("string");
+    expect(typeof mock.snap(0, -Infinity, NaN)).toBe("string");
+    expect(typeof mock.click(NaN, NaN, NaN)).toBe("string");
     expect(typeof mock.open_bytes("x", new Uint8Array())).toBe("string");
     expect(typeof mock.load_sample()).toBe("string");
     expect(mock.save_bytes()).toBeInstanceOf(Uint8Array);

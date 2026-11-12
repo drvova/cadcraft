@@ -12,7 +12,7 @@
 //! | call | reply |
 //! |---|---|
 //! | [`Facade::execute`] | `{"ok":true,"result":…}` or `{"ok":false,"error":"…"}` |
-//! | [`Facade::cmdline`] / [`Facade::prompt`] | the command-line state: `prompt`, `running`, `keywords`, `accept`, `default`, `output`; `cmdline` adds `error` when the line was refused |
+//! | [`Facade::cmdline`] / [`Facade::prompt`] | the command-line state: `prompt`, `running`, `keywords`, `accept`, `default`, `base`, `corner`, `distance`, `deferred`, `output`; `cmdline` adds `error` when the line was refused |
 //! | [`Facade::start`] | the command-line state plus `output` (and `error` for an unknown id): a command started **by id**, as a menu click does |
 //! | [`Facade::state`] | `{"title","dirty","revision","extents","layerCount","entityCount","currentLayer","space"}` (`extents` is `[minx,miny,maxx,maxy]` or `null`) |
 //! | [`Facade::selection`] | `{"count":n,"handles":["1A",…]}` |
@@ -24,6 +24,20 @@
 //! | [`Facade::display`] | the display list below, or `{"error":"…"}` |
 //! | [`Facade::set_view`] | `{"ok":true,"view":{"min":[x,y],"max":[x,y]}}` or `{"ok":false,"error":"…"}`; the engine's session view follows quietly (no view-history entries) |
 //! | [`Facade::view`] | `{"min":[x,y],"max":[x,y]}` — what the canvas shows; it follows a command that moves the view (ZOOM, PAN, a view restore) |
+//! | [`Facade::set_viewport`] | `{"ok":true,"viewport":[w,h]}` (the canvas's CSS pixel size the engine sizes its pick box by) or `{"ok":false,"error":"…"}` |
+//! | [`Facade::set_cursor`] | `{"ok":true}` or `{"ok":false,"error":"…"}` — where the pointer is, the direction of direct distance entry |
+//! | [`Facade::preview`] | the running command's rubber band: `{"verts","prims","drag"}` (the display list's `verts`/`prims`; `drag` is `null` or `{"handles":[18,…],"matrix":[a,b,c,d,e,f],"clipboard":false}`), plus `error` when refused |
+//! | [`Facade::pick`] | `{"handles":["1A",…]}` — what is under the pointer, nearest first; the selection is untouched; plus `error` when refused |
+//! | [`Facade::snap`] | `{"snap":null}` or `{"snap":{"point":[x,y],"mode":1,"name":"Endpoint","deferred":false}}`; plus `error` when refused |
+//! | [`Facade::click`] | the command-line state plus `output`, `snap` (the object snap the point took, or `null`) and `error` when refused: a pointer click given to the running command |
+//!
+//! # Points and apertures
+//!
+//! [`Facade::preview`], [`Facade::pick`], [`Facade::snap`], [`Facade::click`] and
+//! [`Facade::set_cursor`] take a world point, refused unless both ordinates are finite and within
+//! [`MAX_COORD`]. An aperture is a world distance: `0` means the engine's own box (PICKBOX or
+//! APERTURE pixels at the current view and [`Facade::set_viewport`] size), a negative or
+//! non-finite one is refused, and a larger one than a view may span is clamped.
 //! | [`Facade::open_bytes`] | `{"ok":true,"title","entityCount","warnings"}` or `{"ok":false,"error":"…"}` |
 //! | [`Facade::save_bytes`] | DXF bytes (empty when no drawing is open) |
 //! | [`Facade::digest`] | `{"hash","entities","bounds"}` |
@@ -57,9 +71,10 @@
 
 use cadcraft_color::Rgb;
 use cadcraft_doc::Space;
-use cadcraft_engine::Session;
+use cadcraft_engine::snap::SnapHit;
+use cadcraft_engine::{Input, Session};
 use cadcraft_geom::{Bounds2, Vec2};
-use cadcraft_render::{DPrim, Kind, Options};
+use cadcraft_render::{DPrim, DisplayList, Kind, Options};
 use serde_json::{Value, json};
 
 /// The dark drawing-area colour the interface paints (`ui-egui`'s `Tokens::DARK.canvas`, copied
@@ -88,6 +103,29 @@ const MAX_VIEW_SIZE: f64 = 1e12;
 
 /// A canvas view narrower or shorter than this is refused (the canvas would be unusable).
 const MIN_VIEW_SIZE: f64 = 1e-9;
+
+/// The largest ordinate a pointer call accepts. Past it a double no longer holds whole units, so
+/// no pick, snap or rubber band there means anything; such a point is refused.
+pub const MAX_COORD: f64 = 1e15;
+
+/// The smallest canvas edge [`Facade::set_viewport`] keeps, in CSS pixels (a smaller positive
+/// size is raised to it, so the engine's world-per-pixel never divides by nothing).
+const MIN_VIEWPORT_PX: f64 = 1.0;
+
+/// The largest canvas edge [`Facade::set_viewport`] keeps, in CSS pixels (past any real display;
+/// a larger size is lowered to it).
+const MAX_VIEWPORT_PX: f64 = 32_768.0;
+
+/// Handles a [`Facade::pick`] reply carries: what is under a pointer is a handful of objects, and
+/// a hostile aperture that covers the whole drawing must not serialize all of it every frame.
+const MAX_PICK_HANDLES: usize = 64;
+
+/// Clipboard objects [`Facade::preview`] draws under the pointer while pasting. A larger
+/// clipboard shows no objects (cloning and transforming it every frame would stall the pointer).
+const MAX_PREVIEW_CLIPBOARD: usize = 512;
+
+/// Bytes a dragged handle is estimated to take in a [`Facade::preview`] reply, for the size cap.
+const HANDLE_BYTES: usize = 24;
 
 /// The canvas is assumed about this many pixels tall: chord tolerance is half a pixel and the
 /// minimum dash two pixels at that scale.
@@ -218,16 +256,52 @@ fn prim_color(p: &DPrim) -> (u8, u8, u8) {
     (c.0, c.1, c.2)
 }
 
-/// The command-line state, as the desktop control channel reports it.
+/// The command-line state, as the desktop control channel reports it, with what the pointer needs
+/// of the prompt: `base` (the rubber band's origin, `[x,y]` or `null`), `corner` (the base is a
+/// window's first corner, so ortho does not bend the other), `distance` (a point answers with its
+/// distance from the base) and `deferred` (the prompt resolves deferred tangent and
+/// perpendicular snaps).
 fn cmdline_state(s: &Session) -> Value {
     let p = s.current_prompt();
+    let base = p.as_ref().and_then(|p| p.base).filter(|b| b.is_finite());
     json!({
         "prompt": s.prompt_text(),
         "running": s.running.as_ref().map(|r| r.id.clone()),
         "keywords": p.as_ref().map(|p| p.keywords.clone()).unwrap_or_default(),
         "accept": p.as_ref().map(|p| p.accept),
         "default": p.as_ref().and_then(|p| p.default.clone()),
+        "base": base.map(|b| [b.x, b.y]),
+        "corner": p.as_ref().is_some_and(|p| p.corner),
+        "distance": p.as_ref().is_some_and(|p| p.distance),
+        "deferred": p.as_ref().is_some_and(|p| p.deferred),
     })
+}
+
+/// A world point a pointer call may use: both ordinates finite and within [`MAX_COORD`].
+fn world_point(x: f64, y: f64) -> Result<Vec2, String> {
+    if x.is_finite() && y.is_finite() && x.abs() <= MAX_COORD && y.abs() <= MAX_COORD {
+        Ok(Vec2::new(x, y))
+    } else {
+        Err("the point is not a usable world coordinate".into())
+    }
+}
+
+/// An aperture in world units: `0` takes `engine_default` (the engine's own box at the current
+/// view), a negative or non-finite one is refused, and one larger than a view may span is clamped
+/// to [`MAX_VIEW_SIZE`].
+fn usable_aperture(aperture: f64, engine_default: f64) -> Result<f64, String> {
+    if !aperture.is_finite() || aperture < 0.0 {
+        return Err("the aperture must be a finite world distance, 0 or more".into());
+    }
+    let a = if aperture == 0.0 { engine_default } else { aperture };
+    if a.is_finite() && a > 0.0 { Ok(a.min(MAX_VIEW_SIZE)) } else { Err("the view gives no usable aperture".into()) }
+}
+
+/// One object snap as a reply carries it: the snapped point, the OSMODE bit and its name
+/// (`"Endpoint"`, `"Midpoint"`, `"Center"`…), and whether it is a deferred tangent or
+/// perpendicular (its point is provisional until the line's other end is known).
+fn snap_json(hit: &SnapHit) -> Value {
+    json!({"point": [finite(hit.point.x), finite(hit.point.y)], "mode": hit.mode, "name": hit.name, "deferred": hit.deferred.is_some()})
 }
 
 /// The facade a JavaScript interface calls: one session, one view, JSON replies.
@@ -315,6 +389,11 @@ impl Facade {
     /// the `output` lines the log gained since it held `before` lines, and `error` when the call
     /// was refused.
     fn cmdline_reply(&mut self, before: usize, error: Option<String>) -> String {
+        self.cmdline_value(before, error).to_string()
+    }
+
+    /// [`Facade::cmdline_reply`] before it is written out, for a reply that adds a field.
+    fn cmdline_value(&mut self, before: usize, error: Option<String>) -> Value {
         self.refresh();
         let mut v = cmdline_state(&self.session);
         let out: Vec<String> = self.session.log.iter().skip(before).take(MAX_OUTPUT).cloned().collect();
@@ -324,7 +403,7 @@ impl Facade {
                 o.insert("error".into(), json!(e));
             }
         }
-        v.to_string()
+        v
     }
 
     /// Cancel the running command, exactly as Escape does ([`Session::cancel`]): the command
@@ -476,37 +555,10 @@ impl Facade {
         let revision = st.revision;
         let window = expand_view(self.view, margin);
         let list = cadcraft_render::build(&st.doc, &st.space, &self.build_options_for(window));
-        let mut verts: Vec<Value> = Vec::new();
-        let mut prims: Vec<Value> = Vec::new();
-        let mut estimate: usize = 0;
-        for p in &list.prims {
-            let pts = list.points(p);
-            if pts.is_empty() || !self.prim_visible(p, pts, window) {
-                continue;
-            }
-            let points: Vec<Vec2> = match p.kind {
-                Kind::Infinite { ray } => infinite_points(pts, window, ray).to_vec(),
-                _ => pts.to_vec(),
-            };
-            estimate = estimate.saturating_add(points.len().saturating_mul(VERTEX_BYTES)).saturating_add(PRIM_BYTES);
-            if estimate > MAX_DISPLAY_BYTES {
-                return error_only("the drawing is too large for the display list");
-            }
-            let start = verts.len();
-            for q in &points {
-                verts.push(json!([finite(q.x), finite(q.y)]));
-            }
-            let (r, g, b) = prim_color(p);
-            prims.push(json!({
-                "kind": kind_name(p.kind),
-                "start": start,
-                "len": points.len(),
-                "color": [r, g, b],
-                "lw": p.lw,
-                "alpha": p.alpha(),
-                "handle": p.handle.0,
-            }));
-        }
+        let (verts, prims) = match self.list_json(&list, window, 0) {
+            Ok(parts) => parts,
+            Err(e) => return error_only(e),
+        };
         let bounds = if list.bounds.is_empty() {
             json!([0.0, 0.0, 0.0, 0.0])
         } else {
@@ -544,6 +596,232 @@ impl Facade {
     /// The view the canvas is showing: `{"min":[x,y],"max":[x,y]}`.
     pub fn view(&self) -> String {
         view_json(self.view).to_string()
+    }
+
+    /// The `verts` and `prims` of a display list as the module documentation describes them,
+    /// culled to `window` (an infinite line is cut to it). `reserved` is what the reply already
+    /// holds, in bytes; past [`MAX_DISPLAY_BYTES`] the list is refused rather than built.
+    fn list_json(&self, list: &DisplayList, window: Bounds2, reserved: usize) -> Result<(Vec<Value>, Vec<Value>), String> {
+        let mut verts: Vec<Value> = Vec::new();
+        let mut prims: Vec<Value> = Vec::new();
+        let mut estimate = reserved;
+        for p in &list.prims {
+            let pts = list.points(p);
+            if pts.is_empty() || !self.prim_visible(p, pts, window) {
+                continue;
+            }
+            let cut: [Vec2; 2];
+            let points: &[Vec2] = match p.kind {
+                Kind::Infinite { ray } => {
+                    cut = infinite_points(pts, window, ray);
+                    &cut
+                }
+                _ => pts,
+            };
+            estimate = estimate.saturating_add(points.len().saturating_mul(VERTEX_BYTES)).saturating_add(PRIM_BYTES);
+            if estimate > MAX_DISPLAY_BYTES {
+                return Err("the drawing is too large for the display list".into());
+            }
+            let start = verts.len();
+            verts.extend(points.iter().map(|q| json!([finite(q.x), finite(q.y)])));
+            let (r, g, b) = prim_color(p);
+            prims.push(json!({
+                "kind": kind_name(p.kind),
+                "start": start,
+                "len": points.len(),
+                "color": [r, g, b],
+                "lw": p.lw,
+                "alpha": p.alpha(),
+                "handle": p.handle.0,
+            }));
+        }
+        Ok((verts, prims))
+    }
+
+    /// Tell the engine the canvas's size in CSS pixels, which is what turns PICKBOX and APERTURE
+    /// (pixels) into world distances and gives ZOOM its aspect. Call it when the canvas is laid
+    /// out or resized. Replies `{"ok":true,"viewport":[w,h]}` with the size kept (each edge
+    /// brought into `1..=32768`), or an error for a size that is not finite or not positive (a
+    /// hidden canvas measures 0: the last real size stays).
+    pub fn set_viewport(&mut self, width: f64, height: f64) -> String {
+        if !(width.is_finite() && height.is_finite()) {
+            return error_reply("the canvas size is not finite");
+        }
+        if width <= 0.0 || height <= 0.0 {
+            return error_reply("the canvas size must be positive");
+        }
+        let size = (width.clamp(MIN_VIEWPORT_PX, MAX_VIEWPORT_PX), height.clamp(MIN_VIEWPORT_PX, MAX_VIEWPORT_PX));
+        self.session.viewport_px = size;
+        json!({"ok": true, "viewport": [size.0, size.1]}).to_string()
+    }
+
+    /// Tell the engine where the pointer is, in world coordinates. A distance typed alone at a
+    /// point prompt (`5`) goes that far from the last point towards it (direct distance entry).
+    /// Replies `{"ok":true}`, or an error for a point that is not usable (the cursor stays).
+    pub fn set_cursor(&mut self, x: f64, y: f64) -> String {
+        match world_point(x, y) {
+            Ok(p) => {
+                self.session.cursor = p;
+                json!({"ok": true}).to_string()
+            }
+            Err(e) => error_reply(e),
+        }
+    }
+
+    /// The running command's rubber band with the pointer at a world point, as the display
+    /// list's `verts` and `prims` (the module documentation; the handle of rubber-band geometry
+    /// is 0), built for the current view from the preview's own few objects, never the drawing.
+    ///
+    /// `drag` is `null`, or says the preview is also existing objects under one transform (MOVE,
+    /// COPY, ROTATE, SCALE, MIRROR): `{"handles":[18,…],"matrix":[a,b,c,d,e,f],"clipboard":false}`.
+    /// `handles` are the display list's `prims[].handle` numbers and `matrix` maps a world point
+    /// `(x, y)` to `(a·x + c·y + e, b·x + d·y + f)` (a canvas `transform(a,b,c,d,e,f)`), so the
+    /// canvas redraws primitives it already holds instead of receiving their copies each frame.
+    /// While pasting (`clipboard` true) the objects are not in the drawing yet, so they arrive in
+    /// `prims`, already placed.
+    ///
+    /// With no command running, or one that draws nothing, `verts` and `prims` are empty. A
+    /// point that is not usable, or a preview past [`MAX_DISPLAY_BYTES`], replies the empty
+    /// preview with `error`. Nothing changes in the session.
+    pub fn preview(&self, x: f64, y: f64) -> String {
+        match self.preview_value(x, y) {
+            Ok(v) => v.to_string(),
+            Err(e) => json!({"verts": [], "prims": [], "drag": null, "error": e}).to_string(),
+        }
+    }
+
+    fn preview_value(&self, x: f64, y: f64) -> Result<Value, String> {
+        let cursor = world_point(x, y)?;
+        let empty = || json!({"verts": [], "prims": [], "drag": null});
+        let Ok(st) = self.session.state() else { return Ok(empty()) };
+        let (entities, drag) = match self.session.drag(cursor) {
+            Some((drag, mut extra)) => {
+                if drag.clipboard && self.session.clipboard.len() <= MAX_PREVIEW_CLIPBOARD {
+                    extra.extend(self.session.clipboard.iter().map(|e| {
+                        let mut placed = e.clone();
+                        placed.kind.transform(&drag.matrix);
+                        placed
+                    }));
+                }
+                (extra, Some(drag))
+            }
+            None => (self.session.preview(cursor), None),
+        };
+        // A transform that is not finite (a degenerate reference length) cannot be drawn or
+        // carried by JSON: the rubber band shows without the dragged objects.
+        let drag = drag.filter(|d| {
+            let m = d.matrix;
+            [m.a, m.b, m.c, m.d, m.e, m.f].iter().all(|v| v.is_finite())
+        });
+        if entities.is_empty() && drag.is_none() {
+            return Ok(empty());
+        }
+        let reserved = drag.as_ref().map_or(0, |d| d.handles.len().saturating_mul(HANDLE_BYTES));
+        let list = cadcraft_render::build_entities(&st.doc, &entities, &self.build_options_for(self.view));
+        let (verts, prims) = self.list_json(&list, self.view, reserved)?;
+        let drag = drag.map(|d| {
+            let m = d.matrix;
+            json!({
+                "handles": d.handles.iter().map(|h| h.0).collect::<Vec<u64>>(),
+                "matrix": [m.a, m.b, m.c, m.d, m.e, m.f],
+                "clipboard": d.clipboard,
+            })
+        });
+        Ok(json!({"verts": verts, "prims": prims, "drag": drag}))
+    }
+
+    /// What is under the pointer at a world point, nearest first (the first is what a click
+    /// there selects): `{"handles":["1A",…]}`, the handles as [`Facade::selection`] writes them
+    /// (a hostile aperture's list is cut short). It only looks: the selection, the undo stack and the drawing are untouched,
+    /// whatever command is running. `aperture` is the reach in world units (`0`: the engine's own
+    /// pick box, PICKBOX pixels at the current view and canvas size). No drawing, or nothing
+    /// there, replies no handles; a point or aperture that is not usable replies none with
+    /// `error`.
+    pub fn pick(&self, x: f64, y: f64, aperture: f64) -> String {
+        match self.pick_handles(x, y, aperture) {
+            Ok(handles) => json!({"handles": handles}).to_string(),
+            Err(e) => json!({"handles": [], "error": e}).to_string(),
+        }
+    }
+
+    fn pick_handles(&self, x: f64, y: f64, aperture: f64) -> Result<Vec<String>, String> {
+        let p = world_point(x, y)?;
+        let s = &self.session;
+        let reach = usable_aperture(aperture, s.pixel_size() * s.settings.pickbox.max(1.0) * 1.5)?;
+        let Ok(st) = s.state() else { return Ok(Vec::new()) };
+        let hits = cadcraft_engine::select::pick_all(&st.doc, &st.edit_space(), p, reach);
+        Ok(hits.into_iter().take(MAX_PICK_HANDLES).map(|h| h.hex()).collect())
+    }
+
+    /// The object snap the pointer takes at a world point, by the engine's own `osnap` with its
+    /// running snap modes (OSMODE, OSNAPHATCH) and the prompt's base point (which tangent and
+    /// perpendicular need): `{"snap":{"point":[x,y],"mode":1,"name":"Endpoint","deferred":false}}`,
+    /// or `{"snap":null}` when nothing snaps, object snap is off, there is no drawing, or the
+    /// running command's prompt is not asking for a point. `mode` is the OSMODE bit. `aperture`
+    /// is the reach in world units (`0`: the engine's own, APERTURE pixels at the current view and
+    /// canvas size). A point or aperture that is not usable replies `null` with `error`. Nothing
+    /// changes in the session; [`Facade::click`] gives the same point to the command.
+    pub fn snap(&self, x: f64, y: f64, aperture: f64) -> String {
+        match self.snap_hit(x, y, aperture) {
+            Ok(hit) => json!({"snap": hit.as_ref().map(snap_json)}).to_string(),
+            Err(e) => json!({"snap": null, "error": e}).to_string(),
+        }
+    }
+
+    /// The one snap query [`Facade::snap`] reports and [`Facade::click`] feeds, so the marker a
+    /// person sees is the point the command gets.
+    fn snap_hit(&self, x: f64, y: f64, aperture: f64) -> Result<Option<SnapHit>, String> {
+        let p = world_point(x, y)?;
+        let s = &self.session;
+        let reach = usable_aperture(aperture, s.pixel_size() * s.settings.aperture.max(1.0))?;
+        let Ok(st) = s.state() else { return Ok(None) };
+        let prompt = s.current_prompt();
+        // A prompt that selects objects, or takes only typed input, does not snap its clicks.
+        if prompt.as_ref().is_some_and(|p| !p.accept.point || p.picks_objects()) {
+            return Ok(None);
+        }
+        let hatch = if s.settings.osnaphatch { cadcraft_engine::snap::mode::HATCH } else { 0 };
+        let base = prompt.as_ref().and_then(|p| p.base);
+        let deferred = prompt.as_ref().is_some_and(|p| p.deferred);
+        Ok(cadcraft_engine::snap::osnap(&st.doc, &st.edit_space(), p, reach, s.settings.osmode | hatch, base, deferred))
+    }
+
+    /// A pointer click at a world point, given to the running command as the desktop gives it:
+    /// snapped as [`Facade::snap`] reports (through [`Session::input_snapped`], which is what
+    /// carries a deferred tangent or perpendicular and a layout viewport's own coordinates:
+    /// typed coordinates cannot), else the point itself. At "Select objects" the point picks or
+    /// opens a window, as a click does. The engine's cursor moves there too. With no command
+    /// running the click does nothing (selecting at rest is the `select` command).
+    ///
+    /// The reply has the shape `cmdline` replies, plus `snap`: the object snap the point took, or
+    /// `null`. A point or aperture that is not usable is refused with `error` and nothing is fed.
+    pub fn click(&mut self, x: f64, y: f64, aperture: f64) -> String {
+        let before = self.session.log.len();
+        let mut error = None;
+        let mut snapped = Value::Null;
+        match (world_point(x, y), self.snap_hit(x, y, aperture)) {
+            (Ok(p), Ok(hit)) => {
+                self.session.cursor = hit.map_or(p, |h| h.point);
+                let fed = match hit {
+                    Some(h) => {
+                        snapped = snap_json(&h);
+                        self.session.input_snapped(h)
+                    }
+                    None => self.session.input(Input::Point(p)),
+                };
+                if let Err(e) = fed {
+                    let m = e.to_string();
+                    self.session.echo(m.clone());
+                    error = Some(m);
+                }
+            }
+            (Err(e), _) | (_, Err(e)) => error = Some(e),
+        }
+        let mut v = self.cmdline_value(before, error);
+        if let Some(o) = v.as_object_mut() {
+            o.insert("snap".into(), snapped);
+        }
+        v.to_string()
     }
 
     /// Load the sample drawing into the running session (the browser's File ▸ Open Sample
@@ -830,6 +1108,36 @@ mod bindings {
         #[wasm_bindgen(js_name = view)]
         pub fn view(&self) -> String {
             self.0.view()
+        }
+
+        #[wasm_bindgen(js_name = setViewport)]
+        pub fn set_viewport(&mut self, width: f64, height: f64) -> String {
+            self.0.set_viewport(width, height)
+        }
+
+        #[wasm_bindgen(js_name = setCursor)]
+        pub fn set_cursor(&mut self, x: f64, y: f64) -> String {
+            self.0.set_cursor(x, y)
+        }
+
+        #[wasm_bindgen(js_name = preview)]
+        pub fn preview(&self, x: f64, y: f64) -> String {
+            self.0.preview(x, y)
+        }
+
+        #[wasm_bindgen(js_name = pick)]
+        pub fn pick(&self, x: f64, y: f64, aperture: f64) -> String {
+            self.0.pick(x, y, aperture)
+        }
+
+        #[wasm_bindgen(js_name = snap)]
+        pub fn snap(&self, x: f64, y: f64, aperture: f64) -> String {
+            self.0.snap(x, y, aperture)
+        }
+
+        #[wasm_bindgen(js_name = click)]
+        pub fn click(&mut self, x: f64, y: f64, aperture: f64) -> String {
+            self.0.click(x, y, aperture)
         }
 
         #[wasm_bindgen(js_name = openBytes)]
@@ -1236,5 +1544,389 @@ mod tests {
         let text = r["text"].as_str().unwrap_or_default();
         assert!(!text.contains("NaN") && !text.contains("inf") && !text.contains("Inf"), "{r}");
         assert!(text.starts_with("0.0000"), "{r}");
+    }
+
+    /// A facade on an empty drawing holding one line from (0,0) to (10,0), viewed 20 units tall
+    /// on a 1000 px canvas: 0.02 world units per pixel.
+    fn line_facade() -> Facade {
+        let mut f = Facade::new();
+        assert_eq!(parse(&f.execute("line", r#"{"points":[[0,0],[10,0]]}"#))["ok"], json!(true));
+        assert_eq!(parse(&f.set_view(-5.0, -10.0, 15.0, 10.0))["ok"], json!(true));
+        assert_eq!(parse(&f.set_viewport(1000.0, 1000.0))["ok"], json!(true));
+        f
+    }
+
+    /// Everything a read-only call must leave alone.
+    fn fingerprint(f: &Facade) -> (String, String, String, String) {
+        (f.digest(), f.state(), f.selection(), f.prompt())
+    }
+
+    fn point_of(v: &Value) -> (f64, f64) {
+        (v[0].as_f64().unwrap(), v[1].as_f64().unwrap())
+    }
+
+    /// Numbers no pointer produces: every pointer call must refuse or tame them.
+    const HOSTILE: [f64; 8] = [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 1e308, -1e308, f64::MAX, f64::MIN, 1e300];
+
+    #[test]
+    fn the_prompt_state_carries_the_base_corner_and_distance() {
+        let mut f = Facade::new();
+        let idle = parse(&f.prompt());
+        assert!(idle["base"].is_null(), "{idle}");
+        assert_eq!((&idle["corner"], &idle["distance"], &idle["deferred"]), (&json!(false), &json!(false), &json!(false)), "{idle}");
+        let first = parse(&f.start("line"));
+        assert!(first["base"].is_null(), "the first point has no base: {first}");
+        let next = parse(&f.cmdline("2,3"));
+        assert_eq!(next["base"], json!([2.0, 3.0]), "the rubber band starts at the last point: {next}");
+        assert_eq!(next["corner"], json!(false), "{next}");
+        f.cancel();
+        f.start("circle");
+        let radius = parse(&f.cmdline("1,1"));
+        assert_eq!(radius["base"], json!([1.0, 1.0]), "{radius}");
+        assert_eq!(radius["distance"], json!(true), "a radius is a distance from the centre: {radius}");
+        f.cancel();
+        f.start("rectang");
+        let other = parse(&f.cmdline("4,5"));
+        assert_eq!(other["base"], json!([4.0, 5.0]), "{other}");
+        assert_eq!(other["corner"], json!(true), "the base is a rectangle's first corner: {other}");
+        // `prompt()` reports the same fields as the `cmdline` reply.
+        assert_eq!(parse(&f.prompt())["corner"], json!(true));
+    }
+
+    #[test]
+    fn preview_is_the_rubber_band_and_changes_nothing() {
+        let mut f = line_facade();
+        let idle = parse(&f.preview(1.0, 1.0));
+        assert_eq!(idle, json!({"verts": [], "prims": [], "drag": null}), "no command, no preview");
+        f.start("line");
+        assert_eq!(parse(&f.preview(1.0, 1.0))["prims"], json!([]), "no first point yet, no band");
+        f.cmdline("0,5");
+        let before = fingerprint(&f);
+        let band = parse(&f.preview(4.0, 7.0));
+        assert_eq!(fingerprint(&f), before, "a preview only looks");
+        let verts: Vec<(f64, f64)> = band["verts"].as_array().unwrap().iter().map(point_of).collect();
+        assert!(verts.contains(&(0.0, 5.0)) && verts.contains(&(4.0, 7.0)), "the band runs from the base to the pointer: {band}");
+        let prims = band["prims"].as_array().unwrap();
+        assert!(!prims.is_empty(), "{band}");
+        for p in prims {
+            assert!(matches!(p["kind"].as_str(), Some("polyline" | "tris" | "point" | "image")), "the display list's own shape: {p}");
+            let (start, len) = (p["start"].as_u64().unwrap(), p["len"].as_u64().unwrap());
+            assert!(start + len <= verts.len() as u64, "the range is inside verts: {p}");
+            assert_eq!(p["handle"], json!(0), "rubber-band geometry has no handle: {p}");
+        }
+        assert!(band["drag"].is_null(), "{band}");
+        // The band follows the pointer.
+        assert_ne!(parse(&f.preview(-3.0, 2.0)), band);
+        // A point far outside the view still answers a well-formed preview.
+        assert!(parse(&f.preview(1.0e9, 1.0e9))["prims"].is_array());
+        assert_eq!(entity_count(&f), 1, "nothing was drawn");
+    }
+
+    #[test]
+    fn preview_of_a_move_is_a_transform_of_the_objects() {
+        let mut f = line_facade();
+        let handle = parse(&f.execute("select", r#"{"at":[5,0],"aperture":0.5}"#))["result"]["handles"][0].as_str().unwrap().to_string();
+        f.start("move");
+        let asked = parse(&f.cmdline("0,0"));
+        assert_eq!(asked["running"], json!("move"), "{asked}");
+        let before = fingerprint(&f);
+        let p = parse(&f.preview(3.0, 4.0));
+        assert_eq!(fingerprint(&f), before, "a preview only looks");
+        let drag = &p["drag"];
+        assert_eq!(drag["matrix"], json!([1.0, 0.0, 0.0, 1.0, 3.0, 4.0]), "a translation by the pointer's offset: {p}");
+        assert_eq!(drag["clipboard"], json!(false), "{p}");
+        let dragged: Vec<String> = drag["handles"].as_array().unwrap().iter().map(|h| format!("{:X}", h.as_u64().unwrap())).collect();
+        assert_eq!(dragged, [handle], "the moved object, by its display-list handle: {p}");
+        // The handles are the ones the display list's primitives carry.
+        let shown = parse(&f.display(0.0));
+        let number = drag["handles"][0].as_u64().unwrap();
+        assert!(shown["prims"].as_array().unwrap().iter().any(|q| q["handle"].as_u64() == Some(number)), "{shown}");
+        // The base-to-pointer line comes as ordinary geometry.
+        assert!(!p["prims"].as_array().unwrap().is_empty(), "{p}");
+    }
+
+    #[test]
+    fn pick_finds_what_is_under_the_pointer_and_leaves_the_selection_alone() {
+        let mut f = line_facade();
+        assert_eq!(parse(&f.execute("circle", r#"{"center":[5,0],"radius":0.01}"#))["ok"], json!(true));
+        let undo_depth = parse(&f.state())["undoDepth"].clone();
+        let before = fingerprint(&f);
+        let hit = parse(&f.pick(5.0, 0.1, 0.5));
+        let handles = hit["handles"].as_array().unwrap();
+        assert_eq!(handles.len(), 2, "the line and the small circle on it: {hit}");
+        assert!(hit.get("error").is_none(), "{hit}");
+        assert!(parse(&f.pick(5.0, 5.0, 0.5))["handles"].as_array().unwrap().is_empty(), "nothing there");
+        // Aperture 0 is the engine's own pick box: 3 px * 1.5 at 0.02 units per pixel = 0.09.
+        assert_eq!(parse(&f.pick(2.0, 0.05, 0.0))["handles"].as_array().unwrap().len(), 1);
+        assert!(parse(&f.pick(2.0, 0.2, 0.0))["handles"].as_array().unwrap().is_empty(), "outside the pick box");
+        assert_eq!(fingerprint(&f), before, "a pick only looks");
+        assert_eq!(parse(&f.selection())["count"], json!(0), "the selection is untouched");
+        assert_eq!(parse(&f.state())["undoDepth"], undo_depth, "and so is the undo stack");
+        // The first handle is what a click there selects, in the selection's own spelling.
+        let selected = parse(&f.execute("select", r#"{"at":[5,0.1],"aperture":0.5}"#));
+        assert_eq!(selected["result"]["handles"][0], handles[0], "{selected}");
+        // With a selection made, and with a command asking for objects, a pick still only looks.
+        let chosen = f.selection();
+        f.pick(2.0, 0.0, 0.5);
+        assert_eq!(f.selection(), chosen);
+        f.cancel();
+        f.start("erase");
+        let asking = fingerprint(&f);
+        assert_eq!(parse(&f.pick(2.0, 0.0, 0.5))["handles"].as_array().unwrap().len(), 1);
+        assert_eq!(fingerprint(&f), asking, "nothing was picked into the command");
+        // No drawing: nothing, quietly.
+        assert_eq!(parse(&empty_facade().pick(0.0, 0.0, 1.0)), json!({"handles": []}));
+    }
+
+    #[test]
+    fn snap_reports_the_object_snap_and_its_mode() {
+        let mut f = line_facade();
+        let before = fingerprint(&f);
+        let end = parse(&f.snap(0.1, 0.1, 0.5));
+        assert_eq!(end["snap"]["point"], json!([0.0, 0.0]), "{end}");
+        assert_eq!(end["snap"]["name"], json!("Endpoint"), "{end}");
+        assert_eq!(end["snap"]["mode"], json!(cadcraft_engine::snap::mode::END), "{end}");
+        assert_eq!(end["snap"]["deferred"], json!(false), "{end}");
+        assert_eq!(parse(&f.snap(5.0, 5.0, 0.5)), json!({"snap": null}), "nothing to snap to");
+        // Aperture 0 is the engine's own: 10 px at 0.02 units per pixel = 0.2.
+        assert_eq!(parse(&f.snap(10.1, 0.1, 0.0))["snap"]["point"], json!([10.0, 0.0]));
+        assert!(parse(&f.snap(10.5, 0.0, 0.0))["snap"].is_null(), "outside the aperture");
+        assert_eq!(fingerprint(&f), before, "a snap query only looks");
+        // The running modes decide: with Midpoint alone the end does not snap and the middle does.
+        f.session.settings.osmode = cadcraft_engine::snap::mode::MID;
+        assert!(parse(&f.snap(0.1, 0.1, 0.5))["snap"].is_null());
+        let mid = parse(&f.snap(5.1, 0.1, 0.5));
+        assert_eq!((&mid["snap"]["point"], &mid["snap"]["name"]), (&json!([5.0, 0.0]), &json!("Midpoint")), "{mid}");
+        // Object snap off (F3, or no modes at all): null.
+        f.session.settings.osmode |= cadcraft_engine::snap::mode::OFF;
+        assert_eq!(parse(&f.snap(5.1, 0.1, 0.5)), json!({"snap": null}));
+        f.session.settings.osmode = 0;
+        assert_eq!(parse(&f.snap(5.1, 0.1, 0.5)), json!({"snap": null}));
+        // A prompt that selects objects does not snap its clicks.
+        f.session.settings.osmode = cadcraft_engine::snap::mode::END;
+        f.start("erase");
+        assert_eq!(parse(&f.snap(0.1, 0.1, 0.5)), json!({"snap": null}));
+        assert_eq!(parse(&empty_facade().snap(0.0, 0.0, 1.0)), json!({"snap": null}));
+    }
+
+    #[test]
+    fn click_feeds_the_snapped_point_to_the_command() {
+        let mut f = line_facade();
+        f.start("line");
+        let first = parse(&f.click(9.9, 0.1, 0.5));
+        assert_eq!(first["snap"]["name"], json!("Endpoint"), "{first}");
+        assert_eq!(first["base"], json!([10.0, 0.0]), "the command took the snapped point, not the raw one: {first}");
+        assert_eq!(first["running"], json!("line"), "{first}");
+        let second = parse(&f.click(10.0, 6.0, 0.5));
+        assert!(second["snap"].is_null(), "nothing to snap to there: {second}");
+        assert_eq!(second["base"], json!([10.0, 6.0]), "{second}");
+        assert!(second.get("error").is_none(), "{second}");
+        f.cmdline("");
+        assert_eq!(entity_count(&f), 2, "the two clicks drew a line");
+        let [_, _, x1, y1] = bounds(&mut f);
+        assert_eq!((x1, y1), (10.0, 6.0), "from the snapped end to the clicked point");
+        // At "Select objects" a click picks, with the engine's own pick box.
+        f.start("erase");
+        let picked = parse(&f.click(10.0, 3.0, 0.0));
+        assert!(picked["snap"].is_null(), "{picked}");
+        f.cmdline("");
+        assert_eq!(entity_count(&f), 1, "the clicked line was erased");
+        // With no command running a click does nothing at all.
+        let before = fingerprint(&f);
+        let idle = parse(&f.click(5.0, 0.0, 0.5));
+        assert!(idle["running"].is_null() && idle.get("error").is_none(), "{idle}");
+        assert_eq!(fingerprint(&f), before);
+    }
+
+    #[test]
+    fn click_carries_a_deferred_tangent_typed_coordinates_cannot() {
+        let mut f = Facade::new();
+        assert_eq!(parse(&f.execute("circle", r#"{"center":[0,0],"radius":5}"#))["ok"], json!(true));
+        assert_eq!(parse(&f.set_view(-10.0, -10.0, 10.0, 10.0))["ok"], json!(true));
+        f.session.settings.osmode = cadcraft_engine::snap::mode::TAN;
+        let asked = parse(&f.start("line"));
+        assert_eq!(asked["deferred"], json!(true), "LINE's first point resolves deferred snaps: {asked}");
+        let hover = parse(&f.snap(5.1, 0.0, 0.5));
+        assert_eq!((&hover["snap"]["name"], &hover["snap"]["deferred"]), (&json!("Deferred Tangent"), &json!(true)), "{hover}");
+        assert_eq!(hover["snap"]["mode"], json!(cadcraft_engine::snap::mode::TAN), "{hover}");
+        let first = parse(&f.click(5.1, 0.0, 0.5));
+        assert_eq!(first["snap"]["deferred"], json!(true), "{first}");
+        f.session.settings.osmode = 0;
+        f.click(0.0, 10.0, 0.5);
+        f.cmdline("");
+        assert_eq!(entity_count(&f), 2, "the line was drawn");
+        // Tangent from (0,10) to the circle of radius 5 touches it at y = 2.5, x = 5·√3/2; the
+        // picked point (5,0) is only where the circle was touched.
+        let [_, y0, x1, _] = bounds(&mut f);
+        assert!(y0 >= -5.01, "the line does not start at the picked point's far side: {y0}");
+        let shown = parse(&f.display(0.0));
+        let verts: Vec<(f64, f64)> = shown["verts"].as_array().unwrap().iter().map(point_of).collect();
+        let tangent = (5.0 * 3.0_f64.sqrt() / 2.0, 2.5);
+        assert!(
+            verts.iter().any(|v| (v.0 - tangent.0).abs() < 1e-6 && (v.1 - tangent.1).abs() < 1e-6),
+            "the tangent point is an end: {x1} {verts:?}"
+        );
+    }
+
+    #[test]
+    fn set_viewport_sizes_the_engine_pick_box() {
+        let mut f = Facade::new();
+        assert_eq!(parse(&f.set_view(0.0, 0.0, 20.0, 20.0))["ok"], json!(true));
+        assert_eq!(f.session.viewport_px, (1200.0, 800.0), "the engine's own default until the canvas says");
+        let r = parse(&f.set_viewport(1600.0, 400.0));
+        assert_eq!(r, json!({"ok": true, "viewport": [1600.0, 400.0]}));
+        assert_eq!(f.session.viewport_px, (1600.0, 400.0));
+        assert_eq!(f.session.pixel_size(), 20.0 / 400.0, "world units per pixel follow the canvas height");
+        // Clamped into a sane range, never zero.
+        assert_eq!(parse(&f.set_viewport(0.25, 1.0e9))["viewport"], json!([MIN_VIEWPORT_PX, MAX_VIEWPORT_PX]));
+        // A hidden canvas (0 x 0), a negative or a non-finite size is refused and changes nothing.
+        f.set_viewport(800.0, 600.0);
+        for (w, h) in [(0.0, 0.0), (0.0, 600.0), (800.0, -1.0), (f64::NAN, 600.0), (800.0, f64::INFINITY), (f64::NEG_INFINITY, f64::NAN)] {
+            let r = parse(&f.set_viewport(w, h));
+            assert_eq!(r["ok"], json!(false), "{w} x {h}: {r}");
+            assert!(r["error"].is_string(), "{r}");
+            assert_eq!(f.session.viewport_px, (800.0, 600.0), "{w} x {h}");
+        }
+        assert!(f.session.pixel_size().is_finite() && f.session.pixel_size() > 0.0);
+    }
+
+    #[test]
+    fn set_cursor_gives_direct_distance_entry_its_direction() {
+        let mut f = Facade::new();
+        f.start("line");
+        f.cmdline("1,1");
+        assert_eq!(parse(&f.set_cursor(1.0, 9.0)), json!({"ok": true}));
+        let r = parse(&f.cmdline("5"));
+        assert!(r.get("error").is_none(), "{r}");
+        assert_eq!(r["base"], json!([1.0, 6.0]), "5 units from (1,1) towards the pointer: {r}");
+        // A hostile cursor is refused and the last good one stays.
+        for (x, y) in [(f64::NAN, 0.0), (0.0, f64::INFINITY), (1.0e308, 0.0), (0.0, -1.0e300)] {
+            let r = parse(&f.set_cursor(x, y));
+            assert_eq!(r["ok"], json!(false), "{x},{y}: {r}");
+            assert_eq!(f.session.cursor, Vec2::new(1.0, 9.0), "{x},{y}");
+        }
+    }
+
+    #[test]
+    fn hostile_pointer_numbers_never_panic() {
+        // In every state a pointer can meet: no drawing, at rest, a point prompt, a selection
+        // prompt, a drag.
+        let mut at_point = Facade::sample();
+        at_point.start("line");
+        at_point.cmdline("0,0");
+        let mut at_select = Facade::sample();
+        at_select.start("erase");
+        let mut dragging = line_facade();
+        dragging.execute("select", r#"{"at":[5,0],"aperture":0.5}"#);
+        dragging.start("scale");
+        dragging.cmdline("0,0");
+        for mut f in [empty_facade(), Facade::sample(), at_point, at_select, dragging] {
+            let before = fingerprint(&f);
+            for &a in &HOSTILE {
+                for &b in &[0.0, 1.0, a] {
+                    for (x, y) in [(a, b), (b, a)] {
+                        let p = parse(&f.preview(x, y));
+                        assert!(p["prims"].as_array().is_some_and(Vec::is_empty) && p["error"].is_string(), "preview {x},{y}: {p}");
+                        let k = parse(&f.pick(x, y, 1.0));
+                        assert!(k["handles"].as_array().is_some_and(Vec::is_empty) && k["error"].is_string(), "pick {x},{y}: {k}");
+                        let s = parse(&f.snap(x, y, 1.0));
+                        assert!(s["snap"].is_null() && s["error"].is_string(), "snap {x},{y}: {s}");
+                        assert_eq!(parse(&f.set_cursor(x, y))["ok"], json!(false), "set_cursor {x},{y}");
+                        assert_eq!(fingerprint(&f), before, "a refused read changed something: {x},{y}");
+                        let c = parse(&f.click(x, y, 1.0));
+                        assert!(c["error"].is_string() && c["snap"].is_null(), "click {x},{y}: {c}");
+                        assert_eq!(f.digest(), before.0, "a refused click changed the drawing: {x},{y}");
+                    }
+                }
+                // A hostile aperture on a good point: refused (not finite, negative) or clamped
+                // (huge), and a clamped pick stays a short list.
+                for aperture in [a, -1.0, -0.0, -f64::MIN_POSITIVE] {
+                    let k = parse(&f.pick(1.0, 1.0, aperture));
+                    assert!(k["handles"].as_array().is_some_and(|h| h.len() <= MAX_PICK_HANDLES), "pick aperture {aperture}: {k}");
+                    let s = parse(&f.snap(1.0, 1.0, aperture));
+                    assert!(s.get("snap").is_some(), "snap aperture {aperture}: {s}");
+                    if !aperture.is_finite() || aperture < 0.0 {
+                        assert!(k["error"].is_string() && s["error"].is_string(), "aperture {aperture}: {k} {s}");
+                        let c = parse(&f.click(1.0, 1.0, aperture));
+                        assert!(c["error"].is_string(), "click aperture {aperture}: {c}");
+                    }
+                }
+                assert_eq!(parse(&f.set_viewport(a, a))["ok"].as_bool(), Some(a.is_finite() && a > 0.0), "set_viewport {a}");
+                let size = f.session.viewport_px;
+                assert!(size.0 >= MIN_VIEWPORT_PX && size.0 <= MAX_VIEWPORT_PX && size.1 >= MIN_VIEWPORT_PX && size.1 <= MAX_VIEWPORT_PX, "{size:?}");
+            }
+            // The facade still answers after all of it.
+            assert!(parse(&f.preview(1.0, 1.0))["prims"].is_array());
+            assert!(parse(&f.pick(1.0, 1.0, 0.0)).get("error").is_none());
+            assert!(parse(&f.snap(1.0, 1.0, 0.0)).get("error").is_none());
+        }
+    }
+
+    /// What one pointer move costs on the sample drawing, printed in microseconds:
+    /// `cargo test -p cadcraft-wasm --release pointer_calls_are_cheap -- --nocapture`.
+    /// `preview`, `pick` and `snap` run once per animation frame, so each must stay a small part
+    /// of a 16 ms frame; the bound asserted here is loose enough for a debug build on a busy
+    /// machine and still catches a preview that rebuilds the whole drawing.
+    #[test]
+    fn pointer_calls_are_cheap() {
+        const ROUNDS: u32 = 200;
+        let mut f = Facade::sample();
+        assert_eq!(parse(&f.set_viewport(1280.0, 800.0))["ok"], json!(true));
+        let view = parse(&f.view());
+        let ((x0, y0), (x1, y1)) = (point_of(&view["min"]), point_of(&view["max"]));
+        // Pointer positions sweeping the view's diagonal, so the calls meet real geometry.
+        let at = |i: u32| {
+            let t = f64::from(i % ROUNDS) / f64::from(ROUNDS);
+            (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)
+        };
+        let time = |label: &str, call: &mut dyn FnMut(f64, f64) -> usize| {
+            let started = std::time::Instant::now();
+            let mut bytes = 0;
+            for i in 0..ROUNDS {
+                let (x, y) = at(i);
+                bytes += call(x, y);
+            }
+            let micros = started.elapsed().as_secs_f64() * 1e6 / f64::from(ROUNDS);
+            println!("{label}: {micros:.1} us per call, {} reply bytes on average", bytes / ROUNDS as usize);
+            micros
+        };
+        let whole = {
+            let started = std::time::Instant::now();
+            let bytes = f.display(0.0).len();
+            let micros = started.elapsed().as_secs_f64() * 1e6;
+            println!("display (the whole list, for scale): {micros:.1} us, {bytes} bytes");
+            micros
+        };
+        // The engine's own boxes (a few pixels: most positions hit nothing), then a reach of a
+        // twentieth of the view, where nearly every position hits several objects.
+        let wide = (y1 - y0) / 20.0;
+        let pick = time("pick (the engine's pick box)", &mut |x, y| f.pick(x, y, 0.0).len());
+        let pick_wide = time("pick (a reach of 1/20 of the view)", &mut |x, y| f.pick(x, y, wide).len());
+        let snap_idle = time("snap (at rest, the engine's aperture)", &mut |x, y| f.snap(x, y, 0.0).len());
+        let snap_wide = time("snap (a reach of 1/20 of the view)", &mut |x, y| f.snap(x, y, wide).len());
+        let preview_idle = time("preview (no command)", &mut |x, y| f.preview(x, y).len());
+        f.start("line");
+        f.cmdline("0,0");
+        let preview_line = time("preview (LINE rubber band)", &mut |x, y| f.preview(x, y).len());
+        let snap_line = time("snap (LINE, with a base point)", &mut |x, y| f.snap(x, y, 0.0).len());
+        f.cancel();
+        f.start("circle");
+        f.cmdline("0,0");
+        let preview_circle = time("preview (CIRCLE rubber band)", &mut |x, y| f.preview(x, y).len());
+        f.cancel();
+        // `ALL` selects everything, the empty input between the two spaces ends the selection.
+        f.cmdline("move all  0,0");
+        let dragged = parse(&f.preview(1.0, 1.0))["drag"]["handles"].as_array().map_or(0, Vec::len);
+        assert!(dragged > 10, "MOVE ALL drags the sample's objects: {dragged}");
+        let preview_move = time("preview (MOVE of everything, as a transform)", &mut |x, y| f.preview(x, y).len());
+        println!("MOVE drags {dragged} objects");
+        for (label, micros) in [
+            ("pick", pick.max(pick_wide)),
+            ("snap", snap_idle.max(snap_wide).max(snap_line)),
+            ("preview", preview_idle.max(preview_line).max(preview_circle).max(preview_move)),
+        ] {
+            assert!(micros < 8_000.0, "{label} takes {micros:.0} us: half a frame");
+        }
+        assert!(preview_line < whole.max(1.0), "a rubber band ({preview_line:.0} us) must cost less than the whole display list ({whole:.0} us)");
     }
 }

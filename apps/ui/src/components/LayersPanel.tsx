@@ -3,12 +3,12 @@
  * that call `layer.set` / `layer.current`. Read-only view of the engine's state; no colour is
  * invented here — the swatch paints the engine's own `colorRgb`.
  *
- * Each state key is named for its layer and its flag ("Outline frozen") and says whether the flag
- * is set through `aria-pressed`: the name does not change with the state, so a screen reader hears
- * one key that is pressed or not, never two names for one key. Its hint is what a press does now
- * ("Freeze", "Thaw"), for the eye, beside the icon that draws the state. No native `title`: the
- * swatch, the used mark and the count carry the system's hint (`data-hint`) for the pointer, and
- * each has its own name.
+ * Each state key is the layer's `Toggle`, named for its layer and its flag ("Outline frozen"): the
+ * name does not change with the state, so a screen reader hears one key that is pressed or not,
+ * never two names for one key. Its hint is what a press does now ("Freeze", "Thaw"), for the eye,
+ * beside the glyph that draws the state, and its `tone` says which state is the one to notice
+ * (off, frozen, locked). No native `title`: the swatch, the used mark and the count carry the
+ * system's hint (`data-hint`) for the pointer, and each has its own name.
  *
  * A name too long for its track keeps both ends (`splitName`): layer names tell each other apart
  * at the end ("…-PHASE-1", "…-PHASE-2") as often as at the start. The two halves are for the eye
@@ -18,10 +18,10 @@
 
 import { createSignal, Index, Show, type Accessor, type JSX } from "solid-js";
 import type { LayerInfo } from "../facade";
-import { ToolIcon } from "../icons";
 import { IconButton } from "../ui/IconButton";
 import { Row } from "../ui/Row";
 import { SectionLabel } from "../ui/SectionLabel";
+import { Toggle } from "../ui/Toggle";
 import { Tooltip } from "../ui/Tooltip";
 
 export interface LayersPanelProps {
@@ -124,42 +124,36 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
                 data-hint={layer().used ? "Has objects" : "No objects"}
               />
               <span class="layer-toggles">
-                <button
-                  class={layer().on ? "toggle is-on" : "toggle"}
-                  type="button"
-                  data-hint={layer().on ? "Turn off" : "Turn on"}
-                  aria-label={`${layer().name} on`}
-                  aria-pressed={layer().on}
-                  onClick={() => props.onToggle(layer().name, "on", !layer().on)}
-                >
-                  <Show when={layer().on} fallback={<ToolIcon id="layer.off" />}>
-                    <ToolIcon id="layer.on" />
-                  </Show>
-                </button>
-                <button
-                  class={layer().frozen ? "toggle is-frozen" : "toggle"}
-                  type="button"
-                  data-hint={layer().frozen ? "Thaw" : "Freeze"}
-                  aria-label={`${layer().name} frozen`}
-                  aria-pressed={layer().frozen}
-                  onClick={() => props.onToggle(layer().name, "frozen", !layer().frozen)}
-                >
-                  <Show when={layer().frozen} fallback={<ToolIcon id="layer.thawed" />}>
-                    <ToolIcon id="layer.frozen" />
-                  </Show>
-                </button>
-                <button
-                  class={layer().locked ? "toggle is-locked" : "toggle"}
-                  type="button"
-                  data-hint={layer().locked ? "Unlock" : "Lock"}
-                  aria-label={`${layer().name} locked`}
-                  aria-pressed={layer().locked}
-                  onClick={() => props.onToggle(layer().name, "locked", !layer().locked)}
-                >
-                  <Show when={layer().locked} fallback={<ToolIcon id="layer.unlocked" />}>
-                    <ToolIcon id="layer.locked" />
-                  </Show>
-                </button>
+                <Toggle
+                  size="sm"
+                  tone="absent"
+                  icon="layer.off"
+                  iconOn="layer.on"
+                  ariaLabel={`${layer().name} on`}
+                  hint={layer().on ? "Turn off" : "Turn on"}
+                  pressed={layer().on}
+                  onChange={(on) => props.onToggle(layer().name, "on", on)}
+                />
+                <Toggle
+                  size="sm"
+                  tone="info"
+                  icon="layer.thawed"
+                  iconOn="layer.frozen"
+                  ariaLabel={`${layer().name} frozen`}
+                  hint={layer().frozen ? "Thaw" : "Freeze"}
+                  pressed={layer().frozen}
+                  onChange={(frozen) => props.onToggle(layer().name, "frozen", frozen)}
+                />
+                <Toggle
+                  size="sm"
+                  tone="caution"
+                  icon="layer.unlocked"
+                  iconOn="layer.locked"
+                  ariaLabel={`${layer().name} locked`}
+                  hint={layer().locked ? "Unlock" : "Lock"}
+                  pressed={layer().locked}
+                  onChange={(locked) => props.onToggle(layer().name, "locked", locked)}
+                />
               </span>
             </div>
           )}

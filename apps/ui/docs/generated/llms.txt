@@ -22,6 +22,7 @@
 - [Select](docs/generated/components/select.md): It lets the user pick one value from a short, known list, and hands the pick back to the caller, who owns the value.
 - [Tab](docs/generated/components/tab.md): It brings one view of a strip to the front: a layout over the drawing or a chat in the assistant, marked selected when it is the one show...
 - [TextArea](docs/generated/components/textarea.md): It takes several lines of text, grows to hold them up to a limit, and hands every edit back to the caller, who owns the text.
+- [Toggle](docs/generated/components/toggle.md): It switches one setting on or off in place, under a name that never changes, and says which it is through its pressed state.
 - [Tooltip](docs/generated/components/tooltip.md): It is the layer's one hint: a small box beside a control under the pointer or under keyboard focus, saying what the control does not alre...
 
 ## Rules

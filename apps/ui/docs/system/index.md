@@ -2,7 +2,7 @@
 
 ## Description
 
-The CADCraft web interface's design system: the tokens, the twelve canonical components and the rules the interface is built from, serving the SolidJS app in `apps/ui` over the cadcraft-wasm facade. Foundation: hand-rolled — the system is the app's own, measured from the running Cursor 3.27.22, and no registry item ships it.
+The CADCraft web interface's design system: the tokens, the thirteen canonical components and the rules the interface is built from, serving the SolidJS app in `apps/ui` over the cadcraft-wasm facade. Foundation: hand-rolled — the system is the app's own, measured from the running Cursor 3.27.22, and no registry item ships it.
 
 ## Importing a component
 

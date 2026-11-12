@@ -13,11 +13,11 @@
  *    `wasm-loader.ts`, which only Vite evaluates) and wrapped.
  */
 
-import { EMPTY_DISPLAY, parseDisplayList, type DisplayList } from "./display";
+import { EMPTY_DISPLAY, parseDisplayList, type DisplayList, type DisplayPrim } from "./display";
 import { emptyPrompt, reducePrompt, type PromptState } from "./prompt";
 import { MockFacade } from "./mock";
 import { asBool, asNumber, asString, isRecord } from "./json";
-import { parseRect, rectIsDegenerate, type Rect } from "./view";
+import { parseRect, rectIsDegenerate, type Point, type Rect } from "./view";
 
 /** The raw wasm-bindgen handle: exactly the facade's methods, JSON strings in and out. */
 export interface RawFacade {
@@ -38,6 +38,18 @@ export interface RawFacade {
   display(margin: number): string;
   set_view(x0: number, y0: number, x1: number, y1: number): string;
   view(): string;
+  /** The canvas's size in CSS pixels: what turns the engine's pick box (pixels) into world units. */
+  set_viewport(width: number, height: number): string;
+  /** Where the pointer is, in world coordinates: the direction of direct distance entry. */
+  set_cursor(x: number, y: number): string;
+  /** The running command's rubber band with the pointer at a world point. */
+  preview(x: number, y: number): string;
+  /** What is under a world point, nearest first; it never changes the selection. */
+  pick(x: number, y: number, aperture: number): string;
+  /** The object snap a world point takes, or `{"snap":null}`. */
+  snap(x: number, y: number, aperture: number): string;
+  /** A pointer click given to the running command, snapped as `snap` reports. */
+  click(x: number, y: number, aperture: number): string;
   open_bytes(name: string, bytes: Uint8Array): string;
   load_sample(): string;
   save_bytes(): Uint8Array;
@@ -139,6 +151,137 @@ export interface SettingsState {
   qpmode: boolean;
   osmode: number;
   pickbox: number;
+}
+
+/**
+ * The running command's preview as existing objects under one transform (MOVE, COPY, ROTATE,
+ * SCALE, MIRROR), so the canvas redraws primitives it already holds instead of receiving their
+ * copies on every pointer move.
+ */
+export interface PreviewDrag {
+  /** The dragged objects, as the display list's `prims[].handle` numbers. */
+  handles: readonly number[];
+  /** `[a, b, c, d, e, f]`: world `(x, y)` goes to `(a·x + c·y + e, b·x + d·y + f)`, the argument
+   *  order of a canvas `transform(a, b, c, d, e, f)`. */
+  matrix: readonly [number, number, number, number, number, number];
+  /** The dragged objects are being pasted: they are not in the drawing, so they come in the
+   *  preview's own `prims`, already placed, and `handles` is empty. */
+  clipboard: boolean;
+}
+
+/** The running command's rubber band (`Facade::preview`): a display list's `verts` and `prims`
+ *  in world coordinates (rubber-band primitives carry handle 0), and the drag, if it is one. */
+export interface CommandPreview {
+  verts: readonly Point[];
+  prims: readonly DisplayPrim[];
+  drag: PreviewDrag | null;
+}
+
+export const EMPTY_PREVIEW: CommandPreview = { verts: [], prims: [], drag: null };
+
+/** The most dragged handles a preview reply is read for (the engine caps the reply's bytes). */
+const MAX_DRAG_HANDLES = 400_000;
+/** The most handles a pick reply is read for (the engine sends at most 64). */
+const MAX_PICK_HANDLES = 64;
+
+function parsePreviewDrag(value: unknown): PreviewDrag | null {
+  if (!isRecord(value)) return null;
+  const m = value["matrix"];
+  if (!Array.isArray(m) || m.length !== 6) return null;
+  const [a, b, c, d, e, f] = [asNumber(m[0]), asNumber(m[1]), asNumber(m[2]), asNumber(m[3]), asNumber(m[4]), asNumber(m[5])];
+  if (a === null || b === null || c === null || d === null || e === null || f === null) return null;
+  const handles: number[] = [];
+  const raw = Array.isArray(value["handles"]) ? value["handles"] : [];
+  const n = Math.min(raw.length, MAX_DRAG_HANDLES);
+  for (let i = 0; i < n; i++) {
+    const h = asNumber(raw[i]);
+    if (h !== null && h >= 0) handles.push(Math.round(h));
+  }
+  return { handles, matrix: [a, b, c, d, e, f], clipboard: asBool(value["clipboard"]) ?? false };
+}
+
+/** Parse a `preview` reply; anything unreadable, or a refusal, is the empty preview. */
+export function parsePreview(raw: string): CommandPreview {
+  const list = parseDisplayList(raw);
+  if (list === null) return EMPTY_PREVIEW;
+  // Most previews are not drags: the reply says so in so many bytes, and is not parsed twice.
+  const parsed = raw.includes('"drag":null') ? null : parseJson(raw);
+  const drag = isRecord(parsed) ? parsePreviewDrag(parsed["drag"]) : null;
+  return list.prims.length === 0 && drag === null ? EMPTY_PREVIEW : { verts: list.verts, prims: list.prims, drag };
+}
+
+/** Parse a `pick` reply into the engine's hex handles, nearest first; unreadable is none. */
+export function parsePick(raw: string): string[] {
+  const parsed = parseJson(raw);
+  if (!isRecord(parsed) || !Array.isArray(parsed["handles"])) return [];
+  const out: string[] = [];
+  for (const h of parsed["handles"]) {
+    if (out.length >= MAX_PICK_HANDLES) break;
+    if (typeof h === "string" && h.length > 0) out.push(h);
+  }
+  return out;
+}
+
+/** An object snap (`Facade::snap`): where the pointer snaps to, and why. */
+export interface SnapPoint {
+  point: Point;
+  /** The engine's OSMODE bit: 1 endpoint, 2 midpoint, 4 centre, 8 node, 16 quadrant,
+   *  32 intersection, 64 insertion, 128 perpendicular, 256 tangent, 512 nearest,
+   *  1024 geometric centre, 2048 apparent intersection, 4096 extension, 8192 parallel. */
+  mode: number;
+  /** The engine's own name for it ("Endpoint", "Midpoint", "Center"…), for a tooltip. */
+  name: string;
+  /** A deferred tangent or perpendicular: `point` is provisional until the line's other end
+   *  is known, and only `click` (never typed coordinates) can give it to the command. */
+  deferred: boolean;
+}
+
+function parseXy(value: unknown): Point | null {
+  if (!Array.isArray(value)) return null;
+  const x = asNumber(value[0]);
+  const y = asNumber(value[1]);
+  return x === null || y === null ? null : { x, y };
+}
+
+function parseSnapValue(value: unknown): SnapPoint | null {
+  if (!isRecord(value)) return null;
+  const point = parseXy(value["point"]);
+  if (point === null) return null;
+  const mode = asNumber(value["mode"]);
+  return { point, mode: mode === null ? 0 : Math.max(0, Math.round(mode)), name: asString(value["name"]) ?? "", deferred: asBool(value["deferred"]) ?? false };
+}
+
+/** Parse a `snap` reply (or the `snap` field of a `click` reply); null when nothing snapped. */
+export function parseSnap(raw: string): SnapPoint | null {
+  const parsed = parseJson(raw);
+  return isRecord(parsed) ? parseSnapValue(parsed["snap"]) : null;
+}
+
+/** What the pointer needs of the running command's prompt (`Prompt` in the engine). */
+export interface PromptAnchor {
+  /** The rubber band's origin (the last point given), or null when the prompt has none. */
+  base: Point | null;
+  /** The base is a window's first corner (RECTANG, ZOOM Window): ortho does not bend the other. */
+  corner: boolean;
+  /** A point answers with its distance from the base (a radius, a length). */
+  distance: boolean;
+  /** The prompt resolves deferred tangent and perpendicular snaps (LINE's first point). */
+  deferred: boolean;
+}
+
+export const NO_ANCHOR: PromptAnchor = { base: null, corner: false, distance: false, deferred: false };
+
+/** Read the anchor out of a command-line reply (`prompt`, `cmdline`, `start`, `click`). */
+export function parsePromptAnchor(raw: string): PromptAnchor {
+  const parsed = parseJson(raw);
+  if (!isRecord(parsed)) return NO_ANCHOR;
+  return { base: parseXy(parsed["base"]), corner: parsed["corner"] === true, distance: parsed["distance"] === true, deferred: parsed["deferred"] === true };
+}
+
+/** What a `click` did: the command line after it, and the object snap the point took. */
+export interface ClickResult {
+  state: PromptState;
+  snap: SnapPoint | null;
 }
 
 /** One layout tab from `execute("layout.list", {})`. `current` is true when the layout's name
@@ -456,6 +599,85 @@ export class AppFacade {
     return parseEnvelope(raw) ?? { ok: false, error: "unreadable reply from set_view" };
   }
 
+  /**
+   * Tell the engine the canvas's size in CSS pixels. Call it when the canvas is laid out or
+   * resized: until then the engine assumes 1200 x 800, and its own pick box and snap aperture
+   * (the `aperture = 0` of `pick`, `snap` and `click`, and every click a command takes at "Select
+   * objects") are the wrong size. A size that is not finite or not positive is refused.
+   */
+  setViewport(width: number, height: number): Envelope {
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return { ok: false, error: "refused a canvas size that is not positive" };
+    const raw = this.call(() => this.raw.set_viewport(width, height));
+    return parseEnvelope(raw) ?? { ok: false, error: "unreadable reply from set_viewport" };
+  }
+
+  /**
+   * Tell the engine where the pointer is (world coordinates). A distance typed alone at a point
+   * prompt (`5`) then goes that far towards the pointer. Call it on pointer moves while a
+   * command runs; a point that is not finite is refused.
+   */
+  setCursor(point: Point): Envelope {
+    if (!usablePoint(point)) return { ok: false, error: "refused a cursor that is not finite" };
+    const raw = this.call(() => this.raw.set_cursor(point.x, point.y));
+    return parseEnvelope(raw) ?? { ok: false, error: "unreadable reply from set_cursor" };
+  }
+
+  /**
+   * The running command's rubber band with the pointer at `point` (world coordinates): empty
+   * when no command runs or it draws nothing. Cheap enough for every pointer frame; it changes
+   * nothing in the engine. Pass the snapped point when `snap` found one.
+   */
+  preview(point: Point): CommandPreview {
+    if (!usablePoint(point)) return EMPTY_PREVIEW;
+    return parsePreview(this.call(() => this.raw.preview(point.x, point.y)));
+  }
+
+  /**
+   * The objects under `point`, nearest first, as the selection's hex handles (the first is what
+   * a click there selects): for a hover highlight. It never changes the selection or the undo
+   * stack. `aperture` is the reach in world units; 0 is the engine's own pick box at the current
+   * view (needs `setViewport`).
+   */
+  pick(point: Point, aperture = 0): string[] {
+    if (!usablePoint(point) || !usableAperture(aperture)) return [];
+    return parsePick(this.call(() => this.raw.pick(point.x, point.y, aperture)));
+  }
+
+  /**
+   * The object snap `point` takes under the engine's running snap modes, or null: nothing
+   * within reach, object snap off, or the running command is not asking for a point. `aperture`
+   * is the reach in world units; 0 is the engine's own aperture at the current view (needs
+   * `setViewport`). It changes nothing; `click` gives the same snap to the command.
+   */
+  snap(point: Point, aperture = 0): SnapPoint | null {
+    if (!usablePoint(point) || !usableAperture(aperture)) return null;
+    return parseSnap(this.call(() => this.raw.snap(point.x, point.y, aperture)));
+  }
+
+  /**
+   * A pointer click at `point` given to the running command, snapped exactly as `snap(point,
+   * aperture)` reports (so the marker shown is the point taken), else the point itself; at
+   * "Select objects" it picks. Unlike typing the coordinates, it carries a deferred tangent or
+   * perpendicular. Folded like `cmdline`; `echo` is the line to show for it in the output. With
+   * no command running it does nothing.
+   */
+  click(point: Point, aperture = 0, prev: PromptState = emptyPrompt(), echo?: string): ClickResult {
+    if (!usablePoint(point) || !usableAperture(aperture)) {
+      return { state: { ...prev, error: "refused a click that is not a usable point" }, snap: null };
+    }
+    const raw = this.call(() => this.raw.click(point.x, point.y, aperture));
+    return { state: reducePrompt(prev, raw, echo), snap: parseSnap(raw) };
+  }
+
+  /**
+   * The running prompt's base point and kind: where the rubber band starts, and whether it is a
+   * window's corner or a distance. Read it when the prompt changes (after `cmdline`, `start`,
+   * `cancel`, `click`), not on every pointer frame.
+   */
+  promptAnchor(): PromptAnchor {
+    return parsePromptAnchor(this.call(() => this.raw.prompt()));
+  }
+
   layers(): LayerInfo[] {
     const env = this.execute("layer", {});
     return env.ok ? parseLayers(env.result) : [];
@@ -520,6 +742,16 @@ function parseJson(raw: string): unknown {
   } catch {
     return null;
   }
+}
+
+/** A world point both of whose ordinates are finite (the engine refuses any other). */
+function usablePoint(point: Point): boolean {
+  return Number.isFinite(point.x) && Number.isFinite(point.y);
+}
+
+/** An aperture the engine takes: a finite world distance, 0 (its own box) or more. */
+function usableAperture(aperture: number): boolean {
+  return Number.isFinite(aperture) && aperture >= 0;
 }
 
 function message(e: unknown): string {

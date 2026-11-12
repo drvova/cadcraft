@@ -141,7 +141,7 @@ Real uses, 24 call sites (`rg -c "<IconButton" src/components` → `src/componen
 - `rule/icon-button-row-limit`: When a toolbar row holds more than 5 icon buttons, move the rest into a menu, because the measured composer row holds 3 at 24px each with 4px gaps and the row starts crowding the input past 5. Evidence: measured 3 actions at 24px with 4px gaps, `docs/system/decisions.md`. Check: review `src/components/AssistantPane.tsx`.
   - Don't: 6 circles in the composer's toolbar row.
   - Do: 3 circles in the row and the rest inside a menu.
-- `rule/icon-button-touch-target`: When 2 `sm` icon buttons sit side by side, keep at least 4px between them, because under a coarse pointer each 20px circle keeps its drawn size and takes a 24px target from an invisible `::after` 2px past every edge, and closer circles overlap their targets. Evidence: measured 20px circle with a 24px `::after` target, `src/ui/ui.css:976`. Check: review `src/ui/ui.css`.
+- `rule/icon-button-touch-target`: When 2 `sm` icon buttons sit side by side, keep at least 4px between them, because under a coarse pointer each 20px circle keeps its drawn size and takes a 24px target from an invisible `::after` 2px past every edge, and closer circles overlap their targets. Evidence: measured 20px circle with a 24px `::after` target, `src/ui/ui.css:1137`. Check: review `src/ui/ui.css`.
   - Don't: `.my-row .ui-icon-button--sm + .ui-icon-button--sm { margin-left: 0 }` — two 24px targets on a 20px pitch.
   - Do: `.my-row { display: flex; gap: var(--gap-4) }`
 
@@ -195,3 +195,4 @@ Rests on the native `<button>` element, with the drawn glyph hidden from assisti
 - `Tooltip`: the hint box this component shows by itself; wrap another control in it, never this one.
 - `Kbd`: the key cap the hint draws for a shortcut.
 - `Checkbox`: when the on/off belongs to a form's value rather than to a tool.
+- `Toggle`: when a setting is switched in place under a fixed name, its state drawn by the glyph and never by a fill: a list row's state keys, a bar's drafting settings.
