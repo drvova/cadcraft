@@ -435,6 +435,9 @@ export function App(props: AppProps): JSX.Element {
     saidOnKey = !env.ok;
     setNotice(env.ok ? null : env.error);
     if (env.ok) pieceAt = null;
+    // A piece started, or made another kind, is a new sheet: the drawing is framed on it. An
+    // edit of one number leaves the view where the reader put it.
+    if (env.ok && "kind" in params && props.facade.execute("zoom.extents", {}).ok) adoptView();
     refresh();
     return env.ok ? null : env.error;
   };
@@ -805,7 +808,9 @@ export function App(props: AppProps): JSX.Element {
   const newDrawing = (): void => {
     setNotice(null);
     recovery.flush();
-    const env = props.facade.execute("new", {});
+    // A new drawing is millimetres: it is what a jeweler drafts in, and what the piece, the
+    // stones and the bench sheet are said in.
+    const env = props.facade.execute("new", { metric: true });
     if (!env.ok) {
       setNotice(env.error);
       return;
