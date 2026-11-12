@@ -194,8 +194,10 @@ describe("UI_ITEMS", () => {
         "ui.assistant.ask",
         "ui.panel.bench",
         "ui.panel.layers",
+        "ui.panel.piece",
         "ui.panel.properties",
         "ui.toggle.assistant",
+        "ui.toggle.source",
         "ui.toggle.cmdline",
         "ui.toggle.statusbar",
         "ui.toggle.toolbar",
@@ -221,6 +223,8 @@ describe("UI_ITEMS", () => {
     expect(byId.get("ui.sample")?.menu).toEqual(["Help", "Open Sample Drawing"]);
     expect(byId.get("ui.panel.layers")?.menu).toEqual(["Window", "Layers Palette"]);
     expect(byId.get("ui.toggle.cmdline")?.shortcut).toBe("Cmd+9");
+    expect(byId.get("ui.toggle.source")?.menu).toEqual(["Window", "Source"]);
+    expect(byId.get("ui.toggle.source")?.shortcut).toBe("Cmd+U");
     expect(byId.get("ui.toggle.menubar")?.label).toBe("In-window Menu Bar");
     expect(byId.get("ui.theme.dark")?.menu).toEqual(["View", "Interface Theme", "Dark"]);
     expect(byId.get("ui.animations.off")?.menu).toEqual(["View", "Accessibility", "Animation Effects", "Off"]);

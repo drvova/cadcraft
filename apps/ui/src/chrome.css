@@ -402,21 +402,7 @@
   height: var(--icon-size-sm);
 }
 
-/* ---- The tool strip ---- */
-
-.toolstrip {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-2);
-  height: var(--control-h-button);
-  padding: 0 var(--gap-6);
-  background: var(--chrome);
-  border-bottom: var(--hairline) solid var(--border);
-  /* A window narrower than the strip does not scroll it: ToolStrip.tsx measures the strip, draws
-     the leading groups that fit and folds the rest behind the overflow key at its end. Nothing is
-     clipped here, so the key's menu can open under the strip. */
-  min-width: 0;
-}
+/* ---- The tool strip: the ribbon, in ribbon.css ---- */
 
 .editor-tabs::-webkit-scrollbar {
   display: none;
@@ -444,53 +430,6 @@
 
 .editor-tabs[data-clip-end] {
   --fade-end: var(--control-h-input);
-}
-
-/* Under a finger the keys keep their size and stand further apart. */
-@media (pointer: coarse) {
-  .toolstrip {
-    gap: var(--gap-6);
-  }
-}
-
-/* The strip's cells never squeeze: the groups that do not fit are folded away whole. */
-.toolstrip .ui-icon-button {
-  flex: 0 0 auto;
-}
-
-/* A tool's glyph is the large step, 16 in the 24 key: the drafting glyphs carry grips, dashes and
-   arrowheads that close up at 14. The overflow key's chevron stays the default size. */
-.toolstrip > .ui-icon-button .tool-icon {
-  width: var(--icon-size-lg);
-  height: var(--icon-size-lg);
-}
-
-/* The overflow key's host, at the strip's end whatever the groups before it leave: the box its
-   menu opens from. The menu hangs from the key's own end, so it opens into the window. */
-.tool-more {
-  position: relative;
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  height: 100%;
-  margin-inline-start: auto;
-}
-
-/* The menu opens under the strip, a band lower than a title's: its height gives the strip's up as
-   well, so a long list scrolls under its key instead of being pulled over it. */
-.tool-more > .menu-drop {
-  left: auto;
-  right: 0;
-  max-height: calc(100dvh - var(--control-h-tab) - var(--control-h-button) - var(--menu-floor, var(--control-h-button)) - var(--gap-8));
-}
-
-/* A group's divider: the glyphs' height, with the same room on each side. */
-.tool-divider {
-  flex: 0 0 auto;
-  width: var(--hairline);
-  height: var(--icon-size-lg);
-  margin: 0 var(--gap-4);
-  background: var(--border);
 }
 
 /* ---- The editor tabs ---- */

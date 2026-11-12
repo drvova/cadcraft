@@ -13,7 +13,8 @@ Not applicable: hand-rolled — a native `<textarea>` in Field's measured recipe
 ## Examples
 `<TextArea value={notes()} onInput={setNotes} ariaLabel="Notes" />` — a notes field: two lines tall when empty, growing to eight.
 
-Real uses, 1 call site (`rg -c "<TextArea" src/components` → `src/components/AssistantPane.tsx:1`):
+Real uses, 2 call sites (`rg -c "<TextArea" src/components` → `src/components/AssistantPane.tsx:1`, `src/components/SourcePanel.tsx:1`):
+- `src/components/SourcePanel.tsx` — the Source panel's editor: `variant="bare"` in the panel's body, `rows` and `maxRows` both the rows the body holds, so the script scrolls inside it beside a gutter of line numbers; Ctrl+Enter applies. Added 2026-11-12.
 - `src/components/AssistantPane.tsx:1192` — the composer's editor: `variant="bare"` inside the card, two rows growing to nine, the combobox of the slash list while that list shows.
 
 ### Example files

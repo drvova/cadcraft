@@ -14,6 +14,9 @@ import {
   parseCommands,
   parseDrawingState,
   parseEnvelope,
+  parseScriptReport,
+  parseSourceReply,
+  MAX_SCRIPT_OUTPUT,
   parseHexColor,
   parseHover,
   parseLayers,
@@ -1134,5 +1137,59 @@ describe("a layout's sheet through the facade", () => {
     expect(after.sheet).toBeNull();
     expect(after.space).toBe(before.space);
     expect(after.prims).toEqual(before.prims);
+  });
+});
+
+describe("the script replies", () => {
+  test("a source reply is the text, or a failure that is never shown as the script", () => {
+    expect(parseSourceReply('{"ok":true,"text":"LINE 0,0 1,1\\n"}')).toEqual({ ok: true, text: "LINE 0,0 1,1\n" });
+    // The mock's reply carries no `ok`.
+    expect(parseSourceReply('{"text":""}')).toEqual({ ok: true, text: "" });
+    expect(parseSourceReply('{"ok":false,"error":"no drawing open"}')).toEqual({ ok: false, error: "no drawing open" });
+    expect(parseSourceReply('{"ok":false,"text":"LINE","error":"no"}')).toEqual({ ok: false, error: "no" });
+    for (const raw of ["", "not json", "[]", "null", '"LINE 0,0 1,1"', '{"text":7}', '{"ok":true}']) {
+      expect(parseSourceReply(raw).ok, raw).toBe(false);
+    }
+  });
+
+  test("a script report keeps the count, the output and the error, and only `ok: true` is a success", () => {
+    expect(parseScriptReport('{"ok":true,"ran":3,"output":["a","b"]}')).toEqual({ ok: true, ran: 3, output: ["a", "b"], error: null });
+    expect(parseScriptReport('{"ok":false,"ran":1,"output":[],"error":"line 2: CIRCLE: needs a radius"}')).toEqual({
+      ok: false,
+      ran: 1,
+      output: [],
+      error: "line 2: CIRCLE: needs a radius",
+    });
+    // Hostile shapes: no claim of success, no count that is not a whole number, output capped.
+    expect(parseScriptReport('{"ran":3}')).toEqual({ ok: false, ran: 3, output: [], error: "the script did not run" });
+    expect(parseScriptReport('{"ok":"yes","ran":-1,"output":"x"}').ok).toBe(false);
+    expect(parseScriptReport('{"ok":true,"ran":1.5}').ran).toBeNull();
+    expect(parseScriptReport('{"ok":true,"ran":1e400}').ran).toBeNull();
+    for (const raw of ["", "{", "[]", "7"]) expect(parseScriptReport(raw)).toEqual({ ok: false, ran: null, output: [], error: "unreadable reply from run_script" });
+    const many = JSON.stringify({ ok: true, ran: 1, output: Array.from({ length: 500 }, (_, i) => `l${i}`) });
+    expect(parseScriptReport(many).output.length).toBe(MAX_SCRIPT_OUTPUT);
+  });
+
+  test("the facade's script calls over the mock: the text, a run, and a refused line", () => {
+    const facade = mockFacade();
+    const before = facade.scriptSource();
+    expect(before.ok).toBe(true);
+    expect(facade.applyScript("(circle 1,1 2)").ok).toBe(true);
+    const bad = facade.applyScript("(circle x)");
+    expect(bad.ok).toBe(false);
+    expect(bad.error).toContain("bad line");
+  });
+
+  test("a facade whose script calls throw answers a failure", () => {
+    const raw = new MockFacade();
+    raw.source = () => {
+      throw new Error("boom");
+    };
+    raw.run_script = () => {
+      throw new Error("boom");
+    };
+    const facade = new AppFacade(raw, { kind: "mock", detail: "test" });
+    expect(facade.scriptSource()).toEqual({ ok: false, error: "the facade call failed: boom" });
+    expect(facade.applyScript("LINE 0,0 1,1")).toEqual({ ok: false, ran: null, output: [], error: "the facade call failed: boom" });
   });
 });

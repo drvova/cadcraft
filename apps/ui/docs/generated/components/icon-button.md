@@ -13,12 +13,12 @@ Not applicable: hand-rolled — the circle, the .08 hover fill and the 14px glyp
 ## Examples
 `<IconButton icon="close" title="Close the panel" />` — the panel's close control.
 
-Real uses, 28 call sites (`rg -c "<IconButton" src` → `src/components/AssistantPane.tsx:18`, `src/components/BenchPanel.tsx:1`, `src/components/InlineAsk.tsx:1`, `src/components/LayerManager.tsx:1`, `src/components/LayersPanel.tsx:1`, `src/components/Menu.tsx:1`, `src/components/PropertiesPanel.tsx:1`, `src/components/ToolStrip.tsx:1`, `src/components/TopBar.tsx:3`):
+Real uses, 33 call sites (`rg -c "<IconButton" src` → `src/components/AssistantPane.tsx:18`, `src/components/BenchPanel.tsx:1`, `src/components/InlineAsk.tsx:1`, `src/components/LayerManager.tsx:1`, `src/components/LayersPanel.tsx:1`, `src/components/Menu.tsx:1`, `src/components/PropertiesPanel.tsx:1`, `src/components/ToolStrip.tsx:1`, `src/components/TopBar.tsx:3`):
 - `src/components/AssistantPane.tsx` — the close on a chip of `@` context in the composer card (`sm`), as the selection chip's. Added 2026-11-12.
 - `src/components/AssistantPane.tsx` — the composer pilot: the toolbar's attach (`soft`), stop and send (`inverted`), and each attachment chip's remove circle (`sm`).
 - `src/components/BenchPanel.tsx` — the bench section's fold key (`sm`, `expanded`, `controls`), as the layers' and the properties' sections fold. Added 2026-11-12.
 - `src/components/InlineAsk.tsx` — the inline ask's send (`inverted`, `sm`, `shortcut="Enter"`), off while the line is empty with the reason as its `description`. Added 2026-11-12.
-- `src/components/ToolStrip.tsx:111` — every tool in the strip: the glyph from the tool's icon id, the title its label and shortcut, click to invoke it.
+- `src/components/ToolStrip.tsx:295` — every tool of the ribbon's compact row (a window of a phone's width): the glyph from the tool's icon id, the title its label and shortcut, click to invoke it; and the key at the tab row's end that folds the tool band (`expanded`, `controls`). On a wider window a tool is the ghost `Button` with its glyph over its label.
 
 ### Example files
 | File | Covers | Caption |

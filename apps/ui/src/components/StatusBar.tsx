@@ -55,6 +55,10 @@ export interface LayoutTabsProps {
   onLayout: (name: string) => void;
   /** A tab's menu was asked for, at this point of the window. */
   onMenu?: (name: string, at: MenuPoint) => void;
+  /** With this, the strip ends in a "3D" tab that asks for the piece's 3D view; without it there is none. */
+  onView3d?: () => void;
+  /** The 3D view is the one in front: its tab is the selected one, and no layout's is. */
+  view3d?: boolean;
 }
 
 /**
@@ -70,7 +74,7 @@ export function LayoutTabs(props: LayoutTabsProps): JSX.Element {
   // made or switched to from the command line), bring the tab in front into view and re-mark the
   // clipped edges.
   createEffect(() => {
-    const front = tabs().indexOf(props.space);
+    const front = props.view3d === true ? tabs().length : tabs().indexOf(props.space);
     strip?.children.item(front)?.scrollIntoView({ block: "nearest", inline: "nearest" });
     mark?.();
   });
@@ -99,11 +103,18 @@ export function LayoutTabs(props: LayoutTabsProps): JSX.Element {
     >
       <For each={tabs()}>
         {(name) => (
-          <Tab size="md" selected={props.space === name} title={name === "Model" ? "Switch to model space" : `Switch to ${name}`} onClick={() => props.onLayout(name)}>
+          <Tab size="md" selected={props.view3d !== true && props.space === name} title={name === "Model" ? "Switch to model space" : `Switch to ${name}`} onClick={() => props.onLayout(name)}>
             {name}
           </Tab>
         )}
       </For>
+      <Show when={props.onView3d}>
+        {(show) => (
+          <Tab size="md" selected={props.view3d === true} title="Show the piece as a solid" onClick={() => show()()}>
+            3D
+          </Tab>
+        )}
+      </Show>
     </div>
   );
 }

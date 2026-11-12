@@ -76,6 +76,8 @@ export class MockFacade implements RawFacade {
   /** The last command that opened a prompt: what an empty Enter starts again. */
   private lastAsked: string | null = null;
   private selected: string[] = [];
+  /** The mock's parametric ring (`piece`): its parameters, or null when the drawing has none. */
+  private piece: Record<string, unknown> | null = null;
   /** The canvas size in CSS pixels (`set_viewport`); the engine's default until it is told. */
   private viewport: [number, number] = [1200, 800];
   /** The drafting toggles the status bar shows (GRID, SNAP, ORTHO). */
@@ -83,6 +85,10 @@ export class MockFacade implements RawFacade {
 
   constructor() {
     this.reset();
+    // `?mock=1&piece=solitaire` starts the mock with a piece, so the 3D view has something to show
+    // without the Piece section being worked first (band, solitaire or eternity).
+    const asked = typeof location === "undefined" ? null : new URLSearchParams(location.search).get("piece");
+    if (asked !== null) this.pieceCommand({ kind: asked });
   }
 
   private reset(): void {
@@ -97,6 +103,7 @@ export class MockFacade implements RawFacade {
     this.dirty = false;
     this.pending = null;
     this.lastAsked = null;
+    this.piece = null;
     // The canned drawing: a 100x60 plate with a bore, a datum line, a filled arrow (tris),
     // corner points and an image frame — every primitive kind the canvas knows.
     this.entities = [
@@ -468,11 +475,123 @@ export class MockFacade implements RawFacade {
         if (this.selected.length === 0) return envelope(false, { error: "properties.set: nothing selected" });
         return envelope(true, { changed: Object.keys(params).length });
       }
+      case "piece":
+        return this.pieceCommand(params);
+      case "piecemesh":
+        // The piece as a solid, for the 3D view: a mock's stand-in shape, never the engine's ring.
+        if (this.piece === null) return envelope(false, { error: "piecemesh: the drawing has no piece" });
+        return envelope(true, mockPieceMesh(this.piece, params["quality"] === "fine"));
+      case "stlout": {
+        if (this.piece === null) return envelope(false, { error: "stlout: the drawing has no piece" });
+        const solid = mockPieceMesh(this.piece, true);
+        return envelope(true, mockStl(solid.meshes.filter((mesh) => params["stones"] !== false || mesh.part !== "stone"), `${String(this.piece["kind"] ?? "piece")}-mock.stl`));
+      }
+      case "gemlist":
+        // A mock's list: enough for the Piece section's and the Gem dialog's choices.
+        return envelope(true, {
+          cuts: [
+            { name: "round", measure: "diameter" },
+            { name: "princess", measure: "diameter" },
+            { name: "oval", measure: "length" },
+            { name: "emerald", measure: "length" },
+          ],
+          stones: [
+            ["diamond", 3.52],
+            ["sapphire", 4.0],
+            ["ruby", 4.0],
+          ],
+        });
       case "circle":
         return envelope(false, { error: "circle: use the command line (`cmdline`) or centre/radius params in the mock" });
       default:
         return envelope(false, { error: `unknown command \`${command}\`` });
     }
+  }
+
+  /**
+   * A stand-in for the engine's `piece`: it keeps the parameters, refuses what the engine refuses
+   * in the engine's form of words, and answers with canned figures. Nothing is drawn and nothing
+   * here is a real weight, carat or size conversion: this is a mock.
+   */
+  private pieceCommand(params: Record<string, unknown>): string {
+    const bad = (error: string): string => envelope(false, { error: `piece: ${error}` });
+    if (params["query"] === true) return envelope(true, { piece: this.piece === null ? null : this.pieceJson(this.piece) });
+    if (params["remove"] === true) {
+      const removed = this.piece === null ? 0 : 1;
+      this.piece = null;
+      if (removed > 0) this.touch();
+      return envelope(true, { piece: null, removed });
+    }
+    const defaults: Record<string, unknown> = { system: "us", size: 6, sizeSystem: "us", wall: 1.8, width: 2.2, profile: "flat", metal: "gold18", cut: "round", stoneLength: 6.5, stoneWidth: 6.5, stone: "diamond", prongs: 6, halo: false, melee: 1.8, count: null, gap: 0.2 };
+    const next: Record<string, unknown> = { ...(this.piece ?? defaults) };
+    for (const key of ["kind", "wall", "width", "profile", "metal", "cut", "stoneLength", "stoneWidth", "stone", "prongs", "halo", "melee", "count", "gap"]) {
+      if (key in params) next[key] = params[key];
+    }
+    const kind = next["kind"];
+    if (typeof kind !== "string") return bad("give `kind`: band, solitaire or eternity");
+    if (!["band", "solitaire", "eternity"].includes(kind)) return bad("`kind` must be band, solitaire or eternity");
+    for (const [key, min, max] of [
+      ["wall", 0.3, 10],
+      ["width", 0.5, 30],
+      ["stoneWidth", 0.5, 30],
+      ["stoneLength", 0.5, 30],
+      ["melee", 0.8, 6],
+      ["gap", 0, 5],
+    ] as const) {
+      const v = next[key];
+      if (typeof v !== "number" || !Number.isFinite(v) || v < min || v > max) return bad(`\`${key}\` must be a number of millimetres from ${min} to ${max}`);
+    }
+    if (next["profile"] !== "flat" && next["profile"] !== "dome") return bad("`profile` must be flat or dome");
+    if (!["gold24", "gold22", "gold18", "gold14", "platinum", "silver"].includes(String(next["metal"]))) return bad(`\`${String(next["metal"]).slice(0, 24)}\` is not a metal (gold24|22|18|14, platinum, silver)`);
+    if (!["round", "princess", "oval", "emerald"].includes(String(next["cut"]))) return bad(`\`${String(next["cut"]).slice(0, 24)}\` is not a cut (GEMLIST lists them)`);
+    if (!["diamond", "sapphire", "ruby"].includes(String(next["stone"]))) return bad(`\`${String(next["stone"]).slice(0, 24)}\` is not a stone (GEMLIST lists them)`);
+    const prongs = next["prongs"];
+    if (typeof prongs !== "number" || !Number.isInteger(prongs) || prongs < 3 || prongs > 8) return bad("`prongs` must be a whole number from 3 to 8");
+    const halo = next["halo"];
+    if (halo === true) next["halo"] = 1.3;
+    else if (halo !== false && (typeof halo !== "number" || !Number.isFinite(halo) || halo < 0.8 || halo > 3)) return bad("`halo` must be true, false or a melee width from 0.8 to 3 millimetres");
+    const count = next["count"];
+    if (count !== null && (typeof count !== "number" || !Number.isInteger(count) || count < 1 || count > 400)) return bad("`count` must be a whole number from 1 to 400");
+    if ("size" in params) {
+      const system = typeof params["system"] === "string" ? params["system"].toLowerCase() : "us";
+      const size = params["size"];
+      if (system === "uk" ? typeof size !== "string" || !/^[a-z]/i.test(size) : typeof size !== "number" || !Number.isFinite(size) || size < 0 || size > 80) {
+        return envelope(false, { error: `piece: ${typeof size === "string" ? `\`${size.slice(0, 8)}\`` : String(size)} is not a ${system.toUpperCase()} ring size` });
+      }
+      next["sizeSystem"] = system;
+      // The mock converts nothing: a US size is kept as given, any other system's stays US 6.
+      next["size"] = system === "us" ? size : 6;
+      next["mockSize"] = system === "us" ? null : [system, size];
+    }
+    this.piece = next;
+    this.touch();
+    return envelope(true, { piece: this.pieceJson(next), message: `piece: a ${kind} (mock)` });
+  }
+
+  /** The mock piece as the engine's reply shapes it; every figure is canned. */
+  private pieceJson(p: Record<string, unknown>): Record<string, unknown> {
+    const { mockSize, ...params } = p;
+    const us = typeof p["size"] === "number" ? p["size"] : 6;
+    const half = Math.abs(us - Math.floor(us) - 0.5) < 0.01;
+    const size: Record<string, unknown> = { mm: 16.51, diameter: 16.51, circumference: 51.87, us, usText: `${Math.floor(us)}${half ? "½" : ""}`, uk: "L½", eu: 52, jp: 12, cn: 12 };
+    if (Array.isArray(mockSize) && typeof mockSize[0] === "string") size[mockSize[0]] = mockSize[1];
+    const wall = typeof p["wall"] === "number" ? p["wall"] : 1.8;
+    const kind = p["kind"];
+    const stones = kind === "band" ? { count: 0, carat: 0 } : kind === "solitaire" ? { count: p["halo"] === false ? 1 : 19, carat: p["halo"] === false ? 1.03 : 1.21 } : { count: typeof p["count"] === "number" ? p["count"] : 26, carat: 0.62 };
+    const checks: Record<string, unknown>[] = [
+      wall < 0.8 ? { id: "wall", ok: false, message: `The wall is ${wall} mm: under 0.8 mm a casting fails` } : { id: "wall", ok: true, message: "The wall is thick enough to cast" },
+    ];
+    if (kind === "eternity") checks.push({ id: "fit", ok: true, message: "The stones fit around the band" });
+    if (kind === "solitaire") checks.push({ id: "head", ok: true, message: "The head clears the finger" });
+    return {
+      params: { ...params, sizeText: size["usText"] },
+      handles: ["A1", "A2"],
+      size,
+      metal: { name: p["metal"], density: 15.5, grams: 3.42 },
+      stones,
+      checks,
+      at: [0, 0],
+    };
   }
 
   /** The display handle of the first entity containing `(x, y)` — the mock's canned pick. */
@@ -628,6 +747,7 @@ export class MockFacade implements RawFacade {
       { id: "layer", label: "Layers", menu: ["Format", "Layers"], shortcut: "", aliases: ["la"], params: "{} → layers", enabled: true },
       { id: "layer.set", label: "Set Layer Properties", menu: [], shortcut: "", aliases: [], params: "{name, on?, frozen?, locked?}", enabled: true },
       { id: "layer.current", label: "Make Current", menu: [], shortcut: "", aliases: [], params: "{name}", enabled: true },
+      { id: "piece", label: "Piece", menu: [], shortcut: "", aliases: [], params: "{kind?: band|solitaire|eternity, metal?: gold24|22|18|14|platinum|silver (default gold18), query?, remove?} → {piece}", enabled: true },
     ]);
   }
 
@@ -812,4 +932,104 @@ export class MockFacade implements RawFacade {
   digest(): string {
     return `mock-${this.revision}-${this.entities.length}`;
   }
+}
+
+// ---- the mock's solid (`piecemesh`, `stlout`) ----
+
+interface MockMesh {
+  part: "metal" | "stone";
+  name: string;
+  color: [number, number, number];
+  positions: number[];
+  indices: number[];
+}
+
+/**
+ * A stand-in solid for the 3D view, generated here and clearly a mock: a plain torus for the band
+ * (as wide and as thick as the mock piece says) and, for a piece that has a stone, one octahedron
+ * above the head. It is in the engine's frame (the finger's axis is Z, the head at +Y, millimetres,
+ * triangles counter-clockwise seen from outside) and is no model of a ring: nothing here is a
+ * seat, a prong or a cut.
+ */
+function mockPieceMesh(piece: Record<string, unknown>, fine: boolean): { meshes: MockMesh[]; bounds: { min: number[]; max: number[] }; triangles: number; notes: string[] } {
+  const num = (key: string, fallback: number, lo: number, hi: number): number => {
+    const v = piece[key];
+    return typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
+  };
+  const wall = num("wall", 1.8, 0.3, 10);
+  const width = num("width", 2.2, 0.5, 30);
+  const inner = 8.25;
+  const major = inner + wall / 2;
+  const around = fine ? 96 : 48;
+  const across = fine ? 20 : 12;
+  const band: MockMesh = { part: "metal", name: "band (mock)", color: [214, 178, 92], positions: [], indices: [] };
+  for (let i = 0; i < around; i += 1) {
+    const u = (2 * Math.PI * i) / around;
+    for (let j = 0; j < across; j += 1) {
+      const v = (2 * Math.PI * j) / across;
+      const r = major + (wall / 2) * Math.cos(v);
+      band.positions.push(r * Math.cos(u), r * Math.sin(u), (width / 2) * Math.sin(v));
+      const a = i * across + j;
+      const b = ((i + 1) % around) * across + j;
+      const c = ((i + 1) % around) * across + ((j + 1) % across);
+      const d = i * across + ((j + 1) % across);
+      band.indices.push(a, b, c, a, c, d);
+    }
+  }
+  const meshes: MockMesh[] = [band];
+  if (piece["kind"] !== "band") {
+    const half = num("stoneWidth", 6.5, 0.5, 30) / 2;
+    const girdle = inner + wall + half * 0.75;
+    const corners = [
+      [half, girdle, 0],
+      [0, girdle, half],
+      [-half, girdle, 0],
+      [0, girdle, -half],
+    ];
+    const stone: MockMesh = { part: "stone", name: "stone (mock)", color: [176, 214, 244], positions: [0, girdle + half * 0.45, 0, 0, girdle - half * 0.75, 0, ...corners.flat()], indices: [] };
+    for (let k = 0; k < 4; k += 1) {
+      const here = 2 + k;
+      const next = 2 + ((k + 1) % 4);
+      stone.indices.push(0, next, here, 1, here, next);
+    }
+    meshes.push(stone);
+  }
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  let triangles = 0;
+  for (const mesh of meshes) {
+    triangles += mesh.indices.length / 3;
+    mesh.positions.forEach((v, i) => {
+      min[i % 3] = Math.min(min[i % 3] ?? v, v);
+      max[i % 3] = Math.max(max[i % 3] ?? v, v);
+    });
+  }
+  return { meshes, bounds: { min, max }, triangles, notes: ["A mock solid: a plain torus, not the engine's ring."] };
+}
+
+/** The mock solid as a binary STL in base64, shaped as the engine's `stlout` replies. */
+function mockStl(meshes: readonly MockMesh[], name: string): Record<string, unknown> {
+  const triangles = meshes.reduce((sum, mesh) => sum + mesh.indices.length / 3, 0);
+  const bytes = new Uint8Array(84 + triangles * 50);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(80, triangles, true);
+  let at = 84;
+  for (const mesh of meshes) {
+    for (let t = 0; t < mesh.indices.length; t += 3) {
+      const corner = (k: number): [number, number, number] => {
+        const v = (mesh.indices[t + k] ?? 0) * 3;
+        return [mesh.positions[v] ?? 0, mesh.positions[v + 1] ?? 0, mesh.positions[v + 2] ?? 0];
+      };
+      const [a, b, c] = [corner(0), corner(1), corner(2)];
+      const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
+      const w = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
+      const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+      const length = Math.hypot(n[0] ?? 0, n[1] ?? 0, n[2] ?? 0) || 1;
+      [...n.map((v) => v / length), ...a, ...b, ...c].forEach((v, i) => view.setFloat32(at + i * 4, v, true));
+      at += 50;
+    }
+  }
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return { format: "stl-binary", base64: btoa(binary), bytes: bytes.length, triangles, name };
 }

@@ -39,11 +39,15 @@ export const UI_ITEMS: readonly UiItem[] = [
   { id: "ui.toggle.sidebar", label: "Sidebar", menu: ["Window", "Sidebar"], shortcut: "Cmd+B" },
   { id: "ui.panel.properties", label: "Properties Inspector", menu: ["Window", "Properties Inspector"], shortcut: "Cmd+1" },
   { id: "ui.toggle.assistant", label: "Assistant", menu: ["Window", "Assistant"], shortcut: "Cmd+7" },
+  // The web shell's own: the drawing as a script beside the drawing.
+  { id: "ui.toggle.source", label: "Source", menu: ["Window", "Source"], shortcut: "Cmd+U" },
   // The web shell's own: one line over the drawing that asks the assistant, the editor's inline key.
   { id: "ui.assistant.ask", label: "Ask the Assistant...", menu: ["Window", "Ask the Assistant..."], shortcut: "Cmd+K" },
   { id: "ui.panel.layers", label: "Layers Palette", menu: ["Window", "Layers Palette"] },
   // The web shell's own: the piece's stones and metal beside the drawing.
   { id: "ui.panel.bench", label: "Bench Sheet", menu: ["Window", "Bench Sheet"] },
+  // The web shell's own: the parametric ring's parameters, edited beside the drawing.
+  { id: "ui.panel.piece", label: "Piece", menu: ["Window", "Piece"] },
   { id: "ui.animations.system", label: "Use System Setting", menu: ["View", "Accessibility", "Animation Effects", "Use System Setting"] },
   { id: "ui.animations.on", label: "On", menu: ["View", "Accessibility", "Animation Effects", "On"] },
   { id: "ui.animations.off", label: "Off", menu: ["View", "Accessibility", "Animation Effects", "Off"] },
@@ -197,8 +201,8 @@ export const MENU_GROUPS: Readonly<Record<string, readonly (readonly string[])[]
   ],
   // The parts of the window; the palettes; where the keyboard goes.
   Window: [
-    ["ui.toggle.sidebar", "ui.toggle.assistant", "ui.assistant.ask", "ui.toggle.cmdline", "ui.toggle.toolbar", "ui.toggle.statusbar", "ui.toggle.menubar"],
-    ["ui.panel.properties", "ui.panel.layers", "ui.panel.bench", "xref"],
+    ["ui.toggle.sidebar", "ui.toggle.assistant", "ui.toggle.source", "ui.assistant.ask", "ui.toggle.cmdline", "ui.toggle.toolbar", "ui.toggle.statusbar", "ui.toggle.menubar"],
+    ["ui.panel.piece", "ui.panel.properties", "ui.panel.layers", "ui.panel.bench", "xref"],
     ["ui.focus.cmdline", "ui.focus.next", "ui.focus.previous"],
   ],
 };

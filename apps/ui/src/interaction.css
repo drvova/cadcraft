@@ -238,3 +238,93 @@
   gap: var(--gap-4);
   padding: var(--gap-2) 0;
 }
+
+/* ---- Piece ---- */
+
+/* The piece is the rail's first section and its longest reading (a solitaire with a halo is
+   fifteen rows before the results): under half the rail at most, then it scrolls, so that in a
+   window 800 tall the layers, the properties and the bench sheet under it keep their rows. */
+.piece {
+  max-height: 44%;
+  max-height: round(down, 44%, 1px);
+  border-top: none;
+}
+
+/* A sentence in the place of the rows (no piece yet; no piece tools in this build): it wraps. */
+.piece-note {
+  padding-block: var(--gap-2);
+  line-height: var(--leading-ui);
+}
+
+/* The three kinds a piece starts as, on the rail's text column. */
+.piece-starts {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-4);
+  padding: var(--gap-2) var(--gap-8) var(--gap-6) var(--rail-text, var(--gap-8));
+}
+
+/* The parameters, the engine's results and its checks are three lists of one column of rows; a
+   hairline parts what is typed from what the engine answers. */
+.piece-list {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.piece-results,
+.piece-checks {
+  margin-top: var(--gap-2);
+  padding-top: var(--gap-2);
+  border-top: var(--hairline) solid var(--border-soft);
+}
+
+/* A result's value is whole and may be long (the size in four other systems): the label takes
+   the room it needs and the value wraps in the rest, as the bench sheet's lines do. */
+.piece-results .prop-row {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+/* A check is its sentence, read whole (it wraps), and the word for how it went on the values'
+   edge. The word says it; the ink only repeats it. */
+.piece-check {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: var(--gap-8);
+  min-height: var(--control-h-row);
+  padding: var(--gap-2) calc(var(--gap-8) + var(--prop-arrow-slot)) var(--gap-2) var(--rail-text, var(--gap-8));
+}
+
+.piece-check-text {
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: var(--font-chip);
+  line-height: var(--leading-ui);
+  overflow-wrap: anywhere;
+}
+
+.piece-check-mark {
+  color: var(--text-faint);
+  font-size: var(--font-chip);
+  line-height: var(--leading-ui);
+  white-space: nowrap;
+}
+
+.piece-check.is-failed .piece-check-text {
+  color: var(--text);
+}
+
+.piece-check.is-failed .piece-check-mark {
+  color: var(--warn);
+}
+
+/* The way out of the piece, quiet under everything else: its label (inside the button's own
+   inset) starts on the rail's text column. */
+.piece-foot {
+  flex: 0 0 auto;
+  display: flex;
+  padding: var(--gap-4) var(--gap-8) var(--gap-4) calc(var(--rail-text, var(--gap-8)) - var(--gap-6));
+}

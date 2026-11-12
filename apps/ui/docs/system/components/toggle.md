@@ -12,11 +12,11 @@ Not applicable: hand-rolled — a native `<button aria-pressed>` drawn from the 
 ## Examples
 `<Toggle size="sm" tone="info" icon="layer.thawed" iconOn="layer.frozen" ariaLabel="Outline frozen" hint={frozen() ? "Thaw" : "Freeze"} pressed={frozen()} onChange={setFrozen} />` — a layer's freeze key: one name, the state in the glyph and `aria-pressed`, the action in the hint.
 
-Real uses, 5 call sites (`rg -c "<Toggle" src` → `src/components/LayerManager.tsx:1`, `src/components/LayersPanel.tsx:3`, `src/components/StatusBar.tsx:1`):
+Real uses, 6 call sites (`rg -c "<Toggle" src` → `src/components/LayerManager.tsx:1`, `src/components/LayersPanel.tsx:3`, `src/components/StatusBar.tsx:1`):
 - `src/components/LayersPanel.tsx:127` — a layer row's on key: `glyph`, `sm`, `tone="absent"` (off is the state that explains a missing layer).
 - `src/components/LayersPanel.tsx:137` — the same row's frozen key: `tone="info"`.
 - `src/components/LayersPanel.tsx:147` — the same row's locked key: `tone="caution"`.
-- `src/components/StatusBar.tsx:171` — each of the status bar's 11 drafting settings: `text`, `sm`, the function key as `shortcut`, the hint above the bar, in a toolbar that is one Tab stop.
+- `src/components/StatusBar.tsx:182` — each of the status bar's 11 drafting settings: `text`, `sm`, the function key as `shortcut`, the hint above the bar, in a toolbar that is one Tab stop.
 
 ### Example files
 | File | Covers | Caption |
@@ -129,7 +129,7 @@ Real uses, 5 call sites (`rg -c "<Toggle" src` → `src/components/LayerManager.
 - `rule/toggle-tone-meaning`: When a `tone` is passed, pick it by which state the person must notice (`absent` for off, `info` or `caution` for on) and pass 1 tone per setting across the whole list, because the tone is the only colour in the column and a tone picked for looks makes 2 rows of the same setting read as different things. Evidence: app 3/3 layer state keys, each with its own tone on every row, `src/components/LayersPanel.tsx`. Check: review `src/components/LayersPanel.tsx`.
   - Don't: `<Toggle tone="caution" icon="layer.off" iconOn="layer.on" ariaLabel="Outline on" pressed={on()} />` — on is the ordinary state, and it would be drawn as a warning on every row.
   - Do: `<Toggle tone="absent" icon="layer.off" iconOn="layer.on" ariaLabel="Outline on" pressed={on()} />`
-- `rule/toggle-group-one-stop`: When more than 3 toggles stand in one bar, give the bar `role="toolbar"` with a name and make it 1 Tab stop (the container sets each `tabIndex`; the arrows, Home and End move), because 11 Tab stops in the status bar stand between the drawing and everything after it. Evidence: single use `src/components/StatusBar.tsx:168`, the toolbar that roves its 11 toggles. Check: review `src/components/StatusBar.tsx`.
+- `rule/toggle-group-one-stop`: When more than 3 toggles stand in one bar, give the bar `role="toolbar"` with a name and make it 1 Tab stop (the container sets each `tabIndex`; the arrows, Home and End move), because 11 Tab stops in the status bar stand between the drawing and everything after it. Evidence: single use `src/components/StatusBar.tsx:179`, the toolbar that roves its 11 toggles. Check: review `src/components/StatusBar.tsx`.
   - Don't: `<div class="status-toggles"><Toggle variant="text" pressed={grid()}>Grid</Toggle>…</div>` with 11 Tab stops.
   - Do: `<div class="status-toggles" role="toolbar" aria-label="Drafting settings" ref={(el) => rovingBand(el, "button")}>…</div>`
 - `rule/toggle-no-native-title`: When a toggle is styled or wrapped, add 0 hints of its own (no `title` attribute set from outside, no `Tooltip` around it), because the component already shows `hint` in the layer's hint box and a second hint stacks on the first. Evidence: app 38/38 toggles in the running shell render no `title` attribute, measured in the browser 2026-11-11. Check: test `src/ui/Toggle.test.tsx`.

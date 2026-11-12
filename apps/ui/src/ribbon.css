@@ -1,0 +1,226 @@
+/* The ribbon (components/ToolStrip.tsx): a row of tabs over one band of tools, each a glyph over
+   its label, in named groups. Every length is a token or a sum of tokens (tokens.css). */
+
+.ribbon {
+  /* A tool: the glyph over one line of label. */
+  --ribbon-label-leading: var(--font-label);
+  --ribbon-tool-h: calc(var(--gap-4) + var(--icon-size-lg) + var(--gap-3) + var(--ribbon-label-leading) + var(--gap-3));
+  /* The band: a tool, the group's caption under it, and the air above and below. */
+  --ribbon-band-h: calc(var(--gap-2) + var(--ribbon-tool-h) + var(--gap-2) + var(--ribbon-label-leading) + var(--gap-4));
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--chrome);
+  border-bottom: var(--hairline) solid var(--border);
+}
+
+/* ---- The tab row ---- */
+
+/* The tabs from the start, the key that folds the band at the end. The row has room for a tab
+   under a finger (rule/tab-touch-target). */
+.ribbon-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-8);
+  min-height: var(--control-h-button);
+  padding: 0 var(--gap-6);
+  min-width: 0;
+}
+
+/* The strip gives way before the fold key does: a tab clips its own label. */
+.ribbon-tabs {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-2);
+  min-width: 0;
+}
+
+.ribbon-head > .ui-icon-button {
+  flex: 0 0 auto;
+}
+
+/* The fold key's chevron points where the band will go: up to fold it away, down to bring it
+   back. One glyph, turned, because a glyph is drawn once for the key it is on. */
+.ribbon.is-folded .ribbon-head > .ui-icon-button .tool-icon {
+  transform: rotate(180deg);
+}
+
+/* ---- The band ---- */
+
+.ribbon-band {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-6);
+  height: var(--ribbon-band-h);
+  padding: 0 var(--gap-6);
+  min-width: 0;
+  border-top: var(--hairline) solid var(--border-soft);
+}
+
+.ribbon-band[hidden] {
+  display: none;
+}
+
+/* The tool bar: the tools, and the overflow key at its end. Nothing is clipped here, so the key's
+   menu can open under the band. */
+.ribbon-bar {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  column-gap: var(--gap-4);
+  height: 100%;
+  min-width: 0;
+}
+
+/* Every tool of the tab is laid out in one row that never wraps and never scrolls; the ones past
+   the bar's room are cut off here and hidden where they stand (`data-folded`), still measured. */
+.ribbon-tools {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  min-width: 0;
+  overflow: clip;
+  /* A focus ring on the first or the last tool is drawn inside the cut. */
+  overflow-clip-margin: var(--gap-2);
+}
+
+/* A group: its tools in a row, its caption under them, centred under the tools that show. */
+.ribbon-group {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--gap-2) 0 var(--gap-3);
+}
+
+.ribbon-group-tools {
+  display: flex;
+  gap: var(--gap-2);
+}
+
+.ribbon-cell {
+  flex: 0 0 auto;
+  display: flex;
+}
+
+.ribbon-caption {
+  width: var(--ribbon-shown, 100%);
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: var(--font-chip);
+  line-height: var(--ribbon-label-leading);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ribbon [data-folded] {
+  visibility: hidden;
+}
+
+/* A group's divider: a hairline the height of the group, with the same room on each side. */
+.tool-divider {
+  flex: 0 0 auto;
+  align-self: center;
+  width: var(--hairline);
+  height: calc(var(--ribbon-band-h) - 2 * var(--gap-8));
+  margin: 0 var(--gap-6);
+  background: var(--border);
+}
+
+/* A tool: the system's ghost Button, stood on end. Only its geometry and its type size are the
+   band's: the glyph at the large step over one line of label, in a box no narrower than a key a
+   finger can take. The inks, the fills, the focus ring and the label that never wraps stay the
+   Button's. */
+.ribbon-cell > .ui-button {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: var(--gap-3);
+  min-width: calc(var(--control-h-tab) + var(--gap-6));
+  height: var(--ribbon-tool-h);
+  padding: var(--gap-4) var(--gap-6) var(--gap-3);
+  border-radius: var(--radius-small);
+  font-size: var(--font-chip);
+  line-height: var(--ribbon-label-leading);
+}
+
+.ribbon-cell > .ui-button .tool-icon {
+  flex: 0 0 auto;
+  width: var(--icon-size-lg);
+  height: var(--icon-size-lg);
+}
+
+/* ---- The overflow key ---- */
+
+/* The overflow key's host, at the bar's end whatever the tools before it leave: the box its menu
+   opens from. The menu hangs from the key's own end, so it opens into the window. */
+.tool-more {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  margin-inline-start: auto;
+}
+
+/* The menu opens under the band: its height gives up the title bar's, the tab row's and the
+   band's, so a long list scrolls under its key instead of being pulled over it. */
+.tool-more > .menu-drop {
+  left: auto;
+  right: 0;
+  max-height: calc(100dvh - var(--control-h-tab) - var(--control-h-button) - var(--ribbon-band-h) - var(--menu-floor, var(--control-h-button)) - var(--gap-8));
+}
+
+/* ---- The one-row ribbon of a window as narrow as a phone ---- */
+
+/* No tab row and no captions: the tab is a select at the row's start, and its tools are icon keys
+   at the size of the old strip, so the drawing keeps its room. */
+.ribbon.is-compact {
+  --ribbon-band-h: var(--control-h-button);
+}
+
+.ribbon.is-compact .ribbon-band {
+  border-top: none;
+}
+
+.ribbon.is-compact .ribbon-band > .ui-select {
+  flex: 0 0 auto;
+}
+
+.ribbon.is-compact .ribbon-bar {
+  column-gap: var(--gap-2);
+}
+
+.ribbon.is-compact .ribbon-tools {
+  align-items: center;
+}
+
+.ribbon.is-compact .ribbon-group {
+  padding: 0;
+}
+
+.ribbon.is-compact .tool-divider {
+  height: var(--icon-size-lg);
+  margin: 0 var(--gap-4);
+  background: var(--border);
+}
+
+/* A tool's glyph is the large step, 16 in the 24 key: the drafting glyphs carry grips, dashes and
+   arrowheads that close up at 14. The overflow key's chevron stays the default size. */
+.ribbon.is-compact .ribbon-cell .tool-icon {
+  width: var(--icon-size-lg);
+  height: var(--icon-size-lg);
+}
+
+.ribbon.is-compact .tool-more > .menu-drop {
+  max-height: calc(100dvh - var(--control-h-tab) - var(--control-h-button) - var(--menu-floor, var(--control-h-button)) - var(--gap-8));
+}
+
+/* Under a finger the icon keys keep their size and stand further apart. */
+@media (pointer: coarse) {
+  .ribbon.is-compact .ribbon-group-tools {
+    gap: var(--gap-6);
+  }
+}

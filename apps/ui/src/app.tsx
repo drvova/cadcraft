@@ -11,7 +11,7 @@
  */
 
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, untrack, type JSX } from "solid-js";
-import { AppFacade, type CommandInfo, type DrawingState, type Grip, type GripOption, type LayerInfo, type SampleName, type SettingsState } from "./facade";
+import { AppFacade, type CommandInfo, type DrawingState, type Grip, type GripOption, type LayerInfo, type SampleName, type ScriptReport, type SettingsState } from "./facade";
 import type { DisplayList } from "./display";
 import { padView, regionCovers, regionOf, VIEW_PAD, viewScale, type DisplayRegion } from "./display-cache";
 import { emptyPrompt, formatPoint, formatSelectBox, pointerWants, type PromptState } from "./prompt";
@@ -36,7 +36,11 @@ import { assistantStartsOpen } from "./assistant";
 import { CanvasView } from "./components/CanvasView";
 import { LayersPanel } from "./components/LayersPanel";
 import { PropertiesPanel } from "./components/PropertiesPanel";
+import { SourcePanel } from "./components/SourcePanel";
+import { Viewport3D } from "./components/Viewport3D";
 import { BenchPanel } from "./components/BenchPanel";
+import { PiecePanel } from "./components/PiecePanel";
+import { NO_CHOICES, NO_PIECE, parsePieceReply, readPieceChoices, type PieceChoices, type PieceState } from "./piece";
 import { InlineAsk } from "./components/InlineAsk";
 import { parseBench, type BenchSheet } from "./bench";
 import { CommandLine } from "./components/CommandLine";
@@ -218,6 +222,10 @@ export function App(props: AppProps): JSX.Element {
   // the window has the room for it beside the drawing, and stays as this browser last left it.
   const [showAssistant, setShowAssistant] = createSignal(loadAssistantOpen());
   createEffect(() => saveAssistantOpen(showAssistant()));
+  /** The Source panel: the drawing's script beside the drawing. It starts closed. */
+  const [showSource, setShowSource] = createSignal(false);
+  /** The stage shows the piece's 3D view (the "3D" tab over the drawing) instead of the drawing. */
+  const [stage3d, setStage3d] = createSignal(false);
   /** The left sidebar as a whole (its palettes keep their own switches inside it). */
   // In a window of a phone's width it would take the whole workspace (styles.css), so it starts closed there.
   const [showSidebar, setShowSidebar] = createSignal(typeof window === "undefined" || window.innerWidth > 560);
@@ -231,6 +239,15 @@ export function App(props: AppProps): JSX.Element {
   const [bench, setBench] = createSignal<BenchSheet | null>(null);
   /** The revision and space the bench sheet was counted at: a refresh that changed nothing counts nothing. */
   let benchAt: string | null = null;
+  /** The Piece section: the drawing's parametric ring, as the engine last described it. */
+  const [showPiece, setShowPiece] = createSignal(true);
+  const [piece, setPiece] = createSignal<PieceState>(NO_PIECE);
+  /** What the engine lets a piece be made of; asked once, when the first piece is shown. */
+  const [pieceChoices, setPieceChoices] = createSignal<PieceChoices>(NO_CHOICES);
+  let pieceChoicesRead = false;
+  /** The revision the piece was read at; and whether the engine said it has no `piece` (never asked again). */
+  let pieceAt: string | null = null;
+  let pieceMissing = false;
   const [theme, setTheme] = createSignal<ThemeChoice>("dark");
   const [animations, setAnimations] = createSignal<AnimChoice>("on");
 
@@ -359,6 +376,7 @@ export function App(props: AppProps): JSX.Element {
     setSpace(state?.space ?? "Model");
     setCommands(props.facade.commands());
     readBench(state);
+    readPiece(state);
     syncDisplay();
   };
 
@@ -376,6 +394,50 @@ export function App(props: AppProps): JSX.Element {
   createEffect(() => {
     if (showBench() && showSidebar()) readBench(untrack(drawing));
   });
+
+  /** A `piece` reply into the section: the piece, none, or (once and for good) no such command. */
+  const takePiece = (env: Parameters<typeof parsePieceReply>[0]): void => {
+    const next = parsePieceReply(env, untrack(piece));
+    if (next.kind === "unavailable") pieceMissing = true;
+    if (next.kind === "piece" && !pieceChoicesRead) {
+      pieceChoicesRead = true;
+      setPieceChoices(readPieceChoices(props.facade));
+    }
+    setPiece(next);
+  };
+
+  /** Ask the engine for the piece again when the drawing changed under the section (or it came back). */
+  const readPiece = (state: DrawingState | null): void => {
+    if (pieceMissing || !showPiece() || !showSidebar()) return;
+    const at = state === null ? "" : `${state.revision}/${state.entityCount}/${state.title}`;
+    if (at === pieceAt) return;
+    pieceAt = at;
+    // An engine that lists its commands without `piece` is not asked: its refusal of an unknown
+    // command would stand on the command line as an error nobody caused.
+    const listed = props.facade.commands();
+    if (listed.length > 0 && !listed.some((c) => c.id === "piece")) {
+      takePiece({ ok: false, error: "unknown command `piece`" });
+      return;
+    }
+    takePiece(props.facade.execute("piece", { query: true }));
+  };
+
+  createEffect(() => {
+    if (showPiece() && showSidebar()) readPiece(untrack(drawing));
+  });
+
+  /**
+   * The Piece section built, rebuilt or removed the piece. A refusal is said beside the command
+   * field and handed back in the engine's words, for the row it names.
+   */
+  const onPieceRun = (params: Record<string, unknown>): string | null => {
+    const env = props.facade.execute("piece", params);
+    saidOnKey = !env.ok;
+    setNotice(env.ok ? null : env.error);
+    if (env.ok) pieceAt = null;
+    refresh();
+    return env.ok ? null : env.error;
+  };
 
   // Recovery copies of unsaved work, and the bar that offers one after an unclean close.
   const recovery = createRecovery({
@@ -764,6 +826,22 @@ export function App(props: AppProps): JSX.Element {
     refresh();
   };
 
+  /**
+   * The Source panel applied its text: the drawing is rebuilt from the script, and the window
+   * follows as after any command (a waiting command is cancelled first, as the engine would; the
+   * view moves only if the script moved it; every surface reads the drawing again).
+   */
+  const applySource = (text: string): ScriptReport => {
+    setNotice(null);
+    recovery.flush();
+    if (prompt().running !== null) setPrompt(props.facade.cancel(prompt()));
+    const before = engineView();
+    const report = props.facade.applyScript(text);
+    followView(before);
+    refresh();
+    return report;
+  };
+
   /** Everything the palette can run: the registry's commands and the shell's own items. */
   const palette = createMemo(() => paletteItems(commands(), UI_ITEMS));
 
@@ -843,8 +921,14 @@ export function App(props: AppProps): JSX.Element {
       case "ui.panel.bench":
         setShowBench((v) => !v);
         return;
+      case "ui.panel.piece":
+        setShowPiece((v) => !v);
+        return;
       case "ui.toggle.assistant":
         setShowAssistant((v) => !v);
+        return;
+      case "ui.toggle.source":
+        setShowSource((v) => !v);
         return;
       case "ui.toggle.sidebar":
         setShowSidebar((v) => !v);
@@ -865,6 +949,12 @@ export function App(props: AppProps): JSX.Element {
         return;
     }
   };
+
+  /** What the Source panel reads the drawing's script again for: another drawing, or a change of this one. */
+  const sourceStamp = createMemo(() => {
+    const d = drawing();
+    return d === null ? "" : `${d.revision}/${d.entityCount}/${d.layerCount}/${d.title}`;
+  });
 
   /** What the pointer is for on the drawing: the running command's prompt decides. */
   const wants = createMemo(() => pointerWants(prompt()));
@@ -1162,8 +1252,11 @@ export function App(props: AppProps): JSX.Element {
         <ToolStrip onInvoke={onInvoke} commands={commands()} />
       </Show>
       <div class={showAssistant() ? "workspace has-assistant" : "workspace"}>
-        <Show when={showSidebar() && (showLayers() || showProperties() || showBench())}>
+        <Show when={showSidebar() && (showPiece() || showLayers() || showProperties() || showBench())}>
           <aside class="sidebar" aria-label="Drawing">
+            <Show when={showPiece()}>
+              <PiecePanel state={piece()} choices={pieceChoices()} onRun={onPieceRun} onNotice={onPropertyNotice} />
+            </Show>
             <Show when={showLayers()}>
               <LayersPanel layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} onMenu={(name, at) => openContext({ kind: "layer", name }, at)} />
             </Show>
@@ -1177,7 +1270,21 @@ export function App(props: AppProps): JSX.Element {
         </Show>
         <div class="editor">
           <RecoveryBar {...recovery.bar} />
-          <LayoutTabs layouts={layouts()} space={space()} onLayout={onLayout} onMenu={(name, at) => openContext({ kind: "layout", name }, at)} />
+          <LayoutTabs
+            layouts={layouts()}
+            space={space()}
+            onLayout={(name) => {
+              // Back from the 3D view to the space that was under it: nothing is asked of the
+              // engine, so the drawing is exactly as it was left.
+              const from3d = stage3d();
+              setStage3d(false);
+              if (!from3d || name.toLowerCase() !== space().toLowerCase()) onLayout(name);
+            }}
+            onMenu={(name, at) => openContext({ kind: "layout", name }, at)}
+            view3d={stage3d()}
+            onView3d={() => setStage3d(true)}
+          />
+          <div class="editor-row">
           <main class="stage">
             <CanvasView
               facade={props.facade}
@@ -1200,6 +1307,10 @@ export function App(props: AppProps): JSX.Element {
               onBeforeQuery={tellView}
               onCursor={setCursor}
             />
+            {/* Over the drawing, which stays mounted under it at its own view. */}
+            <Show when={stage3d()}>
+              <Viewport3D execute={(command, params) => props.facade.execute(command, params)} revision={drawing()?.revision ?? 0} onNotice={setNotice} />
+            </Show>
             <InlineAsk
               open={askOpen()}
               draft={assistant()?.input() ?? ""}
@@ -1213,6 +1324,15 @@ export function App(props: AppProps): JSX.Element {
               shortcut={shortcutLabel("Cmd+K", isMacPlatform())}
             />
           </main>
+          <SourcePanel
+            open={showSource()}
+            stamp={sourceStamp()}
+            readSource={() => props.facade.scriptSource()}
+            onApply={applySource}
+            onClose={() => setShowSource(false)}
+            applyShortcut={shortcutLabel("Cmd+Enter", isMacPlatform())}
+          />
+          </div>
           <Show when={showCmdline()}>
             <CommandLine prompt={prompt} notice={notice} onSubmit={onCommand} />
           </Show>

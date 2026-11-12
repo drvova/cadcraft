@@ -1,27 +1,44 @@
 /**
- * The tool strip: the icon row under the title bar, the drafting tools first (file, history, draw,
- * modify, annotate, view, inspect, print), with a thin divider between groups. Each button starts
- * its command id through `onInvoke`, exactly as the command's menu item does; its name is the
- * command's label, its shortcut is a key cap in the hint and `aria-keyshortcuts`, and the name
- * typed at the command line is the hint's second line.
+ * The ribbon: the tools under the title bar, as a row of tabs naming the kinds of work (Home,
+ * Jewelry, Draw, Modify, Annotate, View) over one band that holds the tab in front's tools, each
+ * a glyph over its label, in named groups with a hairline between them. The model is `../ribbon`
+ * (the tabs, their groups, what fits, what the browser remembers); this file draws it.
  *
- * The icons come from `icons.ts` (original code-drawn paths).
+ * Each tool starts its command id through `onInvoke`, exactly as the command's menu item does. Its
+ * name is the command's label; its hint is what the label leaves out: the name typed at the
+ * command line, the shortcut as a key cap (and `aria-keyshortcuts`), or why it is blocked. The
+ * glyphs come from `icons.ts` (original code-drawn paths).
  *
- * A window narrower than the strip keeps the leading groups that fit, whole, and folds the rest
- * behind one overflow key at the strip's end, which opens them as a menu (`MenuKey`, `./Menu.tsx`):
- * each row is the tool's glyph, its label, its typed name and its shortcut, in the strip's own
- * groups with a separator between them, walked by the keys of every menu. The
- * strip never scrolls. The keys drawn and the overflow key are one Tab stop (`rovingBand`); a
- * tool run from the menu returns the focus to the overflow key.
+ * The tab row is a tablist with one Tab stop: Left, Right, Home and End move along it and bring
+ * that tab's tools to the front as they go. The band is the tab's panel and a tool bar with one
+ * Tab stop of its own (`rovingBand`). The key at the tab row's end folds the band away to leave
+ * the tab row alone, and so does a double click on a tab; a click on a tab brings the band back.
+ * The tab in front and the fold are remembered by the browser.
+ *
+ * The band never scrolls and never wraps. Every tool of the tab is laid out; the ones that end
+ * past the band's room are hidden where they stand and listed by the overflow key at the band's
+ * end, which opens them as a menu (`MenuKey`, `./Menu.tsx`) in the band's own groups. A tool run
+ * from the menu returns the focus to the overflow key.
+ *
+ * A window as narrow as a phone (`COMPACT_QUERY`) has no height to give a band: the ribbon is
+ * one row there, the tab a `Select` at its start and the tab's tools icon keys after it, folded
+ * into the overflow menu in the same way.
  */
 
-import { createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { isMacPlatform, shortcutLabel } from "../commands";
 import type { CommandInfo } from "../facade";
-import { leadingFit, type MenuItem } from "../menu";
+import { ToolIcon } from "../icons";
+import { foldedRows, loadRibbon, RIBBON, RIBBON_TOOLS, ribbonTab, saveRibbon, toolCaption, toolsFit, type RibbonGroup, type ToolbarEntry } from "../ribbon";
 import { rovingIndex } from "../roving";
+import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
+import { Select } from "../ui/Select";
+import { Tab } from "../ui/Tab";
 import { MenuKey } from "./Menu";
+import "../ribbon.css";
+
+export type { ToolbarEntry } from "../ribbon";
 
 /**
  * Wires a band that scrolls sideways without a scrollbar (the editor tabs; the tool strip folds
@@ -92,7 +109,7 @@ export function rovingBand(band: HTMLElement, selector: string, home?: () => HTM
     list[next]?.focus();
   };
   const observer = new MutationObserver(sync);
-  observer.observe(band, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-selected"] });
+  observer.observe(band, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-selected", "data-folded"] });
   band.addEventListener("focusin", onFocusIn);
   band.addEventListener("focusout", sync);
   band.addEventListener("keydown", onKeyDown);
@@ -106,73 +123,10 @@ export function rovingBand(band: HTMLElement, selector: string, home?: () => HTM
 }
 
 /**
- * One toolbar button: the icon id, the command id it invokes, the label, the shortcut, and the
- * name typed at the command line that starts the same command (the engine's first alias, in the
- * capitals a drafter writes it in; empty when the command has none).
+ * Every tool of the ribbon once, a group to a row: what the icon set must hold a path for. The
+ * tabs and their groups are `RIBBON` (`../ribbon`).
  */
-export interface ToolbarEntry {
-  icon: string;
-  id: string;
-  label: string;
-  shortcut: string;
-  alias: string;
-}
-
-/**
- * The toolbar groups, the most used first, so the overflow menu takes the least used: file,
- * history, draw, jewelry, modify, annotate, view, inspect, print. Every id is a command the engine
- * registers (`crates/engine/src/cmd/*`) or one the shell runs itself (`UI_ITEMS`, `../commands`),
- * and each label, shortcut and alias is that command's own.
- */
-export const TOOLBAR: readonly (readonly ToolbarEntry[])[] = [
-  [
-    { icon: "new", id: "new", label: "New Drawing", shortcut: "Cmd+N", alias: "" },
-    { icon: "open", id: "open", label: "Open", shortcut: "Cmd+O", alias: "" },
-    { icon: "save", id: "qsave", label: "Save", shortcut: "Cmd+S", alias: "" },
-  ],
-  [
-    { icon: "u", id: "u", label: "Undo", shortcut: "Cmd+Z", alias: "" },
-    { icon: "redo", id: "redo", label: "Redo", shortcut: "Cmd+Shift+Z", alias: "" },
-  ],
-  [
-    { icon: "line", id: "line", label: "Line", shortcut: "", alias: "L" },
-    { icon: "polyline", id: "pline", label: "Polyline", shortcut: "", alias: "PL" },
-    { icon: "circle", id: "circle", label: "Circle", shortcut: "", alias: "C" },
-    { icon: "arc", id: "arc", label: "Arc", shortcut: "", alias: "A" },
-    { icon: "rectangle", id: "rectang", label: "Rectangle", shortcut: "", alias: "REC" },
-    { icon: "hatch", id: "hatch", label: "Hatch", shortcut: "", alias: "H" },
-    { icon: "text", id: "mtext", label: "Multiline Text", shortcut: "", alias: "T" },
-  ],
-  // The jeweler's own: the blank, a stone, the metal that holds it, and melee.
-  [
-    { icon: "ring", id: "ring", label: "Ring", shortcut: "", alias: "" },
-    { icon: "gem", id: "gem", label: "Gem", shortcut: "", alias: "" },
-    { icon: "setting", id: "setting", label: "Setting", shortcut: "", alias: "" },
-    { icon: "pave", id: "pave", label: "Pavé", shortcut: "", alias: "" },
-  ],
-  [
-    { icon: "move", id: "move", label: "Move", shortcut: "", alias: "M" },
-    { icon: "copy-objects", id: "copy", label: "Copy", shortcut: "", alias: "CO" },
-    { icon: "rotate", id: "rotate", label: "Rotate", shortcut: "", alias: "RO" },
-    { icon: "mirror", id: "mirror", label: "Mirror", shortcut: "", alias: "MI" },
-    { icon: "offset", id: "offset", label: "Offset", shortcut: "", alias: "O" },
-    { icon: "trim", id: "trim", label: "Trim", shortcut: "", alias: "TR" },
-    { icon: "fillet", id: "fillet", label: "Fillet", shortcut: "", alias: "F" },
-    { icon: "erase", id: "erase", label: "Erase", shortcut: "", alias: "E" },
-  ],
-  [{ icon: "dimension-linear", id: "dimlinear", label: "Linear Dimension", shortcut: "", alias: "DLI" }],
-  [
-    { icon: "zoom.extents", id: "zoom.extents", label: "Zoom Extents", shortcut: "", alias: "" },
-    { icon: "zoom.window", id: "zoom.window", label: "Zoom Window", shortcut: "", alias: "" },
-    { icon: "pan", id: "pan", label: "Pan", shortcut: "", alias: "P" },
-  ],
-  [
-    { icon: "properties", id: "ui.panel.properties", label: "Properties", shortcut: "Cmd+1", alias: "" },
-    { icon: "ui.dialog.layers", id: "layer", label: "Layers", shortcut: "", alias: "LA" },
-    { icon: "dist", id: "dist", label: "Measure Distance", shortcut: "", alias: "DI" },
-  ],
-  [{ icon: "plot", id: "plot", label: "Print", shortcut: "", alias: "" }],
-];
+export const TOOLBAR: readonly (readonly ToolbarEntry[])[] = [RIBBON_TOOLS];
 
 export interface ToolStripProps {
   onInvoke: (id: string) => void;
@@ -194,132 +148,264 @@ export function toolNote(entry: ToolbarEntry, enabled: boolean): string | undefi
   return entry.alias === "" ? undefined : `Type ${entry.alias}`;
 }
 
-/** The strip's own keys: the tools drawn and the overflow key, not the rows of the overflow menu. */
-const STRIP_KEYS = ":scope > button, :scope > .tool-more > button";
+/**
+ * The hint of a labelled tool, whose label is already on it: the note, or the label again when a
+ * shortcut is all there is to add (the box then draws the key cap beside it, and a hint equal to
+ * the name is not read twice).
+ */
+export function toolHint(entry: ToolbarEntry, enabled: boolean): string | undefined {
+  return toolNote(entry, enabled) ?? (entry.shortcut === "" ? undefined : entry.label);
+}
+
+/** The window that gets the one-row ribbon: the width at which the shell shows one part at a time (styles.css). */
+export const COMPACT_QUERY = "(max-width: 560px)";
+
+/** The band's own keys: the tools drawn and the overflow key, not the tools folded away nor the rows of the overflow menu. */
+const BAND_KEYS = ".ribbon-cell:not([data-folded]) > button, .tool-more > button";
 
 /**
- * Decides by measurement how many leading groups of the strip are drawn as keys, and tells
- * `apply`. The strip is measured when its box changes (a `ResizeObserver`, so once a frame at
- * most, after layout and before paint) and when the pointer's kind changes the gap between keys.
- * A key's and a divider's sizes are read from the ones drawn and kept for the frames that draw
- * none; the groups' widths follow from them (`leadingFit`), so a folded group is never laid out
- * to be measured. Call it from the strip's `ref`.
+ * Decides by measurement how many leading tools of the band are drawn, and tells `apply`. Every
+ * tool is laid out, drawn or not, so where each ends is read from the page (`toolsFit`). A group
+ * drawn in part is told how wide its drawn part is (`--ribbon-shown`), so its caption stays under
+ * the tools that show. The band is measured when its box changes (a `ResizeObserver`, so once a
+ * frame at most, after layout and before paint), when the pointer's kind changes the keys' gaps,
+ * when the page's fonts arrive, and whenever the caller asks (the returned function: the tab or
+ * the arrangement changed). Call it from the band's `ref`.
  */
-function fitGroups(band: HTMLElement, groups: readonly number[], apply: (count: number) => void): void {
-  let key = 0;
-  let divider = 0;
+function fitTools(bar: HTMLElement, apply: (count: number) => void): () => void {
   const measure = (): void => {
-    const style = getComputedStyle(band);
-    const button = band.querySelector<HTMLElement>(STRIP_KEYS);
-    const rule = band.querySelector<HTMLElement>(":scope > .tool-divider");
-    if (button !== null && button.offsetWidth > 0) key = button.offsetWidth;
-    if (rule !== null) {
-      const margins = getComputedStyle(rule);
-      divider = rule.offsetWidth + (Number.parseFloat(margins.marginLeft) || 0) + (Number.parseFloat(margins.marginRight) || 0);
+    const tools = bar.querySelector<HTMLElement>(":scope > .ribbon-tools");
+    // A band that is not drawn has nothing to measure: what it shows stays as it was.
+    if (tools === null || bar.clientWidth === 0) return;
+    const style = getComputedStyle(bar);
+    const start = tools.getBoundingClientRect().left;
+    const room = bar.getBoundingClientRect().right - (Number.parseFloat(style.paddingRight) || 0) - start;
+    const cells = Array.from(tools.querySelectorAll<HTMLElement>(".ribbon-cell"));
+    const ends = cells.map((cell) => cell.getBoundingClientRect().right - start);
+    const key = (Number.parseFloat(style.getPropertyValue("--control-h-input")) || 0) + (Number.parseFloat(style.columnGap) || 0);
+    const count = toolsFit(ends, room, key);
+    for (const group of tools.querySelectorAll<HTMLElement>(":scope > .ribbon-group")) {
+      const own = cells.filter((cell) => group.contains(cell));
+      const drawn = own.filter((cell) => cells.indexOf(cell) < count);
+      const last = drawn[drawn.length - 1];
+      if (last === undefined || drawn.length === own.length) group.style.removeProperty("--ribbon-shown");
+      else group.style.setProperty("--ribbon-shown", `${last.getBoundingClientRect().right - group.getBoundingClientRect().left}px`);
     }
-    // A strip that is not drawn has nothing to measure: what it shows stays as it was.
-    if (key === 0 || band.clientWidth === 0) return;
-    const gap = Number.parseFloat(style.columnGap) || 0;
-    const room = band.clientWidth - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0);
-    const between = gap + divider + gap;
-    apply(
-      leadingFit(
-        groups.map((keys) => keys * key + (keys - 1) * gap),
-        room,
-        between,
-        between + key,
-      ),
-    );
+    apply(count);
   };
   const observer = new ResizeObserver(measure);
-  observer.observe(band);
+  observer.observe(bar);
   const coarse = window.matchMedia("(pointer: coarse)");
   coarse.addEventListener("change", measure);
+  let gone = false;
+  void document.fonts?.ready.then(() => {
+    if (!gone) measure();
+  });
   onCleanup(() => {
+    gone = true;
     observer.disconnect();
     coarse.removeEventListener("change", measure);
   });
+  return measure;
 }
 
+/** Whether the window is as narrow as a phone now, kept current. False where there is no window to ask. */
+function useCompact(): () => boolean {
+  const query = typeof window === "undefined" || typeof window.matchMedia !== "function" ? null : window.matchMedia(COMPACT_QUERY);
+  const [compact, setCompact] = createSignal(query?.matches ?? false);
+  const onChange = (event: MediaQueryListEvent): void => {
+    setCompact(event.matches);
+  };
+  query?.addEventListener("change", onChange);
+  onCleanup(() => query?.removeEventListener("change", onChange));
+  return compact;
+}
+
+/** Every strip's tabs and panel name each other by `id`: a count per strip. */
+let strips = 0;
+
 export function ToolStrip(props: ToolStripProps): JSX.Element {
-  let strip: HTMLElement | undefined;
-  /** How many leading groups are drawn as keys; the rest are the overflow menu's rows. */
-  const [shown, setShown] = createSignal(TOOLBAR.length);
+  strips += 1;
+  const base = `ribbon-${strips}`;
+  const panelId = `${base}-panel`;
+  const tabId = (id: string): string => `${base}-tab-${id}`;
+  let bar: HTMLElement | undefined;
+  let measure: (() => void) | undefined;
+  const remembered = loadRibbon();
+  const [tabKey, setTabKey] = createSignal(remembered.tab);
+  const [folded, setFolded] = createSignal(remembered.folded);
+  const compact = useCompact();
+  const tab = createMemo(() => ribbonTab(tabKey()));
+  const count = createMemo(() => tab().groups.reduce((sum, group) => sum + group.tools.length, 0));
+  /** How many leading tools of the tab are drawn; the rest are the overflow menu's rows. */
+  const [shown, setShown] = createSignal(Number.POSITIVE_INFINITY);
   const [moreOpen, setMoreOpen] = createSignal(false);
-  const moreKey = (): HTMLElement | null => strip?.querySelector<HTMLElement>(":scope > .tool-more > button") ?? null;
+  const moreKey = (): HTMLElement | null => bar?.querySelector<HTMLElement>(":scope > .tool-more > button") ?? null;
+  const enabled = (id: string): boolean => toolEnabled(id, props.commands);
+  const overflow = createMemo(() => foldedRows(tab(), shown(), enabled));
+  /** The band is away: folded, in a window that has a band to fold. */
+  const away = (): boolean => folded() && !compact();
 
-  // The menu keeps the strip's groups (a separator where the strip has a divider), and each row
-  // carries what its key's hint does: the name typed at the command line.
-  const folded = createMemo((): MenuItem[] =>
-    TOOLBAR.slice(shown()).flatMap((group) =>
-      group.map((entry, at) => ({ label: entry.label, id: entry.id, shortcut: entry.shortcut, enabled: toolEnabled(entry.id, props.commands), children: [], icon: entry.icon, name: entry.alias, group: at === 0 })),
-    ),
+  createEffect(() => saveRibbon({ tab: tabKey(), folded: folded() }));
+  // Another tab's tools, or the other arrangement of the same ones, are laid out now: fit them.
+  createEffect(
+    on([tab, compact, away], () => {
+      setMoreOpen(false);
+      measure?.();
+    }),
   );
+  onMount(() => measure?.());
 
-  const fit = (count: number): void => {
-    if (count === shown()) return;
-    const held = strip?.contains(document.activeElement) === true;
+  const fit = (next: number): void => {
+    if (next === shown() || (next >= count() && shown() >= count())) return;
+    const held = bar?.contains(document.activeElement) === true;
     // The menu listed the tools folded at the other width: it closes.
     setMoreOpen(false);
-    setShown(count);
-    // A key folded away (or a row gone with the menu) while it had the focus hands it on: to the
-    // overflow key, or to the first key when every tool is drawn again.
-    if (held && strip?.contains(document.activeElement) !== true) (moreKey() ?? strip?.querySelector<HTMLElement>(STRIP_KEYS))?.focus();
+    setShown(next);
+    // A tool folded away (or a row gone with the menu) while it had the focus hands it on: to the
+    // overflow key, or to the first tool when every tool is drawn again.
+    const lost = document.activeElement instanceof HTMLElement && document.activeElement.closest("[data-folded]") !== null;
+    if (held && (lost || bar?.contains(document.activeElement) !== true)) (moreKey() ?? bar?.querySelector<HTMLElement>(BAND_KEYS))?.focus();
+  };
+
+  /** Whether the first click of the double click now arriving is the one that brought the band back. */
+  let broughtBack = false;
+  const pick = (id: string, event?: MouseEvent): void => {
+    if (event === undefined || event.detail <= 1) broughtBack = folded();
+    setTabKey(id);
+    if (event !== undefined) setFolded(false);
+  };
+  const onTabKey = (event: KeyboardEvent): void => {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+    const at = RIBBON.findIndex((entry) => entry.id === tabKey());
+    const next = RIBBON[rovingIndex(event.key, at, RIBBON.length, "horizontal") ?? -1];
+    if (next === undefined) return;
+    event.preventDefault();
+    pick(next.id);
+    document.getElementById(tabId(next.id))?.focus();
+  };
+
+  /** Where a group's first tool stands among the tab's tools. */
+  const groupStart = (index: number): number => tab().groups.slice(0, index).reduce((sum, group) => sum + group.tools.length, 0);
+
+  const key = (entry: ToolbarEntry): JSX.Element => (
+    <Show
+      when={!compact()}
+      fallback={
+        <IconButton
+          icon={entry.icon}
+          title={entry.label}
+          shortcut={entry.shortcut === "" ? undefined : shortcutLabel(entry.shortcut, isMacPlatform())}
+          description={toolNote(entry, enabled(entry.id))}
+          disabled={!enabled(entry.id)}
+          onClick={() => props.onInvoke(entry.id)}
+        />
+      }
+    >
+      <Button
+        variant="ghost"
+        ariaLabel={entry.short === undefined ? undefined : entry.label}
+        title={toolHint(entry, enabled(entry.id))}
+        shortcut={entry.shortcut === "" ? undefined : shortcutLabel(entry.shortcut, isMacPlatform())}
+        disabled={!enabled(entry.id)}
+        onClick={() => props.onInvoke(entry.id)}
+      >
+        <ToolIcon id={entry.icon} />
+        <span class="ribbon-tool-label">{toolCaption(entry)}</span>
+      </Button>
+    </Show>
+  );
+
+  const group = (entry: RibbonGroup, index: () => number): JSX.Element => {
+    const captionId = `${base}-group-${index()}`;
+    return (
+      <>
+        <Show when={index() > 0}>
+          <span class="tool-divider" aria-hidden="true" data-folded={groupStart(index()) >= shown() ? "" : undefined} />
+        </Show>
+        <div class="ribbon-group" role="group" aria-labelledby={compact() ? undefined : captionId} aria-label={compact() ? entry.name : undefined} data-folded={groupStart(index()) >= shown() ? "" : undefined}>
+          <div class="ribbon-group-tools" role="none">
+            <For each={entry.tools}>
+              {(item, at) => (
+                <span class="ribbon-cell" role="none" data-folded={groupStart(index()) + at() >= shown() ? "" : undefined}>
+                  {key(item)}
+                </span>
+              )}
+            </For>
+          </div>
+          <Show when={!compact()}>
+            <span class="ribbon-caption" id={captionId}>
+              {entry.name}
+            </span>
+          </Show>
+        </div>
+      </>
+    );
   };
 
   return (
-    <nav
-      class="toolstrip"
-      role="toolbar"
-      aria-label="Tool bar"
-      ref={(element) => {
-        strip = element;
-        fitGroups(
-          element,
-          TOOLBAR.map((group) => group.length),
-          fit,
-        );
-        rovingBand(element, STRIP_KEYS);
-      }}
-    >
-      <For each={TOOLBAR}>
-        {(group, index) => (
-          <Show when={index() < shown()}>
-            <Show when={index() > 0}>
-              <span class="tool-divider" aria-hidden="true" />
-            </Show>
-            <For each={group}>
+    <div class="toolstrip ribbon" classList={{ "is-compact": compact(), "is-folded": away() }}>
+      <Show when={!compact()}>
+        <div class="ribbon-head">
+          <div
+            class="ribbon-tabs"
+            role="tablist"
+            aria-label="Tools"
+            onKeyDown={onTabKey}
+            onDblClick={(event) => {
+              if (!(event.target instanceof Element) || event.target.closest('[role="tab"]') === null) return;
+              // The double click that opened a folded band leaves it open; any other folds it.
+              if (!broughtBack) setFolded(true);
+              broughtBack = false;
+            }}
+          >
+            <For each={RIBBON}>
               {(entry) => (
-                <IconButton
-                  icon={entry.icon}
-                  title={entry.label}
-                  shortcut={entry.shortcut === "" ? undefined : shortcutLabel(entry.shortcut, isMacPlatform())}
-                  description={toolNote(entry, toolEnabled(entry.id, props.commands))}
-                  disabled={!toolEnabled(entry.id, props.commands)}
-                  onClick={() => props.onInvoke(entry.id)}
-                />
+                <Tab size="sm" id={tabId(entry.id)} controls={panelId} selected={tabKey() === entry.id} tabIndex={tabKey() === entry.id ? 0 : -1} onClick={(event) => pick(entry.id, event)}>
+                  {entry.label}
+                </Tab>
               )}
             </For>
-          </Show>
-        )}
-      </For>
-      <Show when={shown() < TOOLBAR.length}>
-        <MenuKey
-          class="tool-more"
-          icon="chevron-down"
-          title="More tools"
-          items={folded()}
-          open={moreOpen()}
-          onOpen={() => setMoreOpen(true)}
-          onClose={() => setMoreOpen(false)}
-          stacked
-          onInvoke={(id) => {
-            // The row that ran the tool is gone with the menu: the focus returns to the key.
-            moreKey()?.focus();
-            props.onInvoke(id);
-          }}
-        />
+          </div>
+          <IconButton icon="chevron-up" title="Tool band" description={folded() ? "Show the tools" : "Hide the tools"} expanded={!folded()} controls={panelId} onClick={() => setFolded((value) => !value)} />
+        </div>
       </Show>
-    </nav>
+      <div class="ribbon-band" id={panelId} role={compact() ? undefined : "tabpanel"} aria-labelledby={compact() ? undefined : tabId(tabKey())} hidden={away()}>
+        <Show when={compact()}>
+          <Select ariaLabel="Tools" title="The kind of tools shown" value={tabKey()} options={RIBBON.map((entry) => ({ value: entry.id, label: entry.label }))} onChange={(id) => pick(id)} />
+        </Show>
+        <div
+          class="ribbon-bar"
+          role="toolbar"
+          aria-label={compact() ? "Tool bar" : `${tab().label} tools`}
+          ref={(element) => {
+            bar = element;
+            measure = fitTools(element, fit);
+            rovingBand(element, BAND_KEYS);
+          }}
+        >
+          <div class="ribbon-tools" role="none">
+            <For each={tab().groups}>{(entry, index) => group(entry, index)}</For>
+          </div>
+          <Show when={shown() < count()}>
+            <MenuKey
+              class="tool-more"
+              icon="chevron-down"
+              title="More tools"
+              items={overflow()}
+              open={moreOpen()}
+              onOpen={() => setMoreOpen(true)}
+              onClose={() => setMoreOpen(false)}
+              stacked
+              onInvoke={(id) => {
+                // The row that ran the tool is gone with the menu: the focus returns to the key.
+                moreKey()?.focus();
+                props.onInvoke(id);
+              }}
+            />
+          </Show>
+        </div>
+      </div>
+    </div>
   );
 }
