@@ -38,6 +38,7 @@ import { LayersPanel } from "./components/LayersPanel";
 import { PropertiesPanel } from "./components/PropertiesPanel";
 import { SourcePanel } from "./components/SourcePanel";
 import { Viewport3D } from "./components/Viewport3D";
+import { TechSheet } from "./components/TechSheet";
 import { BenchPanel } from "./components/BenchPanel";
 import { ObjectsPanel } from "./components/ObjectsPanel";
 import { OBJECTS_LIMIT, parseObjects, type ObjectList } from "./objects";
@@ -49,6 +50,7 @@ import { CommandLine } from "./components/CommandLine";
 import { createRecovery, RecoveryBar } from "./components/RecoveryBar";
 import { GemDialog, RingDialog } from "./components/JewelryDialog";
 import { LayerManager } from "./components/LayerManager";
+import { TemplateGallery } from "./components/TemplateGallery";
 import { opensLayerManager } from "./layer-manager";
 
 export interface AppProps {
@@ -474,6 +476,17 @@ export function App(props: AppProps): JSX.Element {
     return env.ok ? null : env.error;
   };
 
+  /**
+   * The template gallery chose a preset: start it from a clean slate. Any current piece is removed
+   * first (so no stale parameter survives the merge), then the template's own parameters build it —
+   * both through the Piece section's own handler, so a template reaches `piece` exactly as a start
+   * button does. Answers null when it built, else the engine's refusal for the card to show.
+   */
+  const onTemplateChoose = (params: Record<string, unknown>): string | null => {
+    if (untrack(piece).kind === "piece") onPieceRun({ remove: true });
+    return onPieceRun(params);
+  };
+
   // Recovery copies of unsaved work, and the bar that offers one after an unclean close.
   const recovery = createRecovery({
     facade: props.facade,
@@ -768,6 +781,10 @@ export function App(props: AppProps): JSX.Element {
   const [layerManager, setLayerManager] = createSignal(false);
   /** Which of the Ring and Gem dialogs shows, if either. */
   const [jewelry, setJewelry] = createSignal<"ring" | "gem" | null>(null);
+  /** Whether the "Start from a template" gallery shows. */
+  const [showTemplates, setShowTemplates] = createSignal(false);
+  /** Whether the Tech Sheet view (the printable bench sheet) shows over the editor. */
+  const [showTechSheet, setShowTechSheet] = createSignal(false);
   /**
    * A ring or a stone was placed from its dialog: show it. Its weight is read on the Bench
    * section, which counts again here; the line beside the command field is for refusals, in the
@@ -910,6 +927,12 @@ export function App(props: AppProps): JSX.Element {
       loadSample(file === "sample" ? "solitaire" : "bracket");
       return;
     }
+    // The ribbon's and the menu's Tech Sheet open the printable view; typed at the command line
+    // (TECHSHEET, BOM) the engine command still inserts its table, and `execute` still runs it.
+    if (id === "techsheet") {
+      setShowTechSheet(true);
+      return;
+    }
     switch (classify(id)) {
       case "engine":
         startCommand(id);
@@ -938,6 +961,9 @@ export function App(props: AppProps): JSX.Element {
       case "jewelry":
         setJewelry(id === "gem" ? "gem" : "ring");
         return;
+      case "templates":
+        setShowTemplates(true);
+        return;
       case "focus":
         if (id === "ui.focus.cmdline") focusCommandLine();
         else focusRegion(id === "ui.focus.previous" ? -1 : 1);
@@ -963,6 +989,9 @@ export function App(props: AppProps): JSX.Element {
         return;
       case "ui.panel.objects":
         setShowObjects((v) => !v);
+        return;
+      case "ui.view.techsheet":
+        setShowTechSheet((v) => !v);
         return;
       case "ui.toggle.assistant":
         setShowAssistant((v) => !v);
@@ -1295,7 +1324,7 @@ export function App(props: AppProps): JSX.Element {
         <Show when={showSidebar() && (showPiece() || showLayers() || showObjects() || showProperties() || showBench())}>
           <aside class="sidebar" aria-label="Drawing">
             <Show when={showPiece()}>
-              <PiecePanel state={piece()} choices={pieceChoices()} onRun={onPieceRun} onNotice={onPropertyNotice} />
+              <PiecePanel state={piece()} choices={pieceChoices()} onRun={onPieceRun} onNotice={onPropertyNotice} onTemplates={() => setShowTemplates(true)} />
             </Show>
             <Show when={showLayers()}>
               <LayersPanel layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} onMenu={(name, at) => openContext({ kind: "layer", name }, at)} />
@@ -1416,6 +1445,8 @@ export function App(props: AppProps): JSX.Element {
       <LayerManager facade={props.facade} open={layerManager()} onClose={() => setLayerManager(false)} onChanged={refresh} />
       <RingDialog facade={props.facade} open={jewelry() === "ring"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
       <GemDialog facade={props.facade} open={jewelry() === "gem"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
+      <TemplateGallery open={showTemplates()} onClose={() => setShowTemplates(false)} execute={(command, params) => props.facade.execute(command, params)} onChoose={onTemplateChoose} />
+      <TechSheet open={showTechSheet()} execute={(command, params) => props.facade.execute(command, params)} revision={drawing()?.revision ?? 0} onClose={() => setShowTechSheet(false)} />
       <DraftingSettings
         facade={props.facade}
         open={drafting().open}

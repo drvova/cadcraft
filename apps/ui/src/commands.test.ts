@@ -142,6 +142,7 @@ describe("classify", () => {
     expect(classify("ui.sample.bracket")).toBe("sample");
     expect(classify("ui.assistant.ask")).toBe("ask");
     expect(classify("ui.panel.bench")).toBe("visibility");
+    expect(classify("ui.view.techsheet")).toBe("visibility");
     expect(classify("ui.panel.layers")).toBe("visibility");
     expect(classify("ui.panel.properties")).toBe("visibility");
     expect(classify("ui.toggle.cmdline")).toBe("visibility");
@@ -155,6 +156,7 @@ describe("classify", () => {
     expect(classify("ui.animations.off")).toBe("animations");
     expect(classify("ui.animations.system")).toBe("animations");
     expect(classify("ui.dialog.commands")).toBe("palette");
+    expect(classify("ui.dialog.templates")).toBe("templates");
     expect(classify("ui.focus.cmdline")).toBe("focus");
     expect(classify("ui.focus.next")).toBe("focus");
     expect(classify("ui.focus.previous")).toBe("focus");
@@ -186,6 +188,7 @@ describe("UI_ITEMS", () => {
     expect([...UI_ITEMS.map((item) => item.id)].sort()).toEqual(
       [
         "ui.dialog.commands",
+        "ui.dialog.templates",
         "ui.toggle.sidebar",
         "ui.open",
         "ui.saveas",
@@ -195,6 +198,7 @@ describe("UI_ITEMS", () => {
         "ui.panel.bench",
         "ui.panel.layers",
         "ui.panel.objects",
+        "ui.view.techsheet",
         "ui.panel.piece",
         "ui.panel.properties",
         "ui.toggle.assistant",

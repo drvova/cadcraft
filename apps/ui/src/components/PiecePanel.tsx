@@ -49,6 +49,8 @@ export interface PiecePanelProps {
   onRun: (params: Record<string, unknown>) => string | null;
   /** A row refused what was typed before it reached the engine. */
   onNotice?: (message: string) => void;
+  /** Open the "Start from a template" gallery (the empty state's richer start). */
+  onTemplates?: () => void;
 }
 
 /** The refusal standing on a row: which row, and the words for it. */
@@ -164,6 +166,11 @@ export function PiecePanel(props: PiecePanelProps): JSX.Element {
                   </Button>
                 )}
               </For>
+              <Show when={props.onTemplates}>
+                <Button variant="quiet" size="sm" ariaLabel="Start from a template" onClick={() => props.onTemplates?.()}>
+                  Templates…
+                </Button>
+              </Show>
             </div>
           </Match>
           <Match when={props.state.kind === "piece"}>

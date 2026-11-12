@@ -14,7 +14,7 @@
 import type { CommandInfo } from "./facade";
 
 /** What the shell does with an invoked id. */
-export type CommandAction = "engine" | "open" | "save" | "sample" | "visibility" | "theme" | "animations" | "palette" | "ask" | "focus" | "drafting" | "layers" | "jewelry" | "none";
+export type CommandAction = "engine" | "open" | "save" | "sample" | "visibility" | "theme" | "animations" | "palette" | "ask" | "focus" | "drafting" | "layers" | "jewelry" | "templates" | "none";
 
 /** One `ui.*` command the web shell can honour, transcribed from `menus.rs`'s `UI_COMMANDS`. */
 export interface UiItem {
@@ -50,6 +50,10 @@ export const UI_ITEMS: readonly UiItem[] = [
   { id: "ui.panel.piece", label: "Piece", menu: ["Window", "Piece"] },
   // The web shell's own: what the drawing holds, as a searchable tree beside it.
   { id: "ui.panel.objects", label: "Objects", menu: ["Window", "Objects"] },
+  // The web shell's own: a gallery of preset pieces to start a new drawing from.
+  { id: "ui.dialog.templates", label: "Templates...", menu: ["Window", "Templates..."] },
+  // The web shell's own: the piece as a printable bench sheet, shown over the editor.
+  { id: "ui.view.techsheet", label: "Tech Sheet", menu: ["Window", "Tech Sheet"] },
   { id: "ui.animations.system", label: "Use System Setting", menu: ["View", "Accessibility", "Animation Effects", "Use System Setting"] },
   { id: "ui.animations.on", label: "On", menu: ["View", "Accessibility", "Animation Effects", "On"] },
   { id: "ui.animations.off", label: "Off", menu: ["View", "Accessibility", "Animation Effects", "Off"] },
@@ -72,11 +76,13 @@ export function classify(id: string): CommandAction {
   if (id === "ui.open") return "open";
   if (id === "ui.saveas") return "save";
   if (id === "ui.sample" || id === "ui.sample.bracket") return "sample";
-  if (id.startsWith("ui.panel.") || id.startsWith("ui.toggle.")) return "visibility";
+  if (id.startsWith("ui.panel.") || id.startsWith("ui.toggle.") || id.startsWith("ui.view.")) return "visibility";
   if (id.startsWith("ui.theme.")) return "theme";
   if (id.startsWith("ui.animations.")) return "animations";
   if (id.startsWith("ui.focus.")) return "focus";
   if (id === "ui.dialog.commands") return "palette";
+  // The template gallery is the interface's own dialog of preset pieces.
+  if (id === "ui.dialog.templates") return "templates";
   if (id === "ui.assistant.ask") return "ask";
   // Drafting Settings is the interface's dialog over the engine's settings, not a prompt sequence.
   if (id === "dsettings") return "drafting";
@@ -204,7 +210,7 @@ export const MENU_GROUPS: Readonly<Record<string, readonly (readonly string[])[]
   // The parts of the window; the palettes; where the keyboard goes.
   Window: [
     ["ui.toggle.sidebar", "ui.toggle.assistant", "ui.toggle.source", "ui.assistant.ask", "ui.toggle.cmdline", "ui.toggle.toolbar", "ui.toggle.statusbar", "ui.toggle.menubar"],
-    ["ui.panel.piece", "ui.panel.properties", "ui.panel.layers", "ui.panel.objects", "ui.panel.bench", "xref"],
+    ["ui.panel.piece", "ui.dialog.templates", "ui.panel.properties", "ui.panel.layers", "ui.panel.objects", "ui.panel.bench", "ui.view.techsheet", "xref"],
     ["ui.focus.cmdline", "ui.focus.next", "ui.focus.previous"],
   ],
 };

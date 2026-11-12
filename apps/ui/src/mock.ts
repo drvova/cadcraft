@@ -479,10 +479,14 @@ export class MockFacade implements RawFacade {
         return this.pieceCommand(params);
       case "objects":
         return this.objectsCommand(params);
-      case "piecemesh":
+      case "piecemesh": {
         // The piece as a solid, for the 3D view: a mock's stand-in shape, never the engine's ring.
-        if (this.piece === null) return envelope(false, { error: "piecemesh: the drawing has no piece" });
-        return envelope(true, mockPieceMesh(this.piece, params["quality"] === "fine"));
+        // PIECEMESH takes the piece's parameters directly and changes nothing (the gallery's
+        // thumbnails lean on that), so a full spec in `params` is built from; else the stored piece.
+        const spec = typeof params["kind"] === "string" ? params : this.piece;
+        if (spec === null) return envelope(false, { error: "piecemesh: the drawing has no piece" });
+        return envelope(true, mockPieceMesh(spec, params["quality"] === "fine"));
+      }
       case "stlout": {
         if (this.piece === null) return envelope(false, { error: "stlout: the drawing has no piece" });
         const solid = mockPieceMesh(this.piece, true);
