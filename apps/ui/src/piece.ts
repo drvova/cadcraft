@@ -25,12 +25,13 @@ import { asBool, asNumber, asString, isRecord } from "./json";
 import { RING_SYSTEMS, metalLabel, paramsOf, readGemChoices, ringChoices, ENGINE_DEFAULT, type Choice, type JewelryEngine } from "./jewelry-dialog";
 import { numberText, readNumber, type DraftVerdict } from "./props";
 
-export type PieceKind = "band" | "solitaire" | "eternity";
+export type PieceKind = "band" | "solitaire" | "threestone" | "eternity";
 
 /** The kinds the engine builds, in the order the section offers them. */
 export const PIECE_KINDS: readonly Choice[] = [
   { value: "band", label: "Band" },
   { value: "solitaire", label: "Solitaire" },
+  { value: "threestone", label: "Three-stone" },
   { value: "eternity", label: "Eternity" },
 ];
 
@@ -38,6 +39,11 @@ export const PIECE_KINDS: readonly Choice[] = [
 export const PIECE_PROFILES: readonly Choice[] = [
   { value: "flat", label: "Flat" },
   { value: "dome", label: "Dome" },
+  { value: "comfort", label: "Comfort fit" },
+  { value: "court", label: "Court" },
+  { value: "knife", label: "Knife edge" },
+  { value: "bevel", label: "Bevel" },
+  { value: "concave", label: "Concave" },
 ];
 
 /** What a count reads, and what is typed, when the engine fits as many stones as go around. */
@@ -73,6 +79,9 @@ export interface PieceParams {
   /** How many stones were asked for; null when the engine fits them. */
   count: number | null;
   gap: number | null;
+  /** A three-stone ring's side stones: their width (null: the engine's share of the centre's) and prongs. */
+  sideWidth: number | null;
+  sideProngs: number | null;
 }
 
 /** The finger in every system, each as it is shown; null where the engine gave none. */
@@ -140,7 +149,7 @@ const wholeOf = (value: unknown): number | null => {
 
 function kindOf(value: unknown): PieceKind | null {
   const name = nameOf(value);
-  return name === "band" || name === "solitaire" || name === "eternity" ? name : null;
+  return name === "band" || name === "solitaire" || name === "threestone" || name === "eternity" ? name : null;
 }
 
 /** A size in a system that numbers its sizes, as it is shown. */
@@ -172,6 +181,8 @@ function parseParams(value: unknown): PieceParams | null {
     melee: sizeOf(value["melee"]),
     count: wholeOf(value["count"]),
     gap: sizeOf(value["gap"]),
+    sideWidth: sizeOf(value["sideWidth"]),
+    sideProngs: wholeOf(value["sideProngs"]),
   };
 }
 
@@ -348,7 +359,7 @@ export function pieceRows(piece: Piece, choices: PieceChoices, system: string): 
   if (p.kind === "band") return rows;
   rows.push({ key: "cut", label: "Cut", value: p.cut, kind: "choice", choices: withHeld(choices.cuts, p.cut, capital) });
   rows.push({ key: "stone", label: "Stone", value: p.stone, kind: "choice", choices: withHeld(choices.stones, p.stone, capital) });
-  if (p.kind === "solitaire") {
+  if (p.kind === "solitaire" || p.kind === "threestone") {
     if (choices.round.includes(p.cut)) {
       rows.push({ key: "stoneWidth", label: "Stone, mm", value: num(p.stoneWidth), kind: "number", both: true });
     } else {
@@ -356,6 +367,12 @@ export function pieceRows(piece: Piece, choices: PieceChoices, system: string): 
       rows.push({ key: "stoneWidth", label: "Stone width, mm", value: num(p.stoneWidth), kind: "number" });
     }
     rows.push({ key: "prongs", label: "Prongs", value: num(p.prongs), kind: "whole" });
+    if (p.kind === "threestone") {
+      // The side stones: empty reads as the engine's own share of the centre stone.
+      rows.push({ key: "sideWidth", label: "Side stones, mm", value: num(p.sideWidth), kind: "number" });
+      rows.push({ key: "sideProngs", label: "Side prongs", value: num(p.sideProngs), kind: "whole" });
+      return rows;
+    }
     rows.push({ key: "halo", label: "Halo", value: p.halo === null ? "false" : "true", kind: "tick" });
     if (p.halo !== null) {
       rows.push({ key: "haloWidth", label: "Halo stones, mm", value: num(p.halo), kind: "number" });
