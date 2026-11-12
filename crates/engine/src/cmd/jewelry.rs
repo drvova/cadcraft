@@ -14,7 +14,10 @@
 
 mod bench;
 mod gem;
+mod mesh;
 mod pave;
+mod piece;
+mod piece_params;
 mod setting;
 mod sizes;
 #[cfg(test)]
@@ -36,6 +39,8 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(pave::specs());
     v.extend(setting::specs());
     v.extend(bench::specs());
+    v.extend(piece::specs());
+    v.extend(mesh::specs());
     v
 }
 
