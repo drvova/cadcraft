@@ -1,8 +1,8 @@
 # CADCraft roadmap
 
-**Stage: pre-alpha** · next: alpha, ~3 points (37% → 40% ready for real work) and the four failing core workflows of the [alpha gate](docs/roadmap.md#alpha-gate): ~125–190 Opus 5.5 hours as estimated before the interface was replaced, plus the new interface's own gaps, not estimated yet
+**Stage: pre-alpha** · next: alpha, ~2 points (38% → 40% ready for real work) and the four failing core workflows of the [alpha gate](docs/roadmap.md#alpha-gate): ~125–190 Opus 5.5 hours as estimated before the interface was replaced, plus the new interface's own gaps, not estimated yet
 
-> **Last reviewed:** 2026-10-10 (features, files, hours) · 2026-11-12 (interface) · **Last updated:** 2026-11-12 · **Change:** minor (the web interface gained grips, right-click menus and its first dialog: UI/UX fidelity ≈ 31% → ≈ 37%, ready for real work ≈ 36% → ≈ 37%; on 2026-11-11, major: the egui interface was removed, the interface is the web interface in `apps/ui` and the desktop app is that interface in a native webview) · **Target:** Autodesk AutoCAD 2027
+> **Last reviewed:** 2026-10-10 (features, files, hours) · 2026-11-12 (interface) · **Last updated:** 2026-11-12 · **Change:** minor (the web interface gained dynamic input, the Layer Properties Manager, paper under a layout and recovery of unsaved work, after grips, right-click menus and its first dialog the same day: UI/UX fidelity ≈ 31% → ≈ 42%, ready for real work ≈ 36% → ≈ 38%; on 2026-11-11, major: the web interface replaced the egui interface) · **Target:** Autodesk AutoCAD 2027
 
 CADCraft targets full parity with AutoCAD (2D drafting first, then annotation, layouts and
 plotting, DWG, parametrics and 3D), plus what AutoCAD doesn't have: agent control over MCP, a
@@ -10,11 +10,12 @@ scriptable CLI, a web build, Linux and FreeBSD builds, and a free licence.
 
 **Why pre-alpha:** four of AutoCAD's five core workflows fail the [alpha gate](docs/roadmap.md#alpha-gate).
 Precise drafting: the new interface draws with the pointer, snaps to objects, follows ortho,
-polar, grid snap and object snap tracking, and edits by grips, but there is no dynamic input and
-one dialog (Drafting Settings). Blocks, plotting and every other
+polar, grid snap and object snap tracking, takes dynamic input at the pointer and edits by grips;
+what fails there is engine-side (no TK, approximate ellipse and spline intersections) and the
+missing snap menu. There are two dialogs (Drafting Settings, Layer Properties Manager). Blocks, plotting and every other
 command with a dialog run as command-line prompts only. The app opens and saves DXF, not DWG, and
 a DWG saved by the CLI drops what CADCraft doesn't model and has never been checked in AutoCAD.
-Dimensioning passes, by typing. Ready for real work (≈ 37%) is under the ~40% alpha bar. Beta was
+Dimensioning passes, by typing. Ready for real work (≈ 38%) is under the ~40% alpha bar. Beta was
 ≈ 600–930 h away before the interface change.
 
 **The interface, 2026-11-11.** The egui interface is gone. The interface is a SolidJS app over
@@ -30,7 +31,7 @@ exercised in Chromium and, as the desktop app, on Windows. What it lacks is in
 | Number | Value | Kind |
 |---|---|---|
 | Feature breadth (AutoCAD for Mac menu items with a live command) | **62%** (304 / 491: 300 engine commands in the checklist generated 2026-10-26, plus 4 interface-only items hand-counted 2026-11-11; 2D menus only ≈ 65% as of 2026-10-10, not recounted) | measured ([parity-checklist.md](docs/parity-checklist.md) + interface-only items); `cargo xtask parity` not re-run |
-| Ready for real work | **≈ 37%** (38% with the egui interface) | estimated ([target-app-parity.md](docs/target-app-parity.md)); weighted sum hand-computed 2026-11-12 |
+| Ready for real work | **≈ 38%** (as with the egui interface; 35% when the interface was first replaced) | estimated ([target-app-parity.md](docs/target-app-parity.md)); weighted sum hand-computed 2026-11-12 |
 | Mainstream practitioner (2D drafter) | **≈ 28%** on the egui interface; not re-measured, lower now (lower than the full number: file exchange, stability and interaction discounts multiply) | estimated ([target-app-parity.md](docs/target-app-parity.md#mainstream-practitioner)) |
 | Essentials user | **≈ 46%** on the egui interface; not re-measured, lower now | estimated ([target-app-parity.md](docs/target-app-parity.md#essentials-user)) |
 | Remaining to alpha | **≈ 125–190 h** (the gate rows), plus the interface's gaps, not estimated | estimated before the interface change |
@@ -41,7 +42,7 @@ exercised in Chromium and, as the desktop app, on Windows. What it lacks is in
 
 | Audience | Ready % | Opus 5.5 agent wall-clock hours to ~95% | Work that dominates |
 |---|---:|---|---|
-| Full target (ready for real work) | ≈ 37% | ≈ 1,150–1,850 h (≈ 70% parallelises across 4–6 agents: ≈ 300–480 h elapsed) | 3D kernel (300–450 h), DWG/DXF and other formats, AutoLISP and ecosystem, blocks/xrefs/dynamic blocks, localization |
+| Full target (ready for real work) | ≈ 38% | ≈ 1,150–1,850 h (≈ 70% parallelises across 4–6 agents: ≈ 300–480 h elapsed) | 3D kernel (300–450 h), DWG/DXF and other formats, AutoLISP and ecosystem, blocks/xrefs/dynamic blocks, localization |
 | Mainstream practitioner (2D drafter) | ≈ 28% (egui; not re-measured) | ≈ 570–880 h (≈ 70% parallelises: ≈ 150–240 h elapsed) | lossless DWG exchange and a real-file corpus, precision input (tracking, dynamic input), 2D geometry precision, blocks/xrefs, annotation depth, stability backlog |
 | Essentials user | ≈ 46% (egui; not re-measured) | ≈ 140–225 h (≈ 50% parallelises across 3 agents: ≈ 60–110 h elapsed) | stubbed options in basic draw/modify commands, opening DWGs people send, launch/stability fixes, plot dialog, context menus and dynamic input |
 
@@ -59,7 +60,7 @@ Hours are Opus 5.5 agent wall-clock hours, calibrated on this repo's own build: 
 | Dimension | Parity | Remaining (h) | Doc |
 |---|---:|---|---|
 | Features (depth, weighted by use) | 41% | 735–1,115 | [target-app-parity.md](docs/target-app-parity.md#by-feature-area-the-features-dimension) |
-| UI/UX fidelity | 37% (web interface, re-scored 2026-11-12; 43% here for egui) | 100–160 (not re-estimated; too low) | [ui-parity.md](docs/ui-parity.md) |
+| UI/UX fidelity | 42% (web interface, re-scored 2026-11-12; 43% here for egui) | 100–160 (not re-estimated; too low) | [ui-parity.md](docs/ui-parity.md) |
 | File formats | 30% | 170–280 | [file-format-parity.md](docs/file-format-parity.md) |
 | Hardware | 45% | 15–25 | [hardware-parity.md](docs/hardware-parity.md) |
 | Localization | 5% (egui catalogs, since removed; not re-measured) | 60–100 | [localization-parity.md](docs/localization-parity.md) |
@@ -107,7 +108,8 @@ catalogs.
 Ranked; detail and the full beta checklist in [docs/roadmap.md](docs/roadmap.md). The list was
 ranked before the interface was replaced; the interface's gaps (W1–W14 in
 [docs/gaps.md](docs/gaps.md#uiux)) are not ranked into it yet, and item 4's tracking and dynamic
-input: tracking is done and reaches the pointer; dynamic input is engine-side only.
+input: tracking and dynamic input are done and reach the pointer. Item 6: the interface keeps
+recovery copies in the browser; the engine's autosave is not reached from it.
 
 1. Gate and land: fix fmt on main, run `cargo xtask ci` on every PR, land the 47 open PRs (15–25 h).
 2. Stop losing data on save; native MULTILEADER; save DWG/DXF at a chosen version (30–45 h).
@@ -123,6 +125,7 @@ input: tracking is done and reaches the pointer; dynamic input is engine-side on
 
 | Date | Entry |
 |---|---|
+| 2026-11-12 | Paper under a layout, dynamic input, recovery of unsaved work, the Layer Properties Manager and a wider drafting font. A layout draws its sheet and printable area, with white objects inked dark on the paper; each space keeps its own view and Zoom Extents on a layout frames the sheet. With DYN on, the prompt and its fields (X and Y, distance and angle, or one value) follow the pointer; a typed value locks and holds the rubber band, Tab moves between fields, Down lists the prompt's options. Unsaved work is copied to the browser's storage three seconds after it changes and offered back on the next start (Restore, Save a copy…, Discard), never silently. Layers opens a manager: a grid of layers edited in place, bulk changes in one undo step, a filter, sorting, the keyboard throughout. The drafting font covers 362 characters instead of 101 (superscripts, fractions, Latin-1, accented Latin, signs), so "m²" no longer draws a box. Limits: dynamic input needs the drawing focused and previews typed angles as plain degrees; the unsaved mark stays after Save; the manager has no layer states, filters or viewport overrides; Greek and Cyrillic still box in the interface. UI/UX ≈ 37% → ≈ 42%, ready for real work ≈ 37% → ≈ 38% (hand-assessed). |
 | 2026-11-12 | Grips, right-click menus and the first dialog in the web interface. A selection shows its grips: hover warms one, a press or a click makes it hot and edits through the engine's grip command, Space cycles Stretch, Move, Rotate, Scale and Mirror, Shift collects several, and a multifunctional grip offers its options. A right click opens a menu on the drawing (at rest, over a selection, and during a command with Enter, Cancel and the prompt's keywords; a quick right click during a command is still Enter), on a layer row and on a layout tab; the menu key, Shift+F10 and a long press open the same. Drafting Settings (snap and grid, polar tracking, object snap modes) is the first dialog, on a new Dialog component; the design system has fourteen components. Selection and hover are a halo under the object, so each keeps its own colour. Limits: every grip is a square, no grips for touch, dynamic-block grips unit-tested only; every other dialog, dynamic input and the snap menu are still missing. UI/UX ≈ 31% → ≈ 37%, ready for real work ≈ 36% → ≈ 37% (hand-assessed). |
 | 2026-11-11 | The interface is rebuilt on the web stack and the egui interface is removed. The desktop app is the web interface in a native window (the system webview), embedding the build of `apps/ui`. The shell is laid out as an editor: title bar with the menus and a command centre, a drawing toolbar (draw, modify, annotate), a sidebar with Layers and Properties, layout tabs over the drawing, the command line as the bottom panel, the assistant, a status bar of drafting toggles, and a command palette (Ctrl+Shift+P). Drawing with the pointer: a click gives a running command its point, with the engine's rubber band, the object-snap marker and a snapped click, and the engine's snapped cursor behind it, so ortho, polar tracking, grid snap and object snap tracking constrain the click with a label and the rays drawn; hover highlight, window and crossing selection, right click as Enter, middle-button pan, wheel zoom, touch pan and pinch (touch not tried on a device). The wasm facade gained `cancel`, `preview`, `pick`, `snap`, `pointer`, `click`, `set_viewport` and `set_cursor`, and `properties.set` refuses bad values. Keyboard patterns through the whole shell (menubar, toolbar, tabs, F6 between parts, function keys for the toggles, command chords). The assistant: setup in two steps with a connection check, chats as tabs, a queue, a changes row with undo, tool rows as sentences, bounds on a provider's output. A design system of thirteen components with specs, a checker and generated docs; dark and light themes with measured contrast. Not carried over from egui: dialogs, grips, dynamic input, context menus, DWG in the app, autosave, the translations, the control channel. UI/UX 43% → ≈ 31%, ready for real work ≈ 38% → ≈ 36%. Exercised in Chromium, on Windows for the desktop shell, and with a local stand-in for a model provider. Docs: [ui-parity.md](docs/ui-parity.md), [apps/ui/README.md](apps/ui/README.md). |
 | 2026-10-26 | One tool, and the model builds its own: the assistant and MCP advertise exactly `run`, which executes AutoLISP **inside the open drawing** — `(cmd "circle" '((CENTER . (0 0)) (RADIUS . 5)))` draws, `(cmdline "line" "0,0" "10,0")` types at the command line, `(commands)`/`(describe "id")` discover, `(cmd "describe")` measures, `(render)` shows a picture — and a `defun` the model writes is kept in `%APPDATA%\CADCraft\definitions` and reloaded next session (`(kept)`, `(forget)`). The per-capability tool catalog is gone, MCP resources with it, and there is no enable/disable flag: running code is what the server does, and sandboxing is the boundary. The same tool in the pane (`assistant {ask}`) and over `cadcraft-cli mcp`. Docs: [assistant.md](docs/assistant.md), [mcp.md](docs/mcp.md). |
@@ -145,6 +148,7 @@ input: tracking is done and reaches the pointer; dynamic input is engine-side on
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | minor | Dynamic input, the Layer Properties Manager, paper under a layout, recovery copies and the 362-character drafting font: banner, why, headline numbers (UI/UX 37% → 42%, ready 37% → 38%, hand-assessed), the note above Upcoming, progress log |
 | 2026-11-12 | minor | Grips, right-click menus and the first dialog (Drafting Settings) in the web interface: banner, why, headline numbers (UI/UX 31% → 37%, ready 36% → 37%, hand-assessed), progress log |
 | 2026-11-11 | major | The web interface replaced the egui interface: banner, why, headline numbers (UI/UX 43% → 31%, ready 38% → 36%; 25% and 35% before the pointer followed the engine's snapped cursor; breadth restated as 304/491 from the generated checklist plus hand-counted interface items), languages (English only), progress log. Hours are unchanged and predate the change; mainstream and essentials numbers not re-measured |
 | 2026-10-25 | minor | Progress log: the jewelry layer (ring sizes, gem cuts, pavé and fit, settings, bench sheet) and [docs/jewelry.md](docs/jewelry.md) |

@@ -88,7 +88,10 @@ The window is laid out as an editor:
 | Title bar | The menus (in groups, each row with the name typed at the command line and its shortcut), the command centre (the drawing's name; it opens the command palette) and three keys that fold the sidebar, the command line and the assistant |
 | Tool strip | File, undo and redo, draw (line, polyline, circle, arc, rectangle, hatch, text), modify (move, copy, rotate, mirror, offset, trim, fillet, erase), linear dimension, zoom and pan, properties, layers, measure and print |
 | Sidebar | Layers (current layer, on, frozen and locked keys) and Properties (the selection's values, edited through `properties.set`) |
-| Editor tabs | Model and the drawing's layouts |
+| Layer Properties Manager | A dialog: a grid of layers edited in place, with bulk changes, New, Rename, Delete, Set current, a filter and sorting (`components/LayerManager.tsx`, `layer-manager.ts`). Opened from Format ▸ Layers, the tool strip's Layers key, or LAYER or LA typed at an idle command line |
+| Editor tabs | Model and the drawing's layouts. A layout draws its sheet of paper and printable area; each space keeps its own view |
+| Dynamic input | With DYN on, the prompt and its fields beside the pointer (`components/DynamicInput.tsx`, `dynamic.ts`) |
+| Recovery bar | After an unclean close, offers the recovery copies kept in this browser: Restore, Save a copy…, Discard (`components/RecoveryBar.tsx`, `autosave.ts`) |
 | Drawing | The canvas |
 | Panel | The command line: history, the prompt, keyword chips |
 | Assistant | The model's panel, on the right |
@@ -131,7 +134,18 @@ off, freezes, locks, selects or isolates its objects, renames (finished at the c
 deletes it; a tab's makes a new layout, renames, deletes and opens Page Setup. A right click on a
 status-bar drafting toggle opens Drafting Settings on that toggle's page.
 
-Not there yet: dynamic input, Tab to cycle snap candidates, the Shift+right-click snap menu,
+With dynamic input on (F12), a box follows the pointer while a command asks for something: the
+prompt, and X and Y for a first point, a distance and an angle for a next one, or one field for
+a number. A field with nothing typed shows the pointer's value; a typed one locks and holds the
+rubber band. It takes typing only while the drawing has the focus and the command line is on
+screen, and it previews a typed angle as degrees counter-clockwise from +X whatever the
+drawing's angle settings (its author's report). It has no component test.
+
+On a layout the drawing sits on its sheet of paper, with colour-7 objects inked dark. Light
+layer colours (yellow, cyan, green) are hard to read there. The wheel, snap markers and hover on
+paper, and widths under 1280, were not checked in a browser by the author of that work.
+
+Not there yet: Tab to cycle snap candidates, the Shift+right-click snap menu,
 menus on the command line and Properties. Grips have limits their author reported: every grip is
 drawn as a square whatever its kind, grips do not work for touch, dynamic-block grips are
 unit-tested only and were never seen in a browser, and the mock engine has none. The
@@ -162,7 +176,15 @@ On macOS the chords use Cmd in place of Ctrl.
 | F9 | Snap mode (grid snap) | Anywhere, mid-command too |
 | F10 | Polar tracking | Anywhere, mid-command too |
 | F11 | Object snap tracking | Anywhere, mid-command too |
-| F12 | Dynamic input (the setting only: the interface draws no dynamic input) | Anywhere |
+| F12 | Dynamic input on or off | Anywhere, mid-command too |
+| Digits and signs | Type into the active field; a typed field locks | Dynamic input (the drawing in focus, a command asking) |
+| Tab | Next field | Dynamic input |
+| `,` | Go on to Y (a distance and angle become X and Y) | Dynamic input |
+| `<` | Go on to the angle | Dynamic input |
+| `@`, `#` | Relative to the last point, absolute | Dynamic input |
+| Down | List the prompt's keywords | Dynamic input |
+| Enter, Escape | Send the line; drop what was typed | Dynamic input |
+| `LAYER` or `LA`, then Enter | Open the Layer Properties Manager | The command line, with no command running |
 | Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Z, Ctrl+Shift+Z and every other chord a command carries | Run that command, as its menu item does | Anywhere but under an open menu, palette or sheet; a text field keeps its own undo, redo, select all and clipboard |
 | Escape | Cancel the running command (a grip edit included); with none running, clear the selection | The drawing, or the command line when its field is empty |
 | Enter, Space | The command line's empty Enter: repeat the last command, or accept the running command's default; during a grip edit, the next mode | The drawing |
@@ -239,6 +261,9 @@ src/commands.ts        what an invoked id means, the menu tree, the ui.* items, 
 src/menu.ts            a menu's pure rules; src/roving.ts the arrow-key walks
 src/palette.ts         the command palette's items and ranking
 src/context.ts         what each right-click menu holds and what its rows do (pure)
+src/dynamic.ts         dynamic input's rules: fields, keys, the line sent (pure)
+src/layer-manager.ts   the Layer Properties Manager's rows, selection and engine calls (pure)
+src/autosave.ts        recovery copies: when one is written, the caps, the browser's store
 src/drafting.ts        Drafting Settings: reading the engine, checking the form, the calls it sends
 src/view.ts            world↔screen mapping, pan, zoom about the pointer, pinch (pure)
 src/display.ts         the display-list parser (the trust boundary for engine bytes)
@@ -253,7 +278,8 @@ src/assistant-session.ts  one chat: its conversation, queue, changes and stored 
 src/icons.ts           every icon, drawn in code (24×24 paths, one 1.25px stroke; no image assets)
 src/components/        TopBar, MenuBar, Menu, ToolStrip, StatusBar (with the editor tabs),
                        CanvasView, LayersPanel, PropertiesPanel, CommandLine, CommandPalette,
-                       ContextMenu, DraftingSettings, AssistantPane
+                       ContextMenu, DraftingSettings, LayerManager, DynamicInput, RecoveryBar,
+                       AssistantPane
 src/ui/                the design system's components, their tests and their one sheet, ui.css
 src/tokens.css         the design tokens
 src/styles.css, chrome.css, interaction.css, canvas.css, palette.css, assistant.css
@@ -270,11 +296,11 @@ tokens; each has a spec in `docs/system/components` and a test beside it.
 
 | Component | Its job |
 |---|---|
-| Button | Runs one action the moment its label says so |
+| Button | Runs one action the moment its label says so (primary, secondary, ghost, quiet and danger variants) |
 | IconButton | Runs one action drawn as a single glyph; its title is its name and its hint |
 | Toggle | Switches one setting on or off in place, under a name that never changes |
 | Checkbox | Holds one yes-or-no value, and can say that what it stands for disagrees |
-| Field | Takes one line of text |
+| Field | Takes one line of text; it has start and end slots and a bare variant, and draws the command line's and the palette's inputs |
 | TextArea | Takes several lines and grows to hold them, up to a limit |
 | Select | Picks one value from a short, known list |
 | Row | The full-width clickable band of a list: a menu item, a property row, a layer |
@@ -304,14 +330,21 @@ tokens".
 
 ## What this interface does not do yet
 
-- Dialogs, but for Drafting Settings. A command that had a dialog in the removed egui interface
-  (Options, Plot, Layer Properties Manager, Hatch and Gradient, the block and text editors) runs
-  here as its command-line prompt sequence only.
-- Dynamic input, Tab to cycle snap candidates, the Shift+right-click snap menu, menus on the
-  command line and Properties, grips for touch, distinct grip shapes.
+- Dialogs, but for Drafting Settings and the Layer Properties Manager. A command that had a
+  dialog in the removed egui interface (Options, Plot, Hatch and Gradient, the block and text
+  editors) runs here as its command-line prompt sequence only. The manager has no layer states,
+  property filters, viewport overrides or full colour picker.
+- Tab to cycle snap candidates, the Shift+right-click snap menu, menus on the command line and
+  Properties, grips for touch, distinct grip shapes, dynamic input that follows the drawing's
+  angle settings.
 - DWG. The wasm build has no DWG reader: opening one says to save as DXF. Save writes DXF.
-- Files are picked and downloaded through the page; there is no autosave and no list of recent
-  files.
+- Files are picked and downloaded through the page; there is no list of recent files. Unsaved
+  work is kept as a recovery copy in the browser's IndexedDB (three per document per tab, 32 MiB
+  a copy, 96 MiB in all; a copy stays on this device). The engine has no "mark saved" for the
+  interface, so the title's unsaved mark stays after Save, and a zoom after Save can leave a
+  copy. The desktop webview's persistence was read from code, not run.
+- Text in the drafting font beyond its 362 characters: Greek past a few letters, Cyrillic and
+  other scripts draw a box, because no system font stands behind it here.
 - Languages other than English.
 - `image` primitives draw their frame only: the display list carries no pixels.
 - A control channel. The removed egui app served one (`docs/control-protocol.md`); nothing does

@@ -1,6 +1,6 @@
 # Target-app parity: CADCraft vs AutoCAD 2027
 
-> **Last reviewed:** 2026-10-10 (features, files, the audience numbers) · 2026-11-12 (UI/UX) · **Last updated:** 2026-11-12 · **Change:** minor (grips, right-click menus and the first dialog in the web interface: UI/UX fidelity ≈ 31% → ≈ 37%, ready for real work ≈ 36% → ≈ 37%; on 2026-11-11, major: the egui interface was removed and the web interface replaced it, UI/UX 43% → ≈ 25%, then ≈ 31%) · **Target:** Autodesk AutoCAD 2027
+> **Last reviewed:** 2026-10-10 (features, files, the audience numbers) · 2026-11-12 (UI/UX) · **Last updated:** 2026-11-12 · **Change:** minor (dynamic input, the Layer Properties Manager, paper under a layout and recovery copies in the web interface: UI/UX fidelity ≈ 37% → ≈ 42%, ready for real work ≈ 37% → ≈ 38%; earlier the same day ≈ 31% → ≈ 37%; on 2026-11-11, major: the web interface replaced the egui interface, UI/UX 43% → ≈ 25%) · **Target:** Autodesk AutoCAD 2027
 
 The authoritative assessment of how close CADCraft is to AutoCAD, and how much Opus 5.5 work
 remains. [ROADMAP.md](../ROADMAP.md) summarises it, [gaps.md](gaps.md) lists every shortfall,
@@ -15,20 +15,20 @@ and the deep checklists are [geometry-parity.md](geometry-parity.md),
 | **Feature breadth** (AutoCAD for Mac menu items with a live command) | **304 / 491 = 62%**: 300 (61%) counted by `cargo xtask parity` on 2026-10-26, which sees engine commands only, plus 4 items the web interface has of its own (Window ▸ Tool Bar, Status Bar, Command Line, Properties Inspector; hand-counted 2026-11-11 against the checklist's uncovered list). It was 245 (233 + 12 egui items) on 2026-10-10. Breadth counts a registered command; in the interface a command that had a dialog runs as command-line prompts | measured ([parity-checklist.md](parity-checklist.md)); `cargo xtask parity` not re-run on 2026-11-11 |
 | Feature breadth, 2D menus only (excluding 150 3D items) | **≈ 65%** (222 / 341 by `cargo xtask parity`'s rule) | measured (source scan, 2026-10-10; not recounted since) |
 | Feature depth, weighted by use (features dimension) | **≈ 41%** | estimated (table below) |
-| **Ready for real work** | **≈ 37%** | estimated (dimension table below; weighted 36.9%; it was 37.7% with the egui interface, and 35.0% then 36.1% on the web interface as the snapped cursor landed) |
+| **Ready for real work** | **≈ 38%** | estimated (dimension table below; weighted 37.6%; it was 37.7% with the egui interface, and 35.0%, 36.1% and 36.9% on the web interface as its parts landed) |
 | Mainstream practitioner (2D drafter, weekly tools) | **≈ 28%**, measured on the egui interface; not re-measured, and lower now | estimated ([below](#mainstream-practitioner)) |
 | Essentials user (core tools, default settings) | **≈ 46%**, measured on the egui interface; not re-measured, and lower now | estimated ([below](#essentials-user)) |
 | Remaining to alpha (gate rows) | **≈ 125–190 Opus 5.5 hours** | estimated |
 | Remaining to beta | **≈ 600–930 Opus 5.5 hours** | estimated |
 | Remaining to full parity | **≈ 1,300–2,100 Opus 5.5 hours** | estimated |
 
-Stage: **pre-alpha**. Four of the five core workflows fail the [alpha gate](roadmap.md#alpha-gate) (precise drafting with tracking, blocks, plotting, lossless DWG save), and ready for real work (≈ 37%) is under the ~40% alpha bar. Alpha was ≈ 125–190 h away before the interface was replaced; the work to bring the web interface to the egui interface's level ([gaps.md](gaps.md#uiux) W1–W14) is not in that figure and is not estimated yet.
+Stage: **pre-alpha**. Four of the five core workflows fail the [alpha gate](roadmap.md#alpha-gate) (precise drafting with tracking, blocks, plotting, lossless DWG save), and ready for real work (≈ 38%) is under the ~40% alpha bar. Alpha was ≈ 125–190 h away before the interface was replaced; the work to bring the web interface to the egui interface's level ([gaps.md](gaps.md#uiux) W1–W14) is not in that figure and is not estimated yet.
 
 ## Readiness by audience
 
 | Audience | Ready % | Opus 5.5 agent wall-clock hours to ~95% | Work that dominates |
 |---|---:|---|---|
-| Full target (ready for real work) | ≈ 37% | ≈ 1,150–1,850 h (≈ 70% parallelises across 4–6 agents: ≈ 300–480 h elapsed) | 3D kernel (300–450 h), DWG/DXF and other formats, AutoLISP and ecosystem, blocks/xrefs/dynamic blocks, localization |
+| Full target (ready for real work) | ≈ 38% | ≈ 1,150–1,850 h (≈ 70% parallelises across 4–6 agents: ≈ 300–480 h elapsed) | 3D kernel (300–450 h), DWG/DXF and other formats, AutoLISP and ecosystem, blocks/xrefs/dynamic blocks, localization |
 | Mainstream practitioner (2D drafter) | ≈ 28% | ≈ 570–880 h (≈ 70% parallelises: ≈ 150–240 h elapsed) | lossless DWG exchange and a real-file corpus, precision input (tracking, dynamic input), 2D geometry precision, blocks/xrefs, annotation depth, stability backlog |
 | Essentials user | ≈ 46% | ≈ 140–225 h (≈ 50% parallelises across 3 agents: ≈ 60–110 h elapsed) | stubbed options in basic draw/modify commands, opening DWGs people send, launch/stability fixes, plot dialog, context menus and dynamic input |
 
@@ -97,7 +97,7 @@ Share), Sheet Set Manager administration, specialist hardware, languages other t
 
 Depths are the area percentages above and in [ui-parity.md](ui-parity.md) as they stood for the
 egui interface. The precision-input and command-line rows, and the interaction discount below,
-are lower for the web interface (no dynamic input, one dialog) and have
+differ for the web interface (two dialogs where egui had many) and have
 not been redone. File I/O is not an area here; it is counted once, as the file-exchange discount.
 
 | Discount | Factor | Evidence |
@@ -107,7 +107,7 @@ not been redone. File I/O is not an area here; it is counted once, as the file-e
 | Exchanging files with AutoCAD users | ×0.80 | saves drop unmodelled entities, images, layer states, multileader styles, true colours and more (#79, #201, #204, #208, #209, #213, #223); never checked in AutoCAD; a 10 MB DWG failed (#57) |
 
 **Mainstream practitioner ≈ 45.3% × 0.90 × 0.85 × 0.80 ≈ 28%** (estimated). It is lower than
-ready for real work (≈ 38% then, ≈ 37% now) for CADCraft, unlike most apps: the full number credits additively
+ready for real work (≈ 38%) for CADCraft, unlike most apps: the full number credits additively
 what CADCraft does well beyond 2D drafting (platforms 75%, performance 60%, hardware 45%), while
 here the three blockers a working drafter hits every day multiply.
 
@@ -179,7 +179,7 @@ presence: an option that prints "not available yet" doesn't count.
 | Dimension | Weight | Parity | Remaining (h) | Kind | Doc |
 |---|---:|---:|---|---|---|
 | Features (table above) | 35% | 41% | 735–1,115 | estimated | this file |
-| UI/UX fidelity (point entry, snaps, tracking, dynamic input, grips, selection, command line, chrome) | 15% | 37% | 100–160 (estimated for the egui interface; not re-estimated) | estimated, weighted in the doc; re-scored for the web interface three times: ≈ 25% as first read and ≈ 31% with the snapped cursor (2026-11-11), ≈ 37% with grips, right-click menus and the first dialog (2026-11-12) (43% before; ui-parity's own table had reached 48% on 2026-10-11 and this row had not followed) | [ui-parity](ui-parity.md) |
+| UI/UX fidelity (point entry, snaps, tracking, dynamic input, grips, selection, command line, chrome) | 15% | 42% | 100–160 (estimated for the egui interface; not re-estimated) | estimated, weighted in the doc; re-scored for the web interface as its parts landed: ≈ 25% as first read and ≈ 31% with the snapped cursor (2026-11-11), ≈ 37% with grips, right-click menus and the first dialog, ≈ 42% with dynamic input, the Layer Properties Manager and paper under a layout (2026-11-12) (43% before; ui-parity's own table had reached 48% on 2026-10-11 and this row had not followed) | [ui-parity](ui-parity.md) |
 | File formats (DWG/DXF fidelity first) | 20% | 30% | 170–280 | estimated | [file-format-parity](file-format-parity.md) |
 | Stability and correctness | 10% | 35% | 30–50 | estimated: about 60 bug fixes merged on 2026-10-10 alone, 30 open issues, `cargo fmt` failing on main (PR #194), no CI runs the Rust tests on pull requests | [gaps](gaps.md#stability) |
 | Performance | 5% | 60% | 20–40 | internal numbers only (200k entities fluent); 1M entities and large DWG loads untested; a 10 MB DWG took ~2 min to fail (#57) | [hardware-parity](hardware-parity.md#performance-on-hardware-internal-numbers-only) |
@@ -188,7 +188,7 @@ presence: an option that prints "not available yet" doesn't count.
 | Platforms | 3% | 75% | 15–25 | macOS, Windows (x64/x86/arm64), Linux, FreeBSD, web: more than AutoCAD; but the web build can't open or save files reliably (#55, #133, #134) and has no DWG, and Windows/Linux get little runtime testing. Not re-measured on 2026-11-11: the desktop app is now the web interface in the system webview, run on Windows only so far, and it shares the web build's limits (no DWG, no autosave) | [gaps](gaps.md#platforms) |
 | Localization | 3% | 5% | 60–100 | measured on the egui interface: string catalog with Ukrainian (936 rows, #36). Not re-measured on 2026-11-11: the catalogs were removed with that interface and the web interface is English only, so this figure is too high (it moves the total by at most 0.15) | [localization-parity](localization-parity.md) |
 | AI features (Autodesk Assistant, Smart Blocks, Markup Assist) | 1% | 20% | 40–80 | the in-app assistant ([assistant.md](assistant.md)), now in the web interface; agent control over MCP is a different strength; no Smart Blocks or Markup Assist | [gaps](gaps.md#ai-features) |
-| **Ready for real work** | 100% | **≈ 37%** (36.9: the weighted sum above, hand-computed 2026-11-12) | **≈ 1,300–2,100** (predates the interface change) | | |
+| **Ready for real work** | 100% | **≈ 38%** (37.6: the weighted sum above, hand-computed 2026-11-12) | **≈ 1,300–2,100** (predates the interface change) | | |
 
 The dimension weights describe what decides whether a professional can switch: features and
 file compatibility dominate.
@@ -226,6 +226,7 @@ DWG/DXF corpus (files from people who own them); black-box checks in AutoCAD of 
 
 | Date | Feature breadth | Weighted parity | Remaining | Note |
 |---|---|---|---|---|
+| 2026-11-12 (later) | unchanged (not recounted) | ready ≈ 38% (37.6%); mainstream and essentials not re-measured | not re-estimated | dynamic input, the Layer Properties Manager, paper under a layout and recovery copies in the web interface: UI/UX ≈ 37% → ≈ 42%. Recovery copies and the wider drafting font touch the features and stability dimensions, which were not re-scored |
 | 2026-11-12 | unchanged (not recounted) | ready ≈ 37% (36.9%); mainstream and essentials not re-measured | not re-estimated | grips, right-click menus and the first dialog in the web interface: UI/UX ≈ 31% → ≈ 37% |
 | 2026-11-11 | 304/491 (62%): engine 300/491 from the checklist generated 2026-10-26, +4 interface items hand-counted | ready ≈ 36% (36.1%); mainstream and essentials not re-measured | not re-estimated | the egui interface was removed and the web interface replaced it: UI/UX 43% → ≈ 25% as first read (ready 35.0%), then ≈ 31% once the pointer followed the engine's snapped cursor |
 | 2026-10-10 (merge) | unchanged (233/491 re-scanned) | ready ≈ 38% (37.7%), mainstream ≈ 28%, essentials ≈ 46% | unchanged within rounding | main landed dynamic input pointer boxes (#60), the Ukrainian catalog (#36), WIPEOUT/gradient DXF fixes (#147, #162): UI/UX 40% → 43%, localization 3% → 5% |
@@ -237,6 +238,7 @@ DWG/DXF corpus (files from people who own them); black-box checks in AutoCAD of 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | minor | The web interface gained dynamic input, the Layer Properties Manager, paper under a layout and recovery copies: UI/UX ≈ 37% → ≈ 42% ([ui-parity.md](ui-parity.md), hand-assessed from the source), ready for real work 36.9% → 37.6% by the dimension weights (hand-computed). No other dimension re-scored |
 | 2026-11-12 | minor | The web interface gained grips, right-click menus and its first dialog (Drafting Settings): UI/UX ≈ 31% → ≈ 37% ([ui-parity.md](ui-parity.md), hand-assessed from the source), ready for real work 36.1% → 36.9% by the dimension weights (hand-computed) |
 | 2026-11-11 | minor | The interface's pointer is resolved by the engine's snapped cursor (ortho, polar, grid snap, object snap tracking): UI/UX ≈ 25% → ≈ 31% ([ui-parity.md](ui-parity.md), hand-assessed), ready for real work 35.0% → 36.1% by the dimension weights (hand-computed) |
 | 2026-11-11 | major | The egui interface was removed; the web interface (`apps/ui`) replaced it and the desktop app is that interface in a native webview. UI/UX fidelity re-scored from the interface's source, 43% → ≈ 25% ([ui-parity.md](ui-parity.md)); ready for real work 37.7% → 35.0% by the dimension weights (hand-computed). Feature breadth restated from the generated checklist (300/491 on 2026-10-26) plus 4 interface-only items, hand-counted. Ecosystem, platforms, localization and AI evidence text updated; their percentages, the mainstream and essentials numbers and every hour figure are not re-measured |

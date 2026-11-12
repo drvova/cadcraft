@@ -18,7 +18,7 @@ over the tracked `src` files; the Rust figures include each crate's tests.
 | L0 | `dxf` | 1,108 | Standalone DXF tag reader/writer: ASCII and binary, tag-count limits for hostile input |
 | L1 | `color` | 311 | AutoCAD Color Index table, true colour, ByLayer/ByBlock |
 | L1 | `doc` | 11,141 | The drawing database: header, symbol tables (layers, linetypes, text/dimension/table/multileader styles), blocks, model space, layouts, constraints; copy-on-write `EntityStore`; our own hatch pattern and linetype library (`library.rs`) |
-| L2 | `fonts` | 4,493 | Our single-stroke drafting font, TrueType/OpenType/`.ttc` outlines through `skrifa`, TEXT and MTEXT layout and formatting codes, per-character fallback and FONTALT |
+| L2 | `fonts` | 4,493 (before the font grew; not recounted) | Our single-stroke drafting font (362 characters: ASCII, all of Latin-1, superscripts and subscripts, fractions, accented Latin Extended-A composed from a base letter and a mark, typographic punctuation and common signs; a character it lacks falls back to the nearest one before the missing-glyph box), TrueType/OpenType/`.ttc` outlines through `skrifa`, TEXT and MTEXT layout and formatting codes, per-character fallback and FONTALT |
 | L2 | `render` | 9,055 | Display lists (polylines, triangles, points tagged with entity handles): linetypes, hatches, gradients, text, block expansion, dimension geometry, paper-space clipping; CPU rasteriser (`tiny-skia`) for PNG, plot preview and tests |
 | L2 | `constraints` | 4,344 | Own parametric solver: damped Gauss–Newton / Levenberg–Marquardt (`lm.rs`), 12 geometric and the dimensional constraints, expressions and parameters, AutoConstrain inference |
 | L3 | `io` | 15,062 | DXF ⇄ document mapping (`dxf_read.rs`, `dxf_write.rs`, CADCraft xdata in `dxf_ext.rs`), PDF plotting, SVG and PNG export |
@@ -63,9 +63,11 @@ scripts, CLI and MCP all reach the same commands. JSON calls never open dialogs.
 
 `render::build` turns a space into a display list (polylines, triangles, points and image
 frames, each tagged with its entity's handle). The facade's `display(margin)` serialises the
-part of it inside the view, padded by the margin, with a revision number; the interface parses
+part of it inside the view, padded by the margin, with a revision number, the `space` the list
+is of and, for a layout, its `sheet` (the paper and its printable area); the interface parses
 it (`apps/ui/src/display.ts`, the trust boundary for engine bytes) and draws it on a 2D canvas
-(`canvas.ts`). There is no GPU path: the wgpu renderer was the egui interface's and went with it.
+(`canvas.ts`), on the sheet of paper when the list carries one, with colour-7 objects inked dark
+there. There is no GPU path: the wgpu renderer was the egui interface's and went with it.
 
 The interface keeps the list it holds until the view leaves the padded window, the drawing's
 revision changes, or a zoom passes the detail the list was built for (`display-cache.ts`), so a
@@ -121,5 +123,6 @@ The desktop shell never lets a request path reach the file system.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | minor | The display list carries `space` and a layout's `sheet`, and the canvas draws a layout on its paper; the drafting font covers 362 characters with composed glyphs and a nearest-character fallback |
 | 2026-11-11 | major | The interface is `apps/ui` over the wasm facade and the desktop app is that interface in a native webview (egui removed, d5cad47). Workspace table: `wasm`, `ai`, `cadcraft` and `ui` rows rewritten, line counts recounted (57,000 → about 149,000 lines of Rust, tests included). Rendering rewritten: a 2D canvas over the facade's display list, no GPU path. Agent control: the control channel is not served; the assistant runs in the interface. Data model: Helix, MLine, Region, Tolerance noted. Safety: the facade's bounds |
 | 2026-10-10 | major | First committed architecture doc, measured from the code (crate sizes, entity kinds, command counts) |

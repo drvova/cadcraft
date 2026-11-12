@@ -1,23 +1,23 @@
 # UI parity
 
-> **Last reviewed:** 2026-11-12 · **Last updated:** 2026-11-12 · **Change:** minor (grips on the drawing, right-click menus, the first dialog (Drafting Settings), a selection that keeps each object's colour: UI/UX fidelity ≈ 31% → ≈ 37%; on 2026-11-11, major: re-measured against the web interface, ≈ 48% → ≈ 25%, then ≈ 31% with the snapped cursor) · **Target:** Autodesk AutoCAD 2027 for Mac (26.0)
+> **Last reviewed:** 2026-11-12 · **Last updated:** 2026-11-12 · **Change:** minor (dynamic input at the pointer, the Layer Properties Manager, paper under a layout, recovery of unsaved work: UI/UX fidelity ≈ 37% → ≈ 42%; earlier the same day, grips, right-click menus and the first dialog, ≈ 31% → ≈ 37%; on 2026-11-11, major: re-measured against the web interface, ≈ 48% → ≈ 25%) · **Target:** Autodesk AutoCAD 2027 for Mac (26.0)
 
 How CADCraft's interaction compares with AutoCAD's: point entry, object snaps, tracking, dynamic
 input, grips, selection, the command line, chrome and navigation. A drafter's speed in AutoCAD
 comes from these, so "the command exists" isn't enough: it has to accept the same input, snap to
 the same points and respond to the same keys. Work items: [gaps.md](gaps.md#uiux).
 
-**Headline (estimated): UI/UX fidelity ≈ 37%.** The interface is the SolidJS app in `apps/ui`,
+**Headline (estimated): UI/UX fidelity ≈ 42%.** The interface is the SolidJS app in `apps/ui`,
 in a browser tab or in the desktop app's native webview. The egui interface was removed on
-2026-11-11, and its dialogs, dynamic input and translations went with it. What the engine does
+2026-11-11, and most of its dialogs and its translations went with it. What the engine does
 for typed input still works: the command line, point syntax, point modifiers and typed snap
 overrides. The pointer draws: a click gives a running command its point, resolved by the
 engine's own snapped cursor, so object snaps, ortho, polar tracking, grid snap and object snap
-tracking constrain it. A selection shows its grips and they edit through the engine's grip
-command. A right click opens a menu on the drawing, a layer row and a layout tab. One dialog
-exists, Drafting Settings; every other dialog, dynamic input and the snap menu are still
-missing. Remaining: **≈ 110–170 Opus 5.5 hours** was the estimate for the egui interface; it
-has not been re-estimated for this one.
+tracking constrain it, and with dynamic input on, the prompt and its fields follow the pointer.
+A selection shows its grips. A right click opens a menu. A layout draws its sheet of paper.
+Two dialogs exist, Drafting Settings and the Layer Properties Manager; the others and the snap
+menu are still missing. Remaining: **≈ 110–170 Opus 5.5 hours** was the estimate for the egui
+interface; it has not been re-estimated for this one.
 
 ## How this was measured
 
@@ -32,7 +32,12 @@ has not been re-estimated for this one.
   `components/DraftingSettings.tsx`, `drafting.ts`, `ui/Dialog.tsx`, the facade's grip calls).
   Not run in this pass. The author of the grip work reports these limits: every grip is drawn
   as a square, dynamic-block grips are unit-tested only and were never seen in a browser, grips
-  do not work for touch, and the mock engine has none. The commits that
+  do not work for touch, and the mock engine has none.
+- 2026-11-12, again at 0ca8810: dynamic input (`dynamic.ts`, `components/DynamicInput.tsx`), the
+  Layer Properties Manager (`layer-manager.ts`, `components/LayerManager.tsx`), paper under a
+  layout (`display.ts`, `canvas.ts`, the facade's `space` and `sheet`) and recovery copies
+  (`autosave.ts`, `components/RecoveryBar.tsx`). Not run in this pass. Their authors report
+  what was not checked; each section below repeats it. The commits that
   landed the interface say what was exercised: Chromium only, and the desktop webview on Windows
   only. Touch is implemented and unit-tested, not tried on a device.
 - CADCraft, engine: the rows that cite `crates/engine` files were read on 2026-10-10 (main at
@@ -52,14 +57,14 @@ has not been re-estimated for this one.
 | Point entry | 15% | 45% | 45% | 6.8 |
 | Object snaps | 15% | 45% | 40% | 6.0 |
 | Tracking, polar, ortho, grid/snap | 10% | 70% | 60% | 6.0 |
-| Dynamic input | 10% | 45% | 0% | 0.0 |
+| Dynamic input | 10% | 45% | 40% | 4.0 |
 | Grips | 10% | 40% | 35% | 3.5 |
 | Selection | 10% | 40% | 30% | 3.0 |
 | Command line | 10% | 60% | 45% | 4.5 |
-| Chrome and palettes | 10% | 45% | 25% | 2.5 |
-| Navigation | 5% | 55% | 50% | 2.5 |
+| Chrome and palettes | 10% | 45% | 35% | 3.5 |
+| Navigation | 5% | 55% | 55% | 2.8 |
 | Keyboard shortcuts, context menus | 5% | 25% | 35% | 1.8 |
-| **Total** | 100% | ≈ 48% | | **36.5 ≈ 37%** |
+| **Total** | 100% | ≈ 48% | | **41.8 ≈ 42%** |
 
 ## Point entry (≈ 45%)
 
@@ -132,12 +137,28 @@ of a command.
 | Drafting Settings dialog | yes | yes: Snap and Grid (each switch and its X and Y spacing), Polar Tracking (the switch, the increment angle, additional angles) and Object Snap (the switch, tracking, a box per running snap beside its marker). Opened from Tools ▸ Drafting Settings..., by typing DSETTINGS, DS or SE at an idle command line, and by a right click on a status-bar drafting toggle, which opens that toggle's page. OK sends only what changed; a refused value is shown beside its field (`DraftingSettings.tsx`, `drafting.ts`) |
 | Hatch and Gradient / Hatch Edit dialogs | yes | **no**: HATCH and HATCHEDIT run at the command line |
 
-## Dynamic input (0%)
+## Dynamic input (≈ 40%)
 
-AutoCAD's heads-up input (F12) has editable pointer-input fields, dimensional input fields with
-Tab between them, relative-by-default second points, a prompt with clickable options and a
-down-arrow menu. The web interface draws none of it. F12 and the status toggle set DYNMODE and
-nothing reads it. The egui interface had pointer input boxes (#60); they were removed with it.
+With DYN on (F12 or the status toggle), a box beside the pointer says what the running command
+asks and takes the answer there (`dynamic.ts`, `components/DynamicInput.tsx`). What is typed in
+it is the command line's own input: every edit is echoed into the command line's field and
+every line is sent through it.
+
+| Feature | AutoCAD | CADCraft |
+|---|---|---|
+| Pointer input fields (X, Y) | yes | yes, for a first point; a field with nothing typed shows the pointer's value |
+| Dimensional input (distance and angle) for a next point | yes | yes: Distance and Angle from the last point |
+| A single value (a radius, a count) | yes | yes, one field |
+| Typed values lock, with a lock icon | yes | yes: a typed field is locked, shows a padlock and holds the rubber band to its value; emptying it unlocks |
+| Tab between fields; `,` to Y; `<` to the angle | yes | yes |
+| Relative by default for a second point, `#` for absolute, `@` for relative | yes | yes |
+| The prompt at the pointer, Down arrow for its options (DYNPROMPT) | yes | yes: the prompt in a quiet line; Down lists the prompt's keywords |
+| Typed angles follow the drawing's angle settings | yes | **no**: a typed angle is previewed as degrees counter-clockwise from +X whatever ANGBASE, ANGDIR and the angle units say (its author's report) |
+| Works wherever the keyboard is | yes | **partly**: it takes typing only while the drawing has the focus and the command line is on screen (its author's report) |
+| Dimensional input on grips (length and angle while stretching) | yes | not checked: a grip edit is a running command with a point prompt, so the box may show; nothing in the source is specific to grips |
+| DYNMODE, DYNPIFORMAT, DYNPICOORDS, DYNDIM settings | yes | DYNMODE only (on or off) |
+
+Its author verified it in a browser; it has no component test (`dynamic.ts` has unit tests).
 
 ## Grips (≈ 35%)
 
@@ -156,7 +177,7 @@ prompt, keywords, snapped cursor and Escape are the command line's.
 | Several hot grips at once (Shift-click) | yes | yes: Shift on a grip collects it for the next edit |
 | Multifunctional grip menus (Add Vertex, Remove Vertex, Convert to Arc, Lengthen …) | yes | yes for the grips the engine gives options: the menu opens when the pointer rests on the grip, and on a right click of it. No Ctrl to cycle the options |
 | Escape | cancels the edit, then clears | yes: the first Escape cancels the edit, a second clears the selection |
-| Grip dimensional input (length/angle fields) | yes | no (no dynamic input) |
+| Grip dimensional input (length/angle fields) | yes | not checked (see Dynamic input) |
 | Dynamic block grips | yes | the engine's dynamic-block grips go through the same calls; unit-tested only, never seen in a browser |
 | Grip appearance (GRIPSIZE, colours, kinds) | yes | **every grip is a square**: kinds (a polyline's midpoint rectangle, a dynamic block's arrow) are not distinguished; the size comes from the engine's reply; no grip colours |
 | Grips with touch | n/a | **no**: a finger pans; grips need a mouse or a pen |
@@ -193,39 +214,44 @@ prompt, keywords, snapped cursor and Escape are the command line's.
 | UNDO with Mark, Back, BEgin, End, Auto, Control | yes | engine |
 | SETVAR for every system variable | ~1,000 sysvars | about 150 by name (engine) |
 | Scripts (SCRIPT, `.scr`) | yes | script text through the CLI and MCP; the SCRIPT command needs a file path, which the web interface cannot give |
+| Dynamic input types into it | yes | yes: what is typed at the pointer is echoed in the command line's field and sent through it |
 | Floating/docked command window, transparency, lines of history | yes | docked as the panel under the drawing; folds with Ctrl+J or Ctrl+9 |
 
-## Chrome and palettes (≈ 25%)
+## Chrome and palettes (≈ 35%)
 
 | Feature | AutoCAD for Mac | CADCraft |
 |---|---|---|
 | Menu bar | 11 menus, 491 leaf items | the same 11 menus, built from the command registry, in groups with separators, each row showing the name typed at the command line (lower case, quiet) and its shortcut; a submenu opens beside its whole menu; breadth is in [parity-checklist.md](parity-checklist.md). Pointing at another title while one is open opens it; full keyboard walk; one Main menu key at 900px and under |
 | Tool Bar | yes | yes: file, undo/redo, 7 draw tools, 8 modify tools, linear dimension, zoom and pan, properties, layers, measure, print; an overflow menu, in the strip's groups, when the window is narrow |
 | File tabs, Start tab | yes | **no**: one drawing at a time, named in the title bar |
+| Drawing recovery | Drawing Recovery Manager | yes, in the interface's own form: a recovery copy is kept in the browser's IndexedDB three seconds after the last change and when the page is hidden or closed, and the next start shows a bar offering Restore, Save a copy… and Discard. Nothing is restored or thrown away silently; copies stay on the device (`autosave.ts`, `components/RecoveryBar.tsx`). Limits its author reported: the title's unsaved mark stays after Save, a zoom after Save can leave a copy, and the desktop webview's persistence was read from code, not run |
 | Layout tabs | yes | yes, as the tabs over the drawing (Model and each layout), with a right-click menu: New Layout, Rename... (finished at the command line), Delete, Page Setup. No reorder, no in-place rename |
+| Paper space on screen | a sheet with its printable area | yes: a layout draws its sheet and printable area, colour-7 objects are inked dark on the paper, and the selection, grip and snap inks are chosen for it. Light layer colours (yellow, cyan, green) are low-contrast on paper and left as they are. Not checked in a browser by its author: the wheel, snap markers and hover on paper, and widths under 1280 |
 | Tool Sets palette (Drafting, Modeling, … with flyouts) | yes | **no** (the tool strip stands in) |
 | Properties Inspector, Quick Properties | yes | Properties in the sidebar (its header says "N selected"): the drawing's defaults, a single selection and a multiple selection; layer, colour, linetype, linetype scale, lineweight, transparency, thickness and visibility are edited through `properties.set`, which refuses a bad value and says why. No per-object geometry fields, no Quick Properties |
-| Layer Properties Manager (filters, states, VP overrides) | yes | **no.** The Layers palette lists the layers with colour, on, frozen and locked keys (shown on hover or when not at their default) and sets the current layer. A row's right-click menu adds Make Current, Turn Off, Freeze, Lock, Select Objects, Isolate, Rename... (finished at the command line) and Delete. Creating a layer and its colour, linetype, lineweight and plot flag go through the LAYER command line |
+| Layer Properties Manager (filters, states, VP overrides) | yes | yes, as a dialog: a grid of layers edited in place (name, on, freeze, lock, plot, colour from the seven named colours, linetype, lineweight, transparency, description), several rows selected and changed together in one undo step, New, Rename, Delete, Set current, a name filter, sorting, and the keyboard throughout. Opened from Format ▸ Layers, the tool strip's Layers key, and LAYER or LA typed at an idle command line (`LayerManager.tsx`, `layer-manager.ts`). **Not there:** layer states, property filters, viewport overrides, a full colour picker (index or true colour) |
+| Layers palette | yes | the sidebar's list: colour, on, frozen and locked keys (shown on hover or when not at their default), the current layer, and a row's right-click menu (Make Current, Turn Off, Freeze, Lock, Select Objects, Isolate, Rename..., Delete) |
 | Blocks palette, Content | yes | **no** |
-| Status bar toggles | ~25 | 11 toggles (Grid, Snap, Ortho, Polar, Iso, OTrack, OSnap, LW, Transp, Dyn, QP) with their function keys; they set the engine's settings, and a right click on one opens Drafting Settings on its page. Snap, Ortho, Polar, OTrack and OSnap change what the pointer does, also in the middle of a command; Grid, Iso, LW, Transp, Dyn and QP change nothing on the canvas |
+| Status bar toggles | ~25 | 11 toggles (Grid, Snap, Ortho, Polar, Iso, OTrack, OSnap, LW, Transp, Dyn, QP) with their function keys; they set the engine's settings, and a right click on one opens Drafting Settings on its page. Snap, Ortho, Polar, OTrack and OSnap change what the pointer does, also in the middle of a command; Dyn shows dynamic input at the pointer; Grid, Iso, LW, Transp and QP change nothing on the canvas |
 | Command palette | no | yes: every command with its menu path, command-line name and shortcut, ranked, the recently used first |
 | ViewCube | interactive 3D | **no** |
 | Navigation bar, SteeringWheels | yes | no |
 | Workspaces | Drafting & Annotation, 3D Modeling | no |
 | Options / Preferences dialog | many tabs | **no** (OPTIONS has a JSON form in the engine; no dialog) |
 | Drafting Settings dialog | yes | yes, the interface's first dialog (see Tracking above), on the design system's Dialog: a native modal with a title bar, a scrolling body and actions |
-| Other dialogs (Plot, Page Setup, Hatch, Dimension Style, Layer Properties Manager, Block Editor, in-place MTEXT editor, Units, External References) | yes | **none.** The commands run as their command-line prompts |
+| Other dialogs (Plot, Page Setup, Hatch, Dimension Style, Block Editor, in-place MTEXT editor, Units, External References) | yes | **none.** The commands run as their command-line prompts |
 | Customisation (CUI, aliases editor, tool palettes) | yes | no |
 | Themes | Dark, Light | Dark, Light, System; every text, icon, border and focus-ring pair has a measured contrast in both (`apps/ui/docs/system/colors.md`) |
 | Interface languages | 8 | English only (the egui interface's catalogs were removed with it) |
 | Accessibility | VoiceOver basics | every control has a name; menus, toolbar, tabs and toggles follow the standard keyboard patterns, each as one Tab stop; F6 walks the regions; the command line is a live log; animation follows the system's reduced-motion setting (View ▸ Accessibility ▸ Animation Effects). Read from the code and its tests; not tried with a screen reader in this pass |
 | Narrow windows | n/a | the menus fold at 900px, the tool strip folds its overflow, the status bar gives way in order, the assistant takes the workspace at 560px |
 
-## Navigation (≈ 50%)
+## Navigation (≈ 55%)
 
 | Feature | AutoCAD | CADCraft |
 |---|---|---|
-| ZOOM Extents, All, Window, Previous, In/Out, Center, Scale, Object | yes | yes (engine); the canvas follows a view a command moved |
+| ZOOM Extents, All, Window, Previous, In/Out, Center, Scale, Object | yes | yes (engine); the canvas follows a view a command moved, and holds it through the resize that follows; on a layout, Zoom Extents frames the sheet |
+| Each space keeps its own view | yes | yes: Model and each layout come back at the view they were left at |
 | ZOOM Realtime (drag), Dynamic | yes | engine (#463); not checked through this interface |
 | Wheel zoom about cursor, ZOOMFACTOR, ZOOMWHEEL | yes | wheel zoom about the pointer; the factor is the interface's own |
 | Middle-drag pan, double-middle-click extents | yes | yes |
@@ -242,7 +268,7 @@ prompt, keywords, snapped cursor and Escape are the command line's.
   Ctrl+J and Ctrl+9 (command line), Ctrl+1 (Properties), Ctrl+7 (assistant), F6 and Shift+F6
   (next and previous part). The full table is in [apps/ui/README.md](../apps/ui/README.md#keyboard).
 - Function keys: F3, F7, F8, F9, F10, F11 and F12 flip their drafting settings, and F3, F8, F9,
-  F10 and F11 change the pointer at once, in the middle of a command too. F2 (text window), F4
+  F10, F11 and F12 (dynamic input) change the pointer at once, in the middle of a command too. F2 (text window), F4
   and F5 (isoplane) do nothing.
 - Escape cancels the running command (a grip edit included), or clears the selection. The
   Delete key does not erase the selection; Erase is in the selection's menu.
@@ -266,6 +292,7 @@ prompt, keywords, snapped cursor and Escape are the command line's.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | minor | Read at 0ca8810: dynamic input at the pointer (prompt, X/Y or distance/angle or one value, typed values lock, Tab, comma, `<`, `@`, `#`, Down for the options), the Layer Properties Manager as a dialog, paper under a layout with per-space views and extents on the sheet, recovery copies with a bar on the next start. Dynamic input 0% → 40%, chrome and palettes 25% → 35%, navigation 50% → 55%; total 36.5 → 41.8 (≈ 37% → ≈ 42%), hand-assessed from the source, not run. Limits kept from their authors: dynamic input needs the drawing focused and the command line shown, and previews typed angles as degrees counter-clockwise from +X; paper was not checked for the wheel, snap markers, hover or widths under 1280; the manager has no layer states, filters, viewport overrides or full colour picker |
 | 2026-11-12 | minor | Read at 43dd130: grips on the drawing (drawn for the selection, press-drag-release or click-move-click through the engine's grip command, Space to cycle the modes, keyword options, Shift for several hot grips, multifunctional grip menus), right-click menus (drawing at rest, with a selection, during a command, grips, layer rows, layout tabs; the menu key, Shift+F10, a long press), the first dialog (Drafting Settings), selection and hover as a halo that keeps each object's colour. Grips 0% → 35%, keyboard and context menus 20% → 35%, chrome 20% → 25%, tracking 55% → 60% (the dialog); total 31.3 → 36.5 (≈ 31% → ≈ 37%), hand-assessed from the source, not run. Limits kept from the grip work's author: every grip is a square, dynamic-block grips unit-tested only, no grips for touch |
 | 2026-11-11 | minor | The pointer is resolved by the engine's snapped cursor (facade `pointer`, `Session::snap_cursor`): ortho with Shift to flip it, polar tracking, grid snap and object snap tracking constrain a click, with a label, the rays and the acquired points drawn; Extension, Parallel and Apparent Intersection are reached by the same call; direct distance entry follows the path; hover follows the selection-preview filter; menus are grouped and show typed names. Point entry 40% → 45%, object snaps 30% → 40%, tracking 10% → 55%; total 24.5 → 31.3 (≈ 25% → ≈ 31%), hand-assessed from the source. Its author tried ortho, polar, grid snap and tracking in Chromium; Extension, Parallel, Apparent Intersection and the typed distance on a path are read from the source only |
 | 2026-11-11 | major | Re-measured against the web interface (`apps/ui`, main at ec61741) after the egui interface was removed. Every area re-scored from the source; total ≈ 48% → ≈ 25% (hand-assessed, not run). Gained: pointer drawing with rubber band, snap marker and snapped clicks, hover highlight, window and crossing selection, PICKADD, the command palette, full keyboard patterns, measured contrast in two themes, narrow-window behaviour. Lost with egui: every dialog, grips, dynamic input, context menus, the snapped cursor (ortho, polar, grid snap, tracking, Extension, Parallel, Apparent Intersection; restored later the same day, the row above), Tab snap cycling, selection cycling, file tabs, Tool Sets, Layer Properties Manager, Blocks palette, ViewCube, interface languages. The hours estimate is not re-estimated |
