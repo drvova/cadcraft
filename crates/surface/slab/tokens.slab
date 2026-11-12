@@ -1,0 +1,78 @@
+// The palette every CADCraft surface shares. The values are the interface's own design tokens
+// (apps/ui/src/tokens.css), written once more as Slab tokens: the base is the dark palette (the
+// interface's default), `theme light` is its light mirror, and `theme dark` names the base so a
+// host can ask for either by name. Colour is a signal here as it is there: one ink at an alpha
+// ladder over near-black / near-white surfaces, an accent, and three status inks.
+tokens {
+  color {
+    page       #0F0F0F
+    panel      #141414
+    raised     #1C1C1C
+    line       #F0F0F01F
+    hair       #F0F0F014
+    ink        #F0F0F0
+    dim        #F0F0F0BD
+    faint      #F0F0F099
+    accent     #599CE7
+    accentSoft #599CE71F
+    ok         #3FA266
+    okSoft     #3FA2661F
+    warn       #F1B467
+    warnSoft   #F1B4671F
+    bad        #E34671
+    badSoft    #E346711F
+  }
+  text {
+    eyebrow { size 10; weight 700; tracking 1.4 }
+    title   { size 24; weight 700; leading 1.2 }
+    figure  { size 20; weight 700; leading 1.2 }
+    head    { size 10; weight 700; tracking 1.2 }
+    body    { size 13; weight 400 }
+    strong  { size 13; weight 600 }
+    small   { size 11; weight 400 }
+    tag     { size 10; weight 700; tracking 0.8 }
+    num     { size 12; weight 400 }
+  }
+}
+
+theme dark {
+  color {
+    page       #0F0F0F
+    panel      #141414
+    raised     #1C1C1C
+    line       #F0F0F01F
+    hair       #F0F0F014
+    ink        #F0F0F0
+    dim        #F0F0F0BD
+    faint      #F0F0F099
+    accent     #599CE7
+    accentSoft #599CE71F
+    ok         #3FA266
+    okSoft     #3FA2661F
+    warn       #F1B467
+    warnSoft   #F1B4671F
+    bad        #E34671
+    badSoft    #E346711F
+  }
+}
+
+theme light {
+  color {
+    page       #F8F8F8
+    panel      #FCFCFC
+    raised     #F3F3F3
+    line       #1414141F
+    hair       #14141414
+    ink        #141414
+    dim        #141414BD
+    faint      #141414A8
+    accent     #2678C1
+    accentSoft #2678C11F
+    ok         #007041
+    okSoft     #0070411F
+    warn       #A46701
+    warnSoft   #A467011F
+    bad        #BE1744
+    badSoft    #BE17441F
+  }
+}

@@ -195,6 +195,13 @@ How image exports (PNG 2400×1600, SVG, PDF) are framed: `convert` fits the mode
 rectangle, centred and scaled without distortion; `--view extents` or `--view current` forces
 either framing. To frame a selection set, `zoom {"mode":"object"}` after selecting.
 
+The command-line tool can also draw the piece card, the bench sheet as a page and a terminal
+dashboard (`run --card card.svg --sheet sheet.svg`, `tui`, and `(card)` for an agent). They are
+an optional build, because the layout technology they use ([Slab](https://github.com/stencil-hq/slab))
+is fetched and patched rather than committed: `cargo xtask slab`, then
+`cargo xtask surfaces build --release`. A default `cargo build` needs none of it. See
+[docs/surfaces.md](docs/surfaces.md).
+
 MCP serves **one tool**: `run`, which executes AutoLISP inside the open drawing. Everything is
 reached from that code — `(cmd "circle" '((CENTER . (0 0)) (RADIUS . 5)))` draws,
 `(cmdline "line" "0,0" "10,0")` types at the command line, `(cmd "describe")` reads the drawing

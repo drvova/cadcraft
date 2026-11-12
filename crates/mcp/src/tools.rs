@@ -20,6 +20,34 @@ pub fn tool_definitions(_has_ui: bool) -> Value {
     json!({ "tools": cadcraft_ai::surface::tools() })
 }
 
+/// The most bytes of one picture a result inlines. A client receives it base64-encoded (a third
+/// larger) inside one JSON-RPC line; past this a picture is named, not sent. The engine's own
+/// renders and the piece card are far below it.
+pub const MAX_IMAGE_BYTES: u64 = 4 * 1024 * 1024;
+/// The most pictures one result inlines.
+pub const MAX_IMAGES: usize = 8;
+
+/// One picture a run drew, as a content block: the image itself (`type: image`, base64 `data`,
+/// `mimeType`), or a line of text saying why it is not there.
+fn image_block(path: &str) -> Value {
+    match std::fs::metadata(path) {
+        Ok(m) if m.len() > MAX_IMAGE_BYTES => {
+            return json!({"type": "text", "text": format!("(the picture at {path} is {} bytes, over the {MAX_IMAGE_BYTES} a reply carries; open the file)", m.len())});
+        }
+        Err(e) => return json!({"type": "text", "text": format!("(could not read the render at {path}: {e})")}),
+        Ok(_) => {}
+    }
+    match std::fs::read(path) {
+        Ok(bytes) if bytes.len() as u64 <= MAX_IMAGE_BYTES => {
+            json!({"type": "image", "data": cadcraft_engine::cmd::file::base64_encode(&bytes), "mimeType": "image/png"})
+        }
+        Ok(bytes) => {
+            json!({"type": "text", "text": format!("(the picture at {path} is {} bytes, over the {MAX_IMAGE_BYTES} a reply carries; open the file)", bytes.len())})
+        }
+        Err(e) => json!({"type": "text", "text": format!("(could not read the render at {path}: {e})")}),
+    }
+}
+
 /// Wrap a message as a failing MCP result.
 fn err_text(e: &str) -> Value {
     json!({"content": [{"type": "text", "text": e}], "isError": true})
@@ -90,11 +118,13 @@ pub fn call_tool(b: &mut dyn Backend, name: &str, args: &Value) -> Result<Value,
     // A run that drew pictures returns them as image content blocks beside its text, so a client
     // sees what the code produced, not just a file path.
     let mut content: Vec<Value> = vec![json!({"type": "text", "text": report.text()})];
-    for path in &report.images {
-        match std::fs::read(path) {
-            Ok(bytes) => content.push(json!({"type": "image", "data": cadcraft_engine::cmd::file::base64_encode(&bytes), "mimeType": "image/png"})),
-            Err(e) => content.push(json!({"type": "text", "text": format!("(could not read the render at {path}: {e})")})),
-        }
+    for path in report.images.iter().take(MAX_IMAGES) {
+        content.push(image_block(path));
+    }
+    if report.images.len() > MAX_IMAGES {
+        content.push(
+            json!({"type": "text", "text": format!("({} more pictures were drawn; a reply carries {MAX_IMAGES})", report.images.len() - MAX_IMAGES)}),
+        );
     }
     Ok(json!({"content": content, "isError": report.error.is_some()}))
 }
@@ -195,6 +225,21 @@ mod tests {
         assert_eq!(content[1]["type"], "image");
         assert_eq!(content[1]["mimeType"], "image/png");
         assert!(!content[1]["data"].as_str().unwrap().is_empty(), "the bytes are inlined");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_picture_over_the_cap_is_named_not_inlined() {
+        let path = std::env::temp_dir().join(format!("cadcraft-mcp-big-{}.png", std::process::id()));
+        std::fs::write(&path, vec![0u8; MAX_IMAGE_BYTES as usize + 1]).expect("write");
+        let many: Vec<String> = std::iter::repeat_n(path.to_string_lossy().to_string(), MAX_IMAGES + 3).collect();
+        let mut b = Recorder { answer: json!({"value": "T", "images": many}), ..Recorder::default() };
+        let r = call_tool(&mut b, "run", &json!({"code": "(render)"})).unwrap();
+        let content = r["content"].as_array().unwrap();
+        assert!(content.iter().all(|c| c["type"] == "text"), "nothing that large is inlined");
+        assert_eq!(content.len(), 1 + MAX_IMAGES + 1, "the report, a line per picture up to the cap, and the count left out");
+        assert!(content[1]["text"].as_str().unwrap().contains("over the"), "{}", content[1]);
+        assert!(r.to_string().len() < 20_000);
         let _ = std::fs::remove_file(&path);
     }
 }

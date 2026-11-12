@@ -27,10 +27,11 @@ over the tracked `src` files; the Rust figures include each crate's tests.
 | L5 | `wasm` | 2,295 | The facade the interface runs on: the engine compiled to WebAssembly behind a small JSON API, the only door the interface has into the engine. Session calls (`execute`, `cmdline`, `start`, `cancel`, `prompt`, `state`, `selection`, `settings`, `commands`, `run_script`), the drawing (`display`, `set_view`, `view`, `open_bytes`, `save_bytes`, `load_sample`, `digest`) and the pointer (`set_viewport`, `set_cursor`, `preview`, `pick`, `snap`, `click`). The core `Facade` has no wasm dependency, so its tests run natively |
 | L5 | `ai` | 2,001 | The one tool (`code.rs`: `run`, which executes AutoLISP in the drawing) and its catalog (`surface.rs`), which MCP serves; the conversation, transport and turn loop (`chat.rs`, `client.rs`, `agent.rs`), which the egui pane ran and no app runs today (the interface's port is `apps/ui/src/assistant.ts`) |
 | L5 | `mcp` | 1,551 | MCP server (JSON-RPC 2.0 over stdio, one `run` tool) on a headless session or bridged to a running app |
+| L5 | `surface` | ≈ 2,700 | Designed surfaces outside the web interface: a piece card, the bench sheet as a page and a terminal dashboard, laid out by [Slab](https://github.com/stencil-hq/slab) documents (`crates/surface/slab`) and filled from the engine's own replies to `piece` and `techsheet`. Everything is behind the crate's `slab` feature, off by default (the crate is empty without it): Slab is not in the repository, `cargo xtask slab` fetches it at the commit `third_party/slab/SLAB.lock` pins and applies the patch series there, and `cargo xtask surfaces` builds on it. Linked without Slab's bundled fonts: an SVG and the dashboard need none, a PNG uses a face found on the machine ([surfaces.md](surfaces.md)) |
 | app | `cadcraft` | 388 | Desktop app: one native window (tao) whose content is the interface in the system webview (wry). `build.rs` embeds `apps/ui/dist` and `assets.rs` serves it from a table on a custom scheme, treating request paths as hostile; `--dev [URL]` shows a running dev server instead. The page's title becomes the window's title; the webview's storage lives under the user's data folder. No engine code: the engine it shows is the wasm build |
-| app | `cadcraft-cli` | 1,170 | `info`, `convert`, `run` (scripts), `commands`, `sample`, `mcp` |
+| app | `cadcraft-cli` | 1,170 (before the surfaces; not recounted) | `info`, `convert`, `run` (scripts), `commands`, `sample`, `mcp`; with the optional `surfaces` feature, `run --card/--sheet` and `tui` |
 | app | `ui` | ≈ 14,000 (TypeScript) | The interface: SolidJS + TypeScript over the wasm facade (`apps/ui`, a bun app, not a Rust crate); the same build runs in a browser tab and in the desktop window. Layout, keys and components: [apps/ui/README.md](../apps/ui/README.md) |
-| tool | `xtask` | 1,252 | `ci`, `layers`, `assets`, `wasm`, `ui`, `test`, `parity`, `version`, `stats`, `corpus`, icon packing |
+| tool | `xtask` | 1,252 (before `slab`; not recounted) | `ci`, `layers`, `assets`, `wasm`, `ui`, `test`, `slab`, `surfaces`, `parity`, `version`, `stats`, `corpus`, icon packing |
 
 `cargo xtask layers` enforces the layering: nothing below the apps depends on a UI toolkit
 (tao, wry, winit, wgpu or rfd). The egui interface (`ui-egui`, and the `cadcraft-web` build of it)
@@ -119,10 +120,17 @@ a pick list are bounded, and an opened file has a size limit. On the other side 
 parses every reply with checked narrowing, and the assistant bounds what a provider may send.
 The desktop shell never lets a request path reach the file system.
 
+The designed surfaces call into Slab, which is pre-alpha and unwraps freely: every call runs
+under `catch_unwind` and becomes an error, strings from a drawing are cleaned and cut, lists are
+capped and sizes clamped before anything is allocated ([surfaces.md](surfaces.md)). The engine
+reaches them through a door (`cadcraft_engine::surfaces`), not a dependency: L4 does not link L5,
+and a build without the surfaces answers `(card)` with a sentence.
+
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | minor | `surface` (L5, optional): the piece card, bench sheet page and terminal dashboard on Slab, which is pinned and patched in `third_party/slab` and fetched by `cargo xtask slab`; the `cadcraft-cli` row gains `run --card/--sheet` and `tui` behind its `surfaces` feature |
 | 2026-11-12 | minor | The display list carries `space` and a layout's `sheet`, and the canvas draws a layout on its paper; the drafting font covers 362 characters with composed glyphs and a nearest-character fallback |
 | 2026-11-11 | major | The interface is `apps/ui` over the wasm facade and the desktop app is that interface in a native webview (egui removed, d5cad47). Workspace table: `wasm`, `ai`, `cadcraft` and `ui` rows rewritten, line counts recounted (57,000 → about 149,000 lines of Rust, tests included). Rendering rewritten: a 2D canvas over the facade's display list, no GPU path. Agent control: the control channel is not served; the assistant runs in the interface. Data model: Helix, MLine, Region, Tolerance noted. Safety: the facade's bounds |
 | 2026-10-10 | major | First committed architecture doc, measured from the code (crate sizes, entity kinds, command counts) |

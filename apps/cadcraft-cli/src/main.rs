@@ -4,6 +4,8 @@
 //! cadcraft-cli info FILE.dxf                       summary as JSON
 //! cadcraft-cli convert IN.dxf OUT.(dxf|svg|png) [--window x0,y0,x1,y1 | --view extents|current]
 //! cadcraft-cli run [FILE|--sample|--metric] [--script TEXT|--script-file F.scr] [--cmd 'id {json}']... [--save OUT] [--export OUT.png] [--window ... | --view ...]
+//!                  [--card OUT.(png|svg)] [--sheet OUT.(svg|png)] [--theme dark|light]   the piece card / the bench sheet as a page
+//! cadcraft-cli tui [FILE|--sample|--metric] [--script TEXT] [--size COLSxROWS] [--theme dark|light] [--print]   terminal dashboard
 //! cadcraft-cli commands [FILTER]                   command catalog (JSON)
 //! cadcraft-cli digest A.dxf [B.dxf]                content hash, or two files compared
 //! cadcraft-cli mcp [--connect HOST:PORT [--lazy] [--launch]]  MCP server on stdio (headless or bridged to the app)
@@ -61,6 +63,8 @@ const USAGE: &str = "usage:
   cadcraft-cli info FILE.dxf
   cadcraft-cli convert IN.dxf OUT.(dxf|dwg|svg|png|pdf) [FRAMING]
   cadcraft-cli run [FILE | --sample | --metric] [--script TEXT] [--script-file F.scr] [--cmd 'id {json}']... [--save OUT.dxf] [--export OUT.(png|svg|pdf)] [FRAMING]
+                   [--card OUT.(png|svg)] [--sheet OUT.(svg|png)] [--theme dark|light]
+  cadcraft-cli tui [FILE | --sample | --metric] [--script TEXT] [--size COLSxROWS] [--theme dark|light] [--print]
   cadcraft-cli commands [FILTER]
   cadcraft-cli digest A.dxf [B.dxf]
   cadcraft-cli mcp [--connect HOST:PORT [--lazy] [--launch]]
@@ -73,6 +77,17 @@ digest:
   where it sits), the entity count and the model-space bounds. With two files both digests
   and the delta are printed, and the exit status is 0 when they match, 1 when they differ,
   2 on a usage or read error.
+
+designed surfaces (the drawing's data, laid out; figures are the piece and techsheet commands' own):
+  run --card OUT.png|svg   the piece card: kind, size in two systems, metal weight, stones and
+                           carats, the checks as PASS/FAIL rows, the cost when prices are set.
+  run --sheet OUT.svg|png  the bench sheet as a page: the views, bands, the stone table with its
+                           totals, checks and cost. The same drawing gives the same bytes.
+  --theme dark|light       the palette (default: the card dark, the sheet light).
+  tui                      a terminal dashboard of the same, with a command line that runs
+                           CADCraft commands (Ctrl+C leaves). When stdout is not a terminal, or
+                           with --print, the dashboard is printed once as text and the program
+                           ends; --size COLSxROWS sets the size printed (default 100x30).
 
 image framing (png 2400x1600, svg, pdf; always model space):
   default                  convert: fit the drawing extents.
@@ -181,6 +196,9 @@ fn export_window(s: &Session, framing: Framing, before: Option<&[(u64, Option<Vi
 }
 
 fn install_io() {
+    // The assistant's `(card …)` draws through the surface crate.
+    #[cfg(feature = "surfaces")]
+    cadcraft_surface::install();
     cadcraft_engine::cmd::file::set_io(cadcraft_engine::cmd::file::IoHooks {
         read: |b, name| cadcraft_io::read(b, name).map_err(|e| e.to_string()),
         write: |d, name| cadcraft_io::write(d, name).map_err(|e| e.to_string()),
@@ -509,11 +527,15 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut exp: Option<String> = None;
     let mut framing = Framing::Auto;
     let mut steps: Vec<(String, String)> = Vec::new();
+    let (mut card, mut sheet, mut theme): (Option<String>, Option<String>, Option<SurfaceTheme>) = (None, None, None);
     while let Some(a) = it.next() {
         if framing_option(a, &mut it, &mut framing)? {
             continue;
         }
         match a.as_str() {
+            "--card" => card = Some(surface_output("--card", it.next())?),
+            "--sheet" => sheet = Some(surface_output("--sheet", it.next())?),
+            "--theme" => theme = Some(theme_option(it.next())?),
             "--sample" => {
                 s.open_drawing(cadcraft_engine::sample::default_sample(), "Bracket", None);
             }
@@ -578,7 +600,236 @@ fn run(args: &[String]) -> Result<(), String> {
         let window = if cadcraft_io::is_image(&p) { export_window(&s, framing, Some(&before))? } else { None };
         export_framed(&s, &p, window)?;
     }
+    if let Some(p) = card {
+        write_card(&mut s, &p, theme)?;
+    }
+    if let Some(p) = sheet {
+        write_sheet(&mut s, &p, theme)?;
+    }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------------------------
+// Designed surfaces (crates/surface): the piece card, the bench sheet, the terminal dashboard
+// ---------------------------------------------------------------------------------------------
+//
+// They are the `surfaces` feature, off by default: Slab, which lays them out, is fetched and
+// patched by `cargo xtask slab` and built through `cargo xtask surfaces build`. A build without
+// the feature knows the options and answers them with one sentence.
+
+use surfaces::{SurfaceTheme, surface_output, theme_option, tui, write_card, write_sheet};
+
+#[cfg(not(feature = "surfaces"))]
+mod surfaces {
+    use cadcraft_engine::Session;
+
+    /// What a build without the designed surfaces answers.
+    pub(super) const UNAVAILABLE: &str = "this build of cadcraft-cli has no designed surfaces (the piece card, the bench sheet, the terminal dashboard); \
+                                          build it with `cargo xtask surfaces build` (docs/surfaces.md)";
+
+    /// There is no palette to choose without the surfaces.
+    pub(super) type SurfaceTheme = ();
+
+    pub(super) fn surface_output(option: &str, _value: Option<&String>) -> Result<String, String> {
+        Err(format!("{option}: {UNAVAILABLE}"))
+    }
+
+    pub(super) fn theme_option(_value: Option<&String>) -> Result<SurfaceTheme, String> {
+        Err(format!("--theme: {UNAVAILABLE}"))
+    }
+
+    pub(super) fn write_card(_s: &mut Session, _out: &str, _theme: Option<SurfaceTheme>) -> Result<(), String> {
+        Err(UNAVAILABLE.into())
+    }
+
+    pub(super) fn write_sheet(_s: &mut Session, _out: &str, _theme: Option<SurfaceTheme>) -> Result<(), String> {
+        Err(UNAVAILABLE.into())
+    }
+
+    pub(super) fn tui(_args: &[String]) -> Result<(), String> {
+        Err(format!("tui: {UNAVAILABLE}"))
+    }
+}
+
+#[cfg(feature = "surfaces")]
+mod surfaces {
+    use super::{open, write_atomic};
+    use cadcraft_engine::Session;
+
+    /// The palette a surface is drawn in.
+    pub(super) type SurfaceTheme = cadcraft_surface::Theme;
+
+    /// Which picture format a surface path asks for.
+    pub(super) fn surface_kind(path: &str) -> Option<&'static str> {
+        let ext = std::path::Path::new(path).extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase);
+        match ext.as_deref() {
+            Some("png") => Some("png"),
+            Some("svg") => Some("svg"),
+            _ => None,
+        }
+    }
+
+    /// The path after `--card` / `--sheet`: present, and a format a surface is written in.
+    pub(super) fn surface_output(option: &str, value: Option<&String>) -> Result<String, String> {
+        let path = value.filter(|v| !v.starts_with("--")).ok_or_else(|| format!("{option} needs a path (OUT.png or OUT.svg)"))?;
+        surface_kind(path).ok_or_else(|| format!("{option}: `{path}` must end in .png or .svg"))?;
+        Ok(path.clone())
+    }
+
+    pub(super) fn theme_option(value: Option<&String>) -> Result<cadcraft_surface::Theme, String> {
+        let name = value.ok_or("--theme needs `dark` or `light`")?;
+        cadcraft_surface::Theme::parse(name).map_err(|e| format!("--theme: {e}"))
+    }
+
+    pub(super) fn write_surface(out: &str, bytes: &[u8]) -> Result<(), String> {
+        write_atomic(out, bytes).map_err(|e| format!("{out}: {e}"))?;
+        eprintln!("wrote {out} ({} bytes)", bytes.len());
+        Ok(())
+    }
+
+    /// `run --card OUT`: the piece card of the drawing as it is after the run's steps.
+    pub(super) fn write_card(s: &mut Session, out: &str, theme: Option<cadcraft_surface::Theme>) -> Result<(), String> {
+        let defaults = cadcraft_surface::CardOptions::default();
+        let options = cadcraft_surface::CardOptions { theme: theme.unwrap_or(defaults.theme), ..defaults };
+        let data = cadcraft_surface::PieceData::gather(s);
+        let bytes = match surface_kind(out) {
+            Some("svg") => cadcraft_surface::card_svg(&data, &options).map_err(|e| e.to_string())?.into_bytes(),
+            _ => cadcraft_surface::card_png(&data, &options).map_err(|e| e.to_string())?.png,
+        };
+        write_surface(out, &bytes)
+    }
+
+    /// `run --sheet OUT`: the bench sheet as a page.
+    pub(super) fn write_sheet(s: &mut Session, out: &str, theme: Option<cadcraft_surface::Theme>) -> Result<(), String> {
+        let defaults = cadcraft_surface::SheetOptions::default();
+        let options = cadcraft_surface::SheetOptions { theme: theme.unwrap_or(defaults.theme), ..defaults };
+        let bytes = match surface_kind(out) {
+            Some("svg") => cadcraft_surface::tech_sheet_svg(s, &options).map_err(|e| e.to_string())?.into_bytes(),
+            _ => cadcraft_surface::tech_sheet_png(s, &options).map_err(|e| e.to_string())?.png,
+        };
+        write_surface(out, &bytes)
+    }
+
+    /// What `tui` was asked for.
+    #[derive(Debug, PartialEq)]
+    pub(super) struct TuiArgs {
+        /// A drawing to open, `--sample`, or `--metric`.
+        pub(super) source: Option<String>,
+        /// Script text to run before the dashboard is shown.
+        pub(super) scripts: Vec<String>,
+        /// The size printed when the dashboard is not interactive.
+        pub(super) size: (u16, u16),
+        pub(super) theme: cadcraft_surface::Theme,
+        /// Print once and end, even on a terminal.
+        pub(super) print: bool,
+    }
+
+    /// `COLSxROWS`, e.g. `120x40`. Hostile values are errors; the dashboard clamps what is left.
+    pub(super) fn parse_size(text: &str) -> Result<(u16, u16), String> {
+        let bad = || format!("--size needs COLSxROWS (for example 100x30), got `{}`", text.chars().take(40).collect::<String>());
+        let (c, r) = text.split_once(['x', 'X']).ok_or_else(bad)?;
+        match (c.trim().parse::<u16>(), r.trim().parse::<u16>()) {
+            (Ok(c), Ok(r)) if c > 0 && r > 0 => Ok((c, r)),
+            _ => Err(bad()),
+        }
+    }
+
+    pub(super) fn parse_tui_args(args: &[String]) -> Result<TuiArgs, String> {
+        let mut out = TuiArgs { source: None, scripts: Vec::new(), size: (100, 30), theme: cadcraft_surface::Theme::Dark, print: false };
+        let mut it = args.iter();
+        while let Some(a) = it.next() {
+            match a.as_str() {
+                "--script" => out.scripts.push(it.next().ok_or("--script needs text")?.replace("\\n", "\n")),
+                "--size" => out.size = parse_size(it.next().ok_or("--size needs COLSxROWS")?)?,
+                "--theme" => out.theme = theme_option(it.next())?,
+                "--print" => out.print = true,
+                "--sample" | "--metric" if out.source.is_none() => out.source = Some(a.clone()),
+                f if !f.starts_with("--") && out.source.is_none() => out.source = Some(f.to_string()),
+                other => return Err(format!("tui: unexpected argument {other}")),
+            }
+        }
+        Ok(out)
+    }
+
+    /// `tui`: the terminal dashboard. Interactive on a terminal; printed once as text otherwise.
+    pub(super) fn tui(args: &[String]) -> Result<(), String> {
+        use std::io::IsTerminal as _;
+        let a = parse_tui_args(args)?;
+        let mut s = Session::empty();
+        match a.source.as_deref() {
+            // The jewelry sample: the dashboard is about a piece, so this is the drawing that shows it.
+            Some("--sample") => {
+                s.open_drawing(cadcraft_engine::sample::solitaire(), "Solitaire", None);
+            }
+            Some("--metric") | None => {
+                s.new_drawing(true);
+            }
+            Some(path) => open(&mut s, path)?,
+        }
+        for script in &a.scripts {
+            s.script(script).map_err(|e| e.to_string())?;
+        }
+        let mut dashboard = cadcraft_surface::Dashboard::new(a.theme).map_err(|e| e.to_string())?;
+        dashboard.refresh(&mut s).map_err(|e| e.to_string())?;
+        let terminal = std::io::stdout().is_terminal() && std::io::stdin().is_terminal();
+        if a.print || !terminal {
+            // Not a terminal (a pipe, a file, CI): the dashboard once, as text. Colour only where a
+            // terminal will read the escapes.
+            let text = dashboard.text(a.size.0, a.size.1, !std::io::stdout().is_terminal()).map_err(|e| e.to_string())?;
+            for line in text.lines() {
+                outln!("{line}");
+            }
+            return Ok(());
+        }
+        tui_loop(&mut s, &mut dashboard)
+    }
+
+    /// The interactive loop: Slab's terminal driver reads keys and paints cells; the dashboard (and
+    /// through it the engine) does everything else. The terminal is restored when this returns, on
+    /// an error as on Ctrl+C: `Terminal` restores it when it is dropped.
+    pub(super) fn tui_loop(s: &mut Session, dashboard: &mut cadcraft_surface::Dashboard) -> Result<(), String> {
+        use slab_tui::crossterm::{event, terminal};
+        use std::io::Write as _;
+        use std::time::Duration;
+        let io = |e: std::io::Error| format!("terminal: {e}");
+        let _restore = slab_tui::Terminal::new()?;
+        let (mut cols, mut rows) = terminal::size().map_err(io)?;
+        let mut painter = slab_tui::Painter::new();
+        let mut translator = slab_tui::Translator::new();
+        let mut full = true;
+        let mut out = std::io::stdout();
+        loop {
+            if full || dashboard.stale() {
+                let grid = dashboard.grid(cols, rows).map_err(|e| e.to_string())?;
+                painter.paint(&grid, cols, rows, full);
+                out.write_all(painter.buffer().as_bytes()).and_then(|()| out.flush()).map_err(io)?;
+                full = false;
+            }
+            if !event::poll(Duration::from_millis(250)).map_err(io)? {
+                continue;
+            }
+            // Everything that has arrived, then one repaint.
+            loop {
+                match translator.translate(event::read().map_err(io)?) {
+                    slab_tui::Translated::Ignored => {}
+                    slab_tui::Translated::Quit => return Ok(()),
+                    slab_tui::Translated::Resize(c, r) => {
+                        (cols, rows) = (c, r);
+                        full = true;
+                    }
+                    slab_tui::Translated::Events(pair) => {
+                        let (first, second) = *pair;
+                        for input in std::iter::once(first).chain(second) {
+                            dashboard.dispatch(s, &input).map_err(|e| e.to_string())?;
+                        }
+                    }
+                }
+                if !event::poll(Duration::ZERO).map_err(io)? {
+                    break;
+                }
+            }
+        }
+    }
 }
 
 /// Small deterministic generator (xorshift64*) so perf runs are repeatable without a dependency.
@@ -904,6 +1155,7 @@ fn cli() -> ExitCode {
             outln!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());
         }),
         Some("mcp") => mcp(&rest),
+        Some("tui") => tui(&rest),
         Some("--version" | "-V") => {
             outln!("cadcraft-cli {}", env!("CARGO_PKG_VERSION"));
             Ok(())
@@ -1148,6 +1400,100 @@ mod tests {
 
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).into()).collect()
+    }
+
+    #[test]
+    #[cfg(not(feature = "surfaces"))]
+    fn a_build_without_the_surfaces_says_so_before_anything_runs() {
+        let dir = scratch_dir("no-surfaces");
+        let out = dir.join("card.svg").to_string_lossy().to_string();
+        for bad in [&["--metric", "--card", &out][..], &["--metric", "--sheet", &out], &["--metric", "--theme", "dark"]] {
+            let e = run(&args(bad)).unwrap_err();
+            assert!(e.contains("no designed surfaces") && e.contains("cargo xtask surfaces build"), "{e}");
+        }
+        assert!(tui(&args(&["--sample"])).unwrap_err().contains("no designed surfaces"));
+        assert!(!std::path::Path::new(&out).exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(feature = "surfaces")]
+    fn surface_outputs_must_name_a_picture() {
+        assert_eq!(surface_output("--card", Some(&"out.PNG".to_string())), Ok("out.PNG".into()));
+        assert_eq!(surface_output("--sheet", Some(&"a/b.svg".to_string())), Ok("a/b.svg".into()));
+        for bad in [None, Some("out.pdf"), Some("out"), Some("--theme"), Some("")] {
+            assert!(surface_output("--sheet", bad.map(str::to_string).as_ref()).is_err(), "{bad:?}");
+        }
+        assert!(theme_option(Some(&"light".to_string())).is_ok());
+        assert!(theme_option(Some(&"sepia".to_string())).is_err() && theme_option(None).is_err());
+    }
+
+    #[test]
+    #[cfg(feature = "surfaces")]
+    fn run_writes_the_card_and_the_sheet() {
+        let dir = scratch_dir("surfaces");
+        let path = |name: &str| dir.join(name).to_string_lossy().to_string();
+        let (card, card_svg, sheet, sheet_png) = (path("card.png"), path("card.svg"), path("sheet.svg"), path("sheet.png"));
+        let piece = r#"piece {"kind":"solitaire","halo":true}"#;
+        // The SVG forms need no font: they are written on every machine.
+        run(&args(&["--metric", "--cmd", piece, "--card", &card_svg, "--sheet", &sheet])).unwrap();
+        assert!(std::fs::read_to_string(&card_svg).unwrap().starts_with("<svg"));
+        let first = std::fs::read_to_string(&sheet).unwrap();
+        assert!(first.starts_with("<svg") && first.contains(">Solitaire ring<") && first.contains(">3.53 g<"), "{}", &first[..300.min(first.len())]);
+        assert!(!first.contains("@font-face") && !first.contains("Inter"), "no face is embedded or named");
+        // The same drawing, the same bytes.
+        run(&args(&["--metric", "--cmd", piece, "--sheet", &sheet, "--theme", "light"])).unwrap();
+        assert!(std::fs::read_to_string(&sheet).unwrap() == first, "the sheet is deterministic (and light by default)");
+        // The PNG forms are drawn with a font of the machine's; with none they are refused in a
+        // sentence that says the SVG works, and nothing is written.
+        if cadcraft_surface::png_font().is_some() {
+            run(&args(&["--metric", "--cmd", piece, "--card", &card])).unwrap();
+            assert!(std::fs::read(&card).unwrap().starts_with(b"\x89PNG"));
+            run(&args(&["--metric", "--cmd", piece, "--sheet", &sheet_png, "--theme", "dark"])).unwrap();
+            assert!(std::fs::read(&sheet_png).unwrap().starts_with(b"\x89PNG"));
+            // An empty drawing still gives a card.
+            run(&args(&["--card", &card])).unwrap();
+        } else {
+            let e = run(&args(&["--metric", "--cmd", piece, "--card", &card])).unwrap_err();
+            assert!(e.contains("needs a font") && e.contains(".svg"), "{e}");
+            assert!(!std::path::Path::new(&card).exists());
+        }
+        // A bad path or theme is refused before anything runs.
+        assert!(run(&args(&["--card", "card.pdf"])).is_err());
+        assert!(run(&args(&["--sheet"])).is_err());
+        assert!(run(&args(&["--card", &card_svg, "--theme", "sepia"])).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(feature = "surfaces")]
+    fn tui_arguments_parse_and_hostile_ones_are_errors() {
+        use surfaces::parse_tui_args;
+        let a = parse_tui_args(&args(&["ring.dxf", "--size", "120x40", "--theme", "light", "--print", "--script", "zoom e\\n"])).unwrap();
+        assert_eq!(a.source.as_deref(), Some("ring.dxf"));
+        assert_eq!((a.size, a.theme, a.print), ((120, 40), cadcraft_surface::Theme::Light, true));
+        assert_eq!(a.scripts, vec!["zoom e\n".to_string()]);
+        assert_eq!(parse_tui_args(&[]).unwrap().size, (100, 30));
+        for bad in [
+            &["--size", "0x0"][..],
+            &["--size", "100"],
+            &["--size", "-1x5"],
+            &["--size", "99999999x1"],
+            &["--size"],
+            &["a.dxf", "b.dxf"],
+            &["--typo"],
+        ] {
+            assert!(parse_tui_args(&args(bad)).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "surfaces")]
+    fn the_dashboard_prints_as_text_when_it_is_not_on_a_terminal() {
+        // Under `cargo test` stdout is not a terminal: `tui` prints once and returns.
+        tui(&args(&["--sample", "--size", "100x30"])).unwrap();
+        tui(&args(&["--metric", "--script", "circle 0,0 5\\n", "--print"])).unwrap();
+        assert!(tui(&args(&["/nonexistent/drawing.dxf"])).is_err());
     }
 
     #[test]

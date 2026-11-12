@@ -1,0 +1,42 @@
+[package]
+name = "cadcraft-surface"
+description = "CADCraft's designed surfaces outside the web interface: a piece card, a bench sheet and a terminal dashboard, laid out by Slab documents and filled from the engine's own replies"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[lints]
+workspace = true
+
+[features]
+# Everything in this crate. Without it the crate is empty and links nothing of Slab, which is
+# how the workspace builds on a fresh clone: Slab is fetched and patched by `cargo xtask slab`
+# and built through `cargo xtask surfaces …` (third_party/slab/README.md, docs/surfaces.md).
+slab = ["dep:slab-compile", "dep:slab-fonts", "dep:slab-kernel", "dep:slab-slir", "dep:slab-syntax"]
+
+[dependencies]
+cadcraft-engine = { workspace = true }
+cadcraft-io = { workspace = true }
+# System faces found at run time (never bundled) and the optional craft-fonts build input: where a
+# PNG surface gets its glyph outlines.
+cadcraft-fonts = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+# Slab: the kernel lays a document out, `slab-slir` decodes the compiled form, `slab-compile`
+# checks a source and holds the SVG and PNG exporters, `slab-syntax` names its diagnostics,
+# `slab-fonts` reads a face's metrics. Built without Slab's bundled fonts.
+slab-compile = { workspace = true, optional = true }
+slab-fonts = { workspace = true, optional = true }
+slab-kernel = { workspace = true, optional = true }
+slab-slir = { workspace = true, optional = true }
+slab-syntax = { workspace = true, optional = true }
+
+[build-dependencies]
+# The build script compiles `slab/*.slab` into typed Rust modules (`slab gen rust`, as a library).
+# No network and no tool on PATH: the compiler is this workspace's own dependency.
+slab-compile = { workspace = true, optional = true }
+
+[dev-dependencies]
+# Reading a rendered PNG back in the tests.
+tiny-skia = { workspace = true }

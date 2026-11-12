@@ -46,6 +46,9 @@ pub const TABLE: &[(&str, Class)] = &[
     ("mcp", Class::Layer(5)),
     ("ai", Class::Layer(5)),
     ("wasm", Class::Layer(5)),
+    // The designed surfaces outside the web interface (a piece card, a bench sheet, a terminal
+    // dashboard), laid out by Slab documents over the engine's replies (docs/surfaces.md).
+    ("surface", Class::Layer(5)),
     ("testkit", Class::Testkit),
     // apps and tooling
     ("cadcraft", Class::Exempt),
@@ -63,6 +66,8 @@ pub const INTRA_LAYER_ORDER: &[&[&str]] = &[
     // The assistant owns the agent-facing tool surface and the model transport; the interface and
     // the MCP server both build on it (docs/assistant.md).
     &["ai", "mcp"],
+    // The MCP server installs the surface renderer, so a run's `(card)` comes back as a picture.
+    &["surface", "mcp"],
 ];
 
 fn intra_layer_allowed(from: &str, to: &str) -> bool {

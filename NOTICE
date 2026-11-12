@@ -14,6 +14,12 @@ crate (DWG reading and writing, https://github.com/hakanaktt/acadrust) is licens
 Mozilla Public License 2.0 and is used unmodified as a separate library (crates/dwg). Its source
 is available from crates.io and the repository above.
 
+Builds of the command-line tool with its optional designed surfaces, and web builds with the
+optional Slab shell, link Slab (https://github.com/stencil-hq/slab), MIT License, Copyright (c)
+2026 Stencil. It is not in this repository: it is fetched at the commit third_party/slab/SLAB.lock
+pins and built under the patch series there, without its bundled fonts. No font of Slab's is
+shipped.
+
 
 CADCraft's icons, drafting font, hatch patterns and linetypes are drawn or defined in code.
 The UI also bundles the egui font inputs described below. The per-file list is in ATTRIBUTION.md.

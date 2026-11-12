@@ -13,6 +13,7 @@
 //! | `(inspect)` | the drawing's summary (counts, extents, layers, blocks, selection) |
 //! | `(describe [x])` | what the application, a command, a function or a value is |
 //! | `(render [path] [w h [x0 y0 x1 y1]])` | draw the drawing to a PNG and show it to the model |
+//! | `(card [path] [width] [theme])` | draw the piece card (size, metal, stones, checks, cost) to a PNG and show it to the model |
 //! | `(value "name")`, `(values)` | the named strings passed beside the code |
 //! | `(kept)`, `(forget "name")` | the definitions kept across restarts |
 //! | `(man)` | this manual |
@@ -65,6 +66,11 @@ RUN COMMANDS
   (describe 'FOO)             a function: its parameters; a list: its keys; a value: its type
   (render)                    draw the drawing to a PNG and return ((PATH . \"…\") (WIDTH . 1600) …)
   (render \"out.png\" 1200 800)   …at a size; add x0 y0 x1 y1 to show just that window
+  (card)                      the piece card as a PNG: kind, size, metal weight, stones and carats,
+                              the checks as PASS/FAIL rows and the cost when prices are set. Returns
+                              ((PATH . \"…\") (WIDTH . 1280) (HEIGHT . …) (BYTES . …) (DATA . …)), DATA
+                              being what `piece` (query) and `techsheet` replied
+  (card \"card.png\" 800 \"light\") …to a file, at a width (320–1200), in the light palette
 
 VALUES AND HELPERS
   (value \"name\")              a long text passed beside the code as {{values: {{name: \"…\"}}}} —
@@ -104,6 +110,7 @@ static BUILTINS: &[Builtin] = &[
     Builtin { name: "INSPECT", kind: BuiltinKind::Ctx(inspect) },
     Builtin { name: "DESCRIBE", kind: BuiltinKind::Ctx(describe) },
     Builtin { name: "RENDER", kind: BuiltinKind::Ctx(render) },
+    Builtin { name: "CARD", kind: BuiltinKind::Ctx(card) },
     Builtin { name: "VALUE", kind: BuiltinKind::Ctx(value) },
     Builtin { name: "VALUES", kind: BuiltinKind::Ctx(values) },
     Builtin { name: "KEPT", kind: BuiltinKind::Pure(kept) },
@@ -441,6 +448,68 @@ fn render(ctx: &mut Ctx<'_>, a: Vec<Value>) -> Result<Flow, LispError> {
         Value::cons(Value::sym("HEIGHT"), Value::Int(height as i32)),
         Value::cons(Value::sym("BYTES"), Value::Int(png.len() as i32)),
     ])))
+}
+
+/// `(card [path] [width] [theme])` — the piece card as a PNG, shown to the model.
+///
+/// The card is a designed surface: it is laid out above the engine and reached through
+/// [`crate::surfaces`]. Its figures are what `piece {query: true}` and `techsheet {}` reply, and
+/// the same replies come back as `DATA`, so the model reads the numbers it is looking at.
+fn card(ctx: &mut Ctx<'_>, a: Vec<Value>) -> Result<Flow, LispError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (ctx, a);
+        return Err(LispError::new("card: the browser build has no filesystem to write a PNG to; the piece is in the Piece panel"));
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if a.len() > 3 {
+            return Err(args_err(false));
+        }
+        // A path is a string that names a file; a theme is a string that names a palette. The
+        // path, when given, comes first, as `(render)` takes it.
+        let is_theme = |s: &str| s.eq_ignore_ascii_case("dark") || s.eq_ignore_ascii_case("light");
+        let mut args = a.as_slice();
+        let path = match args.first() {
+            Some(Value::Str(s)) if !(args.len() == 1 && is_theme(s)) => {
+                args = args.get(1..).unwrap_or_default();
+                Some(PathBuf::from(&**s))
+            }
+            _ => None,
+        };
+        let mut params = Map::new();
+        for v in args {
+            match v {
+                Value::Nil => {}
+                Value::Str(s) if !params.contains_key("theme") => {
+                    params.insert("theme".into(), Json::String(s.to_string()));
+                }
+                other if !params.contains_key("width") => {
+                    let w = other.as_number().filter(|w| w.is_finite()).ok_or_else(|| LispError::bad_arg("numberp", other))?;
+                    params.insert("width".into(), serde_json::json!(w.clamp(1.0, 100_000.0)));
+                }
+                other => return Err(LispError::bad_arg("stringp", other)),
+            }
+        }
+        let picture = crate::surfaces::render(ctx.s, "piece-card", &Json::Object(params)).map_err(|e| LispError::new(format!("card: {e}")))?;
+        let path = path.unwrap_or_else(|| {
+            let n = ctx.env.images.len();
+            std::env::temp_dir().join(format!("cadcraft-card-{}-{n}.png", std::process::id()))
+        });
+        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(dir).map_err(|e| LispError::new(format!("card: {}: {e}", dir.display())))?;
+        }
+        std::fs::write(&path, &picture.png).map_err(|e| LispError::new(format!("card: {}: {e}", path.display())))?;
+        let text = path.to_string_lossy().to_string();
+        ctx.env.images.push(text.clone());
+        Ok(Flow::Value(Value::list(vec![
+            Value::cons(Value::sym("PATH"), Value::str(&text)),
+            Value::cons(Value::sym("WIDTH"), Value::Int(i32::try_from(picture.width).unwrap_or(i32::MAX))),
+            Value::cons(Value::sym("HEIGHT"), Value::Int(i32::try_from(picture.height).unwrap_or(i32::MAX))),
+            Value::cons(Value::sym("BYTES"), Value::Int(i32::try_from(picture.png.len()).unwrap_or(i32::MAX))),
+            Value::cons(Value::sym("DATA"), json_to_lisp(&picture.data)),
+        ])))
+    }
 }
 
 /// A string argument, or the printed form of anything else that reads as text.

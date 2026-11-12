@@ -391,3 +391,65 @@ fn run_is_an_ordinary_command() {
     assert_eq!(cadcraft_ai::code::METHOD, "engine.execute");
     assert_eq!(cadcraft_ai::code::COMMAND, "run");
 }
+
+/// The piece card: an agent asks for it inside `run` and gets the picture as an image block,
+/// beside the figures it shows.
+#[test]
+#[cfg(feature = "surfaces")]
+fn the_piece_card_comes_back_as_a_picture_with_its_data() {
+    let mut s = Server::new(Box::new(Headless::default()));
+    run(&mut s, r#"(cmd "new" '((METRIC . T)))"#);
+    run(&mut s, r#"(cmd "piece" '((KIND . "solitaire") (HALO . T)))"#);
+    let sheet = value(&mut s, r#"(cdr (assoc 'COUNT (cdr (assoc 'STONES (cmd "techsheet")))))"#);
+    assert_eq!(sheet, "20");
+
+    let r = run_raw(&mut s, "(card)");
+    if cadcraft_surface::png_font().is_none() {
+        // The card is a PNG and no font is shipped: on a machine with none the model reads why.
+        assert_eq!(r["result"]["isError"], json!(true), "{r}");
+        assert!(r["result"]["content"][0]["text"].as_str().unwrap().contains("needs a font"), "{r}");
+        return;
+    }
+    assert_eq!(r["jsonrpc"], "2.0");
+    assert_ne!(r["result"]["isError"], json!(true), "{}", r["result"]["content"][0]);
+    let content = r["result"]["content"].as_array().unwrap();
+    assert_eq!(content.len(), 2, "the report and the card");
+    // The picture: an MCP image content block, base64 PNG, under the cap.
+    let image = &content[1];
+    assert_eq!(image["type"], "image");
+    assert_eq!(image["mimeType"], "image/png");
+    let data = image["data"].as_str().unwrap();
+    assert!(data.starts_with("iVBORw0KGgo"), "a PNG's signature in base64");
+    assert!(data.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/' || b == b'='));
+    let bytes = data.len() as u64 * 3 / 4;
+    assert!(bytes > 10_000 && bytes < crate::tools::MAX_IMAGE_BYTES, "{bytes} bytes");
+    let png = tiny_skia::Pixmap::decode_png(&cadcraft_engine::cmd::file::base64_decode(data).unwrap()).unwrap();
+    assert_eq!(png.width(), 1280);
+    // The data: what the engine's commands replied, in the value of the run.
+    let text = content[0]["text"].as_str().unwrap();
+    assert!(text.contains("(WIDTH . 1280)") && text.contains("(COUNT . 20)") && text.contains("(GRAMS . 3.53)"), "{text}");
+    assert!(text.contains("(ID . \"wall\")") && text.contains("(OK . T)"), "{text}");
+    assert!(r.to_string().len() < 2_000_000, "one reply line: {} bytes", r.to_string().len());
+
+    // No piece: still a card, saying so. A bad argument: an error the model reads.
+    run(&mut s, r#"(cmd "piece" '((REMOVE . T)))"#);
+    let r = run_raw(&mut s, "(card 400 \"light\")");
+    assert_eq!(r["result"]["content"][1]["type"], "image", "{r}");
+    let r = run_raw(&mut s, "(card 400 \"sepia\")");
+    assert_eq!(r["result"]["isError"], json!(true));
+    assert!(r["result"]["content"][0]["text"].as_str().unwrap().contains("unknown theme"), "{r}");
+}
+
+/// A server built without the designed surfaces answers `(card)` with a sentence.
+#[test]
+#[cfg(not(feature = "surfaces"))]
+fn a_server_without_the_surfaces_says_the_card_is_not_available() {
+    let mut s = Server::new(Box::new(Headless::default()));
+    run(&mut s, r#"(cmd "new" '((METRIC . T)))"#);
+    let r = run_raw(&mut s, "(card)");
+    // Another test in this process may have installed a renderer; without one it is an error.
+    if !cadcraft_engine::surfaces::available() {
+        assert_eq!(r["result"]["isError"], json!(true), "{r}");
+        assert!(r["result"]["content"][0]["text"].as_str().unwrap().contains("not available"), "{r}");
+    }
+}

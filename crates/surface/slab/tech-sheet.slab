@@ -1,0 +1,250 @@
+// The bench sheet as a page: what goes to the bench or to a customer as a quote. The views are
+// the engine's own picture of the drawing, handed over as the runtime image `view`; every figure
+// is a param or a list row filled from `piece {query: true}` and `techsheet {}`.
+import "tokens.slab"
+
+// A band on the sheet: its size, alloy, section and weight.
+def Band(ring="", metal="", width="", wall="", grams="") export {
+  row w=fill gap=12 pad=5,0 align=center {
+    text ring w=fill style=text.body color=color.ink nowrap ellipsis
+    text metal w=120 style=text.body color=color.dim nowrap ellipsis
+    text width w=72 style=text.num color=color.dim align-text=end nowrap
+    text wall w=72 style=text.num color=color.dim align-text=end nowrap
+    text grams w=84 style=text.num color=color.ink align-text=end nowrap
+  }
+}
+
+// One line of the stone table.
+def Stone(what="", pcs="", each_ct="", ct="") export {
+  row w=fill gap=12 pad=5,0 align=center {
+    text what w=fill style=text.body color=color.ink nowrap ellipsis
+    text pcs w=72 style=text.num color=color.ink align-text=end nowrap
+    text each_ct w=72 style=text.num color=color.dim align-text=end nowrap
+    text ct w=84 style=text.num color=color.ink align-text=end nowrap
+  }
+}
+
+// One of the piece's checks.
+def Check(name="", verdict="", message="", ok=false) export {
+  row w=fill gap=12 pad=6,0 align=start {
+    row w=44 h=hug pad=3,0 radius=3 pack=center bg=color.badSoft {
+      when ok { bg=color.okSoft }
+      text verdict style=text.tag color=color.bad nowrap {
+        when ok { color=color.ok }
+      }
+    }
+    text name w=84 style=text.strong color=color.ink nowrap ellipsis
+    text message w=fill style=text.body color=color.dim
+  }
+}
+
+// One line of the cost.
+def Cost(what="", qty="", rate="", amount="") export {
+  row w=fill gap=12 pad=5,0 align=center {
+    text what w=fill style=text.body color=color.ink nowrap ellipsis
+    text qty w=96 style=text.num color=color.dim align-text=end nowrap
+    text rate w=96 style=text.num color=color.dim align-text=end nowrap
+    text amount w=108 style=text.num color=color.ink align-text=end nowrap
+  }
+}
+
+// Something the bench sheet warns about.
+def Warning(message="") export {
+  row w=fill gap=8 pad=4,0 align=start {
+    rect w=6 h=6 radius=999 bg=color.warn self=center
+    text message w=fill style=text.body color=color.ink
+  }
+}
+
+def Figure(caption, value, note) {
+  col w=fill gap=4 pad=12,14 radius=4 bg=color.raised {
+    text caption style=text.eyebrow color=color.faint nowrap
+    text value style=text.figure color=color.ink nowrap ellipsis
+    text note style=text.small color=color.dim
+  }
+}
+
+def Heading(title) {
+  col w=fill gap=6 {
+    text title style=text.head color=color.accent nowrap
+    rect h=1 bg=color.line
+  }
+}
+
+params {
+  drawing      text = ""
+  view         text = ""
+  title        text = "No piece in this drawing"
+  subtitle     text = ""
+  size_a       text = "—"
+  size_b       text = ""
+  metal        text = "—"
+  metal_note   text = ""
+  stone_count  text = "0"
+  stone_note   text = ""
+  verdict      text = ""
+  all_ok       bool = true
+  has_piece    bool = false
+  has_view     bool = false
+  has_bands    bool = false
+  has_stones   bool = false
+  has_cost     bool = false
+  has_warnings bool = false
+  stone_total  text = ""
+  carat_total  text = ""
+  stones_more  text = ""
+  cost_total   text = ""
+  cost_figure  text = ""
+  cost_unit    text = ""
+  cost_note    text = ""
+  bands        list(Band)    = []
+  stones       list(Stone)   = []
+  checks       list(Check)   = []
+  costs        list(Cost)    = []
+  warnings     list(Warning) = []
+}
+
+// A child that a `when` adds goes after its parent's other children, so each optional section
+// has a parent of its own that holds its place on the page; the section brings its own space
+// above (`pad`), and the page itself has no gap.
+col w=fill bg=color.panel pad=40 gap=0 {
+  // The weights the token bundles use, named as literals (see piece-card.slab).
+  when facesemi { weight=600 }
+  when facebold { weight=700 }
+
+  // Letterhead.
+  row w=fill gap=16 align=start {
+    col w=fill gap=6 {
+      row w=hug gap=8 align=center {
+        text "BENCH SHEET" style=text.eyebrow color=color.accent nowrap
+        text param.drawing style=text.eyebrow color=color.faint nowrap ellipsis
+      }
+      text param.title style=text.title color=color.ink
+      text param.subtitle style=text.body color=color.dim
+    }
+    when has_piece {
+      row w=hug h=hug pad=5,10 radius=999 bg=color.badSoft align=center gap=6 {
+        when all_ok { bg=color.okSoft }
+        rect w=6 h=6 radius=999 bg=color.bad {
+          when all_ok { bg=color.ok }
+        }
+        text param.verdict style=text.tag color=color.bad nowrap {
+          when all_ok { color=color.ok }
+        }
+      }
+    }
+  }
+  rect h=22
+  rect h=2 bg=color.ink
+
+  // The views: the drawing as the engine draws it.
+  col w=fill {
+    when has_view {
+      pad=22,0,0,0
+      col w=fill radius=4 clip stroke=color.line stroke-w=1 {
+        img param.view w=fill h=300 fit=contain
+      }
+    }
+  }
+
+  rect h=22
+  row w=fill gap=12 {
+    Figure caption="SIZE" value=param.size_a note=param.size_b
+    Figure caption="METAL" value=param.metal note=param.metal_note
+    Figure caption="STONES" value=param.stone_count note=param.stone_note
+    when has_cost {
+      Figure caption="COST" value=param.cost_figure note=param.cost_unit
+    }
+  }
+
+  col w=fill {
+    when has_bands {
+      pad=22,0,0,0
+      col w=fill gap=0 {
+        Heading title="METAL"
+        row w=fill gap=12 pad=8,0,4,0 {
+          text "BAND" w=fill style=text.head color=color.faint nowrap
+          text "ALLOY" w=120 style=text.head color=color.faint nowrap
+          text "WIDTH" w=72 style=text.head color=color.faint align-text=end nowrap
+          text "WALL" w=72 style=text.head color=color.faint align-text=end nowrap
+          text "WEIGHT" w=84 style=text.head color=color.faint align-text=end nowrap
+        }
+        each param.bands
+      }
+    }
+  }
+
+  col w=fill {
+    when has_stones {
+      pad=22,0,0,0
+      col w=fill gap=0 {
+        Heading title="STONES"
+        row w=fill gap=12 pad=8,0,4,0 {
+          text "CUT AND SIZE" w=fill style=text.head color=color.faint nowrap
+          text "PCS" w=72 style=text.head color=color.faint align-text=end nowrap
+          text "CT EACH" w=72 style=text.head color=color.faint align-text=end nowrap
+          text "CT" w=84 style=text.head color=color.faint align-text=end nowrap
+        }
+        each param.stones
+        text param.stones_more style=text.small color=color.faint
+        rect h=1 bg=color.hair
+        row w=fill gap=12 pad=6,0,0,0 align=center {
+          text "Total" w=fill style=text.strong color=color.ink
+          text param.stone_total w=72 style=text.num weight=700 color=color.ink align-text=end nowrap
+          rect w=72 h=1
+          text param.carat_total w=84 style=text.num weight=700 color=color.ink align-text=end nowrap
+        }
+      }
+    }
+  }
+
+  col w=fill {
+    when has_piece {
+      pad=22,0,0,0
+      col w=fill gap=0 {
+        Heading title="CHECKS"
+        rect h=4
+        each param.checks
+      }
+    }
+  }
+
+  col w=fill {
+    when has_cost {
+      pad=22,0,0,0
+      col w=fill gap=0 {
+        Heading title="COST"
+        row w=fill gap=12 pad=8,0,4,0 {
+          text "ITEM" w=fill style=text.head color=color.faint nowrap
+          text "QTY" w=96 style=text.head color=color.faint align-text=end nowrap
+          text "RATE" w=96 style=text.head color=color.faint align-text=end nowrap
+          text "AMOUNT" w=108 style=text.head color=color.faint align-text=end nowrap
+        }
+        each param.costs
+        rect h=1 bg=color.hair
+        row w=fill gap=12 pad=6,0,0,0 align=center {
+          text "Total" w=fill style=text.strong color=color.ink
+          text param.cost_total style=text.num weight=700 color=color.ink align-text=end nowrap
+        }
+        rect h=6
+        text param.cost_note style=text.small color=color.faint
+      }
+    }
+  }
+
+  col w=fill {
+    when has_warnings {
+      pad=22,0,0,0
+      col w=fill gap=0 {
+        Heading title="CHECK BEFORE CASTING"
+        rect h=4
+        each param.warnings
+      }
+    }
+  }
+
+  rect h=22
+  rect h=1 bg=color.line
+  rect h=10
+  text "Drawn and measured in CADCraft. Weights are the band alone; prongs, heads and seats are not weighed." style=text.small color=color.faint
+}

@@ -1,0 +1,105 @@
+// The terminal dashboard: the piece, its checks, the bench sheet's lines, what the last commands
+// printed, and a command line that runs CADCraft commands. It is laid out for character cells
+// (8u by 16u each): every pad, gap and fixed size is a cell multiple, the face is monospaced at a
+// size whose advance is one cell, and a line is one row.
+import "tokens.slab"
+
+// One of the piece's checks, on one row.
+def Check(name="", verdict="", message="", ok=false) export {
+  row w=fill h=16 gap=8 {
+    text verdict w=32 color=color.bad nowrap {
+      when ok { color=color.ok }
+    }
+    text name w=88 color=color.ink nowrap ellipsis
+    text message w=fill color=color.dim nowrap ellipsis
+  }
+}
+
+// A label and its value, on one row.
+def Fact(name="", value="") export {
+  row w=fill h=16 gap=8 {
+    text name w=64 color=color.faint nowrap
+    text value w=fill color=color.ink nowrap ellipsis
+  }
+}
+
+// One line of text: a bench-sheet line, or a line a command printed.
+def Line(line="") export {
+  row w=fill h=16 {
+    text line w=fill color=color.dim nowrap ellipsis
+  }
+}
+
+def Shelf(title) {
+  col w=fill h=96 stroke=color.line stroke-w=1 pad=16,16 gap=0 clip {
+    text title h=16 color=color.accent nowrap
+    slot
+  }
+}
+
+def Panel(title) {
+  col w=fill h=fill stroke=color.line stroke-w=1 pad=16,16 gap=0 clip {
+    text title h=16 color=color.accent nowrap
+    slot
+  }
+}
+
+params {
+  drawing text = ""
+  title   text = "No piece in this drawing"
+  verdict text = ""
+  all_ok  bool = true
+  draft   text = ""
+  hint    text = "Type a command and press Enter. Ctrl+C leaves."
+  facts   list(Fact)  = []
+  checks  list(Check) = []
+  bench   list(Line)  = []
+  log     list(Line)  = []
+}
+
+col w=fill h=fill bg=color.page family="mono" size=13.333 leading=1.2 color=color.ink {
+  row w=fill h=16 gap=16 {
+    text "CADCRAFT" color=color.accent nowrap
+    text param.drawing w=fill color=color.dim nowrap ellipsis
+    text param.verdict color=color.bad nowrap {
+      when all_ok { color=color.ok }
+    }
+  }
+
+  row w=fill h=fill gap=0 {
+    col w=352 h=fill {
+      Panel title="PIECE" {
+        text param.title h=16 w=fill color=color.ink nowrap ellipsis
+        each param.facts
+      }
+    }
+    Panel title="CHECKS" {
+      each param.checks
+    }
+  }
+
+  // The bench sheet's lines take seven rows: a terminal with fewer than thirty keeps them for
+  // the piece and its checks. The wrapper holds the panel's place: a child a `when` adds goes
+  // after its parent's other children, so the `when` sits on a parent of its own. (The height
+  // tested is what is left under the header row, one row less than the terminal's.)
+  col w=fill {
+    when h>=464 {
+      col w=fill h=112 stroke=color.line stroke-w=1 pad=16,16 gap=0 clip {
+        text "BENCH SHEET" h=16 color=color.accent nowrap
+        each param.bench
+      }
+    }
+  }
+
+  Shelf title="LOG" {
+    each param.log
+  }
+
+  row w=fill h=16 gap=8 {
+    text ">" w=8 color=color.accent nowrap
+    text#cmd param.draft w=fill h=16 color=color.ink nowrap field=draft submit=run label="Command line"
+  }
+  row w=fill h=16 {
+    text param.hint w=fill color=color.faint nowrap ellipsis
+  }
+}

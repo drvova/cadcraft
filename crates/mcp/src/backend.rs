@@ -293,6 +293,10 @@ pub struct Headless {
 
 impl Default for Headless {
     fn default() -> Self {
+        // The engine's `(card …)` draws through the surface crate; this is where a headless
+        // server gets it, in a build with the `surfaces` feature. Installing twice changes nothing.
+        #[cfg(feature = "surfaces")]
+        cadcraft_surface::install();
         Headless { session: Session::new() }
     }
 }

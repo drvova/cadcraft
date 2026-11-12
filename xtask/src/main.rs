@@ -7,6 +7,7 @@ mod assets;
 mod ico;
 mod layers;
 mod parity;
+mod slab;
 mod stats;
 mod version;
 
@@ -23,7 +24,15 @@ commands:
   ui [--strict]   the interface's gate: bun type check, tests and build in apps/ui (skipped,
                   with a note, where bun is missing; --strict makes that a failure)
   test            cargo nextest run (cargo test without nextest) plus the doctests
-  ci              fmt --check, clippy -D warnings, test, assets, layers, wasm, ui (stops at first failure)
+  ci              fmt --check, clippy -D warnings, test, assets, layers, wasm, ui, surfaces (stops at
+                  first failure; the surfaces step is skipped, with a note, until `slab` has run)
+  slab [--verify] fetch Slab at the commit third_party/slab/SLAB.lock pins into the git-ignored
+                  third_party/slab/src and apply the patch series (needs git and the network;
+                  --verify only checks the patches against the lock)
+  surfaces <test|check|clippy|build|run> [args]
+                  build what is built on Slab (crates/surface, the command-line tool's and the MCP
+                  server's `surfaces` feature) against the patched tree; fetches it when absent.
+                  `surfaces run -- tui --sample`, `surfaces build --release`
   corpus [--download]
                   show where test corpora live; --download fetches PngSuite into corpus/pngsuite
   stats [--exact] count tests and lines per crate (--exact: ask the test harness via `-- --list`)
@@ -42,6 +51,8 @@ fn main() -> ExitCode {
         Some("ui") => cmd_ui(rest.contains(&"--strict")),
         Some("test") => cmd_test(),
         Some("ci") => cmd_ci(),
+        Some("slab") => slab::fetch(&root(), rest.contains(&"--verify")),
+        Some("surfaces") => slab::surfaces(&root(), &rest),
         Some("corpus") => cmd_corpus(rest.contains(&"--download")),
         Some("stats") => stats::run(&root(), rest.contains(&"--exact")),
         Some("parity") => parity::run(&root()),
@@ -214,6 +225,23 @@ fn cmd_ui(strict: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// The designed surfaces (docs/surfaces.md) are built on Slab, which is not in the repository:
+/// `cargo xtask slab` fetches and patches it. Where that has run, the gate lints and tests them;
+/// where it has not, the step says so and passes, as the interface's does without bun: a fresh
+/// clone's gate must not need the network, and everything else is built without Slab.
+fn cmd_surfaces() -> Result<(), String> {
+    let root = root();
+    slab::fetch(&root, true)?;
+    if !slab::fetched(&root) {
+        eprintln!(
+            "note: the patched Slab is not fetched; the designed surfaces were not linted or tested (cargo xtask slab, then cargo xtask surfaces test)"
+        );
+        return Ok(());
+    }
+    slab::surfaces(&root, &["clippy"])?;
+    slab::surfaces(&root, &["test"])
+}
+
 fn cmd_ci() -> Result<(), String> {
     type Step = (&'static str, Box<dyn Fn() -> Result<(), String>>);
     let steps: Vec<Step> = vec![
@@ -238,6 +266,7 @@ fn cmd_ci() -> Result<(), String> {
         ("layers", Box::new(cmd_layers)),
         ("wasm", Box::new(cmd_wasm)),
         ("ui", Box::new(|| cmd_ui(false))),
+        ("surfaces", Box::new(cmd_surfaces)),
     ];
     let mut done = Vec::new();
     for (name, f) in &steps {

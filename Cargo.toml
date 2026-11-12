@@ -2,8 +2,9 @@
 resolver = "3"
 members = ["crates/*", "apps/*", "xtask"]
 # `apps/ui` is the SolidJS interface: a bun app, not a Rust crate, so the `apps/*` member glob
-# must not try to load it as one.
-exclude = ["apps/ui"]
+# must not try to load it as one. `third_party/slab/src` is Slab's own workspace, fetched there
+# by `cargo xtask slab` (absent on a fresh clone): its crates must find their own root, not this.
+exclude = ["apps/ui", "third_party/slab/src"]
 # default-members
 
 [workspace.package]
@@ -28,6 +29,27 @@ cadcraft-engine = { path = "crates/engine" }
 cadcraft-mcp = { path = "crates/mcp" }
 cadcraft-ai = { path = "crates/ai" }
 cadcraft-wasm = { path = "crates/wasm" }
+cadcraft-surface = { path = "crates/surface" }
+# Slab (MIT, https://github.com/stencil-hq/slab): the design language the surfaces are written in
+# (compiler, kernel, static exporters, terminal driver). Pre-alpha and not on crates.io, so it is
+# named by git at the commit `third_party/slab/SLAB.lock` pins. Every use is optional (the
+# `slab` feature of `cadcraft-surface`, `surfaces` of the command-line tool and the MCP server):
+# a default build compiles none of it.
+#
+# The commit named here does not build as it is and embeds fonts; CADCraft builds it through the
+# patch series in `third_party/slab/patches`. `cargo xtask slab` fetches the commit into the
+# git-ignored `third_party/slab/src`, applies the series and writes a Cargo `paths` override;
+# `cargo xtask surfaces test|clippy|build|run` passes it (third_party/slab/README.md).
+# `default-features = false` is what leaves Slab's bundled fonts out.
+#
+# When the fork exists: put its URL and the hash of its patched commit in these six lines, and
+# delete the fetch step. Nothing else changes.
+slab-compile = { git = "https://github.com/stencil-hq/slab", rev = "65747371a18da9a54a94955473d0ec7f7fd07d5f", default-features = false }
+slab-fonts = { git = "https://github.com/stencil-hq/slab", rev = "65747371a18da9a54a94955473d0ec7f7fd07d5f", default-features = false }
+slab-kernel = { git = "https://github.com/stencil-hq/slab", rev = "65747371a18da9a54a94955473d0ec7f7fd07d5f", default-features = false }
+slab-slir = { git = "https://github.com/stencil-hq/slab", rev = "65747371a18da9a54a94955473d0ec7f7fd07d5f", default-features = false }
+slab-syntax = { git = "https://github.com/stencil-hq/slab", rev = "65747371a18da9a54a94955473d0ec7f7fd07d5f" }
+slab-tui = { git = "https://github.com/stencil-hq/slab", rev = "65747371a18da9a54a94955473d0ec7f7fd07d5f", default-features = false }
 # Which paths stored in a drawing (xrefs, data links) may be opened.
 craft-docpath = { version = "0.1.0", git = "https://github.com/storytold/craft-libs", rev = "a0916808f7d78bed8c7b90cdf937176015454a7f" }
 # PDF writing (krilla) for plots, and reading them back in tests. The root patches below pin
@@ -95,4 +117,3 @@ codegen-units = 1
 krilla = { version = "=0.8.2", git = "https://github.com/storytold/craft-libs", rev = "a0916808f7d78bed8c7b90cdf937176015454a7f" }
 hayro-syntax = { git = "https://github.com/storytold/craft-libs", rev = "a0916808f7d78bed8c7b90cdf937176015454a7f" }
 hayro-jbig2 = { git = "https://github.com/storytold/craft-libs", rev = "a0916808f7d78bed8c7b90cdf937176015454a7f" }
-
