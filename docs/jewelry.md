@@ -260,7 +260,7 @@ object's handle, kind, layer, block, first words, one telling size and its group
 
 The interface opens on a jewelry drawing: a size 6 solitaire in 18k gold (Help ▸ Open Sample
 Drawing brings it back; Help ▸ Open Sample Bracket opens the mechanical sample). It is built by the
-commands on this page, so its bench sheet reads back: 33 stones, 1.36 ct, a 3.86 g band.
+commands on this page, so its bench sheet reads back: 32 stones, 1.35 ct, a 3.86 g band.
 
 - **The Bench section of the sidebar** is the bench sheet, live: every stone by cut and size with
   its count and carats, every band `RING` drew with its size, alloy and grams, and the totals in
