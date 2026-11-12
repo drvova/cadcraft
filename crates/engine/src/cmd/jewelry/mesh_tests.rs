@@ -49,7 +49,7 @@ pub(super) fn shells(m: &PartMesh) -> Vec<Vec<u32>> {
 /// Everything a mesh must be: indices in range, no NaN, every edge shared by exactly two
 /// triangles running opposite ways, and every shell enclosing a positive volume. With `strict`,
 /// no triangle is degenerate once rounded to the reply's three decimals.
-fn check(mesh: &PieceMesh, strict: bool, what: &str) {
+pub(super) fn check(mesh: &PieceMesh, strict: bool, what: &str) {
     assert!(!mesh.meshes.is_empty(), "{what}: no meshes");
     assert!(mesh.triangles() <= MAX_TRIANGLES, "{what}: {} triangles", mesh.triangles());
     for m in &mesh.meshes {
@@ -633,7 +633,7 @@ fn hostile_input_is_refused_or_handled_and_never_nan() {
         json!({"kind": "band", "wall": 0}),
         json!({"kind": "band", "width": "wide"}),
         json!({"kind": "band", "width": [2]}),
-        json!({"kind": "band", "profile": "knife"}),
+        json!({"kind": "band", "profile": "wavy"}),
         json!({"kind": "band", "metal": "unobtainium"}),
         json!({"kind": "band", "quality": "ultra"}),
         json!({"kind": "band", "quality": 7}),

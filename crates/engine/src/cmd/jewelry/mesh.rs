@@ -16,7 +16,10 @@
 //! `size.diameter / 2` to that plus `wall`. Flat: the rectangle `width` × `wall`, edges sharp.
 //! Dome: a half-round — a circular arc over the full width rising to the wall, on straight sides
 //! of `wall − width/2` when the wall is more than half the width — sampled evenly along its arc,
-//! so the mesh is inscribed in the solid whose volume `PIECE` weighs.
+//! so the mesh is inscribed in the solid whose volume `PIECE` weighs. Comfort and court: the same
+//! with the finger side eased (an arc that touches the finger in the middle, sampled likewise).
+//! Knife and bevel: their flat faces, exactly. Concave: the hollow as the tangents to its arc, so
+//! that mesh too is inscribed. Every profile is the one the shared module defines.
 //!
 //! **Stones.** A stone is as deep as `GEM` has its cut, split crown 26 %, girdle 4 %, pavilion
 //! 70 %, under the table `GEM` draws for the cut. A round is a brilliant: an eight-sided table,
@@ -68,7 +71,7 @@ use cadcraft_geom::{PI, TAU, Vec2, Vec3};
 use serde_json::{Value, json};
 
 use super::super::*;
-use super::piece_params::{self as shared, Head, MAX_PIECE_STONES, MIN_CAST_WALL, PieceKind, PieceParams, Row, Section, proportions};
+use super::piece_params::{self as shared, Head, MAX_PIECE_STONES, MIN_CAST_WALL, PieceKind, PieceParams, Profile, Row, Section, proportions};
 use super::sizes::RingSize;
 use super::*;
 
@@ -494,9 +497,10 @@ fn smooth_path(pts: &[Vec3], sub: usize) -> Vec<Vec3> {
 /// came through the parser are already inside these limits, so for them nothing changes.
 struct Sane {
     p: PieceParams,
-    /// Inside and outside radius.
+    /// The finger's radius, and the radius of the band's outside in the middle of its width
+    /// (where a stone stands).
     ri: f64,
-    ro: f64,
+    top: f64,
     section: Section,
 }
 
@@ -525,7 +529,9 @@ impl Sane {
             q.cut = "round".to_string();
         }
         let ri = fin(q.inner() / 2.0, 1.0, 50.0, 8.255);
-        Sane { ri, ro: ri + q.wall, section: q.section(), p: q }
+        let section = q.section();
+        let top = fin(ri + section.height_at(0.0), ri, ri + q.wall, ri + q.wall);
+        Sane { ri, top, section, p: q }
     }
     /// The band's outside radius at `z` along the finger.
     fn outside_at(&self, z: f64) -> f64 {
@@ -534,21 +540,15 @@ impl Sane {
 }
 
 /// The band's section as (radius, z), in the order that faces the revolved surface outward: the
-/// shared [`Section`], its dome sampled evenly along the arc.
+/// shared [`Section`] as a polygon inscribed in it, its arcs sampled evenly along themselves.
 fn band_section(s: &Sane, d: &Detail) -> Vec<(f64, f64)> {
-    let h = s.p.width / 2.0;
-    let mut pts = vec![(s.ri, -h), (s.ri, h)];
-    if !s.section.domed {
-        pts.extend([(s.ro, h), (s.ro, -h)]);
-        return pts;
-    }
     let m = (d.dome.clamp(2, 256) / 2) * 2;
-    let outside = s.section.outside(m);
-    // A dome with no sides to speak of comes down to the inside corners themselves.
-    let sides = s.section.side() > 2e-3;
-    let last = outside.len().saturating_sub(1);
-    pts.extend(outside.iter().enumerate().filter(|(j, _)| sides || (*j != 0 && *j != last)).map(|(_, q)| (s.ri + q.y, q.x)));
-    pts
+    let mut polygon = s.section.polygon(m);
+    if polygon.len() < 3 {
+        // A section too slight to have a shape is the rectangle around it.
+        polygon = Section::flat(s.p.width, s.p.wall).polygon(m);
+    }
+    polygon.iter().map(|q| (s.ri + q.y, q.x)).collect()
 }
 
 fn build_band(buf: &mut Buf, s: &Sane, d: &Detail) {
@@ -902,7 +902,7 @@ fn build_solitaire(s: &Sane, d: &Detail, out: &mut Parts) {
     let (g, hp) = (head.girdle, if cab { 0.0 } else { proportions(head.depth).2 });
     // The girdle's plane: x across the finger's direction of travel, y along the finger.
     let frame = Frame {
-        o: Vec3::new(0.0, s.ro + head.girdle_height(), 0.0),
+        o: Vec3::new(0.0, s.top + head.girdle_height(), 0.0),
         u: Vec3::new(1.0, 0.0, 0.0),
         v: Vec3::new(0.0, 0.0, -1.0),
         w: Vec3::new(0.0, 1.0, 0.0),
@@ -928,7 +928,7 @@ fn build_solitaire(s: &Sane, d: &Detail, out: &mut Parts) {
             continue;
         }
         // The foot, inside the band's metal and clear of the finger.
-        let zmax = (p.width / 2.0 - rp).max(0.0) * if s.section.domed { 0.6 } else { 1.0 };
+        let zmax = (p.width / 2.0 - rp).max(0.0) * if s.section.profile == Profile::Flat { 1.0 } else { 0.6 };
         let z = (-site.y * 0.45).clamp(-zmax, zmax);
         let rc = (s.outside_at(z) - 0.5 * rp).max(s.ri + 1.05 * rp);
         let x = (site.x * 0.45).clamp(-0.5 * rc, 0.5 * rc);
@@ -1022,7 +1022,7 @@ fn build_eternity(s: &Sane, d: &Detail, out: &mut Parts) {
     let (m, radius, depth) = (row.melee, row.melee / 2.0, row.depth);
     let shape = StoneShape::of(cut, m, m, depth, 16 * d.melee.clamp(1, 8));
     // A cabochon's frame is its base; a faceted stone's is its girdle.
-    let seat_r = if shape.cab { s.ro - depth } else { row.radius };
+    let seat_r = if shape.cab { row.top - depth } else { row.radius };
     let radial = |v: Vec2| Vec3::new(v.x, v.y, 0.0);
     for k in 0..n {
         let w = radial(Row::out(k, n));
@@ -1071,12 +1071,20 @@ fn build_eternity(s: &Sane, d: &Detail, out: &mut Parts) {
             row.fits
         ));
     }
-    if depth > p.wall + 1e-9 {
+    let seat_height = s.section.height_at(0.0);
+    if depth > seat_height + 1e-9 {
         out.notes.push(format!(
             "The stones' culets reach through the {} mm wall: {} mm stones are {} mm deep.",
-            size_json(p.wall),
+            size_json(seat_height),
             size_json(m),
             size_json(depth)
+        ));
+    }
+    if !row.level() {
+        out.notes.push(format!(
+            "A {} band falls {} mm from its middle to the stones' edges, under their girdles: the row has no seat there (PIECE's stone-seat check fails).",
+            p.profile.name(),
+            size_json(row.fall)
         ));
     }
     if m > p.width + 1e-9 {
@@ -1276,15 +1284,15 @@ pub(super) fn stl_ascii(tris: &[[Vec3; 4]], title: &str) -> String {
 // The commands
 // ---------------------------------------------------------------------------------------------
 
-const PIECE_KEYS: &str = "kind: band|solitaire|eternity, system?, size? (default US 6), wall?: mm (1.8), width?: mm (2.2), profile?: flat|dome, \
-    metal? (gold18), cut? (round), stoneWidth?: mm (6.5), stoneLength?: mm, stone? (diamond), prongs?: 3–8 (6), halo?: bool | melee mm, \
+const PIECE_KEYS: &str = "kind: band|solitaire|eternity, system?, size? (default US 6), wall?: mm (1.8), width?: mm (2.2), \
+    profile?: flat|dome|comfort|court|knife|bevel|concave, comfort?|ridge?|bevel?|hollow?: mm (the profile's own number), metal? (gold18), cut? (round), stoneWidth?: mm (6.5), stoneLength?: mm, stone? (diamond), prongs?: 3–8 (6), halo?: bool | melee mm, \
     melee?: mm (1.8), count?: stones (default: as many as fit), gap?: mm (0.2)";
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("piecemesh", "Piece as a Solid", run_piecemesh)
             .params(
-                "{kind: band|solitaire|eternity, …the piece's parameters as PIECE takes them (size, wall, width, profile, metal, cut, stoneWidth, \
+                "{kind: band|solitaire|eternity, …the piece's parameters as PIECE takes them (size, wall, width, profile: flat|dome|comfort|court|knife|bevel|concave with its comfort, ridge, bevel or hollow, metal, cut, stoneWidth, \
                  stoneLength, stone, prongs, halo, melee, count, gap), quality?: draft|fine (default draft)} → {meshes: [{part: metal|stone, name, \
                  color: [r,g,b], positions: [x,y,z,…] mm, indices: [i,j,k,…]}], bounds: {min, max}, triangles, size, kind, params (as PIECE \
                  reports them), quality, level, stones (centre + halo + eternity stones: the count PIECE reports), fits? (eternity: the most \

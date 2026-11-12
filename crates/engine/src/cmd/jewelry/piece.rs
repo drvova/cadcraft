@@ -20,9 +20,10 @@
 //!   girdle. An eternity band's stones are drawn as their side profiles at their angles, tables
 //!   level with the band's outside.
 //! - **Section** (to the right): the band's cross-section, `width` across by `wall` high, the
-//!   finger side down. A dome is a half-round: a circular arc over the full width whose rise is
-//!   the wall, and when the wall is more than half the width, straight sides under a semicircle.
-//!   An eternity band's section carries the stone's profile in its seat.
+//!   finger side down, as one closed polyline with exact arcs: flat, dome (a half-round), comfort
+//!   (the dome with the finger side eased), court (a lens), knife (two faces meeting at a ridge),
+//!   bevel (chamfered edges) or concave (hollowed between two raised edges), each as the shared
+//!   module defines it. An eternity band's section carries the stone's profile in its seat.
 //! - **Plan** (under the front view, seen from above): the band as a rectangle `outer` long by
 //!   `width` wide. A solitaire's stone is here as a real `GEM` insert (its true girdle, its length
 //!   along the finger), with its prongs as circles on the girdle where `SETTING` would put them
@@ -99,7 +100,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("piece", "Piece", run_piece)
             .menu(&["Draw", "Piece"])
             .alias(&["ringpiece"])
-            .params("One parametric ring per drawing, drawn as a sheet (front view, section, plan; an eternity band also its stone layout) in millimetres through INSUNITS, and rebuilt when a number changes. {query: true} → {piece: null | P}, changes nothing. {remove: true} → {piece: null, removed: n objects}. Anything else builds or rebuilds in one undo step: the keys given are merged over the stored piece (or over the defaults, and then `kind` is required): {kind: band|solitaire|eternity, at?: [x,y] (the front view's centre; default 0,0 for a new piece, where the band is now for a rebuild), system?: us|uk|eu|jp|cn (default us), size?: number|string in that system (default US 6), wall?: mm 0.3–10 (default 1.8, radial thickness), width?: mm 0.5–30 (default 2.2, along the finger), profile?: flat|dome (default flat), metal?: gold24|22|18|14|10|9|platinum|palladium|silver|steel|titanium|brass|copper|wax (default gold18), cut?: a GEMLIST cut (default round; the solitaire's centre stone, or every eternity stone), stone?: a GEMLIST stone (default diamond), stoneWidth?: mm 0.5–30 (default 6.5), stoneLength?: mm (default stoneWidth; along the finger), prongs?: 3–8 (default 6), halo?: false|true (1.3)|melee mm 0.8–3 (solitaire: round diamonds around the centre stone), melee?: mm 0.8–6 (default 1.8, the eternity stones' diameter), count?: 1–400 or null (eternity; null = as many as fit at `gap`), gap?: mm 0–5 (default 0.2, least metal between two stones)} → {piece: P, message}, P = {params: {kind, system: \"us\", size, sizeText, sizeSystem, wall, width, profile, metal, cut, stoneLength, stoneWidth, stone, prongs, halo, melee, count, gap}, handles: [every object of the piece, at most 5000], size: {mm, diameter, circumference, us, usText, uk, eu, jp, cn}, metal: {name, density, grams (the band alone: prongs, head and stone seats are not weighed)}, stones: {count, carat, fits? (eternity: the most that fit at `gap`)}, checks: [{id: wall|stone-seat|spacing|calibrated|size, ok, message}], at: [x,y]}. A failed check is information; a bad parameter, or an eternity `count` that cannot fit at `gap`, is refused and nothing changes")
+            .params("One parametric ring per drawing, drawn as a sheet (front view, section, plan; an eternity band also its stone layout) in millimetres through INSUNITS, and rebuilt when a number changes. {query: true} → {piece: null | P}, changes nothing. {remove: true} → {piece: null, removed: n objects}. Anything else builds or rebuilds in one undo step: the keys given are merged over the stored piece (or over the defaults, and then `kind` is required): {kind: band|solitaire|eternity, at?: [x,y] (the front view's centre; default 0,0 for a new piece, where the band is now for a rebuild), system?: us|uk|eu|jp|cn (default us), size?: number|string in that system (default US 6), wall?: mm 0.3–10 (default 1.8, radial thickness), width?: mm 0.5–30 (default 2.2, along the finger), profile?: flat|dome|comfort|court|knife|bevel|concave (default flat; dome = half-round, comfort = dome outside with the finger side eased, court = a lens curved outside and inside, knife = two faces meeting at a ridge, bevel = flat with 45° chamfered edges, concave = the outside hollowed between two raised edges), comfort?: mm or null (comfort and court: how far the eased inside stands off the finger at the edges; null = a sixth of the wall; 0.05 to the lesser of 40 % of the wall and half the width), ridge?: mm or null (knife: the peak's height; null = 60 % of the wall; 0.05 to 90 % of the wall), bevel?: mm or null (bevel: the chamfer; null = the lesser of a fifth of the width and half the wall; 0.05 to the lesser of 40 % of the width and 80 % of the wall), hollow?: mm or null (concave: the hollow's depth; null = a quarter of the wall; 0.05 to the lesser of 60 % of the wall and 35 % of the width), metal?: gold24|22|18|14|10|9|platinum|palladium|silver|steel|titanium|brass|copper|wax (default gold18), cut?: a GEMLIST cut (default round; the solitaire's centre stone, or every eternity stone), stone?: a GEMLIST stone (default diamond), stoneWidth?: mm 0.5–30 (default 6.5), stoneLength?: mm (default stoneWidth; along the finger), prongs?: 3–8 (default 6), halo?: false|true (1.3)|melee mm 0.8–3 (solitaire: round diamonds around the centre stone), melee?: mm 0.8–6 (default 1.8, the eternity stones' diameter), count?: 1–400 or null (eternity; null = as many as fit at `gap`), gap?: mm 0–5 (default 0.2, least metal between two stones)} → {piece: P, message}, P = {params: {kind, system: \"us\", size, sizeText, sizeSystem, wall, width, profile, comfort, ridge, bevel, hollow, metal, cut, stoneLength, stoneWidth, stone, prongs, halo, melee, count, gap}, handles: [every object of the piece, at most 5000], size: {mm, diameter, circumference, us, usText, uk, eu, jp, cn}, metal: {name, density, grams (the band alone: prongs, head and stone seats are not weighed)}, stones: {count, carat, fits? (eternity: the most that fit at `gap`)}, checks: [{id: wall|stone-seat|spacing|calibrated|size, ok, message}], at: [x,y]}. The finger's size is measured where the inside is narrowest (the middle of the width) and the weight is the profile's exact section swept around the finger. `wall` judges the band where it is thinnest (a knife or bevelled band's edges, the middle of a concave one). A stone stands on the outside in the middle of the width; an eternity row on a band that falls away under the stones' girdles (dome, comfort, court, knife) fails `stone-seat`. A failed check is information; a bad parameter, or an eternity `count` that cannot fit at `gap`, is refused and nothing changes")
             .interactive(|_| Ok(Box::new(PieceM::default()))),
     ]
 }
@@ -183,7 +184,7 @@ fn rect(c: Vec2, w: f64, h: f64) -> Shape {
 /// the origin and its table up.
 fn profile(cut: &gem::Cut, w: f64, depth: f64) -> Vec<(Vec2, f64)> {
     if cut.name == "cabochon" {
-        return Section { width: w, wall: depth, domed: true }.outline();
+        return Section::dome(w, depth).outline();
     }
     let a = w / 2.0;
     let table = a * shared::table_ratio(cut);
@@ -260,6 +261,36 @@ fn calibrated_check(what: &str, mm: Option<f64>) -> Value {
     }
 }
 
+/// Whether the band is thick enough to cast, judged at its thinnest ([`Section::thinnest`]).
+fn wall_check(p: &PieceParams, section: &Section) -> Value {
+    let (thin, place) = section.thinnest();
+    let ok = thin + 1e-9 >= MIN_CAST_WALL;
+    match place {
+        None if ok => check("wall", true, format!("The wall is {} mm, at or over the {MIN_CAST_WALL} mm a bench casts", fmt_mm(p.wall))),
+        None => check("wall", false, format!("The wall is {} mm, under the {MIN_CAST_WALL} mm a bench casts without it failing", fmt_mm(p.wall))),
+        Some(place) if ok => check(
+            "wall",
+            true,
+            format!(
+                "The wall is {} mm and a {} band is thinnest {place}: {} mm, at or over the {MIN_CAST_WALL} mm a bench casts",
+                fmt_mm(p.wall),
+                p.profile.name(),
+                fmt_mm(thin)
+            ),
+        ),
+        Some(place) => check(
+            "wall",
+            false,
+            format!(
+                "The wall is {} mm but a {} band is thinnest {place}: {} mm, under the {MIN_CAST_WALL} mm a bench casts without it failing",
+                fmt_mm(p.wall),
+                p.profile.name(),
+                fmt_mm(thin)
+            ),
+        ),
+    }
+}
+
 /// Work a piece out from its parameters. Nothing is drawn; a piece that cannot be made is
 /// refused here, before the drawing is touched.
 fn design(p: &PieceParams) -> Result<Design> {
@@ -270,11 +301,10 @@ fn design(p: &PieceParams) -> Result<Design> {
     let grams = p.band_grams();
     let mut shapes: Vec<(On, Shape)> = Vec::new();
     let mut placed: Vec<Placed> = Vec::new();
-    let mut checks = vec![if p.wall + 1e-9 >= MIN_CAST_WALL {
-        check("wall", true, format!("The wall is {} mm, at or over the {MIN_CAST_WALL} mm a bench casts", fmt_mm(p.wall)))
-    } else {
-        check("wall", false, format!("The wall is {} mm, under the {MIN_CAST_WALL} mm a bench casts without it failing", fmt_mm(p.wall)))
-    }];
+    let section = p.section();
+    // Where a stone stands: the band's outside in the middle of its width.
+    let top = p.crown();
+    let mut checks = vec![wall_check(p, &section)];
     let (mut centre, mut melee, mut carat, mut fits) = (None, None, 0.0, None);
     // How far the front view reaches to the right, and the plan view above and below its middle.
     let mut front_reach = ro;
@@ -301,12 +331,12 @@ fn design(p: &PieceParams) -> Result<Design> {
             let prong = head.prong;
             // Front view: the stone's side profile over the band, and the two prongs the view shows.
             let side = profile(stone.cut, stone.width, head.depth);
-            let culet = Vec2::new(0.0, ro + head.clear);
+            let culet = Vec2::new(0.0, top + head.clear);
             shapes.push((On::Stones, place_profile(&side, culet, Vec2::new(1.0, 0.0), Vec2::new(0.0, 1.0))));
             let half = stone.width / 2.0;
             let foot = (0.45 * half).min(0.9 * ro);
             let foot_y = (ro * ro - foot * foot).max(0.0).sqrt();
-            let (girdle_bottom, tip) = (ro + head.girdle_height() - head.girdle / 2.0, ro + head.prong_height());
+            let (girdle_bottom, tip) = (top + head.girdle_height() - head.girdle / 2.0, top + head.prong_height());
             for sign in [-1.0, 1.0] {
                 shapes.push((
                     On::Settings,
@@ -422,7 +452,7 @@ fn design(p: &PieceParams) -> Result<Design> {
                 let out = Row::out(i, n);
                 let along = Vec2::new(-out.y, out.x);
                 // Front view: the stone's side, its table on the band's outside.
-                shapes.push((On::Stones, place_profile(&side, out * (ro - depth), along, out)));
+                shapes.push((On::Stones, place_profile(&side, out * (seats.top - depth), along, out)));
                 // Plan: the upper half, each stone as wide as the cosine of its angle leaves it.
                 let squeeze = phi.cos();
                 if squeeze > 0.05 {
@@ -441,12 +471,22 @@ fn design(p: &PieceParams) -> Result<Design> {
             unrolled = Some(length);
             let metal = seats.between(n);
             let edge = (p.width - m) / 2.0;
-            let under = p.wall - depth;
-            let seat_ok = edge + 1e-9 >= MIN_EDGE && under >= -1e-9;
+            // The metal under the culet: the outside's height where the row sits, less the stone.
+            let seat_height = section.height_at(0.0);
+            let under = seat_height - depth;
+            let seat_ok = edge + 1e-9 >= MIN_EDGE && under >= -1e-9 && seats.level();
             checks.push(check(
                 "stone-seat",
                 seat_ok,
-                if seat_ok {
+                if edge + 1e-9 >= MIN_EDGE && under >= -1e-9 && !seats.level() {
+                    format!(
+                        "A {} band falls {} mm from its middle to the edge of a {} mm stone, more than the {} mm the girdle lies under the table: the girdle has no metal beside it",
+                        p.profile.name(),
+                        fmt_mm(seats.fall),
+                        fmt_mm(m),
+                        fmt_mm(shared::girdle_drop(depth))
+                    )
+                } else if seat_ok {
                     format!(
                         "A {} mm stone in a {} mm band leaves {} mm of metal each side, and its {} mm depth leaves {} mm of the wall under the culet",
                         fmt_mm(m),
@@ -467,7 +507,7 @@ fn design(p: &PieceParams) -> Result<Design> {
                         "A {} mm stone is {} mm deep and the wall is {} mm: the culet comes through to the finger",
                         fmt_mm(m),
                         fmt_mm(depth),
-                        fmt_mm(p.wall)
+                        fmt_mm(seat_height)
                     )
                 },
             ));
@@ -490,9 +530,9 @@ fn design(p: &PieceParams) -> Result<Design> {
 
     // The section, to the right of the front view, its base (the finger side) down.
     let section_at = Vec2::new(front_reach + VIEW_GAP + p.width / 2.0, -p.wall / 2.0);
-    shapes.push((On::Metal, Shape::Poly { v: p.section().outline().into_iter().map(|(q, b)| (section_at + q, b)).collect(), closed: true }));
+    shapes.push((On::Metal, Shape::Poly { v: section.outline().into_iter().map(|(q, b)| (section_at + q, b)).collect(), closed: true }));
     if let Some(side) = &seated {
-        let seat = section_at + Vec2::new(0.0, p.wall - p.eternity_row().depth);
+        let seat = section_at + Vec2::new(0.0, section.height_at(0.0) - p.eternity_row().depth);
         shapes.push((On::Stones, place_profile(side, seat, Vec2::new(1.0, 0.0), Vec2::new(0.0, 1.0))));
     }
     // The plan, under the front view.

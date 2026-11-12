@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use super::gem;
 use super::mesh::{PartMesh, PieceMesh, Quality, piece_mesh, r3};
 use super::mesh_tests::{extent, part, shells};
-use super::piece_params::{PieceParams, table_ratio};
+use super::piece_params::{PROFILES, PieceKind, PieceParams, Profile, table_ratio};
 use crate::Session;
 
 /// How far the tessellated band may fall short of the band's exact volume at draft quality: the
@@ -241,6 +241,10 @@ fn agree(b: &Both, what: &str) {
 fn agree_solitaire(b: &Both, what: &str) {
     let (mesh, p) = (&b.mesh, &b.params);
     let outer = p.outer() / 2.0;
+    // Where the head stands: the band's outside in the middle of its width (the outside radius
+    // itself, but in the hollow of a concave band).
+    let top = p.crown();
+    assert!(top <= outer + EXACT && (p.profile == Profile::Concave || (top - outer).abs() < EXACT), "{what}");
     // The sheet's front view: the one closed polyline on Stones is the stone's side profile.
     let stones = polylines(b, "Stones");
     assert_eq!(stones.len(), 1, "{what}");
@@ -249,10 +253,10 @@ fn agree_solitaire(b: &Both, what: &str) {
     let (low, high) = extent(stone, 1);
     assert!((side.max.y - high).abs() < EXACT, "{what}: the sheet's table is {} over the centre, the solid's {high}", side.max.y);
     assert!((side.min.y - low).abs() < EXACT, "{what}: the sheet's culet is at {}, the solid's at {low}", side.min.y);
-    assert!(low - outer >= 0.5 - EXACT, "{what}: the culet is {} over the band", low - outer);
+    assert!(low - top >= 0.5 - EXACT, "{what}: the culet is {} over the band", low - top);
     // The head's height over the band: the table, to the micron.
     let head = p.head();
-    assert!((high - outer - (head.clear + head.depth)).abs() < EXACT, "{what}");
+    assert!((high - top - (head.clear + head.depth)).abs() < EXACT, "{what}");
     // The stone is as wide in the solid as on the sheet (a faceted outline is inscribed in it).
     let (x0, x1) = extent(stone, 0);
     assert!((side.max.x - side.min.x - p.stone_width).abs() < EXACT, "{what}");
@@ -274,7 +278,7 @@ fn agree_solitaire(b: &Both, what: &str) {
     // The centre stone is the first stone the sheet places, in the plan under the front view.
     let centre_at = placed.first().map(|(_, at)| *at).unwrap_or_else(|| panic!("{what}: the centre stone is not in the plan"));
     assert!(centre_at.x.abs() < 1e-9 && centre_at.y < -outer, "{what}: {centre_at:?}");
-    let girdle_y = outer + head.girdle_height();
+    let girdle_y = top + head.girdle_height();
     for (c, r) in &circles {
         assert!((r - head.prong / 2.0).abs() < 1e-9, "{what}: the prong wire");
         // The plan's y runs against the solid's z (the stone's length is along the finger).
@@ -292,7 +296,7 @@ fn agree_solitaire(b: &Both, what: &str) {
     assert_eq!(lines.len(), 2, "{what}: the two prongs the front view shows");
     let (_, tips) = extent(prongs, 1);
     for line in &lines {
-        assert!((line.max.y - (outer + head.prong_height())).abs() < EXACT, "{what}");
+        assert!((line.max.y - (top + head.prong_height())).abs() < EXACT, "{what}");
         assert!(
             tips <= line.max.y + EXACT && tips > line.max.y - PRONG_TOLERANCE,
             "{what}: the solid's prongs reach {tips}, the sheet's {}",
@@ -328,7 +332,7 @@ fn agree_solitaire(b: &Both, what: &str) {
                 }
             }
             let (seat_low, _) = extent(part(mesh, "halo seat"), 1);
-            assert!(seat_low >= outer + 0.5 - EXACT, "{what}: the halo's seat fouls the band");
+            assert!(seat_low >= top + 0.5 - EXACT, "{what}: the halo's seat fouls the band");
         }
     }
 }
@@ -343,6 +347,9 @@ fn agree_eternity(b: &Both, what: &str) {
     let outer = p.outer() / 2.0;
     let count = sheet["stones"]["count"].as_u64().unwrap() as usize;
     let row = p.eternity_row();
+    // The tables' radius: the band's outside in the middle of its width.
+    let top = row.top;
+    assert!((top - p.crown()).abs() < 1e-12 && top <= outer + EXACT && (p.profile == Profile::Concave || (top - outer).abs() < EXACT), "{what}");
     assert_eq!(sheet["stones"]["fits"], json!(row.fits), "{what}");
     assert_eq!(count, row.count(p.count) as usize, "{what}");
     // The sheet's front view: one side profile to a stone, inside the outside circle's reach.
@@ -385,14 +392,14 @@ fn agree_eternity(b: &Both, what: &str) {
     let deepest = |pts: &[Vec2]| pts.iter().map(|q| q.len()).fold(f64::INFINITY, f64::min);
     // (A cabochon's base is flat: its corners are the profile's deepest vertices.)
     let cab = p.cut == "cabochon";
-    let drawn_deepest = if cab { (outer - row.depth).hypot(p.melee / 2.0) } else { outer - row.depth };
+    let drawn_deepest = if cab { (top - row.depth).hypot(p.melee / 2.0) } else { top - row.depth };
     for pts in &profiles {
         assert!((deepest(pts) - drawn_deepest).abs() < EXACT, "{what}: a sheet stone reaches {}", deepest(pts));
     }
     let nearest = small.positions.iter().map(|q| q.x.hypot(q.y)).fold(f64::INFINITY, f64::min);
-    assert!((nearest - (outer - row.depth)).abs() < EXACT, "{what}: the solid's stones reach {nearest}, the sheet's {}", outer - row.depth);
-    let (_, top) = extent(small, 1);
-    assert!((top - outer).abs() < EXACT, "{what}: the table at 12 o'clock is at {top}, the band's outside at {outer}");
+    assert!((nearest - (top - row.depth)).abs() < EXACT, "{what}: the solid's stones reach {nearest}, the sheet's {}", top - row.depth);
+    let (_, table) = extent(small, 1);
+    assert!((table - top).abs() < EXACT, "{what}: the table at 12 o'clock is at {table}, the band's outside at {top}");
     // The layout's pitch is the girdle circle's, the circle the solid's girdles lie on.
     let mut xs: Vec<f64> = inserts(b).iter().map(|(_, at)| at.x).collect();
     xs.sort_by(f64::total_cmp);
@@ -463,6 +470,72 @@ fn a_band_is_one_band() {
         }
     }
     assert_eq!(n, 6 * 2 * 7 * 2);
+}
+
+/// A band of each shape a profile takes: a usual one, a wide low one and a tall narrow one, with
+/// the profile's own number left to its default, at its least and at the most the band allows.
+fn shaped_bands(profile: Profile) -> Vec<Value> {
+    let mut out = Vec::new();
+    for (wall, width) in [(1.8, 3.0), (1.5, 6.0), (2.5, 3.0)] {
+        let band = json!({"profile": profile.name(), "wall": wall, "width": width});
+        out.push(band.clone());
+        if let Some(key) = profile.key() {
+            let (most, _) = profile.most(width, wall);
+            for number in [0.05, most] {
+                let mut shaped = band.clone();
+                shaped[key] = json!(number);
+                out.push(shaped);
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn every_profile_is_one_band_in_every_kind() {
+    let stones = [
+        json!({"kind": "band"}),
+        json!({"kind": "band", "system": "eu", "size": 58, "metal": "platinum"}),
+        json!({"kind": "solitaire"}),
+        json!({"kind": "solitaire", "halo": true, "size": 4}),
+        json!({"kind": "solitaire", "cut": "oval", "stoneLength": 8, "stoneWidth": 6, "prongs": 4}),
+        json!({"kind": "solitaire", "cut": "cabochon", "stoneLength": 8, "stoneWidth": 6, "stone": "opal", "halo": 1.0}),
+        json!({"kind": "eternity", "melee": 1.3}),
+        json!({"kind": "eternity", "melee": 2.0, "count": 12, "system": "uk", "size": "T"}),
+        json!({"kind": "eternity", "cut": "princess", "melee": 1.5}),
+        json!({"kind": "eternity", "cut": "cabochon", "melee": 2.0, "stone": "turquoise"}),
+    ];
+    let mut n = 0;
+    for profile in PROFILES {
+        for band in shaped_bands(profile) {
+            for stone in &stones {
+                let build = with(stone, &band);
+                let b = both(&build);
+                let what = build.to_string();
+                agree(&b, &what);
+                match b.params.kind {
+                    PieceKind::Band => {}
+                    PieceKind::Solitaire => agree_solitaire(&b, &what),
+                    PieceKind::Eternity => {
+                        agree_eternity(&b, &what);
+                        // One decision about a row on a band that falls away, in both.
+                        let level = b.params.eternity_row().level();
+                        let seat = b.sheet["checks"].as_array().unwrap().iter().find(|c| c["id"] == "stone-seat").unwrap();
+                        let fell = seat["message"].as_str().unwrap().contains("no metal beside it");
+                        let noted = b.reply["notes"].as_array().unwrap().iter().any(|note| note.as_str().unwrap().contains("the row has no seat"));
+                        assert_eq!(noted, !level, "{what}: {}", b.reply["notes"]);
+                        assert!(level || seat["ok"] == false, "{what}: {seat}");
+                        assert!(!fell || !level, "{what}: {seat}");
+                    }
+                }
+                assert_eq!(b.sheet["params"]["profile"], profile.name(), "{what}");
+                n += 1;
+            }
+        }
+    }
+    println!("{n} pieces over every profile");
+    // Two profiles with one shape each and five with three, on three bands, under ten pieces.
+    assert_eq!(n, (2 + 5 * 3) * 3 * stones.len());
 }
 
 #[test]

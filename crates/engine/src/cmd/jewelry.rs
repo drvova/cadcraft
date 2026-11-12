@@ -23,6 +23,9 @@ mod piece;
 #[cfg(test)]
 #[path = "jewelry/piece_agree_tests.rs"]
 mod piece_agree_tests;
+#[cfg(test)]
+#[path = "jewelry/piece_more_tests.rs"]
+mod piece_more_tests;
 mod piece_params;
 #[cfg(test)]
 #[path = "jewelry/piece_tests.rs"]

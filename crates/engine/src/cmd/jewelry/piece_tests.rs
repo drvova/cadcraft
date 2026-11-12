@@ -11,45 +11,45 @@ use super::*;
 use crate::{Input, Session};
 
 /// A drawing in millimetres.
-fn mm_drawing() -> Session {
+pub(super) fn mm_drawing() -> Session {
     let mut s = Session::new();
     s.execute("setvar", &json!({"name": "INSUNITS", "value": 4})).unwrap();
     s
 }
 
 /// Build or rebuild, and hand back `P`.
-fn piece(s: &mut Session, p: Value) -> Value {
+pub(super) fn piece(s: &mut Session, p: Value) -> Value {
     let r = s.execute("piece", &p).unwrap_or_else(|e| panic!("{p}: {e}"));
     assert!(r["message"].as_str().is_some_and(|m| !m.is_empty()), "{r}");
     r["piece"].clone()
 }
 
-fn query(s: &mut Session) -> Value {
+pub(super) fn query(s: &mut Session) -> Value {
     s.execute("piece", &json!({"query": true})).unwrap()["piece"].clone()
 }
 
-fn handles(p: &Value) -> Vec<Handle> {
+pub(super) fn handles(p: &Value) -> Vec<Handle> {
     p["handles"].as_array().unwrap().iter().map(|h| Handle::parse_hex(h.as_str().unwrap()).unwrap()).collect()
 }
 
-fn check<'a>(p: &'a Value, id: &str) -> &'a Value {
+pub(super) fn check<'a>(p: &'a Value, id: &str) -> &'a Value {
     p["checks"].as_array().unwrap().iter().find(|c| c["id"] == id).unwrap_or_else(|| panic!("no `{id}` check in {p}"))
 }
 
 /// The drawing as a test compares it: its objects, its undo depth and its revision.
-fn state(s: &Session) -> (usize, usize, u64) {
+pub(super) fn state(s: &Session) -> (usize, usize, u64) {
     let st = s.state().unwrap();
     (st.doc.model.len(), st.undo.len(), st.revision)
 }
 
 /// The piece's objects of one kind on one layer.
-fn on_layer_count(s: &Session, p: &Value, layer: &str, pick: fn(&EntityKind) -> bool) -> usize {
+pub(super) fn on_layer_count(s: &Session, p: &Value, layer: &str, pick: fn(&EntityKind) -> bool) -> usize {
     let d = s.doc().unwrap();
     handles(p).iter().filter_map(|h| d.entity(*h)).filter(|e| e.common.layer == layer && pick(&e.kind)).count()
 }
 
 /// Where the piece's stones are, in drawing units, by block.
-fn stone_inserts(s: &Session, p: &Value) -> Vec<(String, Vec2)> {
+pub(super) fn stone_inserts(s: &Session, p: &Value) -> Vec<(String, Vec2)> {
     let d = s.doc().unwrap();
     handles(p)
         .iter()
@@ -62,7 +62,7 @@ fn stone_inserts(s: &Session, p: &Value) -> Vec<(String, Vec2)> {
 }
 
 /// Every object in model space belongs to the piece: nothing is left over from an old one.
-fn assert_no_orphans(s: &Session, p: &Value) {
+pub(super) fn assert_no_orphans(s: &Session, p: &Value) {
     let d = s.doc().unwrap();
     let hs: std::collections::HashSet<Handle> = handles(p).into_iter().collect();
     assert_eq!(d.model.len(), hs.len(), "objects in the drawing that are not the piece's");
@@ -670,7 +670,7 @@ fn hostile_piece_params_never_panic_and_never_leave_half_a_piece() {
         json!({"kind": "band", "wall": "1.8"}),
         json!({"kind": "band", "width": 1e308}),
         json!({"kind": "band", "width": {"mm": 2}}),
-        json!({"kind": "band", "profile": "knife"}),
+        json!({"kind": "band", "profile": "wavy"}),
         json!({"kind": "band", "metal": "unobtanium"}),
         json!({"kind": "band", "at": [1e308, 0]}),
         json!({"kind": "band", "at": [0, -1e300]}),
