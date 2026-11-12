@@ -1,8 +1,8 @@
 /**
  * The display-list cache: the engine builds and culls a display list for a *window* (the view
  * expanded by [`VIEW_PAD`] on each side), and the canvas may pan and zoom anywhere inside that
- * window without asking the engine again. Only leaving the window — or the drawing changing
- * (a revision bump) — asks for a new list.
+ * window without asking the engine again. Only leaving the window, the drawing changing (a
+ * revision bump) or another space being shown (a layout tab) asks for a new list.
  *
  * Why: the engine's reply is JSON, so a fetch costs milliseconds once a drawing has a few
  * thousand entities. Panning used to fetch on every pointer move (the whole list rebuilt and
@@ -26,6 +26,8 @@ export interface DisplayRegion {
   /** The zoom the list was built for, in CSS pixels per world unit (curves are flattened for
    *  it); 0 when it is not known (a list fetched before the canvas was measured). */
   scale: number;
+  /** The space the list is of ("Model" or a layout's name); null when the engine did not say. */
+  space: string | null;
 }
 
 /**
@@ -48,9 +50,12 @@ export function padView(rect: Rect, pad = VIEW_PAD): Rect {
   return { x0: rect.x0 - dx, y0: rect.y0 - dy, x1: rect.x1 + dx, y1: rect.y1 + dy };
 }
 
-/** The region a fetched list covers: its window, the revision and the scale it was built at. */
-export function regionOf(window: Rect, revision: number, scale = 0): DisplayRegion {
-  return { x0: window.x0, y0: window.y0, x1: window.x1, y1: window.y1, revision, scale: Number.isFinite(scale) && scale > 0 ? scale : 0 };
+/**
+ * The region a fetched list covers: its window, the revision and the scale it was built at, and
+ * the space it is of (`DisplayList.space`).
+ */
+export function regionOf(window: Rect, revision: number, scale = 0, space: string | null = null): DisplayRegion {
+  return { x0: window.x0, y0: window.y0, x1: window.x1, y1: window.y1, revision, scale: Number.isFinite(scale) && scale > 0 ? scale : 0, space };
 }
 
 /**
@@ -58,10 +63,13 @@ export function regionOf(window: Rect, revision: number, scale = 0): DisplayRegi
  * the view's zoom now ([`viewScale`]): a view zoomed in more than [`LOD_REFETCH`] past the scale
  * the list was built for is not answered (its circles would be faceted), and neither is one whose
  * list was built at an unknown scale. A `scale` of 0 (the canvas is not measured) judges the
- * window and the revision alone.
+ * window and the revision alone. `space` is the space on screen now: a list of another space
+ * answers for nothing, whatever its window (two tabs' views can overlap, and switching tabs is
+ * not always a new revision); a list or a caller that does not know its space is not held to it.
  */
-export function regionCovers(region: DisplayRegion | null, rect: Rect, revision: number, scale = 0): boolean {
+export function regionCovers(region: DisplayRegion | null, rect: Rect, revision: number, scale = 0, space: string | null = null): boolean {
   if (region === null || region.revision !== revision) return false;
+  if (space !== null && region.space !== null && region.space !== space) return false;
   if (Number.isFinite(scale) && scale > 0 && !(region.scale > 0 && scale <= region.scale * LOD_REFETCH)) return false;
   if (!Number.isFinite(rect.x0) || !Number.isFinite(rect.x1) || !Number.isFinite(rect.y0) || !Number.isFinite(rect.y1)) return false;
   if (rect.x1 <= rect.x0 || rect.y1 <= rect.y0) return false;

@@ -39,6 +39,19 @@
   --canvas-grip-hover: #f1b467;
   --canvas-grip-hot: #e34671;
 
+  /* ---- The sheet of paper (a layout tab). Paper is paper in both themes, so these are fixed, as
+     the canvas's own colours are. A layout shows the sheet and the dark canvas around it, so each
+     ink that marks something is measured against both: on --paper / on --canvas. ---- */
+  --paper: #FCFCFC; /* the sheet: the light pane surface, 17.31 against the canvas around it */
+  --paper-ink: #141414; /* colour 7 on the sheet (the light theme's text ink): 17.96 */
+  --paper-margin: #8C8C8C; /* the printable area's dashed hairline: 3.28 on the sheet, and no louder */
+  /* The selection ink on a layout (the halo, the dash, a grip at rest, snap markers, the rubber
+     band): the light theme's accent, 4.51 / 3.84. The dark accent measures 2.79 on the sheet. */
+  --paper-selection: #2678C1;
+  /* A grip under the pointer on a layout (the light theme's warning ink): 4.53 / 3.82. The
+     canvas's own measures 1.79 on the sheet. A grip being edited keeps --canvas-grip-hot (3.80 / 4.55). */
+  --paper-grip-hover: #A46701;
+
   /* ---- Text and icons (text, text_dim, text_faint, icon) ---- */
   --text: #F0F0F0;
   --text-dim: rgba(240, 240, 240, 0.74);

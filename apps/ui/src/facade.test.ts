@@ -1078,3 +1078,61 @@ describe("the extended facade contract over the mock", () => {
     expect(typeof mock.digest()).toBe("string");
   });
 });
+
+describe("a layout's sheet through the facade", () => {
+  /** A facade over the mock whose display reply is replaced. */
+  const withDisplay = (display: () => string): AppFacade => {
+    const mock = new MockFacade();
+    const raw = new Proxy(mock, {
+      get: (target, key, receiver): unknown => (key === "display" ? display : (Reflect.get(target, key, receiver) as unknown)),
+    });
+    return new AppFacade(raw, { kind: "mock", detail: "a layout's display" });
+  };
+  const reply = (more: Record<string, unknown>): string => JSON.stringify({ revision: 4, bounds: [0, 0, 297, 210], verts: [[0, 0], [10, 10]], prims: [{ kind: "polyline", start: 0, len: 2, color: [255, 255, 255], lw: 0.25, alpha: 255, handle: 18, ink: "fg" }], ...more });
+
+  test("the display list of a layout carries its sheet, its name and the inks that follow the ground", () => {
+    const list = withDisplay(() => reply({ space: "Sheet A", sheet: { paper: [0, 0, 297, 210], printable: [6.35, 6.35, 290.65, 203.65] } })).displayList(0.5);
+    expect(list.space).toBe("Sheet A");
+    expect(list.sheet?.paper).toEqual({ x0: 0, y0: 0, x1: 297, y1: 210 });
+    expect(list.sheet?.printable).toEqual({ x0: 6.35, y0: 6.35, x1: 290.65, y1: 203.65 });
+    expect(list.prims[0]?.ink).toBe("fg");
+  });
+
+  test("a stale engine package, which sends neither, degrades to a list with no sheet", () => {
+    const list = withDisplay(() => JSON.stringify({ revision: 4, bounds: [0, 0, 1, 1], verts: [[0, 0], [1, 1]], prims: [{ kind: "polyline", start: 0, len: 2, color: [255, 255, 255], lw: 0.25, alpha: 255, handle: 18 }] })).displayList();
+    expect(list.sheet).toBeNull();
+    expect(list.space).toBeUndefined();
+    expect(list.prims).toHaveLength(1);
+    expect(list.prims[0] !== undefined && "ink" in list.prims[0]).toBe(false);
+  });
+
+  test("a hostile sheet is no sheet, and the list is still read", () => {
+    for (const sheet of [{ paper: [0, 0, 0, 0] }, { paper: "A4" }, { paper: [0, 0, 1e300, 1] }, 7, []]) {
+      const list = withDisplay(() => reply({ space: "Sheet A", sheet })).displayList();
+      expect(list.sheet).toBeNull();
+      expect(list.prims).toHaveLength(1);
+    }
+    // A display call that throws or replies with something else is the empty list, as before.
+    expect(
+      withDisplay(() => {
+        throw new Error("boom");
+      }).displayList().sheet ?? null,
+    ).toBeNull();
+  });
+
+  test("the mock answers inertly: model space and no sheet, whichever tab is asked for", () => {
+    const facade = new AppFacade(new MockFacade(), { kind: "mock", detail: "test" });
+    const before = facade.displayList();
+    expect(before.sheet).toBeNull();
+    expect(before.space).toBe(facade.drawingState()?.space);
+    // It lists a layout and takes the switch, and stays in model space: nothing to draw a sheet for.
+    const view = facade.viewRect();
+    expect(facade.setLayout("Layout1").ok).toBe(true);
+    expect(facade.drawingState()?.space).toBe(before.space);
+    expect(facade.viewRect()).toEqual(view);
+    const after = facade.displayList();
+    expect(after.sheet).toBeNull();
+    expect(after.space).toBe(before.space);
+    expect(after.prims).toEqual(before.prims);
+  });
+});

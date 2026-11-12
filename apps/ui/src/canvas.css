@@ -86,6 +86,154 @@
   margin-left: var(--gap-6);
 }
 
+/* Dynamic input (components/DynamicInput.tsx): the command line beside the pointer. A column of
+   the prompt, its fields and, when asked for, its options, placed by a transform the frame sets
+   and laid out apart from the page (`contain`), so following the pointer lays out nothing
+   outside the box. It takes nothing from the pointer: the drawing under it is
+   still drawn on. Out of sight it keeps its box (`visibility`), so its size is known before it
+   shows. It arrives and leaves at once, as the snap label does: it follows the pointer many
+   times a second, and a fade would trail it. */
+.canvas-dyn {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--gap-3);
+  width: max-content;
+  contain: layout style;
+  pointer-events: none;
+  font-family: var(--font-family);
+  font-size: var(--font-small);
+  line-height: var(--gap-16);
+  white-space: nowrap;
+}
+
+.canvas-dyn[data-off] {
+  visibility: hidden;
+}
+
+.canvas-dyn [hidden] {
+  display: none;
+}
+
+/* The prompt: the hint box the snap label is, in the quieter ink, since it says the same thing
+   for the whole step while the values beside it change. */
+.canvas-dyn-prompt {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-8);
+  padding: var(--gap-2) var(--gap-6);
+  border: var(--hairline) solid var(--tooltip-border);
+  border-radius: var(--radius-small);
+  background: var(--tooltip-bg);
+  color: var(--text-dim);
+}
+
+.canvas-dyn-prompt > span:empty {
+  display: none;
+}
+
+/* "Options" and the key that lists them: after the prompt, quieter again. */
+.canvas-dyn-more {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-4);
+  color: var(--text-faint);
+}
+
+.canvas-dyn-fields {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-4);
+}
+
+/* What stands before a value and is part of the line: `@` or `#` before X, `<` before the angle.
+   It is inside the field's box, on the box's own ground, so it reads in both themes. */
+.canvas-dyn-mark {
+  flex: none;
+  color: var(--text-faint);
+  font-family: var(--font-family-mono);
+}
+
+/* A field: the hint box again, at the small control's height, around the layer's bare field. Its
+   width is fixed, so a value that changes under the pointer never moves the box, and its figures
+   are tabular. The field the keys go to has the accent edge, whether the keyboard is in it or
+   still on the drawing; a typed field is locked and shows the padlock before its value. The box
+   is contained whole: its size never depends on its value, so a value that changes every frame
+   is laid out inside the field and nowhere else. */
+.canvas-dyn-field {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-4);
+  box-sizing: border-box;
+  contain: strict;
+  width: calc(var(--gap-16) * 6);
+  height: var(--control-h-chip);
+  padding: 0 var(--gap-6);
+  border: var(--hairline) solid var(--tooltip-border);
+  border-radius: var(--radius-small);
+  background: var(--tooltip-bg);
+  color: var(--text);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.canvas-dyn-field[data-kind="text"] {
+  width: calc(var(--gap-16) * 7);
+}
+
+.canvas-dyn-field[data-active] {
+  border-color: var(--focus-ring);
+}
+
+.canvas-dyn-field[data-invalid] {
+  border-color: var(--error);
+}
+
+.canvas-dyn-field > .ui-field {
+  flex: 1 1 auto;
+  width: 0;
+}
+
+/* The value that follows the pointer is the field's placeholder: readable, and a step quieter
+   than a typed one. */
+.canvas-dyn-field > .ui-field::placeholder {
+  color: var(--text-dim);
+  opacity: 1;
+}
+
+.canvas-dyn-lock {
+  display: none;
+  flex: none;
+  color: var(--text-faint);
+}
+
+.canvas-dyn-field[data-locked] > .canvas-dyn-lock {
+  display: flex;
+}
+
+.canvas-dyn-lock > .tool-icon {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+}
+
+/* The prompt's options, listed on the Down arrow: the popover's surface around the layer's
+   option rows, its corner concentric with theirs. While it is open the box stays where it is,
+   and the list is the one part that can be pressed. */
+.canvas-dyn-options {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-width: calc(var(--gap-16) * 7);
+  padding: var(--gap-2);
+  border: var(--hairline) solid var(--tooltip-border);
+  border-radius: calc(var(--radius-card) + var(--gap-2));
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-popover);
+  pointer-events: auto;
+}
+
 /* The selection rectangle, over the canvas and outside its drawing: dragging it repaints one box,
    not the display list. A window (left to right, objects wholly inside) has a solid rule and a
    crossing (right to left, objects touched) a dashed one: one accent, told apart by the edge.

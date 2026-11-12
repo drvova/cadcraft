@@ -1131,7 +1131,8 @@ export class AppFacade {
   /**
    * The engine's own zoom command. The engine fits the drawing's extents to the canvas's aspect
    * and the facade mirrors the result into the canvas view, so a UI adopts it by reading
-   * `viewRect()` afterwards (the shell's `syncView`).
+   * `viewRect()` afterwards (the shell's `adoptView`). On a layout the view is the sheet's frame
+   * (the paper and whatever is drawn beyond its edge), not only the objects drawn on it.
    */
   zoomExtents(): Envelope {
     return this.execute("zoom", { mode: "extents" });

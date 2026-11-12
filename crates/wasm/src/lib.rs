@@ -23,7 +23,7 @@
 //! | [`Facade::run_script`] | `{"ok","ran","output"[,error]}` |
 //! | [`Facade::display`] | the display list below, or `{"error":"…"}` |
 //! | [`Facade::set_view`] | `{"ok":true,"view":{"min":[x,y],"max":[x,y]}}` or `{"ok":false,"error":"…"}`; the engine's session view follows quietly (no view-history entries) |
-//! | [`Facade::view`] | `{"min":[x,y],"max":[x,y]}` — what the canvas shows; it follows a command that moves the view (ZOOM, PAN, a view restore) |
+//! | [`Facade::view`] | `{"min":[x,y],"max":[x,y]}` — what the canvas shows; it follows a command that moves the view (ZOOM, PAN, a view restore). Each space keeps its own: a tab entered for the first time is framed (a layout by its sheet), one returned to shows what it showed, and ZOOM Extents on a layout frames the sheet |
 //! | [`Facade::set_viewport`] | `{"ok":true,"viewport":[w,h]}` (the canvas's CSS pixel size the engine sizes its pick box by) or `{"ok":false,"error":"…"}` |
 //! | [`Facade::set_cursor`] | `{"ok":true}` or `{"ok":false,"error":"…"}` — where the pointer is, the direction of direct distance entry |
 //! | [`Facade::preview`] | the running command's rubber band: `{"verts","prims","drag"}` (the display list's `verts`/`prims`; `drag` is `null` or `{"handles":[18,…],"matrix":[a,b,c,d,e,f],"clipboard":false}`), plus `error` when refused |
@@ -110,11 +110,20 @@
 //!
 //! ```json
 //! {"revision":7,"bounds":[minx,miny,maxx,maxy],
+//!  "space":"Model","sheet":null,
 //!  "verts":[[x,y],…],
 //!  "prims":[{"kind":"polyline"|"tris"|"point"|"image","start":0,"len":2,
 //!            "color":[r,g,b],"lw":0.25,"alpha":255,"handle":18},…]}
 //! ```
 //!
+//! * `space` is the tab the list is of (`"Model"` or a layout's name), so a caller that holds a
+//!   list knows which space it draws. On a layout `sheet` is its paper,
+//!   `{"paper":[minx,miny,maxx,maxy],"printable":[minx,miny,maxx,maxy]}` in the layout's drawing
+//!   units (the whole sheet, and the area inside the plot device's margins); `null` in model space.
+//! * a primitive whose colour depends on the ground under it says so with `ink`: `"fg"` for
+//!   colour 7 (light on the dark canvas, dark on a sheet of paper) and `"mask"` for a wipeout (the
+//!   ground's own colour). `color` is then what it is on the dark canvas; the interface inks such a
+//!   primitive from its own paper colours where it lies on the sheet.
 //! * `verts` holds world coordinates shared by every primitive; `prims[i].start/len` index into
 //!   it. `polyline` points are connected, `tris` are three vertices per triangle, `point` is
 //!   `verts[start]`, and `image` is the quad's four vertices — the pixels are **not** in the
@@ -133,14 +142,14 @@
 
 use cadcraft_color::Rgb;
 use cadcraft_doc::dynblock::{self, DynGrip, GripPart, GripShape};
-use cadcraft_doc::{EntityKind, Handle, Space};
+use cadcraft_doc::{Drawing, EntityKind, Handle, Space};
 use cadcraft_engine::cmd::curves::is_locked;
 use cadcraft_engine::grips::{GripAction, grip_actions};
 use cadcraft_engine::snap::SnapHit;
 use cadcraft_engine::snap::tracking::{CursorQuery, PathKind, PathShape, Track};
 use cadcraft_engine::{Input, Prompt, Session};
 use cadcraft_geom::{Bounds2, Ellipse, TAU, Vec2};
-use cadcraft_render::{DPrim, DisplayList, Kind, Options};
+use cadcraft_render::{DPrim, DisplayList, Kind, Options, Sheet};
 use serde_json::{Value, json};
 
 /// The dark drawing-area colour the interface paints (`ui-egui`'s `Tokens::DARK.canvas`, copied
@@ -261,15 +270,81 @@ const OUTPUT_TAIL: usize = 20;
 /// oldest (never the one just opened).
 const MAX_OPEN_DOCS: usize = 8;
 
+/// Spaces whose view is remembered while another tab is shown. A drawing has a handful of
+/// layouts; past this the space left longest ago is framed anew when it is next entered.
+const MAX_SPACE_VIEWS: usize = 64;
+
+/// How closely a view must match a space's frame, as a fraction of the frame's size, to count as
+/// still being that frame (nobody panned or zoomed it): far under a pixel on any canvas.
+const FIT_TOLERANCE: f64 = 1e-6;
+
 /// The view a drawing-less canvas starts on (world units around the origin).
 fn default_view() -> Bounds2 {
     Bounds2 { min: Vec2::new(-10.0, -10.0), max: Vec2::new(10.0, 10.0) }
 }
 
+/// Whether a rectangle has four finite corners no farther out than a view may reach.
+fn usable_bounds(b: &Bounds2) -> bool {
+    [b.min.x, b.min.y, b.max.x, b.max.y].iter().all(|v| v.is_finite() && v.abs() <= MAX_VIEW_SIZE)
+}
+
+/// A layout's sheet when its numbers can be drawn: finite, with a real area, inside the range a
+/// view may reach. A page setup read from a hostile file can ask for a sheet that is not.
+fn usable_sheet(sheet: Option<Sheet>) -> Option<Sheet> {
+    let sheet = sheet?;
+    let paper = sheet.bounds();
+    let real = |b: &Bounds2| usable_bounds(b) && b.width() >= MIN_VIEW_SIZE && b.height() >= MIN_VIEW_SIZE;
+    // The size itself is asked: a negative one would still make a rectangle of two corners.
+    let sized = sheet.size.x >= MIN_VIEW_SIZE && sheet.size.y >= MIN_VIEW_SIZE;
+    (sized && real(&paper) && real(&sheet.printable)).then_some(sheet)
+}
+
+/// What frames a space: model space by its extents, a layout by its sheet together with whatever
+/// is drawn beyond the sheet's edge. Empty when there is nothing to frame.
+fn space_frame(d: &Drawing, space: &Space) -> Bounds2 {
+    let ext = d.extents(space);
+    let ext = if usable_bounds(&ext) { ext } else { Bounds2::EMPTY };
+    match space {
+        Space::Model => ext,
+        Space::Paper(name) => usable_sheet(cadcraft_render::sheet(d, name)).map_or(ext, |sheet| sheet.bounds().union(&ext)),
+    }
+}
+
+/// Whether `view` still shows the frame `fit` as it was fitted: the same centre, and the frame
+/// filling it along one axis (a canvas widens a fitted view to its own shape along the other).
+fn is_fit(view: Bounds2, fit: Bounds2) -> bool {
+    let size = fit.width().max(fit.height());
+    if !(usable_bounds(&view) && usable_bounds(&fit)) || size <= 0.0 {
+        return false;
+    }
+    let tol = size * FIT_TOLERANCE;
+    let near = |a: f64, b: f64| (a - b).abs() <= tol;
+    let centred = near(view.center().x, fit.center().x) && near(view.center().y, fit.center().y);
+    let (w, h) = (view.width(), view.height());
+    centred && w >= fit.width() - tol && h >= fit.height() - tol && (near(w, fit.width()) || near(h, fit.height()))
+}
+
+/// `{"paper":[…],"printable":[…]}` for a layout's sheet (see the module documentation), `null`
+/// when the list has none or its numbers cannot be drawn.
+fn sheet_json(sheet: Option<Sheet>) -> Value {
+    let rect = |b: Bounds2| json!([b.min.x, b.min.y, b.max.x, b.max.y]);
+    usable_sheet(sheet).map_or(Value::Null, |sheet| json!({"paper": rect(sheet.bounds()), "printable": rect(sheet.printable)}))
+}
+
+/// The `ink` of a primitive whose colour depends on the ground under it (see the module
+/// documentation); `None` for one that keeps its colour everywhere.
+fn prim_ink(p: &DPrim) -> Option<&'static str> {
+    match p.kind {
+        Kind::Mask => Some("mask"),
+        _ if p.aci7 => Some("fg"),
+        _ => None,
+    }
+}
+
 /// A view around a drawing's extents, with a margin: what opening a drawing or entering a space
 /// fits to. A degenerate extent still gets a usable rectangle.
 fn fit_view(ext: Bounds2) -> Bounds2 {
-    if ext.is_empty() {
+    if ext.is_empty() || !usable_bounds(&ext) {
         return default_view();
     }
     let size = ext.width().max(0.0).max(ext.height().max(0.0)).max(1.0);
@@ -670,9 +745,15 @@ pub struct Facade {
     /// write it, and a command that moves the engine's session view (ZOOM, PAN, a view restore)
     /// is mirrored into it (see [`Facade::refresh`]).
     view: Bounds2,
-    /// The space `view` belongs to. When a command switches spaces (a layout tab, MSPACE) the
-    /// view re-fits to the new space's extents.
+    /// The space `view` belongs to. When a command switches spaces (a layout tab) the view becomes
+    /// the new space's own: its frame the first time, what it last showed after that.
     space: Space,
+    /// The views of the spaces not on screen, as they were left. A space that was still framed
+    /// when it was left is not here: it is framed again, for the canvas as it is by then.
+    views: Vec<(Space, Bounds2)>,
+    /// Which drawing `space` and `views` belong to: the session's document epoch and active
+    /// index. Another drawing has other spaces, whatever their names.
+    document: (u64, usize),
     /// The engine's session view when the facade last looked. A command that moves it (ZOOM,
     /// PAN, a view restore) is mirrored into `view`, so `view()` always reports what the canvas
     /// should be showing; the canvas's own `set_view` writes the session view in step.
@@ -692,9 +773,24 @@ impl Facade {
     /// A new, empty drawing (`Drawing1`, the default imperial drawing).
     pub fn new() -> Self {
         install_host_hooks();
-        let session = Session::new();
+        Self::over(Session::new())
+    }
+
+    /// A facade over a session, on the default view of model space.
+    fn over(session: Session) -> Self {
         let engine_view = session.state().map(|st| st.view()).unwrap_or_default();
-        Facade { session, clock: 0.0, modifiers: Modifiers::default(), view: default_view(), space: Space::Model, engine_view, hot: Vec::new() }
+        let document = (session.doc_epoch, session.active);
+        Facade {
+            session,
+            clock: 0.0,
+            modifiers: Modifiers::default(),
+            view: default_view(),
+            space: Space::Model,
+            views: Vec::new(),
+            document,
+            engine_view,
+            hot: Vec::new(),
+        }
     }
 
     /// The sample drawing `--sample` opens: the mechanical bracket, in model space, fitted.
@@ -702,9 +798,7 @@ impl Facade {
         install_host_hooks();
         let mut session = Session::empty();
         session.open_drawing(cadcraft_engine::sample::default_sample(), "Bracket", None);
-        let engine_view = session.state().map(|st| st.view()).unwrap_or_default();
-        let mut facade =
-            Facade { session, clock: 0.0, modifiers: Modifiers::default(), view: default_view(), space: Space::Model, engine_view, hot: Vec::new() };
+        let mut facade = Self::over(session);
         facade.fit_view();
         facade
     }
@@ -934,7 +1028,15 @@ impl Facade {
         } else {
             json!([finite(list.bounds.min.x), finite(list.bounds.min.y), finite(list.bounds.max.x), finite(list.bounds.max.y)])
         };
-        let text = json!({"revision": revision, "bounds": bounds, "verts": verts, "prims": prims}).to_string();
+        let text = json!({
+            "revision": revision,
+            "bounds": bounds,
+            "space": st.space.tab_name(),
+            "sheet": sheet_json(list.sheet),
+            "verts": verts,
+            "prims": prims,
+        })
+        .to_string();
         if text.len() > MAX_DISPLAY_BYTES {
             return error_only("the drawing is too large for the display list");
         }
@@ -995,7 +1097,7 @@ impl Facade {
             let start = verts.len();
             verts.extend(points.iter().map(|q| json!([finite(q.x), finite(q.y)])));
             let (r, g, b) = prim_color(p);
-            prims.push(json!({
+            let mut prim = json!({
                 "kind": kind_name(p.kind),
                 "start": start,
                 "len": points.len(),
@@ -1003,7 +1105,11 @@ impl Facade {
                 "lw": p.lw,
                 "alpha": p.alpha(),
                 "handle": p.handle.0,
-            }));
+            });
+            if let (Some(ink), Some(o)) = (prim_ink(p), prim.as_object_mut()) {
+                o.insert("ink".into(), json!(ink));
+            }
+            prims.push(prim);
         }
         Ok((verts, prims))
     }
@@ -1803,34 +1909,101 @@ impl Facade {
         }
     }
 
-    /// Follow the session: when a command switched spaces, re-fit the view to the new space (the
-    /// old rectangle was in the old space's units); when a command moved the engine's view (ZOOM,
-    /// PAN, a view restore), mirror it into the canvas rectangle, keeping the canvas's aspect.
+    /// Follow the session. When a command switched spaces (a layout tab) or drawings, the view
+    /// becomes the new space's own: its frame the first time it is entered, what it showed when
+    /// it was left after that. When a command moved the engine's view (ZOOM, PAN, a view restore),
+    /// it is mirrored into the canvas rectangle, keeping the canvas's aspect; a zoom to the
+    /// extents of a layout frames its sheet.
     fn refresh(&mut self) {
         if !grip_edit_running(&self.session) {
             self.hot.clear();
         }
-        let (space, ext, engine_view) = match self.session.state() {
-            Ok(st) => (st.space.clone(), st.doc.extents(&st.space), st.view()),
+        let (space, engine_view) = match self.session.state() {
+            Ok(st) => (st.space.clone(), st.view()),
             Err(_) => return,
         };
-        if space != self.space {
+        let document = (self.session.doc_epoch, self.session.active);
+        if document != self.document {
+            self.document = document;
+            self.views.clear();
             self.space = space;
-            self.view = fit_view(ext);
+            self.fit_view();
+        } else if space != self.space {
+            self.enter_space(space);
         } else if engine_view != self.engine_view {
-            let aspect = (self.view.width() / self.view.height().max(MIN_VIEW_SIZE)).clamp(1e-9, 1e9);
-            let h = engine_view.height;
-            let w = h * aspect;
-            if let Ok(v) = usable_view(
-                engine_view.center.x - w / 2.0,
-                engine_view.center.y - h / 2.0,
-                engine_view.center.x + w / 2.0,
-                engine_view.center.y + h / 2.0,
-            ) {
-                self.view = v;
+            if self.zoomed_to_layout_extents(engine_view) {
+                self.fit_view();
+            } else {
+                let aspect = (self.view.width() / self.view.height().max(MIN_VIEW_SIZE)).clamp(1e-9, 1e9);
+                let h = engine_view.height;
+                let w = h * aspect;
+                if let Ok(v) = usable_view(
+                    engine_view.center.x - w / 2.0,
+                    engine_view.center.y - h / 2.0,
+                    engine_view.center.x + w / 2.0,
+                    engine_view.center.y + h / 2.0,
+                ) {
+                    self.view = v;
+                }
             }
         }
-        self.engine_view = engine_view;
+        self.note_engine_view();
+    }
+
+    /// Show `space`, which a command made the active one: the view of the space left is kept for
+    /// the next time it is shown, unless it was still that space's frame (then it is framed again,
+    /// for the canvas as it is by then), and the view becomes the one `space` was left with, or
+    /// its frame when it is entered for the first time. The engine's view of the space follows.
+    fn enter_space(&mut self, space: Space) {
+        let left = std::mem::replace(&mut self.space, space);
+        let framed = self.session.doc().is_ok_and(|d| is_fit(self.view, fit_view(space_frame(d, &left))));
+        self.views.retain(|(s, _)| *s != left);
+        if !framed {
+            if self.views.len() >= MAX_SPACE_VIEWS {
+                self.views.remove(0);
+            }
+            self.views.push((left, self.view));
+        }
+        match self.views.iter().position(|(s, _)| *s == self.space) {
+            Some(i) => self.view = self.views.remove(i).1,
+            None => self.fit_view(),
+        }
+        self.tell_engine_view();
+    }
+
+    /// Whether the engine's view, which a command just moved to `moved`, is its zoom to the
+    /// extents of a layout (ZOOM Extents, by any route: the toolbar, a typed `E`, a script). The
+    /// engine frames what is drawn on the layout; the canvas frames the sheet. The engine's own
+    /// zoom is asked again: when it changes nothing, that is where the command left the view.
+    /// Inside a viewport (MSPACE) the zoom is the viewport's, and the sheet stays where it is.
+    fn zoomed_to_layout_extents(&mut self, moved: cadcraft_engine::View) -> bool {
+        let on_sheet = self.session.state().is_ok_and(|st| st.space.is_paper() && st.active_viewport().is_none());
+        if !on_sheet || self.session.running.is_some() {
+            return false;
+        }
+        // The probe may record a view-history entry (at most fifty are kept): the history is put
+        // back as it was, so ZOOM Previous steps through the views the drafter made.
+        let Ok(history) = self.session.state().map(|st| st.view_history.clone()) else { return false };
+        let probed = self.session.zoom_extents().is_ok();
+        let Ok(st) = self.session.state_mut() else { return false };
+        if probed && st.view() == moved {
+            return true;
+        }
+        st.view_history = history;
+        st.set_view_quiet(moved);
+        false
+    }
+
+    /// Give the engine the canvas's view of the active space, quietly (no view-history entry), so
+    /// ZOOM and PAN start from what is shown. Inside a viewport the engine's view is the
+    /// viewport's own, which showing a space must not move.
+    fn tell_engine_view(&mut self) {
+        let view = self.view;
+        if let Ok(st) = self.session.state_mut()
+            && st.active_viewport().is_none()
+        {
+            st.set_view_quiet(cadcraft_engine::View { center: view.center(), height: view.height() });
+        }
     }
 
     /// Remember the engine's session view as the facade last saw it (after the canvas wrote it).
@@ -1851,13 +2024,13 @@ impl Facade {
         }
     }
 
-    /// Fit the view to the active space's extents.
+    /// Frame the active space: model space by its extents, a layout by its sheet.
     fn fit_view(&mut self) {
-        let ext = match self.session.state() {
-            Ok(st) => st.doc.extents(&st.space),
+        let frame = match self.session.state() {
+            Ok(st) => space_frame(&st.doc, &st.space),
             Err(_) => return,
         };
-        self.view = fit_view(ext);
+        self.view = fit_view(frame);
     }
 }
 
@@ -2372,15 +2545,7 @@ mod tests {
 
     /// A facade with no drawing at all (the tolerant replies of `selection`/`format_point`).
     fn empty_facade() -> Facade {
-        Facade {
-            session: Session::empty(),
-            clock: 0.0,
-            modifiers: Modifiers::default(),
-            view: default_view(),
-            space: Space::Model,
-            engine_view: cadcraft_engine::View::default(),
-            hot: Vec::new(),
-        }
+        Facade::over(Session::empty())
     }
 
     #[test]
@@ -3850,5 +4015,356 @@ mod tests {
         for (label, micros) in [("grips", list), ("grip_start", start)] {
             assert!(micros < 100_000.0, "{label} takes {micros:.0} us: a selection change must not stall");
         }
+    }
+
+    /// The four numbers of a rectangle in a reply (`[minx,miny,maxx,maxy]`).
+    fn rect_of(v: &Value) -> [f64; 4] {
+        let a = v.as_array().unwrap_or_else(|| panic!("not a rectangle: {v}"));
+        assert_eq!(a.len(), 4, "not a rectangle: {v}");
+        [a[0].as_f64().unwrap(), a[1].as_f64().unwrap(), a[2].as_f64().unwrap(), a[3].as_f64().unwrap()]
+    }
+
+    /// The view as `[minx,miny,maxx,maxy]`.
+    fn view_rect(f: &Facade) -> [f64; 4] {
+        let v = parse(&f.view());
+        let ((x0, y0), (x1, y1)) = (point_of(&v["min"]), point_of(&v["max"]));
+        [x0, y0, x1, y1]
+    }
+
+    /// Show a view of the canvas's own shape around `rect`, as the interface does once it has
+    /// measured the canvas: the same centre, widened along one axis to `aspect` (width / height).
+    fn show_at_aspect(f: &mut Facade, rect: [f64; 4], aspect: f64) {
+        let (cx, cy) = ((rect[0] + rect[2]) / 2.0, (rect[1] + rect[3]) / 2.0);
+        let (w, h) = (rect[2] - rect[0], rect[3] - rect[1]);
+        let (w, h) = if w / h < aspect { (h * aspect, h) } else { (w, w / aspect) };
+        assert_eq!(parse(&f.set_view(cx - w / 2.0, cy - h / 2.0, cx + w / 2.0, cy + h / 2.0))["ok"], json!(true));
+    }
+
+    fn set_layout(f: &mut Facade, name: &str) {
+        let r = parse(&f.execute("layout.set", &json!({ "name": name }).to_string()));
+        assert_eq!(r["ok"], json!(true), "layout.set {name}: {r}");
+    }
+
+    /// Whether `outer` holds `inner` with room to spare on every side.
+    fn holds(outer: [f64; 4], inner: [f64; 4]) -> bool {
+        outer[0] < inner[0] && outer[1] < inner[1] && outer[2] > inner[2] && outer[3] > inner[3]
+    }
+
+    #[test]
+    fn a_layout_display_carries_its_sheet_and_model_space_none() {
+        let mut f = Facade::new();
+        let model = parse(&f.display(0.0));
+        assert_eq!(model["space"], json!("Model"), "{model}");
+        assert!(model["sheet"].is_null(), "model space has no paper: {model}");
+        set_layout(&mut f, "Layout1");
+        let d = parse(&f.display(0.0));
+        assert_eq!(d["space"], json!("Layout1"), "{d}");
+        // The new imperial drawing's layout: ANSI A, landscape, in inches, with quarter-inch margins.
+        assert_eq!(rect_of(&d["sheet"]["paper"]), [0.0, 0.0, 11.0, 8.5], "{d}");
+        assert_eq!(rect_of(&d["sheet"]["printable"]), [0.25, 0.25, 10.75, 8.25], "{d}");
+        // It is the render crate's sheet of that layout, and what a page setup changes.
+        let r = parse(&f.execute("pagesetup", r#"{"paper":"A3","landscape":true,"margins":[10,20,30,40]}"#));
+        assert_eq!(r["ok"], json!(true), "{r}");
+        let d = parse(&f.display(0.0));
+        let sheet = cadcraft_render::sheet(f.session.doc().unwrap(), "Layout1").unwrap();
+        let paper = rect_of(&d["sheet"]["paper"]);
+        let printable = rect_of(&d["sheet"]["printable"]);
+        assert_eq!(paper, [0.0, 0.0, sheet.size.x, sheet.size.y], "{d}");
+        assert_eq!(printable, [sheet.printable.min.x, sheet.printable.min.y, sheet.printable.max.x, sheet.printable.max.y], "{d}");
+        assert!(paper[2] > paper[3], "landscape: {paper:?}");
+        assert!(holds(paper, printable), "the margins are inside the sheet: {paper:?} {printable:?}");
+        // The sheet is in the reply however the view is culled.
+        assert_eq!(parse(&f.set_view(1.0e6, 1.0e6, 1.0e6 + 1.0, 1.0e6 + 1.0))["ok"], json!(true));
+        assert_eq!(rect_of(&parse(&f.display(0.0))["sheet"]["paper"]), paper);
+        set_layout(&mut f, "Model");
+        assert!(parse(&f.display(0.0))["sheet"].is_null());
+    }
+
+    #[test]
+    fn colour_7_and_wipeouts_say_their_ink() {
+        let mut f = Facade::new();
+        let white = parse(&f.execute("line", r#"{"points":[[0,0],[4,0]]}"#))["result"]["handles"][0].as_str().map(str::to_owned);
+        let red = parse(&f.execute("line", r#"{"points":[[0,1],[4,1]]}"#))["result"]["handles"][0].as_str().map(str::to_owned);
+        let (white, red) = (white.expect("a line"), red.expect("a line"));
+        let r = parse(&f.execute("properties.set", &json!({"handles": [red], "color": 1}).to_string()));
+        assert_eq!(r["ok"], json!(true), "{r}");
+        assert_eq!(parse(&f.execute("wipeout", r#"{"points":[[1,-1],[3,-1],[3,2],[1,2]]}"#))["ok"], json!(true));
+        assert_eq!(parse(&f.set_view(-5.0, -5.0, 10.0, 10.0))["ok"], json!(true));
+        let d = parse(&f.display(0.0));
+        let prims = d["prims"].as_array().unwrap();
+        let of = |hex: &str| {
+            let handle = u64::from_str_radix(hex, 16).unwrap();
+            prims
+                .iter()
+                .find(|p| p["handle"].as_u64() == Some(handle) && p["kind"] == json!("polyline"))
+                .unwrap_or_else(|| panic!("no primitive of {hex}: {d}"))
+        };
+        assert_eq!(of(&white)["ink"], json!("fg"), "colour 7 follows the ground: {d}");
+        assert_eq!(of(&white)["color"], json!([255, 255, 255]), "and is white on the dark canvas: {d}");
+        assert!(of(&red).get("ink").is_none(), "red is red on any ground: {d}");
+        assert!(prims.iter().any(|p| p["ink"] == json!("mask") && p["kind"] == json!("tris")), "the wipeout is the ground's colour: {d}");
+        assert!(prims.iter().all(|p| p.get("ink").is_none_or(|i| i == "fg" || i == "mask")), "{d}");
+    }
+
+    #[test]
+    fn entering_a_layout_frames_its_sheet_and_each_space_keeps_its_view() {
+        let mut f = Facade::sample();
+        assert_eq!(parse(&f.set_viewport(1000.0, 500.0))["ok"], json!(true));
+        let model_fit = view_rect(&f);
+        show_at_aspect(&mut f, model_fit, 2.0);
+        // The first time a layout is shown its sheet is framed, whatever model space was showing.
+        set_layout(&mut f, "Layout1");
+        let paper = rect_of(&parse(&f.display(0.0))["sheet"]["paper"]);
+        let layout_fit = view_rect(&f);
+        assert!(holds(layout_fit, paper), "the sheet is in view: {layout_fit:?} {paper:?}");
+        assert!(layout_fit[2] - layout_fit[0] < (paper[2] - paper[0]) * 1.2, "and fills it: {layout_fit:?}");
+        // The engine's view of the layout is the one shown, so ZOOM and PAN start from it.
+        let engine = f.session.state().unwrap().view();
+        assert!(
+            (engine.center.x - (paper[0] + paper[2]) / 2.0).abs() < 1e-9 && (engine.height - (layout_fit[3] - layout_fit[1])).abs() < 1e-9,
+            "{engine:?}"
+        );
+        // The drafter zooms in on the layout, looks at model space, and comes back to that zoom.
+        show_at_aspect(&mut f, layout_fit, 2.0);
+        assert_eq!(parse(&f.set_view(1.0, 1.0, 3.0, 2.0))["ok"], json!(true));
+        set_layout(&mut f, "Model");
+        // Model space was never panned or zoomed: it is framed again, not put back stretched.
+        assert_eq!(view_rect(&f), model_fit, "an untouched space is framed anew");
+        show_at_aspect(&mut f, model_fit, 2.0);
+        set_layout(&mut f, "Layout1");
+        assert_eq!(view_rect(&f), [1.0, 1.0, 3.0, 2.0], "the layout shows what it showed");
+        // And model space, once moved by hand, keeps its own view the same way.
+        set_layout(&mut f, "Model");
+        assert_eq!(parse(&f.set_view(0.0, 0.0, 2.0, 1.0))["ok"], json!(true));
+        set_layout(&mut f, "Layout2");
+        assert!(holds(view_rect(&f), rect_of(&parse(&f.display(0.0))["sheet"]["paper"])), "a second layout is framed the first time too");
+        set_layout(&mut f, "Model");
+        assert_eq!(view_rect(&f), [0.0, 0.0, 2.0, 1.0]);
+        // Another drawing has other spaces: nothing of the old one's views is carried over.
+        set_layout(&mut f, "Layout1");
+        assert_eq!(parse(&f.load_sample())["ok"], json!(true));
+        assert_eq!(view_rect(&f), model_fit, "a drawing opens framed in model space");
+        set_layout(&mut f, "Layout1");
+        assert_eq!(view_rect(&f), layout_fit, "and its layout is framed as a first visit");
+    }
+
+    #[test]
+    fn zoom_extents_on_a_layout_frames_the_sheet() {
+        let mut f = Facade::new();
+        assert_eq!(parse(&f.set_viewport(1000.0, 500.0))["ok"], json!(true));
+        set_layout(&mut f, "Layout1");
+        let fit = view_rect(&f);
+        let paper = rect_of(&parse(&f.display(0.0))["sheet"]["paper"]);
+        // Something small drawn on the sheet: the engine's own extents are this circle, not the paper.
+        assert_eq!(parse(&f.execute("circle", r#"{"center":[2,2],"radius":0.5}"#))["ok"], json!(true));
+        let zoomed_in = [1.9, 1.9, 2.1, 2.0];
+        let routes: [(&str, &dyn Fn(&mut Facade)); 4] = [
+            ("execute", &|f| assert_eq!(parse(&f.execute("zoom", r#"{"mode":"extents"}"#))["ok"], json!(true))),
+            ("the toolbar", &|f| assert!(parse(&f.start("zoom.extents")).get("error").is_none())),
+            ("typed in steps", &|f| {
+                assert_eq!(parse(&f.cmdline("ZOOM"))["running"], json!("zoom"));
+                assert!(parse(&f.cmdline("E"))["running"].is_null());
+            }),
+            ("typed on one line", &|f| assert!(parse(&f.cmdline("ZOOM E"))["running"].is_null())),
+        ];
+        for (route, zoom) in routes {
+            assert_eq!(parse(&f.set_view(zoomed_in[0], zoomed_in[1], zoomed_in[2], zoomed_in[3]))["ok"], json!(true));
+            zoom(&mut f);
+            let view = view_rect(&f);
+            assert_eq!(view, fit, "{route}: the sheet is framed as on the first visit");
+            assert!(holds(view, paper), "{route}: {view:?}");
+        }
+        // Something drawn off the sheet is framed with it.
+        assert_eq!(parse(&f.execute("line", r#"{"points":[[12,0],[20,4]]}"#))["ok"], json!(true));
+        assert_eq!(parse(&f.execute("zoom", r#"{"mode":"extents"}"#))["ok"], json!(true));
+        let wide = view_rect(&f);
+        assert!(holds(wide, paper) && wide[2] > 20.0, "the sheet and what lies beyond it: {wide:?}");
+        // Any other zoom is the engine's own, and the view history is the drafter's: the look at
+        // the engine's extents leaves no entry in it.
+        show_at_aspect(&mut f, wide, 2.0);
+        let before = view_rect(&f);
+        let history = f.session.state().unwrap().view_history.len();
+        assert_eq!(parse(&f.execute("zoom", r#"{"mode":"in"}"#))["ok"], json!(true));
+        let closer = view_rect(&f);
+        assert!((closer[3] - closer[1] - (before[3] - before[1]) / 2.0).abs() < 1e-9, "ZOOM In halves the view: {before:?} {closer:?}");
+        assert_eq!(f.session.state().unwrap().view_history.len(), history + 1, "one entry: the view ZOOM In left");
+        assert_eq!(parse(&f.execute("zoom", r#"{"mode":"previous"}"#))["ok"], json!(true));
+        let back = view_rect(&f);
+        assert!(back.iter().zip(before).all(|(a, b)| (a - b).abs() < 1e-9), "ZOOM Previous returns to it: {before:?} {back:?}");
+        // In model space the engine's extents are the canvas's: the zoom is mirrored as it is.
+        set_layout(&mut f, "Model");
+        assert_eq!(parse(&f.execute("circle", r#"{"center":[50,50],"radius":10}"#))["ok"], json!(true));
+        show_at_aspect(&mut f, [0.0, 0.0, 1.0, 1.0], 2.0);
+        assert_eq!(parse(&f.execute("zoom", r#"{"mode":"extents"}"#))["ok"], json!(true));
+        let model = view_rect(&f);
+        assert!(holds(model, [40.0, 40.0, 60.0, 60.0]) && model[3] - model[1] < 30.0, "{model:?}");
+    }
+
+    #[test]
+    fn a_command_typed_on_one_line_runs_like_its_steps() {
+        let window = |steps: &[&str]| {
+            let mut f = Facade::sample();
+            assert_eq!(parse(&f.set_viewport(1000.0, 500.0))["ok"], json!(true));
+            let fit = view_rect(&f);
+            show_at_aspect(&mut f, fit, 2.0);
+            let mut last = Value::Null;
+            for step in steps {
+                last = parse(&f.cmdline(step));
+                assert!(last.get("error").is_none(), "{step}: {last}");
+            }
+            assert!(last["running"].is_null(), "the command ended: {last}");
+            (view_rect(&f), entity_count(&f))
+        };
+        let (stepped, _) = window(&["ZOOM", "W", "-59,-8", "356,218"]);
+        let (one_line, _) = window(&["ZOOM W -59,-8 356,218"]);
+        assert_eq!(one_line, stepped, "ZOOM Window on one line");
+        assert!(
+            holds(one_line, [-59.0 + 1e-6, -8.0 + 1e-6, 356.0 - 1e-6, 218.0 - 1e-6]) || one_line[0] <= -59.0,
+            "the window is in view: {one_line:?}"
+        );
+        let width = one_line[2] - one_line[0];
+        assert!(((one_line[3] - one_line[1]) - width / 2.0).abs() < 1e-6, "at the canvas's shape: {one_line:?}");
+        assert!((415.0..=460.0).contains(&width), "and fills it: {one_line:?}");
+        // A drawing command the same way: the line's two points, then Enter (the trailing space).
+        let (_, stepped) = window(&["LINE", "0,0", "10,10", ""]);
+        let (_, one_line) = window(&["LINE 0,0 10,10 "]);
+        assert_eq!(one_line, stepped, "LINE on one line draws what its steps draw");
+    }
+
+    #[test]
+    fn a_hostile_page_setup_never_reaches_the_canvas() {
+        let hostile: [(f64, f64, [f64; 4]); 6] = [
+            (f64::NAN, f64::NAN, [f64::NAN; 4]),
+            (f64::INFINITY, f64::NEG_INFINITY, [f64::INFINITY; 4]),
+            (-1.0, 0.0, [-5.0, 1e300, f64::NAN, 3.0]),
+            (1e300, 1e300, [1e300; 4]),
+            (1e-300, 1e-300, [0.0; 4]),
+            (f64::MAX, f64::MIN_POSITIVE, [f64::MAX; 4]),
+        ];
+        for (width, height, margins) in hostile {
+            let mut f = Facade::new();
+            {
+                let st = f.session.state_mut().unwrap();
+                let doc = std::sync::Arc::make_mut(&mut st.doc);
+                for layout in &mut doc.layouts {
+                    layout.page.width_mm = width;
+                    layout.page.height_mm = height;
+                    layout.page.margins_mm = margins;
+                }
+            }
+            set_layout(&mut f, "Layout1");
+            let label = format!("{width} x {height}, margins {margins:?}");
+            let view = view_rect(&f);
+            assert!(view.iter().all(|v| v.is_finite()) && view[2] > view[0] && view[3] > view[1], "{label}: the view is usable: {view:?}");
+            let text = f.display(0.5);
+            let d = parse(&text);
+            assert!(d.get("error").is_none(), "{label}: {d}");
+            if !d["sheet"].is_null() {
+                let (paper, printable) = (rect_of(&d["sheet"]["paper"]), rect_of(&d["sheet"]["printable"]));
+                for r in [paper, printable] {
+                    assert!(r.iter().all(|v| v.is_finite() && v.abs() <= MAX_VIEW_SIZE) && r[2] > r[0] && r[3] > r[1], "{label}: {r:?}");
+                }
+            }
+            assert_eq!(parse(&f.execute("zoom", r#"{"mode":"extents"}"#))["ok"], json!(true), "{label}");
+            assert!(view_rect(&f).iter().all(|v| v.is_finite()), "{label}");
+            set_layout(&mut f, "Model");
+            set_layout(&mut f, "Layout1");
+            assert!(view_rect(&f).iter().all(|v| v.is_finite()), "{label}");
+        }
+        // The helpers themselves, on numbers no page setup can reach through the render crate.
+        let sheet = |size: (f64, f64), printable: Bounds2| Sheet { size: Vec2::new(size.0, size.1), printable, unit_mm: 1.0 };
+        let unit = Bounds2::new(Vec2::ZERO, Vec2::new(1.0, 1.0));
+        for bad in [
+            sheet((f64::NAN, 1.0), unit),
+            sheet((f64::INFINITY, 1.0), unit),
+            sheet((0.0, 1.0), unit),
+            sheet((-4.0, 1.0), unit),
+            sheet((1e300, 1.0), unit),
+            sheet((1.0, 1.0), Bounds2::EMPTY),
+            sheet((1.0, 1.0), Bounds2 { min: Vec2::new(f64::NAN, 0.0), max: Vec2::new(1.0, 1.0) }),
+        ] {
+            assert!(sheet_json(Some(bad)).is_null(), "{bad:?}");
+        }
+        assert!(sheet_json(None).is_null());
+        assert!(!sheet_json(Some(sheet((1.0, 1.0), unit))).is_null());
+        for bad in
+            [Bounds2::EMPTY, Bounds2 { min: Vec2::new(f64::NAN, 0.0), max: Vec2::new(1.0, 1.0) }, Bounds2::new(Vec2::ZERO, Vec2::new(1e300, 1.0))]
+        {
+            assert_eq!(fit_view(bad), default_view(), "{bad:?}");
+            assert!(!is_fit(bad, unit) && !is_fit(unit, bad), "{bad:?}");
+        }
+        assert!(!is_fit(unit, Bounds2::new(Vec2::ZERO, Vec2::ZERO)), "a frame with no size is nobody's fit");
+    }
+
+    #[test]
+    fn a_fitted_view_is_told_from_one_the_hand_moved() {
+        let fit = fit_view(Bounds2::new(Vec2::ZERO, Vec2::new(11.0, 8.5)));
+        assert!(is_fit(fit, fit));
+        // A canvas wider or taller than the frame widens the view about its centre.
+        let wide = Bounds2 { min: Vec2::new(fit.min.x - 4.0, fit.min.y), max: Vec2::new(fit.max.x + 4.0, fit.max.y) };
+        let tall = Bounds2 { min: Vec2::new(fit.min.x, fit.min.y - 4.0), max: Vec2::new(fit.max.x, fit.max.y + 4.0) };
+        assert!(is_fit(wide, fit) && is_fit(tall, fit));
+        // A pan, a zoom in, a zoom out and a view that crops the frame are not the fit.
+        let panned = Bounds2 { min: Vec2::new(wide.min.x + 0.5, wide.min.y), max: Vec2::new(wide.max.x + 0.5, wide.max.y) };
+        let closer = Bounds2 { min: fit.min + Vec2::new(1.0, 1.0), max: fit.max - Vec2::new(1.0, 1.0) };
+        let farther = Bounds2 { min: fit.min - Vec2::new(4.0, 4.0), max: fit.max + Vec2::new(4.0, 4.0) };
+        for moved in [panned, closer, farther] {
+            assert!(!is_fit(moved, fit), "{moved:?}");
+        }
+    }
+
+    /// The model-space geometry a layout's display list shows through its viewports.
+    fn viewport_content(d: &Value) -> Vec<Vec<(f64, f64)>> {
+        let verts = d["verts"].as_array().unwrap();
+        d["prims"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|p| p["handle"].as_u64() == Some(cadcraft_render::VIEWPORT_CONTENT.0) && p["kind"] == json!("polyline"))
+            .map(|p| {
+                let (start, len) = (p["start"].as_u64().unwrap() as usize, p["len"].as_u64().unwrap() as usize);
+                verts[start..start + len].iter().map(point_of).collect()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_circle_seen_through_a_viewport_is_flattened_for_the_canvas() {
+        // A circle of radius 50 in model space, seen through a viewport of the layout.
+        let mut f = Facade::new();
+        assert_eq!(parse(&f.execute("circle", r#"{"center":[0,0],"radius":50}"#))["ok"], json!(true));
+        assert_eq!(parse(&f.set_viewport(1000.0, 500.0))["ok"], json!(true));
+        set_layout(&mut f, "Layout1");
+        let made = parse(&f.execute("mview", r#"{"p1":[1,1],"p2":[10,7.5]}"#));
+        assert_eq!(made["ok"], json!(true), "{made}");
+        let fit = view_rect(&f);
+        show_at_aspect(&mut f, fit, 2.0);
+        // How far the drawn circle stands from a true one, in canvas pixels, at a view.
+        let facets = |f: &mut Facade| {
+            let d = parse(&f.display(0.0));
+            let view = view_rect(f);
+            let px = (view[3] - view[1]) / 500.0;
+            let arcs = viewport_content(&d);
+            let arc = arcs.iter().max_by_key(|a| a.len()).unwrap_or_else(|| panic!("no viewport content: {d}")).clone();
+            assert!(arc.len() >= 3, "a circle, not a chord: {arc:?}");
+            // The circle on paper: every vertex lies on it, so three of them give it.
+            let (a, b, c) = (arc[0], arc[arc.len() / 2], arc[arc.len() - 1 - arc.len() / 4]);
+            let det = 2.0 * (a.0 * (b.1 - c.1) + b.0 * (c.1 - a.1) + c.0 * (a.1 - b.1));
+            assert!(det.abs() > 1e-12, "three points of a circle: {a:?} {b:?} {c:?}");
+            let sq = |p: (f64, f64)| p.0 * p.0 + p.1 * p.1;
+            let cx = (sq(a) * (b.1 - c.1) + sq(b) * (c.1 - a.1) + sq(c) * (a.1 - b.1)) / det;
+            let cy = (sq(a) * (c.0 - b.0) + sq(b) * (a.0 - c.0) + sq(c) * (b.0 - a.0)) / det;
+            let r = (a.0 - cx).hypot(a.1 - cy);
+            let sagitta = arc.windows(2).map(|w| r - ((w[0].0 + w[1].0) / 2.0 - cx).hypot((w[0].1 + w[1].1) / 2.0 - cy)).fold(0.0_f64, f64::max);
+            (sagitta / px, arc.len(), (cx, cy, r))
+        };
+        let (fitted, coarse, (cx, cy, r)) = facets(&mut f);
+        assert!(fitted <= 0.5, "round when the sheet is fitted: {fitted} px over {coarse} points");
+        // Zoomed far in on the circle's edge, the list is built again for that zoom.
+        let edge = (cx + r, cy);
+        let span = r / 40.0;
+        assert_eq!(parse(&f.set_view(edge.0 - span, edge.1 - span / 2.0, edge.0 + span, edge.1 + span / 2.0))["ok"], json!(true));
+        let (close, _, _) = facets(&mut f);
+        assert!(close <= 0.5, "round when zoomed in on it: the chords stand {close} px off the circle");
     }
 }

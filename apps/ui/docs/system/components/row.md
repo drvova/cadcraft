@@ -12,7 +12,7 @@ Not applicable: hand-rolled — the 22px row, the 4px inset and the .14 selected
 ## Examples
 `<Row onClick={pick}>Layer 1</Row>` — one layer in the layers list.
 
-Real uses, 6 call sites (`rg -c "<Row" src/components` → `src/components/AssistantPane.tsx:3`, `src/components/CommandPalette.tsx:1`, `src/components/LayersPanel.tsx:1`, `src/components/Menu.tsx:1`):
+Real uses, 7 call sites (`rg -c "<Row" src` → `src/components/AssistantPane.tsx:3`, `src/components/CommandPalette.tsx:1`, `src/components/DynamicInput.tsx:1`, `src/components/LayersPanel.tsx:1`, `src/components/Menu.tsx:1`):
 - `src/components/AssistantPane.tsx` — the empty state's example rows (a glyph, the prompt and a chevron; a press puts the prompt in the composer), the setup sheet's provider rows and the composer's slash list (the commands a `/word` draft matches; `selected` marks the one the arrow keys are on); the chat tabs in the header moved onto `Tab`; the transcript's tool rows and the composer's toolbar row stay bespoke (the toolbar is a container, and the tool row carries a disclosure arrow and a note).
 - `src/components/CommandPalette.tsx:127` — each command in the palette's list; `selected` marks the one the arrow keys are on, `disabled` the ones that cannot run now.
 - `src/components/LayersPanel.tsx:53` — each layer's name band (`is-current` marks the current one); the toggle cluster beside it stays native buttons.

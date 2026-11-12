@@ -15,7 +15,7 @@ import { AppFacade, type CommandInfo, type DrawingState, type Grip, type GripOpt
 import type { DisplayList } from "./display";
 import { padView, regionCovers, regionOf, VIEW_PAD, viewScale, type DisplayRegion } from "./display-cache";
 import { emptyPrompt, formatPoint, formatSelectBox, pointerWants, type PromptState } from "./prompt";
-import { padRect, UNIT_RECT, type Rect, type ScreenSize } from "./view";
+import { keepHeldView, padRect, sameRect, unionRects, UNIT_RECT, type Rect, type ScreenSize } from "./view";
 import { applyPick, pickAperture, type PickRule } from "./selection";
 import { parseProperties, type PropertiesReply } from "./props";
 import { chordCommand, classify, isMacPlatform, pressShortcut, shortcutLabel, UI_ITEMS } from "./commands";
@@ -36,6 +36,9 @@ import { CanvasView } from "./components/CanvasView";
 import { LayersPanel } from "./components/LayersPanel";
 import { PropertiesPanel } from "./components/PropertiesPanel";
 import { CommandLine } from "./components/CommandLine";
+import { createRecovery, RecoveryBar } from "./components/RecoveryBar";
+import { LayerManager } from "./components/LayerManager";
+import { opensLayerManager } from "./layer-manager";
 
 export interface AppProps {
   facade: AppFacade;
@@ -217,6 +220,8 @@ export function App(props: AppProps): JSX.Element {
    * never be triggered by one.
    */
   let engineRevision = -1;
+  /** The space the engine last reported as the one on screen; null until it has said. */
+  let engineSpace: string | null = null;
   /**
    * The view the engine was last told the canvas shows. A pan or a zoom inside the fetched window
    * fetches nothing and so tells the engine nothing; `tellView` catches it up before a command
@@ -243,7 +248,7 @@ export function App(props: AppProps): JSX.Element {
     // The region carries the revision of the list we now hold: a later edit makes the engine's
     // revision differ from it, and a zoom past the scale it was built for makes its curves too
     // coarse: either is exactly what triggers the next fetch.
-    displayRegion = regionOf(padView(rect), list.revision, scaleOf(rect));
+    displayRegion = regionOf(padView(rect), list.revision, scaleOf(rect), list.space ?? null);
     setDisplay(list);
   };
 
@@ -261,28 +266,53 @@ export function App(props: AppProps): JSX.Element {
   };
 
   /**
+   * The view a command or a tab set (`rect`), and what the canvas shows of it (`shown`), while
+   * the hand has not moved it. The canvas fits again the last view it fitted itself when its box
+   * changes (a command's echo takes a row of the history), and that view is from before the
+   * command: `onViewChange` keeps this one instead, fitted to the canvas as it is by then.
+   */
+  let commanded: { rect: Rect; shown: Rect } | null = null;
+
+  /**
+   * Take the view the engine holds as the canvas's: a command moved it, or another space or
+   * drawing is shown. It is taken before anything is fetched, because a fetch tells the engine
+   * the view on screen, and would tell it the one from before.
+   */
+  const adoptView = (): void => {
+    const rect = props.facade.viewRect();
+    if (rect === null || sameRect(rect, view())) return;
+    toldView = rect;
+    commanded = { rect, shown: rect };
+    setView(rect);
+  };
+
+  /**
    * After a command: the canvas follows the engine's view only when the command moved it (ZOOM,
    * PAN, a view restore). The engine keeps its own shape of the view it was told, so adopting it
-   * after every command would refit the drawing at each line typed.
+   * after every command would refit the drawing at each line typed. Called before `refresh`.
    */
   const followView = (before: Rect | null): void => {
     const after = props.facade.viewRect();
-    const moved = before === null || after === null || before.x0 !== after.x0 || before.y0 !== after.y0 || before.x1 !== after.x1 || before.y1 !== after.y1;
-    if (moved) syncView();
+    if (before === null || after === null || !sameRect(before, after)) adoptView();
   };
 
-  /** Fetch only when the cached list no longer answers for the view (or the drawing changed). */
+  /**
+   * Fetch only when the cached list no longer answers for the view: the view left its window, the
+   * drawing changed, or the list is of another space than the one on screen.
+   */
   const syncDisplay = (): void => {
     const rect = view();
-    if (!regionCovers(displayRegion, rect, engineRevision, scaleOf(rect))) fetchDisplay(rect);
+    if (!regionCovers(displayRegion, rect, engineRevision, scaleOf(rect), engineSpace)) fetchDisplay(rect);
   };
 
   /** Pull everything the surfaces read from the facade, in one place. */
   const refresh = (): void => {
     const state = props.facade.drawingState();
     engineRevision = state?.revision ?? engineRevision;
+    engineSpace = state?.space ?? null;
     const layerRows = props.facade.layers();
     setDrawing(state);
+    recovery.noteChange(state);
     setLayers(layerRows);
     setSettings(props.facade.settings());
     setSelection(props.facade.selection().handles);
@@ -292,6 +322,15 @@ export function App(props: AppProps): JSX.Element {
     setCommands(props.facade.commands());
     syncDisplay();
   };
+
+  // Recovery copies of unsaved work, and the bar that offers one after an unclean close.
+  const recovery = createRecovery({
+    facade: props.facade,
+    afterRestore: () => {
+      adoptView();
+      refresh();
+    },
+  });
 
   // The page's title names the drawing; the desktop app shows it as the window's title.
   createEffect(() => {
@@ -321,21 +360,6 @@ export function App(props: AppProps): JSX.Element {
     setChatIndex(Math.max(0, Math.min(chatIndex() > index ? chatIndex() - 1 : chatIndex(), rest.length - 1)));
   };
 
-  /**
-   * Re-read the view the facade is showing (a space switch or a zoom command moves it) and fetch
-   * for it when the cached window no longer answers.
-   */
-  const syncView = (): void => {
-    const rect = props.facade.viewRect();
-    const now = view();
-    // The engine's view is the canvas's unless a command moved it: the same view is not set again.
-    if (rect !== null && (rect.x0 !== now.x0 || rect.y0 !== now.y0 || rect.x1 !== now.x1 || rect.y1 !== now.y1)) {
-      toldView = rect;
-      setView(rect);
-    }
-    syncDisplay();
-  };
-
   onMount(() => {
     const initial = props.facade.viewRect();
     const list = props.facade.displayList(VIEW_PAD);
@@ -343,7 +367,7 @@ export function App(props: AppProps): JSX.Element {
     const start = initial ?? padRect(list.bounds, 0.06);
     setView(start);
     engineRevision = list.revision;
-    displayRegion = regionOf(padView(start), list.revision);
+    displayRegion = regionOf(padView(start), list.revision, 0, list.space ?? null);
     setPrompt(props.facade.currentPrompt());
     refresh();
     // The facade starts showing its own default view; keep the canvas on it.
@@ -548,8 +572,14 @@ export function App(props: AppProps): JSX.Element {
    * (a wider canvas or a closer view would show a circle's chords).
    */
   const onViewChange = (rect: Rect, size: ScreenSize): void => {
+    const was = screen;
     screen = size;
-    setView(rect);
+    // A view a command set stays through a change of the canvas's size; anything else the canvas
+    // reports is the hand's (a pan, a zoom) or its own fit, and the command's view ends with it.
+    const resized = was !== null && (was.w !== size.w || was.h !== size.h);
+    const held = commanded !== null && resized && sameRect(view(), commanded.shown) ? { rect: commanded.rect, shown: keepHeldView(commanded.rect, size) } : null;
+    commanded = held;
+    setView(held === null ? rect : held.shown);
     syncDisplay();
   };
 
@@ -560,12 +590,18 @@ export function App(props: AppProps): JSX.Element {
    */
   /** The Drafting Settings dialog: whether it shows, and the page it opens on. */
   const [drafting, setDrafting] = createSignal<{ open: boolean; tab: DraftingTab }>({ open: false, tab: "snap-grid" });
+  /** Whether the Layer Properties Manager shows. */
+  const [layerManager, setLayerManager] = createSignal(false);
   const openDrafting = (tab: DraftingTab = "snap-grid"): void => {
     setDrafting({ open: true, tab });
   };
 
   const onCommand = (text: string): void => {
     // Its name typed at an idle command line opens the dialog, as its menu item does.
+    if (prompt().running === null && opensLayerManager(text)) {
+      setLayerManager(true);
+      return;
+    }
     if (prompt().running === null && opensDraftingSettings(text)) {
       openDrafting();
       return;
@@ -573,8 +609,8 @@ export function App(props: AppProps): JSX.Element {
     setNotice(null);
     const before = engineView();
     setPrompt(props.facade.cmdline(text, prompt()));
-    refresh();
     followView(before);
+    refresh();
   };
 
   /** Start a command by id, exactly as the desktop menu does; the prompt becomes interactive. */
@@ -584,22 +620,24 @@ export function App(props: AppProps): JSX.Element {
     const state = props.facade.start(id, prompt());
     setPrompt(state);
     if (state.error !== null) setNotice(state.error);
-    refresh();
     followView(before);
+    refresh();
   };
 
   const openDrawing = async (): Promise<void> => {
     setNotice(null);
     const file = await pickFile(".dxf,.dwg");
     if (file === null) return;
+    // Unsaved work is copied before the drawing in front is replaced.
+    recovery.flush();
     const env = props.facade.openBytes(file.name, file.bytes);
     if (!env.ok) {
       setNotice(env.error);
       return;
     }
-    refresh();
     // Fit the new drawing the way the facade fitted its own view.
-    syncView();
+    adoptView();
+    refresh();
   };
 
   const saveDrawing = (): void => {
@@ -611,28 +649,31 @@ export function App(props: AppProps): JSX.Element {
     }
     const title = drawing()?.title ?? "Drawing1";
     downloadBytes(defaultFileName(title), bytes);
+    recovery.markSaved();
   };
 
   const newDrawing = (): void => {
     setNotice(null);
+    recovery.flush();
     const env = props.facade.execute("new", {});
     if (!env.ok) {
       setNotice(env.error);
       return;
     }
+    adoptView();
     refresh();
-    syncView();
   };
 
   const loadSample = (): void => {
     setNotice(null);
+    recovery.flush();
     const env = props.facade.loadSample();
     if (!env.ok) {
       setNotice(env.error);
       return;
     }
+    adoptView();
     refresh();
-    syncView();
   };
 
   /** Everything the palette can run: the registry's commands and the shell's own items. */
@@ -681,6 +722,9 @@ export function App(props: AppProps): JSX.Element {
         return;
       case "palette":
         setPaletteOpen(true);
+        return;
+      case "layers":
+        setLayerManager(true);
         return;
       case "drafting":
         openDrafting();
@@ -770,8 +814,8 @@ export function App(props: AppProps): JSX.Element {
     const before = engineView();
     const clicked = props.facade.click(point, 0, prompt(), (taken) => formatPoint(taken, worldPerPixel) ?? undefined);
     setPrompt(clicked.state);
-    refresh();
     followView(before);
+    refresh();
   };
 
   /**
@@ -841,8 +885,8 @@ export function App(props: AppProps): JSX.Element {
       return;
     }
     setNotice(null);
+    adoptView();
     refresh();
-    syncView();
   };
 
   /** Status-bar toggles: the engine's own drafting commands, transparently. */
@@ -922,8 +966,8 @@ export function App(props: AppProps): JSX.Element {
     const before = engineView();
     const env = props.facade.execute(id, params);
     setNotice(env.ok ? null : env.error);
-    refresh();
     followView(before);
+    refresh();
   };
 
   /** Carry out the action of a menu row. */
@@ -970,8 +1014,8 @@ export function App(props: AppProps): JSX.Element {
         const chosen = props.facade.gripOption(action.grip, action.option, prompt());
         setPrompt(chosen.state);
         setNotice(chosen.state.error);
-        refresh();
         followView(before);
+        refresh();
         return;
       }
     }
@@ -1025,6 +1069,7 @@ export function App(props: AppProps): JSX.Element {
           </aside>
         </Show>
         <div class="editor">
+          <RecoveryBar {...recovery.bar} />
           <LayoutTabs layouts={layouts()} space={space()} onLayout={onLayout} onMenu={(name, at) => openContext({ kind: "layout", name }, at)} />
           <main class="stage">
             <CanvasView
@@ -1032,7 +1077,7 @@ export function App(props: AppProps): JSX.Element {
               view={view}
               display={display}
               selection={selection}
-              extents={() => drawing()?.extents ?? null}
+              extents={() => unionRects(drawing()?.extents ?? null, display().sheet?.paper ?? null)}
               onViewChange={onViewChange}
               onNotice={setNotice}
               onPick={onPick}
@@ -1084,6 +1129,7 @@ export function App(props: AppProps): JSX.Element {
           onSettings={(id) => openDrafting(draftingTabFor(id))}
         />
       </Show>
+      <LayerManager facade={props.facade} open={layerManager()} onClose={() => setLayerManager(false)} onChanged={refresh} />
       <DraftingSettings
         facade={props.facade}
         open={drafting().open}

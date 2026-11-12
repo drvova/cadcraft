@@ -27,7 +27,7 @@ describe("the toolbar table", () => {
       ["move", "copy", "rotate", "mirror", "offset", "trim", "fillet", "erase"],
       ["dimlinear"],
       ["zoom.extents", "zoom.window", "pan"],
-      ["ui.panel.properties", "ui.panel.layers", "dist"],
+      ["ui.panel.properties", "layer", "dist"],
       ["plot"],
     ]);
   });
@@ -52,7 +52,7 @@ describe("the toolbar table", () => {
     expect(toolEnabled("u", commands)).toBe(false);
     expect(toolEnabled("line", commands)).toBe(true);
     // The shell's own ids are not the engine's to refuse, and no list refuses nothing.
-    expect(toolEnabled("ui.panel.layers", commands)).toBe(true);
+    expect(toolEnabled("ui.panel.properties", commands)).toBe(true);
     expect(toolEnabled("u", undefined)).toBe(true);
   });
 

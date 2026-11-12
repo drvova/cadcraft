@@ -683,7 +683,8 @@ export class MockFacade implements RawFacade {
     }
     push([[12, 12], [34, 12], [34, 34], [12, 34]], "image", BLUE, 0, 255, handle++);
     const b = this.bounds() ?? { x0: 0, y0: 0, x1: 1, y1: 1 };
-    return JSON.stringify({ revision: this.revision, bounds: [b.x0, b.y0, b.x1, b.y1], verts, prims });
+    // The mock has model space only: the list says so, and carries no sheet of paper.
+    return JSON.stringify({ revision: this.revision, bounds: [b.x0, b.y0, b.x1, b.y1], space: "model", sheet: null, verts, prims });
   }
 
   set_view(x0: number, y0: number, x1: number, y1: number): string {

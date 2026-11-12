@@ -102,3 +102,29 @@ describe("the scale a list was built for", () => {
     expect(regionCovers(built, inside, 8, 0)).toBe(false);
   });
 });
+
+describe("the space a list is of", () => {
+  const WINDOW = padView(VIEW, 0.5);
+  const inside: Rect = { x0: 10, y0: 5, x1: 90, y1: 45 };
+
+  test("a list of another space answers for nothing, whatever its window and revision", () => {
+    const model = regionOf(WINDOW, 7, 0, "Model");
+    expect(regionCovers(model, inside, 7, 0, "Model")).toBe(true);
+    // The layout's view lies inside the model list's window, at the same revision: still not its list.
+    expect(regionCovers(model, inside, 7, 0, "Layout1")).toBe(false);
+    expect(regionCovers(regionOf(WINDOW, 7, 0, "Layout1"), inside, 7, 0, "Layout2")).toBe(false);
+    expect(regionCovers(regionOf(WINDOW, 7, 0, "Layout1"), inside, 7, 0, "Layout1")).toBe(true);
+  });
+
+  test("a space's name is compared as it is written", () => {
+    expect(regionCovers(regionOf(WINDOW, 7, 0, "A"), inside, 7, 0, "a")).toBe(false);
+    expect(regionCovers(regionOf(WINDOW, 7, 0, ""), inside, 7, 0, "")).toBe(true);
+  });
+
+  test("a list or a caller that does not know its space is judged by window, revision and scale alone", () => {
+    expect(regionOf(WINDOW, 7).space).toBeNull();
+    expect(regionCovers(regionOf(WINDOW, 7), inside, 7, 0, "Layout1")).toBe(true);
+    expect(regionCovers(regionOf(WINDOW, 7, 0, "Layout1"), inside, 7)).toBe(true);
+    expect(regionCovers(regionOf(WINDOW, 7, 0, "Layout1"), inside, 8, 0, "Layout1")).toBe(false);
+  });
+});

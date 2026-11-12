@@ -366,3 +366,29 @@ export function parseRect(value: unknown): Rect | null {
   }
   return null;
 }
+
+/** Whether two rectangles have the same four corners. */
+export function sameRect(a: Rect, b: Rect): boolean {
+  return a.x0 === b.x0 && a.y0 === b.y0 && a.x1 === b.x1 && a.y1 === b.y1;
+}
+
+/** The rectangle around two rectangles; either may be absent (null for both). */
+export function unionRects(a: Rect | null, b: Rect | null): Rect | null {
+  if (a === null || rectIsDegenerate(a)) return b === null || rectIsDegenerate(b) ? null : b;
+  if (b === null || rectIsDegenerate(b)) return a;
+  return { x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) };
+}
+
+/**
+ * The view to show when the canvas changes size while `held` is a view a command set (ZOOM, a
+ * tab's own view) that nobody has moved by hand: the held rectangle itself, widened about its
+ * centre to the canvas's new shape (`fitAspect`), so all of what the command framed stays in
+ * sight whatever the canvas does next (a command's echo takes a row of the history the moment it
+ * ends). A canvas left to itself fits again the last view it fitted, which is from before the
+ * command, and would undo it. A size that cannot be used leaves the held view as it is.
+ */
+export function keepHeldView(held: Rect, to: ScreenSize): Rect {
+  if (![to.w, to.h].every((n) => Number.isFinite(n) && n > 0) || rectIsDegenerate(held)) return held;
+  const fitted = fitAspect(held, to);
+  return rectIsDegenerate(fitted) ? held : fitted;
+}

@@ -71,3 +71,13 @@ export function defaultFileName(title: string): string {
   if (/\.[A-Za-z0-9]{1,8}$/.test(base)) return base;
   return `${base}.dxf`;
 }
+
+/**
+ * The file name for a recovery copy saved as a file: the drawing's own name with " (recovered)"
+ * before the extension, so it never lands on top of the file it was made from.
+ */
+export function recoveredFileName(title: string): string {
+  const name = defaultFileName(title);
+  const dot = name.lastIndexOf(".");
+  return `${name.slice(0, dot)} (recovered)${name.slice(dot)}`;
+}

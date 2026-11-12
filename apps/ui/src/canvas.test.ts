@@ -36,6 +36,10 @@ import {
   HOVER_SPREAD,
   LABEL_GAP,
   isHighlighted,
+  MARGIN_DASH,
+  PAPER_HALO_ALPHA,
+  paperInkOf,
+  sideOfSheet,
   lineWidthPx,
   overlayIsEmpty,
   placeLabel,
@@ -49,7 +53,9 @@ import {
   type OverlayGuide,
   type OverlayOptions,
   type Palette,
+  type PaperInks,
 } from "./canvas";
+import { readFileSync } from "node:fs";
 import type { DisplayList, DisplayPrim } from "./display";
 import { UNIT_RECT } from "./view";
 
@@ -198,6 +204,24 @@ class RecordingContext {
     this.strokes.push({ style: this.strokeStyle, width: this.lineWidth, alpha: this.globalAlpha });
     this.dashes.push(this.dash);
   }
+  /** `rect()` calls: the sheet's printable area, and the clips at the sheet's edge. */
+  readonly rects: { x: number; y: number; w: number; h: number }[] = [];
+  rect(x: number, y: number, w: number, h: number): void {
+    this.rects.push({ x, y, w, h });
+  }
+  /** `clip()` calls, by fill rule ("nonzero" keeps the path's inside, "evenodd" here its outside). */
+  readonly clips: string[] = [];
+  /** How many `save()` calls are open: every clip must be undone. */
+  saved = 0;
+  save(): void {
+    this.saved++;
+  }
+  restore(): void {
+    this.saved--;
+  }
+  clip(rule?: string): void {
+    this.clips.push(rule ?? "nonzero");
+  }
 }
 
 const INKS = {
@@ -209,8 +233,14 @@ const INKS = {
   selection: "#81a1c1",
 };
 
+/** The sheet's inks stand in as names: the recording context keeps whatever string it is given. */
+const PAPER_INKS: PaperInks = { paper: "paper", ink: "paper-ink", margin: "paper-margin", selection: "paper-selection", gripHover: "paper-grip-hover" };
+
 /** The grips' two warm inks stand in as two of the other inks: all that matters here is that the three differ. */
-const PALETTE: Palette = { ...INKS, gripHover: INKS.axisX, gripHot: INKS.axisY };
+const PALETTE: Palette = { ...INKS, gripHover: INKS.axisX, gripHot: INKS.axisY, paper: PAPER_INKS };
+
+/** A colour as the renderer writes a primitive's own: the test primitives' own, with its three numbers changed. */
+const rgbOf = (color: readonly [number, number, number]): string => (draw().strokes[0]?.style ?? "").replace(prim("point", 0, 1, 0).color.join(","), color.join(","));
 
 const VIEW = { x0: 0, y0: 0, x1: 10, y1: 10 };
 
@@ -251,6 +281,259 @@ describe("samePalette", () => {
     // The grips' two warm inks are part of it: a theme that changes only them redraws the grips.
     expect(samePalette(PALETTE, { ...PALETTE, gripHover: PALETTE.gripHot })).toBe(false);
     expect(samePalette(PALETTE, { ...PALETTE, gripHot: PALETTE.gripHover })).toBe(false);
+  });
+
+  test("the sheet's inks are part of it, and so is having them at all", () => {
+    expect(samePalette(PALETTE, { ...PALETTE, paper: { ...PAPER_INKS } })).toBe(true);
+    for (const key of ["paper", "ink", "margin", "selection", "gripHover"] as const) {
+      expect(samePalette(PALETTE, { ...PALETTE, paper: { ...PAPER_INKS, [key]: "another ink" } })).toBe(false);
+    }
+    const { paper: _paper, ...bare } = PALETTE;
+    void _paper;
+    expect(samePalette(bare, { ...bare })).toBe(true);
+    expect(samePalette(bare, PALETTE)).toBe(false);
+    expect(samePalette(PALETTE, bare)).toBe(false);
+  });
+});
+
+describe("the inks of the sheet (tokens.css, \"The sheet of paper\")", () => {
+  /** WCAG relative luminance of a `#rrggbb` colour. */
+  const luminance = (hex: string): number => {
+    const channel = (i: number): number => {
+      const c = Number.parseInt(hex.slice(i, i + 2), 16) / 255;
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+  };
+  const contrast = (a: string, b: string): number => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  /** A colour laid over another at an opacity, as the canvas blends a halo. */
+  const over = (ink: string, ground: string, alpha: number): string =>
+    `#${[1, 3, 5].map((i) => Math.round(Number.parseInt(ink.slice(i, i + 2), 16) * alpha + Number.parseInt(ground.slice(i, i + 2), 16) * (1 - alpha)).toString(16).padStart(2, "0")).join("")}`;
+  /** The dark theme's tokens, read from tokens.css itself: these are the values the canvas draws with. */
+  const css = readFileSync(new URL("./tokens.css", import.meta.url), "utf8");
+  const dark = css.slice(css.indexOf(":root {"), css.indexOf(':root[data-theme="light"]'));
+  const token = (name: string): string => {
+    const value = new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`).exec(dark)?.[1];
+    if (value === undefined) throw new Error(`tokens.css has no six-digit --${name}`);
+    return value;
+  };
+  const PAPER = token("paper");
+  const INK = token("paper-ink");
+  const SELECTION = token("paper-selection");
+  const GROUND = token("canvas");
+
+  test("the sheet stands far off the canvas around it, and colour 7 is drawn dark on it", () => {
+    expect(contrast(PAPER, GROUND)).toBeGreaterThan(15);
+    expect(contrast(INK, PAPER)).toBeGreaterThan(15);
+    // On the canvas around the sheet that ink would vanish, which is why it is only the sheet's.
+    expect(contrast(INK, GROUND)).toBeLessThan(1.5);
+  });
+
+  test("the marking inks hold 3:1 on the sheet and on the canvas around it", () => {
+    for (const ink of [SELECTION, token("paper-grip-hover"), token("canvas-grip-hot")]) {
+      expect(contrast(ink, PAPER)).toBeGreaterThanOrEqual(3);
+      expect(contrast(ink, GROUND)).toBeGreaterThanOrEqual(3);
+    }
+    // The canvas's own inks do not: the dark theme's selection and the grip under the pointer.
+    expect(contrast(token("selection"), PAPER)).toBeLessThan(3);
+    expect(contrast(token("canvas-grip-hover"), PAPER)).toBeLessThan(3);
+  });
+
+  test("a selected object's halo holds 3:1 on the sheet at the paper's strength, and would not at the canvas's", () => {
+    expect(contrast(over(SELECTION, PAPER, PAPER_HALO_ALPHA), PAPER)).toBeGreaterThanOrEqual(3);
+    expect(contrast(over(SELECTION, PAPER, HALO_ALPHA), PAPER)).toBeLessThan(3);
+    // The object over its halo stays the darker of the two by a wide margin.
+    expect(contrast(over(SELECTION, PAPER, PAPER_HALO_ALPHA), INK)).toBeGreaterThan(4.5);
+  });
+
+  test("the printable area's outline is quiet and still seen: just past 3:1 on the sheet", () => {
+    const margin = contrast(token("paper-margin"), PAPER);
+    expect(margin).toBeGreaterThanOrEqual(3);
+    expect(margin).toBeLessThan(4.5);
+  });
+});
+
+describe("paperInkOf and sideOfSheet", () => {
+  const SHEET = { x0: 0, y0: 0, x1: 297, y1: 210 };
+
+  test("on a sheet colour 7 takes the paper's ink and a wipeout the paper; every other primitive keeps its colour", () => {
+    expect(paperInkOf({ ink: "fg" }, PAPER_INKS)).toBe(PAPER_INKS.ink);
+    expect(paperInkOf({ ink: "mask" }, PAPER_INKS)).toBe(PAPER_INKS.paper);
+    expect(paperInkOf({}, PAPER_INKS)).toBeNull();
+    // In model space nothing is re-inked.
+    expect(paperInkOf({ ink: "fg" }, null)).toBeNull();
+    expect(paperInkOf({ ink: "mask" }, null)).toBeNull();
+  });
+
+  test("a primitive is on the sheet, off it, or across its edge", () => {
+    expect(sideOfSheet({ x0: 10, y0: 10, x1: 20, y1: 20 }, SHEET)).toBe("on");
+    expect(sideOfSheet(SHEET, SHEET)).toBe("on");
+    expect(sideOfSheet({ x0: 300, y0: 10, x1: 320, y1: 20 }, SHEET)).toBe("off");
+    expect(sideOfSheet({ x0: 250, y0: 100, x1: 340, y1: 100 }, SHEET)).toBe("across");
+    expect(sideOfSheet({ x0: -5, y0: -5, x1: 400, y1: 400 }, SHEET)).toBe("across");
+    expect(sideOfSheet(null, SHEET)).toBe("off");
+  });
+});
+
+describe("drawDisplay, a layout's sheet", () => {
+  const SHEET = { paper: { x0: 0, y0: 0, x1: 8, y1: 6 }, printable: { x0: 0.5, y0: 0.5, x1: 7.5, y1: 5.5 } };
+  const WHITE = rgbOf([255, 255, 255]);
+  const RED = rgbOf([255, 0, 0]);
+  const GROUND = rgbOf([24, 24, 24]);
+  const line = (start: number, handle: number, color: readonly [number, number, number], ink?: "fg" | "mask"): DisplayPrim => ({
+    kind: "polyline",
+    start,
+    len: 2,
+    color,
+    lw: 0.25,
+    alpha: 1,
+    handle,
+    ...(ink === undefined ? {} : { ink }),
+  });
+  /** Colour 7 on the sheet, off it and across its edge; red on the sheet; a wipeout on it. */
+  const LAYOUT: DisplayList = {
+    revision: 1,
+    bounds: { x0: 0, y0: 0, x1: 10, y1: 10 },
+    space: "Layout1",
+    sheet: SHEET,
+    verts: [
+      { x: 1, y: 1 },
+      { x: 4, y: 4 },
+      { x: 8.5, y: 8 },
+      { x: 9.5, y: 9 },
+      { x: 6, y: 3 },
+      { x: 9, y: 3 },
+      { x: 1, y: 5 },
+      { x: 4, y: 5 },
+      { x: 2, y: 2 },
+      { x: 3, y: 2 },
+      { x: 3, y: 3 },
+    ],
+    prims: [
+      line(0, 1, [255, 255, 255], "fg"),
+      line(2, 2, [255, 255, 255], "fg"),
+      line(4, 3, [255, 255, 255], "fg"),
+      line(6, 4, [255, 0, 0]),
+      { kind: "tris", start: 8, len: 3, color: [24, 24, 24], lw: 0, alpha: 1, handle: 5, ink: "mask" },
+    ],
+  };
+  const paint = (list: DisplayList, more: { grid?: boolean; selection?: ReadonlySet<string>; palette?: Palette; view?: typeof VIEW } = {}): RecordingContext => {
+    const ctx = new RecordingContext();
+    drawDisplay(ctx as unknown as CanvasRenderingContext2D, list, more.view ?? VIEW, {
+      width: 800,
+      height: 600,
+      dpr: 1,
+      palette: more.palette ?? PALETTE,
+      grid: more.grid ?? false,
+      ...(more.selection === undefined ? {} : { selection: more.selection }),
+    });
+    return ctx;
+  };
+
+  test("the paper is filled over the canvas's ground, and the printable area is one quiet dashed hairline", () => {
+    const ctx = paint({ ...LAYOUT, prims: [] });
+    expect(ctx.fillRects).toEqual([PALETTE.canvas, PAPER_INKS.paper]);
+    expect(ctx.strokes).toEqual([{ style: PAPER_INKS.margin, width: 1, alpha: 1 }]);
+    expect(ctx.dashes).toEqual([[...MARGIN_DASH]]);
+    // The outline is the printable area (0.5 to 7.5 by 0.5 to 5.5 of a 10-unit view, 800 by 600 px),
+    // each rule centred in the pixel its edge falls in.
+    expect(ctx.rects).toEqual([{ x: 40.5, y: 270.5, w: 560, h: 300 }]);
+  });
+
+  test("a sheet whose device has no margins has no outline to draw along its own edge", () => {
+    const ctx = paint({ ...LAYOUT, prims: [], sheet: { paper: SHEET.paper, printable: SHEET.paper } });
+    expect(ctx.fillRects).toEqual([PALETTE.canvas, PAPER_INKS.paper]);
+    expect(ctx.strokes).toHaveLength(0);
+  });
+
+  test("the grid is drawn before the sheet, so it shows on the canvas around it and never on the paper", () => {
+    const order: string[] = [];
+    const ctx = new (class extends RecordingContext {
+      override stroke(): void {
+        order.push(`stroke ${this.strokeStyle}`);
+        super.stroke();
+      }
+      override fillRect(): void {
+        order.push(`fill ${this.fillStyle}`);
+        super.fillRect();
+      }
+    })();
+    drawDisplay(ctx as unknown as CanvasRenderingContext2D, { ...LAYOUT, prims: [] }, VIEW, { width: 800, height: 600, dpr: 1, palette: PALETTE, grid: true });
+    const paper = order.indexOf(`fill ${PAPER_INKS.paper}`);
+    const grid = order.map((entry, i) => (entry === `stroke ${PALETTE.gridMajor}` || entry === `stroke ${PALETTE.gridMinor}` ? i : -1)).filter((i) => i >= 0);
+    expect(grid.length).toBeGreaterThan(0);
+    expect(Math.max(...grid)).toBeLessThan(paper);
+    expect(order.indexOf(`stroke ${PAPER_INKS.margin}`)).toBeGreaterThan(paper);
+  });
+
+  test("colour 7 is the paper's ink on the sheet and its own off it; other colours never change", () => {
+    const ctx = paint(LAYOUT);
+    const styles = ctx.strokes.map((s) => s.style);
+    // After the margin: on the sheet, off the sheet, across the edge (the sheet's side, then the other), red.
+    expect(styles).toEqual([PAPER_INKS.margin, PAPER_INKS.ink, WHITE, PAPER_INKS.ink, WHITE, RED]);
+    // The wipeout on the sheet is the paper's colour, not the canvas's.
+    expect(ctx.fills).toEqual([PAPER_INKS.paper]);
+  });
+
+  test("a primitive across the sheet's edge is clipped at it, once for each ink, and every clip is undone", () => {
+    const ctx = paint({ ...LAYOUT, prims: [LAYOUT.prims[2] as DisplayPrim] });
+    expect(ctx.clips).toEqual(["nonzero", "evenodd"]);
+    expect(ctx.saved).toBe(0);
+    // The clip is the sheet's own box (0..8 by 0..6 of the view), given twice: inside, then cut out.
+    const sheet = { x: 0, y: 240, w: 640, h: 360 };
+    expect(ctx.rects.filter((r) => r.x === sheet.x && r.y === sheet.y && r.w === sheet.w && r.h === sheet.h)).toHaveLength(2);
+    // Primitives wholly on or off the sheet need no clip at all.
+    expect(paint({ ...LAYOUT, prims: [LAYOUT.prims[0] as DisplayPrim, LAYOUT.prims[1] as DisplayPrim] }).clips).toHaveLength(0);
+  });
+
+  test("in model space the same primitives keep the colours the engine gave them", () => {
+    const { sheet: _sheet, ...model } = LAYOUT;
+    void _sheet;
+    for (const list of [model, { ...LAYOUT, sheet: null }]) {
+      const ctx = paint(list);
+      expect(ctx.strokes.map((s) => s.style)).toEqual([WHITE, WHITE, WHITE, RED]);
+      expect(ctx.fills).toEqual([GROUND]);
+      expect(ctx.fillRects).toEqual([PALETTE.canvas]);
+      expect(ctx.clips).toHaveLength(0);
+    }
+  });
+
+  test("a selected object on a layout is marked in the paper's selection ink, its halo at the paper's strength", () => {
+    const ctx = paint({ ...LAYOUT, prims: [LAYOUT.prims[3] as DisplayPrim] }, { selection: new Set(["4"]) });
+    const own = lineWidthPx(0.25);
+    expect(ctx.strokes.slice(1)).toEqual([
+      { style: PAPER_INKS.selection, width: own + HALO_SPREAD, alpha: PAPER_HALO_ALPHA },
+      { style: RED, width: own, alpha: 1 },
+      { style: PAPER_INKS.selection, width: own, alpha: 1 },
+    ]);
+    expect(PAPER_HALO_ALPHA).toBeGreaterThan(HALO_ALPHA);
+  });
+
+  test("a palette's own paper inks are the ones used", () => {
+    const paper = { paper: "a paper", ink: "an ink", margin: "a margin", selection: "a selection", gripHover: "a warm grip" };
+    const ctx = paint({ ...LAYOUT, prims: [LAYOUT.prims[0] as DisplayPrim] }, { palette: { ...PALETTE, paper } });
+    expect(ctx.fillRects).toEqual([PALETTE.canvas, paper.paper]);
+    expect(ctx.strokes.map((s) => s.style)).toEqual([paper.margin, paper.ink]);
+  });
+
+  test("a palette with no paper inks draws the layout as model space is drawn: no sheet, the engine's colours", () => {
+    const { paper: _paper, ...bare } = PALETTE;
+    void _paper;
+    const ctx = paint(LAYOUT, { palette: bare });
+    expect(ctx.fillRects).toEqual([PALETTE.canvas]);
+    expect(ctx.strokes.map((s) => s.style)).toEqual([WHITE, WHITE, WHITE, RED]);
+    expect(ctx.fills).toEqual([GROUND]);
+    expect(ctx.clips).toHaveLength(0);
+  });
+
+  test("a sheet no view can place draws as model space does, and never a NaN rectangle", () => {
+    const far = { paper: { x0: 0, y0: 0, x1: 1e300, y1: 1e300 }, printable: { x0: 0, y0: 0, x1: 1e300, y1: 1e300 } };
+    const ctx = paint({ ...LAYOUT, sheet: far, prims: [LAYOUT.prims[0] as DisplayPrim] }, { view: { x0: 0, y0: 0, x1: 1e-300, y1: 1e-300 } });
+    for (const r of ctx.rects) expect([r.x, r.y, r.w, r.h].every((n) => Number.isFinite(n))).toBe(true);
+    expect(ctx.saved).toBe(0);
   });
 });
 
@@ -791,5 +1074,56 @@ describe("placeLabel", () => {
     // A canvas smaller than the label holds it at its own corner, never at a negative place or NaN.
     const tiny = placeLabel({ x: 10, y: 10 }, label, { w: 40, h: 20 }, { x: 0, y: 0 });
     expect(Number.isFinite(tiny.x) && Number.isFinite(tiny.y)).toBe(true);
+  });
+});
+
+describe("drawOverlay, on a layout", () => {
+  const SHEET = { paper: { x0: 0, y0: 0, x1: 8, y1: 6 }, printable: { x0: 0.5, y0: 0.5, x1: 7.5, y1: 5.5 } };
+  /** The test list on a sheet: its polyline is colour 7. */
+  const ON_PAPER: DisplayList = { ...LIST, space: "Layout1", sheet: SHEET, prims: [{ ...(LIST.prims[0] as DisplayPrim), ink: "fg" }, LIST.prims[1] as DisplayPrim] };
+  const overlay = (parts: Partial<Pick<OverlayOptions, "hover" | "hoverSelected" | "preview" | "snap" | "guide" | "grips">>): PathContext => {
+    const ctx = new PathContext();
+    drawOverlay(ctx as unknown as CanvasRenderingContext2D, ON_PAPER, VIEW, { width: 800, height: 600, dpr: 1, palette: PALETTE, hover: null, preview: null, snap: null, ...parts });
+    return ctx;
+  };
+  const grip = (id: string, x: number, y: number, more: Partial<GripMark> = {}): GripMark => ({ id, point: { x, y }, kind: "standard", locked: false, hot: false, dynamic: null, ...more });
+
+  test("the hover is a halo of the paper's selection ink, and the object over it is in the paper's ink", () => {
+    const own = lineWidthPx(0.25);
+    expect(overlay({ hover: "2F" }).strokes).toEqual([
+      { style: PAPER_INKS.selection, width: own + HOVER_SPREAD, alpha: HOVER_ALPHA },
+      { style: PAPER_INKS.ink, width: own, alpha: 1 },
+    ]);
+  });
+
+  test("a grip on the sheet lies on a hairline of the paper, one off it on the canvas's ground, both in the paper's inks", () => {
+    const ctx = overlay({ grips: { size: 5, list: [grip("A:0", 2, 2), grip("A:1", 9, 9), grip("A:2", 4, 4), grip("A:3", 6, 2, { hot: true })], hover: "A:2", collected: new Set() } });
+    expect(ctx.fillRects).toEqual([
+      PAPER_INKS.paper,
+      PAPER_INKS.selection,
+      PALETTE.canvas,
+      PAPER_INKS.selection,
+      PAPER_INKS.paper,
+      PAPER_INKS.gripHover,
+      PAPER_INKS.paper,
+      PALETTE.gripHot,
+    ]);
+    expect(new Set([PAPER_INKS.selection, PAPER_INKS.gripHover, PALETTE.gripHot]).size).toBe(3);
+  });
+
+  test("a snap marker is in the paper's selection ink over a rule of the ground under it", () => {
+    const on = overlay({ snap: { point: { x: 4, y: 4 }, mode: 1 } });
+    expect(on.strokes.map((s) => s.style)).toEqual([PAPER_INKS.paper, PAPER_INKS.selection]);
+    const off = overlay({ snap: { point: { x: 9, y: 9 }, mode: 1 } });
+    expect(off.strokes.map((s) => s.style)).toEqual([PALETTE.canvas, PAPER_INKS.selection]);
+  });
+
+  test("a rubber band and the drafting guides are in the paper's selection ink; a dragged colour-7 object in the paper's ink", () => {
+    const band = overlay({ preview: { verts: [{ x: 1, y: 1 }, { x: 5, y: 2 }], prims: [prim("polyline", 0, 2, 0)], drag: null } });
+    expect(band.strokes).toEqual([{ style: PAPER_INKS.selection, width: RUBBER_WIDTH, alpha: 1 }]);
+    const dragged = overlay({ preview: { verts: [], prims: [], drag: { handles: [0x2f], matrix: [1, 0, 0, 1, 1, 0], clipboard: false } } });
+    expect(dragged.strokes).toEqual([{ style: PAPER_INKS.ink, width: lineWidthPx(0.25), alpha: DRAG_ALPHA }]);
+    const dot = overlay({ guide: { paths: { verts: [], prims: [] }, dot: { x: 2, y: 2 }, acquired: [] } });
+    expect(dot.fills).toEqual([PAPER_INKS.paper, PAPER_INKS.selection]);
   });
 });

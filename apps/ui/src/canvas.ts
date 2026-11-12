@@ -4,8 +4,26 @@
  * does. Everything here is allocation-light so a pan/zoom can redraw on every pointer move.
  */
 
-import { boundsOfPrim, type DisplayList, type DisplayPrim } from "./display";
-import { makeProjection, normalizeRect, rectsOverlap, type Point, type Rect } from "./view";
+import { boundsOfPrim, type DisplayList, type DisplayPrim, type LayoutSheet } from "./display";
+import { makeProjection, normalizeRect, rectsOverlap, type Point, type Projection, type Rect } from "./view";
+
+/**
+ * The inks of a layout's sheet of paper (tokens.css, "The sheet of paper"). The sheet is the same
+ * paper in both themes, so these are fixed; each one that marks something holds 3:1 against the
+ * paper and against the canvas's ground, because a layout shows both.
+ */
+export interface PaperInks {
+  /** The sheet itself (`--paper`). */
+  paper: string;
+  /** The foreground colour on the sheet (`--paper-ink`): what colour 7 is drawn in there. */
+  ink: string;
+  /** The dashed outline of the printable area (`--paper-margin`). */
+  margin: string;
+  /** The selection ink on a layout (`--paper-selection`). */
+  selection: string;
+  /** A grip under the pointer on a layout (`--paper-grip-hover`). */
+  gripHover: string;
+}
 
 export interface Palette {
   canvas: string;
@@ -19,7 +37,22 @@ export interface Palette {
   gripHover: string;
   /** A grip being edited (`--canvas-grip-hot`): the hottest of the three. */
   gripHot: string;
+  /**
+   * The sheet's inks. tokens.css is their one source: a palette without them (a page that has not
+   * loaded its tokens) draws a layout as it draws model space, with no sheet under it.
+   */
+  paper?: PaperInks;
 }
+
+/** The dash and the gap of the printable area's outline, in CSS px. */
+export const MARGIN_DASH: readonly [number, number] = [4, 4];
+
+/**
+ * How strong a selected object's halo is on a layout: the paper is light and the halo is the
+ * darker of the two there, so it takes the hovered object's strength to hold 3:1 against the sheet
+ * (0.7 of the paper's selection ink measures 2.72 on it, 0.85 measures 3.49).
+ */
+export const PAPER_HALO_ALPHA = 0.85;
 
 /** Point markers are drawn this many CSS px across (the engine's marker, not world geometry). */
 export const POINT_SIZE = 4;
@@ -63,7 +96,10 @@ export function lineWidthPx(lwMm: number): number {
 
 /** Whether two palettes hold the same inks (a theme change that did not touch the canvas's). */
 export function samePalette(a: Palette, b: Palette): boolean {
-  return a.canvas === b.canvas && a.gridMinor === b.gridMinor && a.gridMajor === b.gridMajor && a.axisX === b.axisX && a.axisY === b.axisY && a.selection === b.selection && a.gripHover === b.gripHover && a.gripHot === b.gripHot;
+  const pa = a.paper;
+  const pb = b.paper;
+  const paper = pa === undefined || pb === undefined ? pa === pb : pa.paper === pb.paper && pa.ink === pb.ink && pa.margin === pb.margin && pa.selection === pb.selection && pa.gripHover === pb.gripHover;
+  return paper && a.canvas === b.canvas && a.gridMinor === b.gridMinor && a.gridMajor === b.gridMajor && a.axisX === b.axisX && a.axisY === b.axisY && a.selection === b.selection && a.gripHover === b.gripHover && a.gripHot === b.gripHot;
 }
 
 /** Read the model-space colours from the CSS custom properties (tokens.css is their source). */
@@ -74,6 +110,14 @@ export function paletteFrom(element: Element): Palette {
     return v === "" ? fallback : v;
   };
   const selection = get("--selection", "#81a1c1");
+  const paper: PaperInks = {
+    paper: get("--paper", ""),
+    ink: get("--paper-ink", ""),
+    margin: get("--paper-margin", ""),
+    selection: get("--paper-selection", ""),
+    gripHover: get("--paper-grip-hover", ""),
+  };
+  const hasPaper = Object.values(paper).every((ink) => ink !== "");
   return {
     canvas: get("--canvas", "#181818"),
     gridMinor: get("--grid-minor", "#202020"),
@@ -83,7 +127,145 @@ export function paletteFrom(element: Element): Palette {
     selection,
     gripHover: get("--canvas-grip-hover", selection),
     gripHot: get("--canvas-grip-hot", selection),
+    ...(hasPaper ? { paper } : {}),
   };
+}
+
+/** A rectangle on the canvas, in CSS px. */
+interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * What is under the drawing at a view, and the inks that mark things on it. In model space that is
+ * the canvas's ground and the theme's inks. On a layout there are two grounds, the sheet and the
+ * canvas around it, and the marking inks are the paper's, which read on both.
+ */
+interface Surface {
+  /** The sheet in world units and where it lies on the canvas; null in model space. */
+  sheet: { world: Rect; box: Box; printable: Box; inks: PaperInks } | null;
+  /** The ground under a canvas point: the sheet's paper on the sheet, the canvas's elsewhere. */
+  ground: (x: number, y: number) => string;
+  selection: string;
+  gripHover: string;
+  gripHot: string;
+  /** A selected object's halo strength on this surface. */
+  haloAlpha: number;
+}
+
+/** Where a world rectangle lies on the canvas. */
+function boxOf(rect: Rect, proj: Projection): Box {
+  const x0 = proj.projectX(rect.x0);
+  const x1 = proj.projectX(rect.x1);
+  const y0 = proj.projectY(rect.y1);
+  const y1 = proj.projectY(rect.y0);
+  return { x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.abs(x1 - x0), h: Math.abs(y1 - y0) };
+}
+
+/** The surface a display list is drawn on at a view (see [`Surface`]). */
+function surfaceOf(palette: Palette, sheet: LayoutSheet | null | undefined, proj: Projection): Surface {
+  const model: Surface = { sheet: null, ground: () => palette.canvas, selection: palette.selection, gripHover: palette.gripHover, gripHot: palette.gripHot, haloAlpha: HALO_ALPHA };
+  const inks = palette.paper;
+  if (sheet === null || sheet === undefined || inks === undefined) return model;
+  const box = boxOf(sheet.paper, proj);
+  if (![box.x, box.y, box.w, box.h].every((n) => Number.isFinite(n))) return model;
+  return {
+    sheet: { world: sheet.paper, box, printable: boxOf(sheet.printable, proj), inks },
+    ground: (x, y) => (x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h ? inks.paper : palette.canvas),
+    selection: inks.selection,
+    gripHover: inks.gripHover,
+    gripHot: palette.gripHot,
+    haloAlpha: PAPER_HALO_ALPHA,
+  };
+}
+
+/**
+ * The ink of a primitive on a layout's sheet when it is not its own colour there: the paper's
+ * foreground for colour 7, the paper itself for a wipeout. Null for a primitive that keeps its
+ * colour on any ground, and in model space.
+ */
+export function paperInkOf(prim: Pick<DisplayPrim, "ink">, inks: PaperInks | null): string | null {
+  if (inks === null || prim.ink === undefined) return null;
+  return prim.ink === "mask" ? inks.paper : inks.ink;
+}
+
+/** Where a primitive lies against the sheet: all on it, all off it, or across its edge. */
+export function sideOfSheet(bounds: Rect | null, sheet: Rect): "on" | "off" | "across" {
+  if (bounds === null || !rectsOverlap(bounds, sheet)) return "off";
+  return bounds.x0 >= sheet.x0 && bounds.y0 >= sheet.y0 && bounds.x1 <= sheet.x1 && bounds.y1 <= sheet.y1 ? "on" : "across";
+}
+
+/**
+ * Draw the sheet of a layout under the drawing: the paper, edge to edge on whole device pixels,
+ * and the printable area as a quiet dashed hairline (none when the device has no margins, where
+ * it would run along the sheet's own edge). It is drawn over the grid, so the grid shows only on
+ * the canvas around the sheet.
+ */
+function drawSheet(ctx: CanvasRenderingContext2D, surface: Surface, dpr: number): void {
+  const sheet = surface.sheet;
+  if (sheet === null) return;
+  const snap = (v: number): number => Math.round(v * dpr) / dpr;
+  const { box, printable, inks } = sheet;
+  const x0 = snap(box.x);
+  const y0 = snap(box.y);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = inks.paper;
+  ctx.fillRect(x0, y0, Math.max(snap(box.x + box.w) - x0, 1 / dpr), Math.max(snap(box.y + box.h) - y0, 1 / dpr));
+  const inset = Math.max(printable.x - box.x, printable.y - box.y, box.x + box.w - printable.x - printable.w, box.y + box.h - printable.y - printable.h);
+  if (!(inset >= 1) || !(printable.w >= 2) || !(printable.h >= 2)) return;
+  const left = crispRule(printable.x, dpr);
+  const top = crispRule(printable.y, dpr);
+  const right = crispRule(printable.x + printable.w, dpr);
+  const bottom = crispRule(printable.y + printable.h, dpr);
+  ctx.strokeStyle = inks.margin;
+  ctx.lineWidth = left.width;
+  ctx.lineCap = "butt";
+  ctx.lineJoin = "miter";
+  ctx.setLineDash([...MARGIN_DASH]);
+  ctx.beginPath();
+  ctx.rect(left.at, top.at, right.at - left.at, bottom.at - top.at);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+/**
+ * Draw a primitive on its ground. In model space, and for a primitive that has its own colour,
+ * that is the primitive as it is. On a layout a primitive in the foreground colour (colour 7) is
+ * dark on the sheet and light on the canvas around it, and a wipeout is the colour of whichever
+ * it covers: all on the sheet it takes the paper's ink, all off it its own, and across the
+ * sheet's edge each side is drawn in its own ink, clipped at the edge.
+ */
+function paintPrim(ctx: CanvasRenderingContext2D, prim: DisplayPrim, list: DisplayList, proj: Projection, surface: Surface, bounds?: Rect | null): void {
+  const sheet = surface.sheet;
+  const ink = paperInkOf(prim, sheet === null ? null : sheet.inks);
+  if (sheet === null || ink === null) {
+    drawPrim(ctx, prim, list, proj.projectX, proj.projectY);
+    return;
+  }
+  const side = sideOfSheet(bounds === undefined ? boundsOfPrim(prim, list.verts) : bounds, sheet.world);
+  if (side !== "across") {
+    drawPrim(ctx, prim, list, proj.projectX, proj.projectY, side === "on" ? ink : undefined);
+    return;
+  }
+  const { box } = sheet;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(box.x, box.y, box.w, box.h);
+  ctx.clip();
+  drawPrim(ctx, prim, list, proj.projectX, proj.projectY, ink);
+  ctx.restore();
+  // Everything but the sheet: a rectangle far past the canvas with the sheet cut out of it.
+  const far = 1e6;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(-far, -far, 2 * far, 2 * far);
+  ctx.rect(box.x, box.y, box.w, box.h);
+  ctx.clip("evenodd");
+  drawPrim(ctx, prim, list, proj.projectX, proj.projectY);
+  ctx.restore();
 }
 
 export interface DrawOptions {
@@ -192,14 +374,21 @@ export function drawDisplay(ctx: CanvasRenderingContext2D, list: DisplayList, vi
   ctx.fillRect(0, 0, w, h);
 
   const proj = makeProjection(view, { w, h });
+  const surface = surfaceOf(palette, list.sheet, proj);
   if (options.grid) drawGrid(ctx, normalizeRect(view), w, h, scale, palette);
+  drawSheet(ctx, surface, scale);
 
+  ctx.setLineDash([]);
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   const shown: DisplayPrim[] = [];
+  const shownBounds: Rect[] = [];
   for (const prim of list.prims) {
     const b = boundsOfPrim(prim, list.verts);
-    if (b !== null && rectsOverlap(b, view)) shown.push(prim);
+    if (b !== null && rectsOverlap(b, view)) {
+      shown.push(prim);
+      shownBounds.push(b);
+    }
   }
 
   // The selection's mark, in two parts around the drawing itself so every object keeps its own
@@ -207,10 +396,10 @@ export function drawDisplay(ctx: CanvasRenderingContext2D, list: DisplayList, vi
   const selection = options.selection;
   const still: Mapping = { projectX: proj.projectX, projectY: proj.projectY, m: null };
   const picked = selection !== undefined && selection.size > 0 ? shown.filter((prim) => isHighlighted(handleHex(prim.handle), selection)) : [];
-  for (const prim of picked) haloPrim(ctx, prim, list.verts, still, palette.selection, HALO_SPREAD, HALO_ALPHA);
+  for (const prim of picked) haloPrim(ctx, prim, list.verts, still, surface.selection, HALO_SPREAD, surface.haloAlpha);
   ctx.lineCap = "round";
-  for (const prim of shown) drawPrim(ctx, prim, list, proj.projectX, proj.projectY);
-  for (const prim of picked) dashPrim(ctx, prim, list.verts, still, palette.selection);
+  shown.forEach((prim, i) => paintPrim(ctx, prim, list, proj, surface, shownBounds[i] ?? null));
+  for (const prim of picked) dashPrim(ctx, prim, list.verts, still, surface.selection);
   ctx.globalAlpha = 1;
 }
 
@@ -320,11 +509,14 @@ function dashPrim(ctx: CanvasRenderingContext2D, prim: DisplayPrim, verts: reado
   ctx.setLineDash([]);
 }
 
-/** Draw a primitive in its own colour at [`DRAG_ALPHA`] of its opacity: an object following the pointer. */
-function ghostPrim(ctx: CanvasRenderingContext2D, prim: DisplayPrim, verts: readonly Point[], map: Mapping): void {
+/**
+ * Draw a primitive in its own colour at [`DRAG_ALPHA`] of its opacity: an object following the
+ * pointer. `ink` is the colour it has on a layout's sheet when that is not its own (colour 7).
+ */
+function ghostPrim(ctx: CanvasRenderingContext2D, prim: DisplayPrim, verts: readonly Point[], map: Mapping, ink: string | null = null): void {
   ctx.globalAlpha = prim.alpha * DRAG_ALPHA;
-  ctx.strokeStyle = rgb(prim.color);
-  ctx.fillStyle = rgb(prim.color);
+  ctx.strokeStyle = ink ?? rgb(prim.color);
+  ctx.fillStyle = ink ?? rgb(prim.color);
   if (prim.kind === "point") {
     const s = place(verts[prim.start], map);
     if (s !== null) ctx.fillRect(s.x - POINT_SIZE / 2, s.y - POINT_SIZE / 2, POINT_SIZE, POINT_SIZE);
@@ -547,15 +739,16 @@ export const DYNAMIC_GRIP_REACH = 1.6;
 /**
  * Draw the grips, in screen space: each a square of the engine's size on whole device pixels
  * (a dynamic block's by its kind), filled with the ink of its heat over a hairline of the
- * canvas's ground, so it reads where it lies on geometry. A grip on a locked layer is hollow: the
- * ground with a rule of the ink, quieter than one that can be edited. The warm ones are drawn
+ * ground under it (the sheet's paper on a layout's sheet), so it reads where it lies on geometry. A
+ * grip on a locked layer is hollow: the ground with a rule of the ink, quieter than one that can
+ * be edited. The warm ones are drawn
  * last, over the cold. Grips off the canvas are skipped.
  */
-function drawGrips(ctx: CanvasRenderingContext2D, grips: OverlayGrips, map: Mapping, w: number, h: number, dpr: number, palette: Palette): void {
+function drawGrips(ctx: CanvasRenderingContext2D, grips: OverlayGrips, map: Mapping, w: number, h: number, dpr: number, surface: Surface): void {
   const px = 1 / dpr;
   const cold = Number.isFinite(grips.size) && grips.size > 0 ? grips.size : 1;
   const reach = (cold + GRIP_WARM_GROW) * DYNAMIC_GRIP_REACH;
-  const inks: Record<GripHeat, string> = { cold: palette.selection, hover: palette.gripHover, hot: palette.gripHot };
+  const inks: Record<GripHeat, string> = { cold: surface.selection, hover: surface.gripHover, hot: surface.gripHot };
   ctx.globalAlpha = 1;
   ctx.setLineDash([]);
   ctx.lineJoin = "miter";
@@ -567,15 +760,16 @@ function drawGrips(ctx: CanvasRenderingContext2D, grips: OverlayGrips, map: Mapp
       const at = place(grip.point, map);
       if (at === null || at.x < -reach || at.y < -reach || at.x > w + reach || at.y > h + reach) continue;
       const ink = inks[heat];
+      const ground = surface.ground(at.x, at.y);
       const size = warm ? cold + GRIP_WARM_GROW : cold;
       if (grip.kind === "standard" || grip.dynamic === null) {
         const box = gripBox(at.x, at.y, size, dpr);
-        ctx.fillStyle = palette.canvas;
+        ctx.fillStyle = ground;
         ctx.fillRect(box.x - px, box.y - px, box.side + 2 * px, box.side + 2 * px);
         ctx.fillStyle = ink;
         ctx.fillRect(box.x, box.y, box.side, box.side);
         if (grip.locked && box.side > 2 * px) {
-          ctx.fillStyle = palette.canvas;
+          ctx.fillStyle = ground;
           ctx.fillRect(box.x + px, box.y + px, box.side - 2 * px, box.side - 2 * px);
         }
         continue;
@@ -587,11 +781,11 @@ function drawGrips(ctx: CanvasRenderingContext2D, grips: OverlayGrips, map: Mapp
         else ctx.lineTo(at.x + sx * half, at.y + sy * half);
       });
       ctx.closePath();
-      ctx.strokeStyle = palette.canvas;
+      ctx.strokeStyle = ground;
       ctx.lineWidth = 2 + (grip.locked ? 1 : 0);
       ctx.stroke();
       if (grip.locked) {
-        ctx.fillStyle = palette.canvas;
+        ctx.fillStyle = ground;
         ctx.fill();
         ctx.strokeStyle = ink;
         ctx.lineWidth = 1;
@@ -682,18 +876,18 @@ export function placeLabel(at: Point, label: { w: number; h: number }, canvas: {
   return { x: Math.max(0, Math.min(best.x, canvas.w - label.w)), y: Math.max(0, Math.min(best.y, canvas.h - label.h)) };
 }
 
-/** A mark of the overlay's own, at a screen point: over a hairline of the canvas's ground, in the selection ink. */
-function strokeMark(ctx: CanvasRenderingContext2D, palette: Palette, width: number, trace: () => void): void {
+/** A mark of the overlay's own, at a screen point: over a hairline of the ground under that point, in the selection ink. */
+function strokeMark(ctx: CanvasRenderingContext2D, surface: Surface, at: Point, width: number, trace: () => void): void {
   ctx.globalAlpha = 1;
   ctx.lineCap = "butt";
   ctx.lineJoin = "miter";
   ctx.setLineDash([]);
   ctx.beginPath();
   trace();
-  ctx.strokeStyle = palette.canvas;
+  ctx.strokeStyle = surface.ground(at.x, at.y);
   ctx.lineWidth = width + 2;
   ctx.stroke();
-  ctx.strokeStyle = palette.selection;
+  ctx.strokeStyle = surface.selection;
   ctx.lineWidth = width;
   ctx.stroke();
 }
@@ -706,7 +900,8 @@ function strokeMark(ctx: CanvasRenderingContext2D, palette: Palette, width: numb
  * drag names, moved by its matrix, in their own colours at [`DRAG_ALPHA`]; the rubber band's own
  * primitives in the selection ink (pasted objects, which are not in the drawing, in their own
  * colours); and the object-snap marker, the same size at any zoom, over a hairline of the
- * canvas's ground so it reads where it lies on geometry. The drafting aids' guide lies with
+ * ground under it so it reads where it lies on geometry. On a layout every one of these takes the
+ * paper's inks, which read on the sheet and on the canvas around it. The drafting aids' guide lies with
  * them: its rays dashed and quieter than the rubber band they lead, under it; the grid-snap dot
  * and a small cross on each acquired tracking point, over it. The canvas is cleared first.
  */
@@ -719,6 +914,8 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, list: DisplayList, vi
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
   ctx.clearRect(0, 0, w, h);
   const proj = makeProjection(view, { w, h });
+  const surface = surfaceOf(palette, list.sheet, proj);
+  const paper = surface.sheet === null ? null : surface.sheet.inks;
   const still: Mapping = { projectX: proj.projectX, projectY: proj.projectY, m: null };
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
@@ -734,23 +931,23 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, list: DisplayList, vi
       const b = boundsOfPrim(prim, list.verts);
       if (b !== null && rectsOverlap(b, view)) under.push(prim);
     }
-    for (const prim of under) haloPrim(ctx, prim, list.verts, still, palette.selection, HOVER_SPREAD + (selected ? HALO_HOVER_EXTRA : 0), HOVER_ALPHA);
+    for (const prim of under) haloPrim(ctx, prim, list.verts, still, surface.selection, HOVER_SPREAD + (selected ? HALO_HOVER_EXTRA : 0), HOVER_ALPHA);
     ctx.lineCap = "round";
-    for (const prim of under) drawPrim(ctx, prim, list, proj.projectX, proj.projectY);
-    if (selected) for (const prim of under) dashPrim(ctx, prim, list.verts, still, palette.selection);
+    for (const prim of under) paintPrim(ctx, prim, list, proj, surface);
+    if (selected) for (const prim of under) dashPrim(ctx, prim, list.verts, still, surface.selection);
     ctx.globalAlpha = 1;
     ctx.lineCap = "round";
   }
 
   const grips = options.grips ?? null;
-  if (grips !== null && grips.list.length > 0) drawGrips(ctx, grips, still, w, h, scale, palette);
+  if (grips !== null && grips.list.length > 0) drawGrips(ctx, grips, still, w, h, scale, surface);
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.setLineDash([]);
 
   if (guide !== null && guide.paths.prims.length > 0) {
     ctx.globalAlpha = GUIDE_ALPHA;
-    ctx.strokeStyle = palette.selection;
+    ctx.strokeStyle = surface.selection;
     ctx.lineWidth = RUBBER_WIDTH;
     ctx.lineCap = "butt";
     ctx.setLineDash([...GUIDE_DASH]);
@@ -767,17 +964,17 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, list: DisplayList, vi
       const dragged = new Set(drag.handles);
       const moved: Mapping = { projectX: proj.projectX, projectY: proj.projectY, m: drag.matrix };
       for (const prim of list.prims) {
-        if (dragged.has(prim.handle)) ghostPrim(ctx, prim, list.verts, moved);
+        if (dragged.has(prim.handle)) ghostPrim(ctx, prim, list.verts, moved, paperInkOf(prim, paper));
       }
     }
     const pasted = drag !== null && drag.clipboard;
     for (const prim of preview.prims) {
       if (pasted && prim.handle !== 0) {
-        ghostPrim(ctx, prim, preview.verts, still);
+        ghostPrim(ctx, prim, preview.verts, still, paperInkOf(prim, paper));
         continue;
       }
-      ctx.strokeStyle = palette.selection;
-      ctx.fillStyle = palette.selection;
+      ctx.strokeStyle = surface.selection;
+      ctx.fillStyle = surface.selection;
       ctx.lineWidth = RUBBER_WIDTH;
       if (prim.kind === "tris") {
         ctx.globalAlpha = RUBBER_FILL_ALPHA;
@@ -796,7 +993,7 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, list: DisplayList, vi
       if (at === null) continue;
       const x = Math.round(at.x);
       const y = Math.round(at.y);
-      strokeMark(ctx, palette, RUBBER_WIDTH, () => {
+      strokeMark(ctx, surface, { x, y }, RUBBER_WIDTH, () => {
         ctx.moveTo(x - ACQUIRED_HALF, y);
         ctx.lineTo(x + ACQUIRED_HALF, y);
         ctx.moveTo(x, y - ACQUIRED_HALF);
@@ -808,11 +1005,11 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, list: DisplayList, vi
       ctx.globalAlpha = 1;
       ctx.beginPath();
       ctx.arc(dot.x, dot.y, GRID_DOT_RADIUS + 1, 0, Math.PI * 2);
-      ctx.fillStyle = palette.canvas;
+      ctx.fillStyle = surface.ground(dot.x, dot.y);
       ctx.fill();
       ctx.beginPath();
       ctx.arc(dot.x, dot.y, GRID_DOT_RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = palette.selection;
+      ctx.fillStyle = surface.selection;
       ctx.fill();
     }
   }
@@ -820,7 +1017,7 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, list: DisplayList, vi
   if (snap !== null && Number.isFinite(snap.point.x) && Number.isFinite(snap.point.y)) {
     const x = Math.round(proj.projectX(snap.point.x));
     const y = Math.round(proj.projectY(snap.point.y));
-    strokeMark(ctx, palette, SNAP_MARKER_WIDTH, () => traceSnap(ctx, snapGlyph(snap.mode), x, y, SNAP_MARKER_HALF));
+    strokeMark(ctx, surface, { x, y }, SNAP_MARKER_WIDTH, () => traceSnap(ctx, snapGlyph(snap.mode), x, y, SNAP_MARKER_HALF));
   }
   ctx.globalAlpha = 1;
 }
@@ -892,11 +1089,12 @@ function drawPrim(
   list: DisplayList,
   projectX: (x: number) => number,
   projectY: (y: number) => number,
+  ink?: string,
 ): void {
   const end = Math.min(prim.start + prim.len, list.verts.length);
   ctx.globalAlpha = prim.alpha;
-  ctx.strokeStyle = rgb(prim.color);
-  ctx.fillStyle = rgb(prim.color);
+  ctx.strokeStyle = ink ?? rgb(prim.color);
+  ctx.fillStyle = ink ?? rgb(prim.color);
   switch (prim.kind) {
     case "polyline": {
       // Lineweight is mm; drawn as display px like the desktop canvas (see lineWidthPx).

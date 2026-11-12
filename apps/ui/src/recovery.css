@@ -1,0 +1,67 @@
+/*
+ * The recovery bar (components/RecoveryBar.tsx): a band of the pane over the editor's tabs, closed
+ * by the pane's own stroke. It is in the flow, so it never covers the drawing, and it takes no
+ * colour of its own: the one accent on it is the Restore key.
+ */
+
+.recovery {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--panel);
+  border-bottom: var(--hairline) solid var(--border);
+}
+
+/* A row is the sentence and its keys; when both do not fit one line the keys go under it, at the
+   row's end. The start inset is the editor tabs' own. */
+.recovery-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--gap-4) var(--gap-12);
+  min-width: 0;
+  padding: var(--gap-4) var(--gap-8) var(--gap-4) var(--gap-12);
+}
+
+.recovery-row + .recovery-row {
+  border-top: var(--hairline) solid var(--border-soft);
+}
+
+.recovery-text {
+  flex: 1 1 32ch;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--font-body);
+  line-height: var(--leading-ui);
+  color: var(--text);
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* The drawing's name is the person's own text and can be any length: it clips by itself, inside
+   the sentence, and the sentence around it is always whole. */
+.recovery-name {
+  display: inline-block;
+  max-width: min(32ch, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  font-weight: 600;
+}
+
+/* What the sentence does not need to be read first: how many more wait, and where the copies are. */
+.recovery-note {
+  font-size: var(--font-label);
+  color: var(--text-faint);
+}
+
+.recovery-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-4);
+}

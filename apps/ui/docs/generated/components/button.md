@@ -13,7 +13,7 @@ Not applicable: hand-rolled — the recipe is the app's own `src/ui/ui.css`, mea
 ## Examples
 `<Button variant="primary">Save</Button>` — the one action of a dialog or a pane.
 
-Real uses, 14 call sites (`rg -c "<Button" src/components` → `src/components/AssistantPane.tsx:9`, `src/components/DraftingSettings.tsx:4`, `src/components/TopBar.tsx:1`):
+Real uses, 27 call sites (`rg -c "<Button" src` → `src/components/AssistantPane.tsx:9`, `src/components/DraftingSettings.tsx:4`, `src/components/LayerManager.tsx:7`, `src/components/RecoveryBar.tsx:6`, `src/components/TopBar.tsx:1`):
 - `src/components/DraftingSettings.tsx:337` — the Drafting Settings dialog's footer: Cancel (the default) and OK (`variant="primary" type="submit"`, so Enter in a field presses it); and Select all and Clear all over the object snap boxes (`variant="ghost" size="sm"`, `src/components/DraftingSettings.tsx:302`).
 - `src/components/AssistantPane.tsx` — the assistant's call sites: the empty state's Set up a model (`variant="primary"`, shown while no model is connected), the setup sheet's Change beside the chosen provider's name (`variant="quiet" size="sm"`), its Check connection and Cancel (`variant="ghost"`) and Save (`variant="primary"`), and the stack over the composer: Stop on the run row and Undo all on the changes row (`variant="ghost" size="sm"`), and Keep beside it (`size="sm"`).
 - `src/components/TopBar.tsx:42` — the title bar's command centre (`size="sm"`): the drawing's name, opening the command palette.

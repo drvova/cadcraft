@@ -19,7 +19,7 @@ Not applicable: hand-rolled — a native `<dialog>` opened with `showModal()` (`
 ## Examples
 `<Dialog open={open()} title="Rename Layout" size="sm" onClose={() => setOpen(false)} footer={…}>…</Dialog>` — one field and its two actions (`docs/system/examples/dialog/default.tsx`).
 
-Real uses, 1 call site (`rg -c "<Dialog" src/components` → `src/components/DraftingSettings.tsx:1`):
+Real uses, 2 call sites (`rg -c "<Dialog" src` → `src/components/DraftingSettings.tsx:1`, `src/components/LayerManager.tsx:1`):
 - `src/components/DraftingSettings.tsx:328` — Drafting Settings (`size="md"`): three pages on `TabPanels`, Cancel and OK in the footer, `dismissOnBackdrop` true only while the form is untouched, `describedBy` naming the line that says what OK did when the engine refused a value. The component is exported and not mounted yet: the shell's lines are in the coordinator's hands.
 - The command palette (`src/components/CommandPalette.tsx`) stays a native `<dialog>` of its own: it has no title bar, no dimmed page and no footer, it hangs from the title bar instead of standing in the middle, and it keeps the keyboard in one field (`docs/system/decisions.md`, "A task over the page").
 

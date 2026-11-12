@@ -161,7 +161,7 @@ export const TOOLBAR: readonly (readonly ToolbarEntry[])[] = [
   ],
   [
     { icon: "properties", id: "ui.panel.properties", label: "Properties", shortcut: "Cmd+1", alias: "" },
-    { icon: "ui.dialog.layers", id: "ui.panel.layers", label: "Layers", shortcut: "", alias: "" },
+    { icon: "ui.dialog.layers", id: "layer", label: "Layers", shortcut: "", alias: "LA" },
     { icon: "dist", id: "dist", label: "Measure Distance", shortcut: "", alias: "DI" },
   ],
   [{ icon: "plot", id: "plot", label: "Print", shortcut: "", alias: "" }],

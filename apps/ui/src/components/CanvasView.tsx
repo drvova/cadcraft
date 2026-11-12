@@ -51,13 +51,25 @@
  * on Escape. It shows the focus ring only when the keyboard brought the focus (`data-focus-ring`):
  * a key pressed while the pointer is working in the drawing frames nothing.
  *
+ * Dynamic input (the engine's `DYNMODE`, F12) is the command line beside the pointer
+ * (./DynamicInput.tsx, ../dynamic.ts). While it is on and a command runs, the box follows the
+ * pointer by a transform set in the frame, off the rubber band and off the snap label; it is out
+ * of sight while a pan, a rectangle or a zoom is in hand and when the pointer leaves, unless
+ * something is typed in it. A key typed on the drawing goes to its active field. A typed value
+ * holds the cursor: the engine resolves the pointer as always (so snap, ortho and polar bend the
+ * free part), the typed part is then applied, the rubber band is drawn to that point, and a
+ * click sends the same line Enter would. The setting and the prompt are read from the engine
+ * when its state changes, never per frame; with it off nothing here differs from before.
+ *
  * The props accept the value or the accessor form (the shell may hand either); the component
  * reads both.
  */
 
-import { createEffect, createUniqueId, onCleanup, onMount, type Accessor, type JSX } from "solid-js";
+import { createEffect, createMemo, createUniqueId, onCleanup, onMount, type Accessor, type JSX } from "solid-js";
 import { LONG_PRESS_MS } from "../context";
 import type { DisplayList } from "../display";
+import { constrain, placeBeside, type Aim, type Box } from "../dynamic";
+import { DynamicInput, type DynamicHandle } from "./DynamicInput";
 import { EMPTY_PREVIEW, NO_GRIPS, type AppFacade, type CommandPreview, type Grip, type GripList, type SnapPoint } from "../facade";
 import { drawDisplay, drawOverlay, guideIsEmpty, overlayIsEmpty, paletteFrom, placeLabel, samePalette, type OverlayGuide, type Palette } from "../canvas";
 import type { PointerWants } from "../prompt";
@@ -242,6 +254,9 @@ function modeName(mode: string | null): string {
  */
 const DWELL_MS = 420;
 
+/** How long after a turn of the wheel the dynamic input stays out of sight (ms): a zoom is in hand. */
+const ZOOM_QUIET_MS = 160;
+
 /** What the engine was last asked with: asking again with the same is skipped. */
 interface Asked {
   rect: Rect;
@@ -334,6 +349,30 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
   let rightDown: { at: number; x: number; y: number } | null = null;
   /** The pending long press of a lone finger, or 0. */
   let longPress = 0;
+  /** The dynamic input's box and draft (./DynamicInput.tsx). */
+  let dyn: DynamicHandle | undefined;
+  /** The box's size as its observer last measured it: placing it reads no layout. */
+  let dynSize = { w: 0, h: 0 };
+  /** The pointer as the engine last resolved it for a point, with the prompt's base; null otherwise. */
+  let aimed: Aim | null = null;
+  /** Where the snap label stands (the canvas's CSS px), or null: the dynamic input keeps off it. */
+  let labelBox: Box | null = null;
+  /** The wheel last turned at this time (`performance.now()`), and the pending frame after the quiet. */
+  let zoomedAt = Number.NEGATIVE_INFINITY;
+  let zoomQuiet = 0;
+
+  /**
+   * The engine's dynamic-input setting and its prompt, read when the engine's state changes (a
+   * command line reply, a drafting toggle), which is when either can have.
+   */
+  const dynState = createMemo(() => {
+    props.engineState?.();
+    read(props.wants);
+    return { on: props.facade.settings().dynmode, prompt: props.facade.currentPrompt() };
+  });
+
+  /** Whether the dynamic input is in use: the setting is on and a command is running. */
+  const dynOn = (): boolean => dynState().on && dynState().prompt.running !== null;
 
   const dpr = (): number => {
     const raw = typeof window === "undefined" ? 1 : window.devicePixelRatio;
@@ -506,6 +545,7 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     if (world === null) {
       under = NOTHING_UNDER;
       asked = null;
+      aimed = null;
       awaitDwell(false);
       awaitRest(null);
       return;
@@ -523,14 +563,23 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
       if (!fresh && !viewMoved) return;
       props.onBeforeQuery?.();
       const at = facade.pointer(world, { now: performance.now(), shift: held.shift, ctrl: held.ctrl });
-      const guide: OverlayGuide = { paths: at.paths, dot: at.constraint === "grid" ? at.point : null, acquired: at.acquired };
-      const text = at.snap !== null ? at.snap.name : at.label;
+      // A value typed beside the pointer holds the cursor: the engine has bent the pointer as it
+      // always does, the typed part is applied to that, and the rubber band is drawn there. The
+      // constraint's own measure is then not the point's, and is left out of the label.
+      aimed = dynOn() ? { point: at.point, base: dynState().prompt.anchor.base } : null;
+      const typed = aimed === null || dyn === undefined ? null : constrain(dyn.draft(), aimed);
+      const moved = typed !== null && (typed.x !== at.point.x || typed.y !== at.point.y);
+      const point = typed !== null && moved ? typed : at.point;
+      const preview = moved ? facade.preview(point) : at.preview;
+      const guide: OverlayGuide = { paths: at.paths, dot: at.constraint === "grid" && !moved ? at.point : null, acquired: at.acquired };
+      const text = at.snap !== null ? at.snap.name : moved ? "" : at.label;
       const mode = props.gripEditing?.() === true ? modeName(gripMode) : "";
-      under = { hover: null, preview: at.preview, snap: at.snap, guide: guideIsEmpty(guide) ? null : guide, label: text === "" && mode === "" ? null : { mode, text, at: at.point }, grip: null };
+      under = { hover: null, preview, snap: at.snap, guide: guideIsEmpty(guide) ? null : guide, label: text === "" && mode === "" ? null : { mode, text, at: at.snap !== null ? at.point : point }, grip: null };
       awaitDwell(at.wait);
       awaitRest(null);
       return;
     }
+    aimed = null;
     awaitDwell(false);
     if (want !== "idle" || inGesture()) awaitRest(null);
     if (want !== "idle") {
@@ -567,6 +616,7 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     if (snapLabel === undefined || labelMode === undefined || labelText === undefined) return;
     if (label === null) {
       if (!snapLabel.hidden) snapLabel.hidden = true;
+      labelBox = null;
       return;
     }
     if (labelMode.textContent !== label.mode) labelMode.textContent = label.mode;
@@ -574,8 +624,41 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     snapLabel.hidden = false;
     const base = props.base?.() ?? null;
     const toward = base === null ? null : worldToScreen(rect, size, base);
-    const to = placeLabel(worldToScreen(rect, size, label.at), { w: snapLabel.offsetWidth, h: snapLabel.offsetHeight }, size, toward, runsOn);
-    snapLabel.style.transform = `translate(${Math.round(to.x)}px, ${Math.round(to.y)}px)`;
+    const box = { w: snapLabel.offsetWidth, h: snapLabel.offsetHeight };
+    const to = placeLabel(worldToScreen(rect, size, label.at), box, size, toward, runsOn);
+    labelBox = { x: Math.round(to.x), y: Math.round(to.y), w: box.w, h: box.h };
+    snapLabel.style.transform = `translate(${labelBox.x}px, ${labelBox.y}px)`;
+  };
+
+  /**
+   * Show the dynamic input beside the pointer, or put it out of sight: once a frame, after the
+   * snap label has its place. It follows the pointer by a transform, below and to the right
+   * unless that corner leaves the canvas, lies on the rubber band or covers the snap label
+   * (`placeBeside`); its size comes from its observer, so nothing is measured here. It is out of
+   * sight while a drag or a zoom is in hand and while the pointer is off the drawing, except
+   * when something is typed in it, and it stays where it is while its options are open.
+   */
+  const placeDyn = (): void => {
+    if (dyn === undefined) return;
+    const root = dyn.root;
+    const on = dynOn() && measured();
+    const at = on && pointer !== null ? localPoint(pointer.x, pointer.y) : null;
+    dyn.aim(on ? aimed : null);
+    const follows = at !== null && !inGesture() && performance.now() - zoomedAt >= ZOOM_QUIET_MS;
+    if (!on || !(follows || dyn.busy())) {
+      if ("off" in root.dataset) return;
+      root.dataset["off"] = "";
+      if (root.contains(document.activeElement)) stage?.focus({ preventScroll: true });
+      return;
+    }
+    if (at !== null && follows && !dyn.held()) {
+      if (under.label === null) labelBox = null;
+      const base = dynState().prompt.anchor.base;
+      const to = placeBeside(at, dynSize, size, base === null ? null : worldToScreen(view(), size, base), labelBox);
+      const transform = `translate(${Math.round(to.x)}px, ${Math.round(to.y)}px)`;
+      if (root.style.transform !== transform) root.style.transform = transform;
+    }
+    if ("off" in root.dataset) delete root.dataset["off"];
   };
 
   /**
@@ -638,6 +721,7 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     syncGrips();
     ask();
     paintOverlay();
+    placeDyn();
   };
 
   const schedule = (): void => {
@@ -670,6 +754,7 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     awaitDwell(false);
     awaitRest(null);
     if (longPress !== 0) clearTimeout(longPress);
+    if (zoomQuiet !== 0) clearTimeout(zoomQuiet);
   });
 
   onMount(() => {
@@ -776,16 +861,35 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
         ringWas = host.dataset["focusRing"] !== undefined;
         setRing(false);
       };
+      // A key pressed on the drawing itself is the dynamic input's first, while it is in use:
+      // what it takes never reaches the shell, which would send it to the command line.
+      const onDynKey = (e: KeyboardEvent): void => {
+        if (e.target === host && !e.defaultPrevented && dynOn()) dyn?.key(e);
+      };
       window.addEventListener("keydown", onKeyArrival, true);
       window.addEventListener("pointerdown", onPressArrival, true);
       host.addEventListener("focus", onFocus);
       host.addEventListener("blur", onBlur);
+      host.addEventListener("keydown", onDynKey);
       onCleanup(() => {
         window.removeEventListener("keydown", onKeyArrival, true);
         window.removeEventListener("pointerdown", onPressArrival, true);
         host.removeEventListener("focus", onFocus);
         host.removeEventListener("blur", onBlur);
+        host.removeEventListener("keydown", onDynKey);
       });
+    }
+    if (dyn !== undefined) {
+      // The box's size, for placing it: measured when it changes (a new prompt, another set of
+      // fields), never in the frame.
+      const watcher = new ResizeObserver((entries) => {
+        const box = entries[entries.length - 1]?.borderBoxSize?.[0];
+        if (box === undefined || (box.inlineSize === dynSize.w && box.blockSize === dynSize.h)) return;
+        dynSize = { w: box.inlineSize, h: box.blockSize };
+        schedule();
+      });
+      watcher.observe(dyn.root);
+      onCleanup(() => watcher.disconnect());
     }
     // Shift and Ctrl bend the point while they are held (ortho's override, ARC's direction): a key
     // that goes down or up under a still pointer asks the engine again, without a move or a click.
@@ -821,6 +925,13 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
         const next = zoomAt(view(), size, anchor, factor);
         const now = view();
         if (next.x0 === now.x0 && next.y0 === now.y0 && next.x1 === now.x1 && next.y1 === now.y1) return;
+        // The dynamic input is out of sight while the wheel turns, and back a moment after.
+        zoomedAt = performance.now();
+        if (zoomQuiet !== 0) clearTimeout(zoomQuiet);
+        zoomQuiet = window.setTimeout(() => {
+          zoomQuiet = 0;
+          schedule();
+        }, ZOOM_QUIET_MS);
         setLocal(next);
       };
       canvas.addEventListener("wheel", onWheel, { passive: false });
@@ -832,6 +943,9 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
   const givePoint = (clientX: number, clientY: number): void => {
     // The shell and the engine read the view: hand it over before the point made in it.
     flush();
+    // A value typed beside the pointer holds the cursor, and the click takes the point the
+    // rubber band shows: the line Enter would send, with the pointer where it is.
+    if (dyn !== undefined && aimed !== null && constrain(dyn.draft(), aimed) !== null && dyn.submit()) return;
     const world = worldAt(clientX, clientY);
     if (world !== null) props.onPoint?.(world, worldPerPixel());
   };
@@ -1183,6 +1297,19 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
         <span class="canvas-snap-mode" ref={labelMode} />
         <span ref={labelText} />
       </div>
+      <DynamicInput
+        state={() => dynState().prompt}
+        onDraft={() => {
+          pointerMoved = true;
+          schedule();
+        }}
+        onRest={() => {
+          if (dyn?.root.contains(document.activeElement) === true) stage?.focus({ preventScroll: true });
+        }}
+        handle={(handle) => {
+          dyn = handle;
+        }}
+      />
       <div class="canvas-marquee" ref={marquee} hidden aria-hidden="true" />
       <p id={helpId} hidden>
         {CANVAS_HELP}

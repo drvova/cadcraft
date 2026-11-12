@@ -4,9 +4,17 @@
  *
  * The wire format is:
  *   {"revision": n, "bounds": [minx,miny,maxx,maxy],
+ *    "space": "Model" | a layout's name,
+ *    "sheet": null | {"paper":[minx,miny,maxx,maxy], "printable":[minx,miny,maxx,maxy]},
  *    "verts": [[x,y], …],
  *    "prims": [{"kind":"polyline"|"tris"|"point"|"image", "start":i, "len":n,
- *               "color":[r,g,b], "lw":mm, "alpha":0..255, "handle":h}, …]}
+ *               "color":[r,g,b], "lw":mm, "alpha":0..255, "handle":h, "ink"?: "fg"|"mask"}, …]}
+ *
+ * `space` and `sheet` say what the list is of: a layout's list carries its sheet of paper, so the
+ * canvas never draws one space's objects on another's ground. A reply without them (an engine
+ * package built before layouts had paper) is a list with no sheet. `ink` marks the primitives
+ * whose colour depends on the ground under them: "fg" is the foreground colour (colour 7: light
+ * on the dark canvas, dark on paper) and "mask" a wipeout (the ground's own colour).
  *
  * The parser is the app's only trust boundary for engine bytes: it never throws, skips
  * primitives whose ranges fall outside `verts`, clamps every number, and caps its own loops.
@@ -32,6 +40,20 @@ export interface DisplayPrim {
   alpha: number;
   /** The entity handle, for later picking. */
   handle: number;
+  /**
+   * Set when the colour follows the ground the primitive lies on: "fg" is the drawing's
+   * foreground colour (colour 7) and "mask" a wipeout. `color` is then what it is on the canvas's
+   * own ground; on a sheet of paper the canvas inks it from its paper tokens.
+   */
+  ink?: "fg" | "mask";
+}
+
+/** A layout's sheet of paper, in the layout's drawing units. */
+export interface LayoutSheet {
+  /** The whole sheet. */
+  paper: Rect;
+  /** The area a plot can reach, inside the device's margins (the sheet itself when it has none). */
+  printable: Rect;
 }
 
 export interface DisplayList {
@@ -39,6 +61,10 @@ export interface DisplayList {
   bounds: Rect;
   verts: readonly Point[];
   prims: readonly DisplayPrim[];
+  /** The space the list is of ("Model" or a layout's name); absent when the engine does not say. */
+  space?: string;
+  /** The sheet of paper of a layout's list; null or absent in model space. */
+  sheet?: LayoutSheet | null;
 }
 
 export const EMPTY_DISPLAY: DisplayList = { revision: 0, bounds: UNIT_RECT, verts: [], prims: [] };
@@ -80,7 +106,39 @@ export function displayListOf(value: unknown): DisplayList | null {
   const verts = parseVerts(value["verts"]);
   const prims = parsePrims(value["prims"], verts.length);
   const bounds = parseRect(value["bounds"]) ?? boundsOfPoints(verts) ?? UNIT_RECT;
-  return { revision: Math.max(0, intOr(value["revision"], 0)), bounds, verts, prims };
+  const list: DisplayList = { revision: Math.max(0, intOr(value["revision"], 0)), bounds, verts, prims, sheet: parseSheet(value["sheet"]) };
+  const space = value["space"];
+  if (typeof space === "string" && space.length <= MAX_SPACE_NAME) list.space = space;
+  return list;
+}
+
+/** The longest space name kept (a layout's name is at most 255 characters). */
+const MAX_SPACE_NAME = 1024;
+
+/** The largest ordinate of a sheet that is drawn: past it a double no longer holds whole units. */
+const MAX_SHEET_COORD = 1e15;
+
+/** A rectangle with finite corners inside the usable range and a real area, or null. */
+function usableRect(value: unknown): Rect | null {
+  const r = parseRect(value);
+  if (r === null) return null;
+  if (![r.x0, r.y0, r.x1, r.y1].every((n) => Number.isFinite(n) && Math.abs(n) <= MAX_SHEET_COORD)) return null;
+  return r.x1 > r.x0 && r.y1 > r.y0 ? r : null;
+}
+
+/**
+ * Read a layout's sheet (`{"paper":[…],"printable":[…]}`); null for model space, an engine that
+ * does not send one, and a sheet that is not a real rectangle. A printable area that is missing,
+ * unusable or reaches outside the paper is held to the paper.
+ */
+export function parseSheet(value: unknown): LayoutSheet | null {
+  if (!isRecord(value)) return null;
+  const paper = usableRect(value["paper"]);
+  if (paper === null) return null;
+  const area = usableRect(value["printable"]);
+  if (area === null) return { paper, printable: paper };
+  const printable = { x0: Math.max(area.x0, paper.x0), y0: Math.max(area.y0, paper.y0), x1: Math.min(area.x1, paper.x1), y1: Math.min(area.y1, paper.y1) };
+  return { paper, printable: printable.x1 > printable.x0 && printable.y1 > printable.y0 ? printable : paper };
 }
 
 /** The most bytes of a reply holding a display list that is read at all. */
@@ -119,7 +177,7 @@ function parsePrims(v: unknown, vertCount: number): DisplayPrim[] {
       ? ([channel(p["color"][0]), channel(p["color"][1]), channel(p["color"][2])] as const)
       : DEFAULT_COLOR;
     const alpha = asNumber(p["alpha"]);
-    out.push({
+    const prim: DisplayPrim = {
       kind,
       start,
       len,
@@ -127,7 +185,10 @@ function parsePrims(v: unknown, vertCount: number): DisplayPrim[] {
       lw: Math.max(0, asNumber(p["lw"]) ?? 0),
       alpha: alpha === null ? 1 : Math.min(1, Math.max(0, alpha / 255)),
       handle: Math.max(0, intOr(p["handle"], 0)),
-    });
+    };
+    const ink = p["ink"];
+    if (ink === "fg" || ink === "mask") prim.ink = ink;
+    out.push(prim);
   }
   return out;
 }

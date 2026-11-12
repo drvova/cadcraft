@@ -174,3 +174,382 @@
     gap: var(--gap-12);
   }
 }
+
+/* ---- Layer Properties Manager ---- */
+
+/* A bar of actions over a table. The table's rows are the sidebar list's rows (the same height,
+   glyph keys, swatch and "has objects" mark), with a column each for what the list has no room
+   for. Everything in a column starts on its heading's first letter. */
+.lm {
+  --lm-row-h: var(--control-h-row);
+  /* The status column holds two marks; a flag column its key and the room of its sort arrow. */
+  --lm-mark-w: calc(var(--control-h-input) + var(--gap-8));
+  --lm-flag-w: calc(var(--control-h-chip) + var(--gap-8));
+  --lm-name-min: 16ch;
+  --lm-weight-w: calc(12ch - var(--gap-4));
+  --lm-clear-w: calc(9ch - var(--gap-2));
+  /* The description's heading and the room of its sort arrow. */
+  --lm-note-min: calc(11ch + var(--gap-8));
+  /* Each choice column holds its longest usual value ("Magenta", "Continuous", "2.11 mm", "90%")
+     beside the select's arrow. The name takes most of what is left, the description the rest. */
+  --lm-cols: var(--lm-mark-w) minmax(var(--lm-name-min), 3fr) repeat(4, var(--lm-flag-w)) 14ch 14ch var(--lm-weight-w) var(--lm-clear-w) minmax(var(--lm-note-min), 1fr);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-8);
+  min-width: 0;
+}
+
+.lm-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-8) var(--gap-12);
+}
+
+.lm-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--gap-6);
+}
+
+/* The filter and its count end the bar; on a line of their own (a narrow window) the field takes
+   the line's width. */
+.lm-find {
+  flex: 1 1 24ch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--gap-8);
+  min-width: 0;
+}
+
+.lm-find > .ui-field-box {
+  flex: 0 1 28ch;
+  min-width: 12ch;
+}
+
+.lm-count {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: var(--font-label);
+  font-variant-numeric: lining-nums tabular-nums;
+  white-space: nowrap;
+}
+
+/* The table's window: a fixed share of the screen, so the dialog does not change height as the
+   filter narrows the rows. It scrolls both ways; the heading stays at the top and the status and
+   name columns at the start, and a cell the keyboard moves to stops clear of both. */
+.lm-scroll {
+  position: relative;
+  height: min(calc(20 * var(--lm-row-h)), 50dvh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-card);
+  scroll-padding-block-start: var(--control-h-input);
+  scroll-padding-inline-start: calc(var(--lm-mark-w) + var(--lm-name-min));
+  scrollbar-gutter: stable;
+  container-type: inline-size;
+}
+
+/* Never narrower than its columns: a narrow window scrolls the table sideways under the names. */
+.lm-grid {
+  min-width: calc(var(--lm-mark-w) + 4 * var(--lm-flag-w) + var(--lm-name-min) + 28ch + var(--lm-weight-w) + var(--lm-clear-w) + var(--lm-note-min));
+}
+
+.lm-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: var(--lm-cols);
+  height: var(--control-h-input);
+  background: var(--surface-elevated);
+  box-shadow: inset 0 calc(-1 * var(--hairline)) 0 var(--border);
+}
+
+.lm-body {
+  position: relative;
+  height: calc(var(--lm-lines) * var(--lm-row-h));
+}
+
+/* A row stands at its own line of the table (only the rows near the window are in the page). Its
+   fill is one variable, so the two columns that stay put while the rest scrolls can repeat it. */
+.lm-row {
+  --lm-fill: transparent;
+  position: absolute;
+  inset-inline: 0;
+  top: calc(var(--lm-line) * var(--lm-row-h));
+  display: grid;
+  grid-template-columns: var(--lm-cols);
+  grid-auto-rows: var(--lm-row-h);
+  height: var(--lm-row-h);
+  background: var(--lm-fill);
+  user-select: none;
+}
+
+/* A row the engine refused says why on a second line. */
+.lm-row.has-note {
+  height: calc(2 * var(--lm-row-h));
+}
+
+@media (hover: hover) {
+  .lm-row:hover {
+    --lm-fill: var(--hover);
+  }
+}
+
+.lm-row.is-selected {
+  --lm-fill: var(--list-row);
+}
+
+.lm-cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: var(--lm-row-h);
+  padding-inline: var(--gap-6);
+}
+
+.lm-cell:focus-visible {
+  outline: var(--focus-outline-w) solid var(--focus-ring);
+  outline-offset: var(--focus-outline-offset);
+}
+
+.lm-head-cell {
+  height: 100%;
+  padding-inline: 0;
+  color: var(--text-dim);
+}
+
+/* The two columns that say which layer a row is stay at the table's start. */
+.lm-cell--status,
+.lm-cell--name {
+  position: sticky;
+  z-index: 1;
+  background: var(--surface-elevated);
+}
+
+.lm-cell--status {
+  inset-inline-start: 0;
+}
+
+.lm-cell--name {
+  inset-inline-start: var(--lm-mark-w);
+}
+
+.lm-row > .lm-cell--status::before,
+.lm-row > .lm-cell--name::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--lm-fill);
+  pointer-events: none;
+}
+
+/* The current layer: the accent edge the sidebar's list gives it, and a mark that points at its name. */
+.lm-row.is-current > .lm-cell--status {
+  box-shadow: inset var(--gap-2) 0 0 var(--accent);
+}
+
+.lm-row > .lm-cell--status {
+  gap: var(--gap-3);
+}
+
+.lm-current {
+  flex: 0 0 var(--icon-size-sm);
+  display: inline-flex;
+  height: var(--icon-size-sm);
+  color: var(--text-accent);
+}
+
+.lm-current .tool-icon {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+}
+
+/* The sidebar list's "has objects" mark: a small diamond, filled when the layer has objects. */
+.lm-used {
+  flex: 0 0 auto;
+  width: calc(var(--gap-4) + var(--gap-3));
+  height: calc(var(--gap-4) + var(--gap-3));
+  border: var(--hairline) solid currentColor;
+  border-radius: 1px;
+  color: var(--text-faint);
+  transform: rotate(45deg);
+}
+
+.lm-used.is-used {
+  background: currentColor;
+  color: var(--icon);
+}
+
+/* The sort arrow stands beside its heading's key: down for descending, up for ascending, and
+   its room is kept when the column is not the sorted one, so a heading never moves. */
+.lm-caret {
+  flex: 0 0 var(--gap-8);
+  display: inline-flex;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--icon);
+}
+
+.lm-head-cell > .ui-button,
+.lm-head-cell > .ui-icon-button {
+  flex: 0 0 auto;
+}
+
+.lm-caret .tool-icon {
+  flex: 0 0 auto;
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+}
+
+.lm-head-cell[aria-sort="none"] .lm-caret {
+  visibility: hidden;
+}
+
+.lm-head-cell[aria-sort="ascending"] .lm-caret .tool-icon {
+  transform: rotate(180deg);
+}
+
+/* The name: the sidebar list's head that gives way and tail that never does. */
+.lm-name {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-dim);
+  line-height: var(--lm-row-h);
+  white-space: nowrap;
+}
+
+.lm-row.is-selected .lm-name,
+.lm-row.is-current .lm-name {
+  color: var(--text);
+}
+
+.lm-name.lm-name--none {
+  color: var(--text-faint);
+}
+
+/* Why the engine refused, on the row's second line, in the error ink. It starts on the name's
+   first letter and never runs past the window. */
+.lm-note {
+  position: absolute;
+  inset-block-start: 100%;
+  inset-inline-start: var(--gap-6);
+  width: max-content;
+  max-width: calc(100cqi - var(--lm-mark-w) - var(--gap-12));
+  overflow: hidden;
+  color: var(--error);
+  font-size: var(--font-label);
+  line-height: var(--lm-row-h);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A flag's key stands under its heading's glyph: both are the small 20px cell at the column's start. */
+.lm-cell--flag {
+  padding-inline: 0;
+}
+
+/* A choice reads as text on its heading's first letter until it is touched. */
+.lm-row > .lm-cell--choice {
+  gap: var(--gap-2);
+  padding-inline: calc(var(--gap-2) - var(--hairline));
+}
+
+.lm-row > .lm-cell--color {
+  padding-inline-start: var(--gap-6);
+}
+
+.lm-cell--choice > .ui-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* A choice at rest: its value as text, where the list that replaces it under the pointer or the
+   keyboard draws the same value. */
+.lm-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-inline-start: calc(var(--gap-4) + var(--hairline));
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lm-swatch {
+  flex: 0 0 auto;
+  width: var(--gap-10);
+  height: var(--gap-10);
+  border: var(--hairline) solid var(--swatch-border);
+  border-radius: var(--radius-small);
+}
+
+.lm-text {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The field a name or a description is typed in: its text stands where the value stood. */
+.lm-edit {
+  flex: 1 1 auto;
+  display: flex;
+  min-width: 0;
+  margin-inline: calc(-1 * (var(--gap-4) + var(--hairline)));
+}
+
+.lm-edit > .ui-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* A row's height as the page lays it out, read by the table to place its rows. */
+.lm-probe {
+  position: absolute;
+  top: 0;
+  width: 0;
+  height: var(--lm-row-h);
+  visibility: hidden;
+}
+
+.lm-empty {
+  position: sticky;
+  inset-inline-start: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-4) var(--gap-8);
+  margin: 0;
+  padding: var(--gap-12);
+  color: var(--text-faint);
+  line-height: var(--leading-ui);
+}
+
+/* What the last change came to, for a screen reader: the row's own line says it to the eye. */
+.lm-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* Under a finger a row is a target: the control's height, and each key's 24px inside its column. */
+@media (pointer: coarse) {
+  .lm {
+    --lm-row-h: var(--control-h-input);
+  }
+}

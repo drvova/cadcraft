@@ -38,6 +38,9 @@ import {
   zoomAt,
   type Rect,
   type ScreenBox,
+  keepHeldView,
+  sameRect,
+  unionRects,
 } from "./view";
 
 const SCREEN = { w: 800, h: 400 };
@@ -460,5 +463,67 @@ describe("holdsFit", () => {
     expect(holdsFit(wide, { ...box, w: 0 }, box)).toBe(false);
     expect(holdsFit({ x0: 0, y0: 0, x1: 0, y1: 0 }, box, box)).toBe(false);
     expect(holdsFit({ x0: 0, y0: Number.NaN, x1: 1, y1: 1 }, box, box)).toBe(false);
+  });
+});
+
+describe("sameRect and unionRects", () => {
+  const a = { x0: 0, y0: 0, x1: 10, y1: 5 };
+
+  test("the same four corners are the same rectangle, whichever object holds them", () => {
+    expect(sameRect(a, { ...a })).toBe(true);
+    expect(sameRect(a, { ...a, y1: 5.0000001 })).toBe(false);
+    expect(sameRect({ ...a, x0: Number.NaN }, { ...a, x0: Number.NaN })).toBe(false);
+  });
+
+  test("the union holds both, and an absent or unusable one leaves the other", () => {
+    expect(unionRects(a, { x0: -3, y0: 2, x1: 4, y1: 9 })).toEqual({ x0: -3, y0: 0, x1: 10, y1: 9 });
+    expect(unionRects(a, null)).toEqual(a);
+    expect(unionRects(null, a)).toEqual(a);
+    expect(unionRects(null, null)).toBeNull();
+    expect(unionRects(a, { x0: 0, y0: 0, x1: Number.NaN, y1: 1 })).toEqual(a);
+    expect(unionRects({ x0: 0, y0: 0, x1: 0, y1: 0 }, a)).toEqual(a);
+    expect(unionRects({ x0: 0, y0: 0, x1: 0, y1: 0 }, { x0: 1, y0: 1, x1: Number.POSITIVE_INFINITY, y1: 2 })).toBeNull();
+  });
+});
+
+describe("keepHeldView", () => {
+  // ZOOM Window on 100,60 to 200,130, as the engine fitted it to a 1000 x 500 canvas.
+  const held = { x0: 80, y0: 60, x1: 220, y1: 130 };
+
+  test("a canvas that got shorter still shows all of what the command framed, about the same centre", () => {
+    // The command's echo took two rows of the history: the canvas is 40px shorter.
+    const kept = keepHeldView(held, { w: 1000, h: 460 });
+    expect(kept.y0).toBe(60);
+    expect(kept.y1).toBe(130);
+    expect((kept.x0 + kept.x1) / 2).toBeCloseTo(150, 9);
+    expect((kept.x1 - kept.x0) / (kept.y1 - kept.y0)).toBeCloseTo(1000 / 460, 9);
+    expect(kept.x0).toBeLessThan(held.x0);
+  });
+
+  test("a canvas that got narrower grows the view's height instead: nothing the command framed is cropped", () => {
+    const kept = keepHeldView(held, { w: 500, h: 500 });
+    expect(kept.x0).toBe(80);
+    expect(kept.x1).toBe(220);
+    expect(kept.y0).toBeLessThan(60);
+    expect(kept.y1).toBeGreaterThan(130);
+    expect((kept.y0 + kept.y1) / 2).toBeCloseTo(95, 9);
+  });
+
+  test("it is the held view that is fitted each time, so a canvas that comes back shows what it showed", () => {
+    const back = keepHeldView(held, { w: 1000, h: 500 });
+    expect(back.x0).toBeCloseTo(held.x0, 9);
+    expect(back.y0).toBeCloseTo(held.y0, 9);
+    expect(back.x1).toBeCloseTo(held.x1, 9);
+    expect(back.y1).toBeCloseTo(held.y1, 9);
+  });
+
+  test("a size or a view that cannot be used leaves the held view as it is", () => {
+    for (const size of [{ w: 0, h: 500 }, { w: 1000, h: Number.NaN }, { w: -4, h: 500 }, { w: Number.POSITIVE_INFINITY, h: 500 }]) {
+      expect(keepHeldView(held, size)).toBe(held);
+    }
+    const broken = { x0: 0, y0: 0, x1: Number.NaN, y1: 1 };
+    expect(keepHeldView(broken, { w: 1000, h: 500 })).toBe(broken);
+    const empty = { x0: 0, y0: 0, x1: 0, y1: 0 };
+    expect(keepHeldView(empty, { w: 1000, h: 500 })).toBe(empty);
   });
 });

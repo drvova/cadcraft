@@ -13,7 +13,7 @@ Not applicable: hand-rolled — a native `<kbd>` on one recipe. It replaces two 
 ## Examples
 `<Kbd>esc</Kbd>` — the key that stops a running request, beside Stop.
 
-Real uses, 5 call sites (`rg -c "<Kbd" src/components` → `src/components/AssistantPane.tsx:4`, `src/components/CommandPalette.tsx:4`):
+Real uses, 6 call sites (`rg -c "<Kbd" src` → `src/components/AssistantPane.tsx:1`, `src/components/CommandPalette.tsx:4`, `src/components/DynamicInput.tsx:1`):
 - `src/components/AssistantPane.tsx:878` — the `esc` cap beside the Stop button on the run row over the composer, shown while a request runs.
 - `src/components/CommandPalette.tsx:267` — each command's shortcut at the end of its palette row, written by `shortcutLabel` for the platform; a command with no shortcut draws no cap.
 - `src/components/CommandPalette.tsx:288` — the palette footer's three caps (Enter, Tab, Esc) beside Run, Complete and Close.

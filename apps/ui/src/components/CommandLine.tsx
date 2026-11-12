@@ -23,7 +23,7 @@
  * as written, so a parent may hand either); the component reads both.
  */
 
-import { createEffect, createSignal, For, onMount, Show, type Accessor, type JSX } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, onMount, Show, type Accessor, type JSX } from "solid-js";
 import { promptText, type PromptState } from "../prompt";
 import { Chip } from "../ui/Chip";
 import { Field } from "../ui/Field";
@@ -36,6 +36,26 @@ export interface CommandLineProps {
 
 /** How many submitted lines the Up/Down walk keeps. */
 export const MAX_HISTORY = 200;
+
+/**
+ * What the drawing's dynamic input (`CanvasView`) needs of the command line on screen. What is
+ * typed beside the pointer is the same input, so it goes through this field and no other way:
+ * `echo` writes the typed part into the field as it is typed, and `submit` sends a line exactly
+ * as Enter here, or a keyword's chip, does (remembered for the arrows, echoed to the history, the
+ * field cleared), leaving the keyboard where it is.
+ */
+export interface CommandLineLink {
+  echo: (text: string) => void;
+  submit: (text: string) => void;
+}
+
+/** The command line on screen; the window has one at most. */
+let mounted: CommandLineLink | null = null;
+
+/** The command line on screen, or null while it is folded away. */
+export function commandLineLink(): CommandLineLink | null {
+  return mounted;
+}
 
 /** Read a prop that may be a value or an accessor. */
 function read<T>(value: T | Accessor<T>): T {
@@ -64,8 +84,11 @@ export function CommandLine(props: CommandLineProps): JSX.Element {
     if (scrollback !== undefined) scrollback.scrollTop = scrollback.scrollHeight;
   });
 
-  /** Submit a line: remembered for the arrows, cleared from the input, sent to the shell. */
-  const submit = (text: string): void => {
+  /**
+   * Submit a line: remembered for the arrows, cleared from the input, sent to the shell. The
+   * keyboard comes to the field, unless the line was typed on the drawing (`focus` false).
+   */
+  const submit = (text: string, focus = true): void => {
     if (text.trim() !== "" && history[0] !== text) {
       history.unshift(text);
       if (history.length > MAX_HISTORY) history.length = MAX_HISTORY;
@@ -73,10 +96,25 @@ export function CommandLine(props: CommandLineProps): JSX.Element {
     walk = -1;
     if (input !== undefined) {
       input.value = "";
-      input.focus();
+      if (focus) input.focus();
     }
     props.onSubmit(text);
   };
+
+  // The drawing's dynamic input types into this command line while it is on screen.
+  const link: CommandLineLink = {
+    echo: (text) => {
+      walk = -1;
+      if (input !== undefined && input.value !== text) input.value = text;
+    },
+    submit: (text) => submit(text, false),
+  };
+  onMount(() => {
+    mounted = link;
+  });
+  onCleanup(() => {
+    if (mounted === link) mounted = null;
+  });
 
   /** Move the walk: +1 is older (Up), -1 is newer (Down); beyond either end the input stays. */
   const recall = (direction: number): void => {

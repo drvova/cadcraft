@@ -13,7 +13,7 @@ Not applicable: hand-rolled — the circle, the .08 hover fill and the 14px glyp
 ## Examples
 `<IconButton icon="close" title="Close the panel" />` — the panel's close control.
 
-Real uses, 24 call sites (`rg -c "<IconButton" src/components` → `src/components/AssistantPane.tsx:17`, `src/components/LayersPanel.tsx:1`, `src/components/MenuBar.tsx:1`, `src/components/PropertiesPanel.tsx:1`, `src/components/ToolStrip.tsx:1`, `src/components/TopBar.tsx:3`):
+Real uses, 25 call sites (`rg -c "<IconButton" src` → `src/components/AssistantPane.tsx:17`, `src/components/LayerManager.tsx:1`, `src/components/LayersPanel.tsx:1`, `src/components/Menu.tsx:1`, `src/components/PropertiesPanel.tsx:1`, `src/components/ToolStrip.tsx:1`, `src/components/TopBar.tsx:3`):
 - `src/components/AssistantPane.tsx` — the composer pilot: the toolbar's attach (`soft`), stop and send (`inverted`), and each attachment chip's remove circle (`sm`).
 - `src/components/ToolStrip.tsx:111` — every tool in the strip: the glyph from the tool's icon id, the title its label and shortcut, click to invoke it.
 

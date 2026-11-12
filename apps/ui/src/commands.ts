@@ -14,7 +14,7 @@
 import type { CommandInfo } from "./facade";
 
 /** What the shell does with an invoked id. */
-export type CommandAction = "engine" | "open" | "save" | "sample" | "visibility" | "theme" | "animations" | "palette" | "focus" | "drafting" | "none";
+export type CommandAction = "engine" | "open" | "save" | "sample" | "visibility" | "theme" | "animations" | "palette" | "focus" | "drafting" | "layers" | "none";
 
 /** One `ui.*` command the web shell can honour, transcribed from `menus.rs`'s `UI_COMMANDS`. */
 export interface UiItem {
@@ -68,6 +68,8 @@ export function classify(id: string): CommandAction {
   if (id === "ui.dialog.commands") return "palette";
   // Drafting Settings is the interface's dialog over the engine's settings, not a prompt sequence.
   if (id === "dsettings") return "drafting";
+  // Layers is the Layer Properties Manager; `-layer` stays the command line's prompt sequence.
+  if (id === "layer") return "layers";
   return "engine";
 }
 

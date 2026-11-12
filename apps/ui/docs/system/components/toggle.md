@@ -12,7 +12,7 @@ Not applicable: hand-rolled — a native `<button aria-pressed>` drawn from the 
 ## Examples
 `<Toggle size="sm" tone="info" icon="layer.thawed" iconOn="layer.frozen" ariaLabel="Outline frozen" hint={frozen() ? "Thaw" : "Freeze"} pressed={frozen()} onChange={setFrozen} />` — a layer's freeze key: one name, the state in the glyph and `aria-pressed`, the action in the hint.
 
-Real uses, 4 call sites (`rg -c "<Toggle" src/components` → `src/components/LayersPanel.tsx:3`, `src/components/StatusBar.tsx:1`):
+Real uses, 5 call sites (`rg -c "<Toggle" src` → `src/components/LayerManager.tsx:1`, `src/components/LayersPanel.tsx:3`, `src/components/StatusBar.tsx:1`):
 - `src/components/LayersPanel.tsx:127` — a layer row's on key: `glyph`, `sm`, `tone="absent"` (off is the state that explains a missing layer).
 - `src/components/LayersPanel.tsx:137` — the same row's frozen key: `tone="info"`.
 - `src/components/LayersPanel.tsx:147` — the same row's locked key: `tone="caution"`.
