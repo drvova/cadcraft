@@ -179,7 +179,7 @@ pub fn outline(cut: &Cut, length: f64, width: f64) -> EntityKind {
             let (major, ratio) = if length >= width {
                 (Vec3::new(0.0, length / 2.0, 0.0), width / length)
             } else {
-                (Vec3::new(length / 2.0, 0.0, 0.0), length / width)
+                (Vec3::new(width / 2.0, 0.0, 0.0), length / width)
             };
             EntityKind::Ellipse(cadcraft_doc::Ellipse { center: Vec3::ZERO, major, ratio, start: 0.0, end: cadcraft_geom::TAU })
         }
@@ -252,9 +252,12 @@ fn rounded_polygon(verts: &[Vec2], radius: f64) -> EntityKind {
         let to_next = (next - cur).normalized();
         // Half the shorter edge bounds the radius, so two corners never overlap.
         let r = radius.min(cur.dist(prev) / 2.0).min(cur.dist(next) / 2.0);
+        // The angle inside the corner, from the edge that arrives to the edge that leaves. The
+        // arc between the tangent points sweeps what is left of a half turn, the other way: the
+        // way the outline itself turns, so the corner is rounded outward and not scooped out.
         let turn = (to_prev.x * to_next.y - to_prev.y * to_next.x).atan2(to_prev.dot(to_next));
         out.push(cur + to_prev * r);
-        bulges.push(cadcraft_geom::arc_to_bulge(turn.abs() * turn.signum()));
+        bulges.push(cadcraft_geom::arc_to_bulge((cadcraft_geom::PI - turn.abs()) * -turn.signum()));
         out.push(cur + to_next * r);
         bulges.push(0.0);
     }

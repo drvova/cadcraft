@@ -66,8 +66,8 @@ impl RingSize {
             circumference,
             us: (diameter - US_BASE) / US_STEP,
             // The chart's granularity is a half letter; snapping here keeps floating-point noise
-            // from naming US 6 as K½.
-            uk_index: ((uk_index_of(diameter) * 2.0).round() / 2.0).clamp(0.0, 25.0),
+            // from naming US 6 as K½. The chart ends at Z½ (22.40 mm), which `from_uk` reads.
+            uk_index: ((uk_index_of(diameter) * 2.0).round() / 2.0).clamp(0.0, 25.5),
             eu: circumference.round().clamp(0.0, 999.0) as u32,
             jp: ((diameter - JP_BASE) * 3.0 + 1.0).round().clamp(0.0, 999.0) as u32,
             cn: (circumference - CN_OFFSET).round().clamp(0.0, 999.0) as u32,
@@ -661,6 +661,7 @@ fn run_ring(s: &mut Session, p: &Value) -> Result<Value> {
         metal,
         geom.grams(density)
     );
+    let name = distinct_block(s, name, &kinds, &desc)?;
     let scale = 1.0 / mm_per_unit(s);
     let h = define_block_and_insert(s, &name, kinds, &desc, at, scale)?;
     on_layer(s, h, layer.as_deref())?;
@@ -688,6 +689,25 @@ fn run_ring(s: &mut Session, p: &Value) -> Result<Value> {
 
 /// Define a block of jewelry geometry (in millimetres) and insert it at `at` in drawing units,
 /// scaled by `scale` (the units one millimetre measures).
+/// The name a block of this geometry and description is drawn under: `name`, unless the drawing
+/// already has a block of that name that is something else, and then the name with the first
+/// free number after it (`RING-16.51x2-2`). A ring blank is named by its size and width alone,
+/// so a second blank of another wall or metal used to redefine the first one's block: the ring
+/// already drawn changed its wall, its metal and its weight on the bench sheet.
+fn distinct_block(s: &Session, name: String, kinds: &[EntityKind], desc: &str) -> Result<String> {
+    let d = s.doc()?;
+    let free = |n: &str| {
+        d.block(n).is_none_or(|b| b.description == desc && b.entities.len() == kinds.len() && b.entities.iter().zip(kinds).all(|(e, k)| e.kind == *k))
+    };
+    if free(&name) {
+        return Ok(name);
+    }
+    (2..=MAX_STONES)
+        .map(|i| format!("{name}-{i}"))
+        .find(|n| free(n))
+        .ok_or_else(|| bad("ring", "too many different rings of one size and width in this drawing"))
+}
+
 pub(super) fn define_block_and_insert(s: &mut Session, name: &str, kinds: Vec<EntityKind>, desc: &str, at: Vec2, scale: f64) -> Result<Handle> {
     if !super::blocks::valid_block_name(name) {
         return Err(bad("jewelry", format!("`{name}` is not a usable block name")));

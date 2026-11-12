@@ -34,3 +34,6 @@ libc = "0.2"
 [dev-dependencies]
 # Image fixtures for the raster-image tests (a PNG encoded from a pixmap).
 tiny-skia = { workspace = true }
+# Property-based tests for the jewelry commands (Hegel, MIT). Tests only: never a dependency of
+# the shipped engine, so it does not reach the wasm build.
+hegeltest = "0.52.2"

@@ -226,10 +226,64 @@ pub(super) fn offset_loop(loop_mm: &[Vec2], d: f64) -> Result<Vec<Vec2>> {
     let offset =
         super::super::modify::offset_polyline(&poly, sign * d).ok_or_else(|| bad("setting", "the outline is too small to offset; check its size"))?;
     let out: Vec<Vec2> = cadcraft_geom::Polyline { vertices: offset, closed: true }.tessellate(0.01);
+    let out = unfolded(out);
     if out.len() < 3 {
         return Err(bad("setting", "the outline is too small to offset"));
     }
     Ok(out)
+}
+
+/// The longest loop that is searched for folds (every edge against every other).
+const UNFOLD_POINTS: usize = 2_000;
+/// Most folds taken out of one loop.
+const UNFOLD_MOST: usize = 8;
+
+/// An offset loop with its folds taken out. Where an outline turns inward (a heart's notch) the
+/// offsets of its two sides cross, and past the crossing the joined loop runs on in a small
+/// knot of its own that comes back toward the outline: there a bezel's wall was thinner than
+/// asked and a halo's melee sat on the stone. A crossing splits the loop in two; the one that
+/// cuts off the most of the knot is taken, and the larger part kept, closed at the crossing.
+fn unfolded(mut ring: Vec<Vec2>) -> Vec<Vec2> {
+    if ring.len() > 1
+        && let (Some(first), Some(last)) = (ring.first(), ring.last())
+        && first.near(*last, 1e-9)
+    {
+        ring.pop();
+    }
+    for _ in 0..UNFOLD_MOST {
+        let n = ring.len();
+        if !(4..=UNFOLD_POINTS).contains(&n) {
+            break;
+        }
+        let edge = |i: usize| ring.get(i).copied().zip(ring.get((i + 1) % n).copied());
+        // Of the pairs of edges that are not neighbours and cross, the pair furthest apart along
+        // the loop the shorter way round: a knot's outermost crossing.
+        let crossings = (0..n).flat_map(|i| (i + 2..n).filter(move |j| (j + 1) % n != i).map(move |j| (i, j)));
+        let fold = crossings
+            .filter_map(|(i, j)| {
+                let ((a, b), (c, e)) = (edge(i)?, edge(j)?);
+                crossing(a, b, c, e).map(|x| (i, j, x))
+            })
+            .max_by_key(|(i, j, _)| (j - i).min(n - (j - i)));
+        let Some((i, j, x)) = fold else { break };
+        let inner: Vec<Vec2> = std::iter::once(x).chain(ring.iter().copied().skip(i + 1).take(j - i)).collect();
+        let outer: Vec<Vec2> = ring.iter().copied().take(i + 1).chain(std::iter::once(x)).chain(ring.iter().copied().skip(j + 1)).collect();
+        ring = if cadcraft_geom::shoelace(&inner).abs() > cadcraft_geom::shoelace(&outer).abs() { inner } else { outer };
+    }
+    ring
+}
+
+/// Where the segments `a`–`b` and `c`–`e` cross each other, short of their ends.
+fn crossing(a: Vec2, b: Vec2, c: Vec2, e: Vec2) -> Option<Vec2> {
+    const ENDS: f64 = 1e-9;
+    let (r, s) = (b - a, e - c);
+    let denom = r.cross(s);
+    if denom.abs() < 1e-18 {
+        return None;
+    }
+    let t = (c - a).cross(s) / denom;
+    let u = (c - a).cross(r) / denom;
+    (t > ENDS && t < 1.0 - ENDS && u > ENDS && u < 1.0 - ENDS).then(|| a + r * t)
 }
 
 /// Where a stone's prongs go: its sharp corners first (the tips of a marquise, the corners of an

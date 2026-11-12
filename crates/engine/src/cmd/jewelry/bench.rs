@@ -161,9 +161,13 @@ pub(crate) fn jewelry_facts(d: &cadcraft_doc::Drawing, entities: &[&std::sync::A
             None if (sg - 3.52).abs() < 1e-6 => Some("diamond".to_string()),
             None => None,
         };
+        // One line is stones that weigh the same: the cut, the size, the material and the depth.
+        // (Without the depth, a 0.8 mm round cut 0.4 mm deep was counted at the weight of the
+        // 0.49 mm deep one placed before it.)
+        let same = |a: f64, b: f64| (a - b).abs() < 1e-6;
         match groups
             .iter_mut()
-            .find(|g| g.cut == cut.name && (g.width - name.width).abs() < 1e-6 && (g.length - name.length).abs() < 1e-6 && (g.sg - sg).abs() < 1e-6)
+            .find(|g| g.cut == cut.name && same(g.width, name.width) && same(g.length, name.length) && same(g.sg, sg) && same(g.depth, depth))
         {
             Some(g) => {
                 g.count += 1;

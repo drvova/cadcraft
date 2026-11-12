@@ -199,11 +199,15 @@ and MCP all reach them, and DESCRIBE reads jewelry out of any drawing.
 | J2 | Settings as solids: a parametric band, solitaire and eternity band are solids now (PIECEMESH, STLOUT, a 3D view). Left: the parts are separate shells that pass through each other, no seat is cut for a stone and no bearing; fancy cuts are their girdle tapered, not faceted; bezels, channels, baskets and under-galleries are 2D only; a drawing that is not a parametric piece has no solid; STL is the only 3D format | 16–28 |
 | J3 | A bench's own stone library: calibrated sizes, dealer girdle data and a house cut list (GEM takes any outline, but nothing imports a library file) | 6–10 |
 | J4 | RINGSIZES measures a drawn ring from JSON (`handle`: a circle, an arc, a closed outline, a RING insert); there is no pick prompt for it at the command line, and the interface has no control for it | 1–2 |
+| J5 | Settings on a heart: at the cleft a bezel's wall is thinner than asked (0.42 mm for 0.48), a halo stone lands over the centre stone and a channel's rail comes inside its distance. The outward offset of a concave corner is not held at its distance (a first repair of the fold is in `setting.rs`, not enough). Found by property tests, which are set aside until fixed | 3–5 |
+| J6 | A halo around a sharp tip (a long pear) can put two stones slightly nearer than the gap: the halo is spaced by length along its path, not by straight distance | 2–3 |
+| J7 | Outside a size system's own chart (under 12.84 mm, over 22.5 mm) a finger is named by that chart's last size (a 25 mm finger reads UK Z); it should have no size in that system, which changes the shape of every size row | 2–4 |
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | minor | Jewelry: band profiles and a three-stone ring in PIECE; property tests (Hegel) fixed six faults and left three as new rows J5–J7 |
 | 2026-11-12 | minor | Jewelry: PRICEBOOK and an estimated cost on the bench sheet; in the interface a rendered tech sheet, templates and the Cost group. No row closes |
 | 2026-11-12 | major | A parametric piece (PIECE) with a solid (PIECEMESH, STLOUT) and a 3D view in the interface; OBJECTS; in the interface a tabbed ribbon, Source, the Piece and Objects sections. J2 narrowed. New drawings in the interface are millimetres |
 | 2026-11-12 | minor | Jewelry: RINGSIZES measures a drawn ring (`handle`); PAVE and GEMFIT fit elongated cuts by their own outline at their rotation (`rotate`, `ratio`); a pavé fill no longer ignores the edge that closes its outline. J4 narrows to its prompt, J1 to `taper`. In the interface: Ring and Gem dialogs, `@` context in the assistant, the sidebar reachable at a phone's width |

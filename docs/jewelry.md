@@ -200,7 +200,16 @@ group `JEWELRY_PIECE` (its objects, and its parameters in the description), so u
 DXF save and open keep the geometry and the numbers together; a rebuild lands where the band is
 now unless `at` is given.
 
-The parameters: `size` (with `system`), `wall`, `width`, `profile` (`flat` or `dome`), `metal`;
+The kinds are `band`, `solitaire`, `eternity` and `threestone` (a solitaire with one side stone
+each side of the centre around the band: `sideWidth`, default 60 % of the centre's width,
+`sideLength`, `sideCut`, `sideProngs`, default 4; side stones that cannot clear the centre are
+refused with the numbers). The profiles are `flat`, `dome`, `comfort` (the dome with the finger
+side eased), `court` (curved outside and inside), `knife` (two faces meeting at a ridge), `bevel`
+(chamfered edges) and `concave` (the outside hollowed between two raised edges), each with one
+optional number of its own (`comfort`, `ridge`, `bevel`, `hollow`). The finger's size is the
+inside at its narrowest, and the `wall` check reads the band where it is thinnest and says where.
+
+The parameters: `size` (with `system`), `wall`, `width`, `profile`, `metal`;
 for a solitaire `cut`, `stone`, `stoneWidth`, `stoneLength`, `prongs` (3 to 8) and `halo` (off, or
 the melee's width); for an eternity band `cut`, `stone`, `melee`, `count` (none: as many as fit)
 and `gap`. `params.size` is the US number with `system: "us"`; `sizeSystem` names the system the
@@ -305,6 +314,27 @@ The sample is drawn to be read: gold for the metal, pale blue for the stones, gr
 dimensions and notes, with the finger, the section, the stone and the strip dimensioned at 1 mm
 text.
 
+## Property tests
+
+Besides the worked examples, the jewelry commands are tested by properties
+(`crates/engine/src/cmd/jewelry/property_tests.rs`, with [Hegel](https://hegel.dev), a
+dev-dependency only): a rule is stated once and tried on hundreds of generated inputs, and a
+failure is shrunk to its smallest case. The rules cover ring sizes in every system, every cut's
+outline and weight, block names, pavé fit and its cap, settings around a stone wherever it sits,
+the bench sheet's counts, a piece's parameters, the sheet against the solid, a piece followed
+through any sequence of edits, undo and saves, and hostile input to every command.
+
+What they found and what was fixed: two stones a hundredth of a millimetre apart shared one
+block, so placing the second redrew the first; a second ring blank of the same size and width
+redefined the first one's wall, metal and weight; a cabochon's ellipse was drawn on the wrong
+axis; a cushion's corners were scooped in instead of rounded out; the bench sheet weighed a
+shallow stone at the weight of a deeper one of the same size; UK Z½ was not reached.
+
+What they found and is not fixed (each a test set aside with its reason, and a row in
+[gaps.md](gaps.md)): on a heart, a bezel's wall, a halo's stones and a channel's rails come too
+near the girdle at the cleft; around a sharp tip two halo stones can overlap slightly; and
+outside a system's own chart a finger is named by that chart's last size instead of none.
+
 ## Where the numbers come from
 
 The formulas are the trade's published ones, and the tests check them against known stones: a
@@ -317,6 +347,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | minor | `PIECE` gains five band profiles and a three-stone ring; property tests with Hegel, with six faults fixed and three set aside as gap rows J5–J7 |
 | 2026-11-12 | minor | `PRICEBOOK` and a `cost` on the bench sheet, from the user's own prices; in the interface a Cost group and Price Book editor, a rendered Tech Sheet, and a gallery of templates |
 | 2026-11-12 | major | A parametric piece: `PIECE` (sheet, stored parameters, checks), `PIECEMESH` and `STLOUT` (the solid), one shared definition for both; `OBJECTS`. In the interface: the Piece section, the 3D tab with display modes, the Objects section, Source, a tabbed ribbon; new drawings are millimetres |
 | 2026-11-12 | minor | `RINGSIZES` measures a drawn ring (`handle`); `PAVE` and `GEMFIT` fit cuts that are not round by their own outline at their rotation (`rotate`, `ratio`); a region fill no longer ignores the edge that closes its outline (round stones could hang over it), and square cuts are no longer fitted as circles |

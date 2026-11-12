@@ -27,13 +27,13 @@ fn outline_area(pts: &[Vec2]) -> f64 {
     cadcraft_geom::Polyline::from_points(pts, true).area().abs()
 }
 
-fn polyline(s: &mut Session, pts: &[Vec2]) -> String {
+pub(super) fn polyline(s: &mut Session, pts: &[Vec2]) -> String {
     let r = s.execute("pline", &json!({"points": pts.iter().map(|p| json!([p.x, p.y])).collect::<Vec<_>>(), "closed": true})).unwrap();
     r["handle"].as_str().unwrap_or_else(|| r["handles"][0].as_str().unwrap()).to_string()
 }
 
 /// A drawing in millimetres.
-fn mm_drawing() -> Session {
+pub(super) fn mm_drawing() -> Session {
     let mut s = Session::new();
     s.execute("setvar", &json!({"name": "INSUNITS", "value": 4})).unwrap();
     s
@@ -783,11 +783,11 @@ fn settings_and_pave_keep_their_place_in_an_inch_drawing() {
 
 // ---------------------------------------------------------------- measuring a ring (J4)
 
-fn handle_of(r: &Value) -> String {
+pub(super) fn handle_of(r: &Value) -> String {
     r["handle"].as_str().unwrap_or_else(|| r["handles"][0].as_str().unwrap()).to_string()
 }
 
-fn circle(s: &mut Session, centre: [f64; 2], radius: f64) -> String {
+pub(super) fn circle(s: &mut Session, centre: [f64; 2], radius: f64) -> String {
     handle_of(&s.execute("circle", &json!({"center": centre, "radius": radius})).unwrap())
 }
 

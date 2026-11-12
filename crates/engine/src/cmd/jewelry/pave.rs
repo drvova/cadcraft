@@ -225,6 +225,11 @@ pub(super) struct Fill {
     pub(super) truncated: bool,
 }
 
+/// How far apart the rows of a brick of round stones are, as a fraction of the pitch along a
+/// row: √3/2, rounded up to the next float, so a stone is never nearer its neighbours in the next
+/// row than the pitch. (At 0.866, as it used to be, they were 0.00002 of a pitch too near: under
+/// the clearance asked for, and overlapping when it was zero.)
+const BRICK_ROWS: f64 = 0.866_025_403_784_438_7;
 /// Most grid sites one fill visits.
 const MAX_SITES: f64 = 4_000_000.0;
 /// Most outline-against-edge tests one fill runs for stones that are not round (a hostile
@@ -430,11 +435,11 @@ pub(super) fn oriented_fill_for_test(region: &Region, stone: &Footprint, clearan
 /// Rows run along X. The pitch along a row is the stone's extent in that direction plus the
 /// clearance, and the rows are its extent across plus the clearance apart, so neighbours are a
 /// clearance apart whatever the cut and its rotation. Round stones in a brick nest: their rows
-/// are 0.866 of the pitch apart, which keeps the same clearance between circles.
+/// are √3/2 of the pitch apart ([`BRICK_ROWS`]), which keeps the same clearance between circles.
 fn fill_region(region: &Region, stone: &Footprint, clearance: f64, edge: f64, pattern: Pattern, mut budget: u64) -> Fill {
     let pitch = stone.extent.x + clearance;
     let row_pitch = match (pattern, stone.circle) {
-        (Pattern::Brick, Some(_)) => pitch * 0.866,
+        (Pattern::Brick, Some(_)) => pitch * BRICK_ROWS,
         _ => stone.extent.y + clearance,
     };
     let mut fill = Fill { stones: Vec::new(), dropped_edge: 0, dropped_outside: 0, pitch: Vec2::new(pitch, row_pitch), truncated: false };
@@ -664,28 +669,62 @@ fn with_size(p: &Value, width: f64) -> Value {
     v
 }
 
-/// The largest circle that fits inside a region: the furthest interior point from its edge.
+/// The radius of the largest circle that fits inside a region: how far the interior point
+/// furthest from the edge is from it.
+///
+/// The middles of a 48 × 48 grid over the bounding box are looked at first, each axis divided on
+/// its own, so a long narrow region has rows inside it; then the best of them climbs — to the
+/// better of sixteen neighbours a step away, the step halved when none is better — until the
+/// step is a millionth of the region. Inside a convex region the distance to the edge has one
+/// summit, so the climb ends on it. (The grid alone, as it used to be, read a 1.62 mm circle as
+/// 1.59 mm across and a 100 × 2 mm strip as nothing, so `GEMFIT` and `PAVE` named a melee a
+/// size too small, or none.) Both loops are counted, so no coordinate, however large, keeps
+/// them running.
 pub(super) fn max_inscribed(region: &Region) -> f64 {
+    const CELLS: u32 = 48;
+    const DIRECTIONS: u32 = 16;
+    const CLIMB: usize = 256;
     if region.bounds.is_empty() {
         return 0.0;
     }
     let (min, max) = (region.bounds.min, region.bounds.max);
-    let step = ((max.x - min.x).max(max.y - min.y) / 48.0).max(0.05);
-    let mut best = 0.0f64;
-    let mut y = min.y;
-    while y <= max.y {
-        let mut x = min.x;
-        while x <= max.x {
-            let p = Vec2::new(x, y);
-            if region.contains(p) {
-                let d = region.distance_to_edge(p);
-                if d > best {
-                    best = d;
-                }
+    let (dx, dy) = ((max.x - min.x) / f64::from(CELLS), (max.y - min.y) / f64::from(CELLS));
+    if !(dx.is_finite() && dy.is_finite() && min.is_finite()) {
+        return 0.0;
+    }
+    // How far inside the region a point is: nothing, outside it.
+    let depth = |p: Vec2| if region.contains(p) { region.distance_to_edge(p) } else { 0.0 };
+    let (mut at, mut best) = (min, 0.0f64);
+    for row in 0..CELLS {
+        for col in 0..CELLS {
+            let p = Vec2::new(min.x + (f64::from(col) + 0.5) * dx, min.y + (f64::from(row) + 0.5) * dy);
+            let d = depth(p);
+            if d > best {
+                (at, best) = (p, d);
             }
-            x += step;
         }
-        y += step;
+    }
+    if !(best > 0.0 && best.is_finite()) {
+        return 0.0;
+    }
+    let mut step = dx.max(dy);
+    let fine = step * f64::from(CELLS) * 1e-6;
+    for _ in 0..CLIMB {
+        if step <= fine {
+            break;
+        }
+        let mut moved = false;
+        for k in 0..DIRECTIONS {
+            let a = cadcraft_geom::TAU * f64::from(k) / f64::from(DIRECTIONS);
+            let p = at + Vec2::new(a.cos(), a.sin()) * step;
+            let d = depth(p);
+            if d > best {
+                (at, best, moved) = (p, d, true);
+            }
+        }
+        if !moved {
+            step /= 2.0;
+        }
     }
     best
 }
@@ -725,10 +764,6 @@ fn run_fit(s: &mut Session, p: &Value) -> Result<Value> {
     let mut turned: Option<f64> = None;
     let narrowest = regions.iter().map(max_inscribed).fold(0.0f64, f64::max) * 2.0;
     for size in CALIBRATED {
-        // A round stone needs the region's inscribed circle; any other cut is left to the fit.
-        if round && size + 2.0 * clearance > narrowest + 1e-9 {
-            continue;
-        }
         let length = if round { size } else { size * ratio };
         let mut count = 0usize;
         for region in &regions {
@@ -740,9 +775,13 @@ fn run_fit(s: &mut Session, p: &Value) -> Result<Value> {
         }
         let depth = gem::default_depth(cut, size);
         let carat = gem::carat(cut, length, size, depth, sg) * count as f64;
+        // A size is listed when a stone of it was placed; a round one also when the region's
+        // inscribed circle takes it and no site of its rows fell there. The count decides, not the
+        // circle: measured to a micron, the circle said a 1.2 mm round does not go in a 1.2 mm
+        // square, and `PAVE` placed it.
         if count > 0 {
             largest = Some(size);
-        } else if !round {
+        } else if !round || size + 2.0 * clearance > narrowest + 1e-9 {
             continue;
         }
         let mut row = json!({ "mm": size_json(size), "count": count, "carat": (carat * 1000.0).round() / 1000.0 });
@@ -858,14 +897,47 @@ pub(super) fn lay_along(s: &mut Session, path: &Path, stone: &gem::Stone, pitch:
     if len <= 1e-9 || pitch <= 0.0 {
         return Ok(Vec::new());
     }
-    let n = ((len / pitch).round() as usize).clamp(1, MAX_STONES);
-    let step = len / n as f64;
+    // As many as go along the path a pitch apart; and since two stones are nearer each other
+    // around a bend than they are along it, fewer until every pair is a pitch apart. (Rounded to
+    // the nearest count and never checked, as it used to be, a halo's melee overlapped: 1.43 mm
+    // stones 1.428 mm apart around a 1 mm round.)
+    let sites = |n: usize| -> Vec<(Vec2, Vec2)> {
+        let step = len / n as f64;
+        (0..n).filter_map(|i| path.at((i as f64 + 0.5) * step)).collect()
+    };
+    let mut n = ((len / pitch).floor() as usize).clamp(1, MAX_STONES);
+    let mut laid = sites(n);
+    for _ in 0..FEWER {
+        if n <= 1 || least_apart(&laid) + 1e-9 >= pitch {
+            break;
+        }
+        n -= 1;
+        laid = sites(n);
+    }
     let k = mm_per_unit(s);
-    let mut out = Vec::with_capacity(n);
-    for i in 0..n {
-        let d = (i as f64 + 0.5) * step;
-        let Some((at, tangent)) = path.at(d) else { continue };
+    let mut out = Vec::with_capacity(laid.len());
+    for (at, tangent) in laid {
         out.push(gem::place_stone(s, stone, at / k, tangent.y.atan2(tangent.x), layer)?);
     }
     Ok(out)
+}
+
+/// How many times a row along a path is laid again with one stone fewer, to clear a bend.
+const FEWER: usize = 64;
+/// The most stones every pair of which is measured; of more, each is measured against the
+/// [`NEIGHBOURS`] that follow it along the path.
+const ALL_PAIRS: usize = 512;
+const NEIGHBOURS: usize = 8;
+
+/// The least distance between two of the sites of a row around a closed path.
+fn least_apart(sites: &[(Vec2, Vec2)]) -> f64 {
+    let n = sites.len();
+    let reach = if n <= ALL_PAIRS { n } else { NEIGHBOURS + 1 };
+    let mut least = f64::INFINITY;
+    for (i, (a, _)) in sites.iter().enumerate() {
+        for (b, _) in sites.iter().cycle().skip(i + 1).take(reach.min(n).saturating_sub(1)) {
+            least = least.min(a.dist(*b));
+        }
+    }
+    least
 }
