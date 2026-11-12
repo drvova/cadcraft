@@ -5,10 +5,11 @@ use cadcraft_doc::EntityKind;
 use cadcraft_geom::{PI, Vec2};
 use serde_json::{Value, json};
 
+use super::gem;
 use super::mesh::{Quality, piece_mesh};
 use super::mesh_tests::{check as closed, extent, part, shells};
-use super::piece_params::{PROFILES, PieceParams, Profile, Section};
-use super::piece_tests::{assert_no_orphans, check, handles, mm_drawing, piece, query, state};
+use super::piece_params::{MAX_SIDE_ANGLE, PROFILES, PieceParams, Profile, Section, carat_of, head_polygon, polygons_apart, side_profile};
+use super::piece_tests::{assert_no_orphans, check, handles, mm_drawing, piece, query, state, stone_inserts};
 use crate::Session;
 
 fn params(v: Value) -> PieceParams {
@@ -532,4 +533,396 @@ fn the_params_line_names_every_profile_and_its_number() {
     let q = params(json!({"kind": "band", "profile": "concave", "width": 4, "wall": 2}));
     let outline: Vec<Vec2> = q.section().outline().iter().map(|(p, _)| *p).collect();
     assert_eq!(outline.len(), 6);
+}
+
+// ------------------------------------------------------------------ a three-stone ring
+
+/// The piece's objects of one kind on one layer, by a test of the object.
+fn count_on(s: &Session, p: &Value, layer: &str, pick: impl Fn(&EntityKind) -> bool) -> usize {
+    let d = s.doc().unwrap();
+    handles(p).iter().filter_map(|h| d.entity(*h)).filter(|e| e.common.layer == layer && pick(&e.kind)).count()
+}
+
+#[test]
+fn a_three_stone_ring_sets_a_side_stone_each_side_of_the_centre() {
+    let mut s = mm_drawing();
+    let band = piece(&mut s, json!({"kind": "band"}));
+    let p = piece(&mut s, json!({"kind": "threestone"}));
+    assert_eq!(p["params"]["kind"], "threestone");
+    // Nothing given: side stones 60 % of the centre's 6.5 mm, the centre's cut, four prongs each.
+    assert_eq!(p["params"]["sideWidth"], Value::Null);
+    assert_eq!(p["params"]["sideLength"], Value::Null);
+    assert_eq!(p["params"]["sideCut"], Value::Null);
+    assert_eq!(p["params"]["sideProngs"], json!(4));
+    let q = params(p["params"].clone());
+    let (length, width) = q.side_size();
+    assert!((width - 3.9).abs() < 1e-12 && (length - 3.9).abs() < 1e-12, "{length}×{width}");
+    assert_eq!(p["stones"]["count"], json!(3));
+    let stones = stone_inserts(&s, &p);
+    assert_eq!(stones.iter().map(|(b, _)| b.as_str()).collect::<Vec<_>>(), ["GEM-ROUND-6.5", "GEM-ROUND-3.9", "GEM-ROUND-3.9"]);
+    // The weight is the band's, as a solitaire's is; the carats are the three stones'.
+    assert_eq!(p["metal"]["grams"], band["metal"]["grams"]);
+    let (centre, small) = (q.centre_stone("test").unwrap(), q.side_stone("test").unwrap());
+    let carat = carat_of(&centre) + 2.0 * carat_of(&small);
+    assert!((p["stones"]["carat"].as_f64().unwrap() - carat).abs() < 5.1e-4, "{} against {carat}", p["stones"]["carat"]);
+    // The side stones stand at the least angle that clears the centre's head: there the two
+    // heads, seen along the finger, are the gap and half of each prong wire apart.
+    let sides = q.sides();
+    assert!(sides.fits);
+    let (head, top) = (q.head(), q.crown());
+    assert!((sides.metal - (head.prong + sides.head.prong) / 2.0).abs() < 1e-12 && (head.prong - 0.975).abs() < 1e-12 && sides.head.prong == 0.8);
+    let stand = |polygon: Vec<Vec2>, clear: f64, angle: f64| -> Vec<Vec2> {
+        polygon.iter().map(|v| Vec2::new(angle.sin(), angle.cos()) * (top + clear + v.y) + Vec2::new(angle.cos(), -angle.sin()) * v.x).collect()
+    };
+    let round = gem::cut_of("round").unwrap();
+    let middle = stand(head_polygon(round, 6.5, head.depth, head.clear), head.clear, 0.0);
+    let beside = |angle: f64| stand(head_polygon(round, 3.9, sides.head.depth, sides.head.clear), sides.head.clear, angle);
+    let need = sides.metal + 0.2;
+    assert!((polygons_apart(&middle, &beside(sides.angle)) - need).abs() < 1e-9, "{} against {need}", polygons_apart(&middle, &beside(sides.angle)));
+    assert!((sides.apart - need).abs() < 1e-9 && (sides.between() - 0.2).abs() < 1e-9);
+    assert!(polygons_apart(&middle, &beside(sides.angle - 1e-3)) < need, "a hair nearer and they crowd");
+    assert_eq!(polygons_apart(&middle, &beside(0.05)), 0.0, "near the top the heads overlap");
+    println!(
+        "three-stone, size 6, 6.5 mm centre and 3.9 mm sides: {:.2}° from the top, {:.4} mm between the heads, {} ct, {} g",
+        sides.angle.to_degrees(),
+        sides.apart,
+        p["stones"]["carat"],
+        p["metal"]["grams"]
+    );
+    // The sheet: three side profiles and six prong lines in the front view, three stones and
+    // 6 + 4 + 4 prongs in the plan.
+    assert_eq!(count_on(&s, &p, "Stones", |k| matches!(k, EntityKind::LwPolyline(pl) if pl.closed)), 3);
+    assert_eq!(count_on(&s, &p, "Settings", |k| matches!(k, EntityKind::LwPolyline(pl) if !pl.closed)), 6);
+    assert_eq!(count_on(&s, &p, "Settings", |k| matches!(k, EntityKind::Circle(_))), 14);
+    let x = (top + sides.head.girdle_height()) * sides.angle.sin();
+    assert!((stones[1].1.x + x).abs() < 1e-9 && (stones[2].1.x - x).abs() < 1e-9 && stones[0].1.x.abs() < 1e-9, "{stones:?}");
+    assert!(stones.iter().all(|(_, at)| (at.y - stones[0].1.y).abs() < 1e-9), "the three stones lie along the band in the plan");
+    // The checks: the seat covers all three heads, the spacing is the metal between settings.
+    assert_eq!(check(&p, "stone-seat")["ok"], true, "{}", check(&p, "stone-seat"));
+    assert!(check(&p, "stone-seat")["message"].as_str().unwrap().contains("two 3.9×3.9 mm side stones"), "{}", check(&p, "stone-seat"));
+    assert_eq!(check(&p, "spacing")["ok"], true);
+    let spacing = check(&p, "spacing")["message"].as_str().unwrap();
+    assert!(spacing.contains("0.2 mm of metal between their settings") && spacing.contains(&super::fmt_mm(sides.angle.to_degrees())), "{spacing}");
+    assert_eq!(check(&p, "calibrated")["ok"], true);
+    let said = s.execute("piece", &json!({})).unwrap()["message"].as_str().unwrap().to_string();
+    assert!(said.starts_with("Three-stone ring") && said.contains("2 × 3.9 mm round at the sides") && said.contains("in 6 prongs"), "{said}");
+    // The bench sheet counts three stones in two groups.
+    let sheet = s.execute("techsheet", &json!({})).unwrap();
+    assert_eq!(sheet["stones"]["count"], json!(3), "{sheet}");
+    let groups = sheet["stones"]["groups"].as_array().unwrap();
+    assert_eq!(groups.len(), 2, "{sheet}");
+    let mut counts: Vec<u64> = groups.iter().map(|g| g["count"].as_u64().unwrap()).collect();
+    counts.sort_unstable();
+    assert_eq!(counts, [1, 2]);
+    assert!((sheet["stones"]["carat"].as_f64().unwrap() - carat).abs() < 2e-3);
+    // The solid: three stones, three rails, fourteen prongs, every shell closed and outward.
+    let solid = s.execute("piecemesh", &p["params"]).unwrap();
+    assert_eq!(solid["stones"], json!(3));
+    assert_eq!(solid["metal"]["grams"], p["metal"]["grams"]);
+    for quality in [Quality::Draft, Quality::Fine] {
+        let mesh = piece_mesh(&q, quality);
+        closed(&mesh, true, &format!("three-stone {quality:?}"));
+        let names: Vec<&str> = mesh.meshes.iter().map(|m| m.name).collect();
+        assert_eq!(names, ["band", "head", "prongs", "centre stone", "side stones"]);
+        assert_eq!(shells(part(&mesh, "head")).len(), 3, "a gallery rail to a head");
+        assert_eq!(shells(part(&mesh, "prongs")).len(), 14);
+        assert_eq!(shells(part(&mesh, "side stones")).len(), 2);
+        assert_eq!(mesh.stones, 3);
+        // No metal reaches into the finger, and the side stones stand clear of the band.
+        let inner = q.inner() / 2.0;
+        for m in mesh.meshes.iter().filter(|m| m.part == "metal") {
+            assert!(m.positions.iter().all(|v| v.x.hypot(v.y) >= inner - 1e-9), "{} reaches into the finger", m.name);
+        }
+        let nearest = part(&mesh, "side stones").positions.iter().map(|v| v.x.hypot(v.y)).fold(f64::INFINITY, f64::min);
+        assert!((nearest - (top + 0.5)).abs() < 1e-9, "the side stones' culets are {} over the band", nearest - top);
+        // They mirror each other across the finger's axis.
+        let (lo, hi) = extent(part(&mesh, "side stones"), 0);
+        assert!((lo + hi).abs() < 1e-9 && hi > 3.25);
+    }
+}
+
+#[test]
+fn side_stones_take_their_own_size_cut_and_prongs() {
+    let mut s = mm_drawing();
+    // An oval centre: the side stones keep its proportion and its cut unless told otherwise.
+    let p = piece(&mut s, json!({"kind": "threestone", "cut": "oval", "stoneLength": 8, "stoneWidth": 6, "prongs": 4}));
+    let q = params(p["params"].clone());
+    let (length, width) = q.side_size();
+    assert!((width - 3.6).abs() < 1e-12 && (length - 4.8).abs() < 1e-12);
+    assert_eq!(q.side_cut_data().unwrap().name, "oval");
+    assert_eq!(stone_inserts(&s, &p)[1].0, "GEM-OVAL-4.8x3.6");
+    // Pear side stones of their own size, three prongs each.
+    let pears = piece(&mut s, json!({"sideCut": "pear", "sideWidth": 3, "sideLength": 4.5, "sideProngs": 3}));
+    assert_eq!(pears["params"]["sideCut"], "pear");
+    assert_eq!(stone_inserts(&s, &pears)[2].0, "GEM-PEAR-4.5x3");
+    assert_eq!(count_on(&s, &pears, "Settings", |k| matches!(k, EntityKind::Circle(_))), 4 + 3 + 3);
+    assert_no_orphans(&s, &pears);
+    // A width alone keeps the centre's proportion; `null` goes back to the centre's cut and size.
+    let wide = piece(&mut s, json!({"sideCut": null, "sideLength": null, "sideWidth": 4.2}));
+    let q = params(wide["params"].clone());
+    assert!((q.side_size().0 - 5.6).abs() < 1e-12 && q.side_cut_data().unwrap().name == "oval");
+    assert_eq!(wide["params"]["sideProngs"], json!(3), "the prongs stay as they were set");
+    // Larger side stones stand further round; a larger gap further still.
+    let angle = |p: &Value| params(p["params"].clone()).sides().angle;
+    let small = piece(&mut s, json!({"sideWidth": 3}));
+    let large = piece(&mut s, json!({"sideWidth": 5}));
+    assert!(angle(&large) > angle(&small), "{} {}", angle(&large), angle(&small));
+    let apart = piece(&mut s, json!({"gap": 1.0}));
+    assert!(angle(&apart) > angle(&large));
+    assert!(check(&apart, "spacing")["message"].as_str().unwrap().contains("1 mm of metal between their settings"), "{}", check(&apart, "spacing"));
+    // A halo is a solitaire's: a three-stone ring keeps the number and says it is not drawn.
+    let r = s.execute("piece", &json!({"halo": true, "gap": 0.2})).unwrap();
+    assert_eq!(r["piece"]["params"]["halo"], json!(1.3));
+    assert_eq!(r["piece"]["stones"]["count"], json!(3));
+    assert!(r["message"].as_str().unwrap().contains("Note: A three-stone ring has no halo"), "{}", r["message"]);
+    let solid = s.execute("piecemesh", &r["piece"]["params"]).unwrap();
+    assert!(solid["notes"].as_array().unwrap().iter().any(|n| n.as_str().unwrap().contains("has no halo")), "{}", solid["notes"]);
+    // The same piece as a solitaire has its halo back.
+    let solitaire = piece(&mut s, json!({"kind": "solitaire"}));
+    assert!(solitaire["stones"]["count"].as_u64().unwrap() > 10);
+    // Slight bands fail the seat for any of the three heads.
+    let slight = piece(&mut s, json!({"kind": "threestone", "width": 1.2, "sideLength": 5.5, "sideWidth": 3, "sideCut": "oval"}));
+    assert_eq!(check(&slight, "stone-seat")["ok"], false);
+    assert!(check(&slight, "stone-seat")["message"].as_str().unwrap().contains("side stones"));
+}
+
+#[test]
+fn side_stones_that_cannot_stand_beside_the_centre_are_refused() {
+    let mut s = mm_drawing();
+    let there = piece(&mut s, json!({"kind": "threestone", "size": 4}));
+    // Too large to clear the centre within 60° of the top: the limit is the angle, so each is
+    // refused exactly when the shared decision says it does not fit.
+    let mut refused = Vec::new();
+    for p in [
+        json!({"sideWidth": 14}),
+        json!({"sideWidth": 30, "sideLength": 30}),
+        json!({"stoneWidth": 30, "stoneLength": 30}),
+        json!({"stoneWidth": 12, "stoneLength": 12, "sideWidth": 12}),
+        json!({"stoneWidth": 20, "stoneLength": 20, "sideWidth": 20, "gap": 2}),
+        json!({"gap": 5}),
+    ] {
+        let mut whole = there["params"].clone();
+        for (k, v) in p.as_object().unwrap() {
+            whole[k] = v.clone();
+        }
+        let sides = params(whole).sides();
+        println!("{p}: fits {} at {:.1}°, {:.2} mm apart", sides.fits, sides.angle.to_degrees(), sides.apart);
+        if sides.fits {
+            let mut t = mm_drawing();
+            piece(&mut t, there["params"].clone());
+            let built = piece(&mut t, p.clone());
+            assert_eq!(built["stones"]["count"], json!(3), "{p}");
+            assert_eq!(check(&built, "spacing")["ok"], true, "{p}");
+            assert_no_orphans(&t, &built);
+        } else {
+            refused.push(p);
+        }
+    }
+    assert!(refused.len() >= 2, "{refused:?}");
+    let too_large = refused[0].clone();
+    refused.extend([
+        // Not sizes, not cuts, not counts.
+        json!({"sideWidth": 0}),
+        json!({"sideWidth": -3.9}),
+        json!({"sideWidth": 1e308}),
+        json!({"sideWidth": "3.9"}),
+        json!({"sideWidth": [3.9]}),
+        json!({"sideWidth": true}),
+        json!({"sideLength": 0.1}),
+        json!({"sideLength": 31}),
+        json!({"sideLength": {"mm": 4}}),
+        json!({"sideCut": "banana"}),
+        json!({"sideCut": 3}),
+        json!({"sideCut": ["round"]}),
+        json!({"sideCut": ""}),
+        json!({"sideProngs": 0}),
+        json!({"sideProngs": 2}),
+        json!({"sideProngs": 9}),
+        json!({"sideProngs": 4.5}),
+        json!({"sideProngs": -4}),
+        json!({"sideProngs": "four"}),
+        json!({"sideProngs": 1e308}),
+        // A pear wider than it is long is no pear, at the side as in the middle.
+        json!({"sideCut": "pear", "sideWidth": 5, "sideLength": 2}),
+        json!({"kind": "three stones"}),
+        json!({"kind": "trio"}),
+    ]);
+    let mut empty = mm_drawing();
+    for p in &refused {
+        let before = state(&s);
+        let r = s.execute("piece", p);
+        assert!(r.is_err(), "{p} was accepted: {r:?}");
+        assert!(!matches!(r, Err(crate::EngineError::Internal(..))), "{p} panicked: {r:?}");
+        assert_eq!(state(&s), before, "{p} changed the drawing");
+        assert_eq!(query(&mut s), there, "{p} changed the piece");
+        // And from nothing: no half a piece.
+        let mut whole = json!({"kind": "threestone", "size": 4});
+        for (k, v) in p.as_object().unwrap() {
+            whole[k] = v.clone();
+        }
+        let before = state(&empty);
+        let r = empty.execute("piece", &whole);
+        assert!(r.is_err() && !matches!(r, Err(crate::EngineError::Internal(..))), "{whole}: {r:?}");
+        assert_eq!(state(&empty), before, "{whole} left something behind");
+        assert!(empty.doc().unwrap().groups.is_empty(), "{whole}");
+    }
+    // The refusal gives the reason and the numbers.
+    let e = s.execute("piece", &too_large).unwrap_err().to_string();
+    println!("{too_large}: {e}");
+    assert!(e.contains("do not fit beside") && e.contains("60°") && e.contains("size 4"), "{e}");
+    // The solid, a viewer, still shows them, at the limit, and says PIECE refuses them.
+    let mut whole = json!({"kind": "threestone", "size": 4});
+    for (k, v) in too_large.as_object().unwrap() {
+        whole[k] = v.clone();
+    }
+    let shown = s.execute("piecemesh", &whole).unwrap();
+    assert_eq!(shown["stones"], json!(3));
+    assert!(
+        shown["notes"].as_array().unwrap().iter().any(|n| n.as_str().is_some_and(|t| t.contains("PIECE refuses them") && t.contains("60"))),
+        "{}",
+        shown["notes"]
+    );
+    let q = params(whole);
+    assert!(!q.sides().fits && q.sides().angle == MAX_SIDE_ANGLE);
+    closed(&piece_mesh(&q, Quality::Draft), false, "side stones that do not fit");
+    // Side stones larger than the centre are a jeweler's business: they are built when they fit.
+    let large = piece(&mut s, json!({"stoneWidth": 3, "sideWidth": 4.5}));
+    assert_eq!(large["stones"]["count"], json!(3));
+    assert_no_orphans(&s, &large);
+}
+
+#[test]
+fn every_cut_and_profile_makes_a_closed_three_stone_ring() {
+    for profile in PROFILES {
+        for quality in [Quality::Draft, Quality::Fine] {
+            let p = params(json!({"kind": "threestone", "profile": profile.name(), "width": 3}));
+            let mesh = piece_mesh(&p, quality);
+            closed(&mesh, true, &format!("three-stone {} {quality:?}", profile.name()));
+            assert!(!mesh.over && mesh.triangles() < 40_000, "{} triangles", mesh.triangles());
+        }
+    }
+    let mut s = mm_drawing();
+    for cut in gem::CUTS {
+        for side in gem::CUTS {
+            // Each cut in the middle beside each cut at the sides, in the sizes it is bought in.
+            let long =
+                |name: &str| if matches!(name, "marquise" | "baguette" | "rect" | "pear" | "emerald" | "radiant" | "oval") { 1.5 } else { 1.0 };
+            let build = json!({
+                "kind": "threestone", "cut": cut.name, "stoneWidth": 5, "stoneLength": 5.0 * long(cut.name), "prongs": 4,
+                "sideCut": side.name, "sideWidth": 3, "sideLength": 3.0 * long(side.name), "sideProngs": 3,
+            });
+            let p = piece(&mut s, build.clone());
+            assert_eq!(p["stones"]["count"], json!(3), "{build}");
+            assert_no_orphans(&s, &p);
+            let mesh = piece_mesh(&params(p["params"].clone()), Quality::Draft);
+            closed(&mesh, true, &build.to_string());
+            assert_eq!(shells(part(&mesh, "side stones")).len(), 2, "{build}");
+            assert_eq!(shells(part(&mesh, "prongs")).len(), 4 + 3 + 3, "{build}");
+            assert!(!mesh.notes.iter().any(|n| n.contains("no usable girdle") || n.contains("PIECE")), "{build}: {:?}", mesh.notes);
+        }
+    }
+}
+
+#[test]
+fn hostile_side_stone_numbers_never_panic() {
+    // Parameters that never went through the parser.
+    let nasty = [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -1.0, 0.0, 1e-300, 1e300, 3.9];
+    let mut wild = params(json!({"kind": "threestone"}));
+    for a in nasty {
+        for b in nasty {
+            wild.side_width = Some(a);
+            wild.side_length = Some(b);
+            wild.stone_width = b;
+            wild.gap = a;
+            wild.wall = b;
+            wild.side_prongs = u32::MAX;
+            wild.side_cut = Some("no such cut".to_string());
+            let sides = wild.sides();
+            assert!(sides.angle >= 0.0 && sides.angle <= MAX_SIDE_ANGLE, "{a} {b}: {sides:?}");
+            let _ = (
+                wild.side_size(),
+                wild.side_stone("test").is_ok(),
+                wild.side_prong_sites().is_ok(),
+                sides.between(),
+                sides.out(1.0),
+                sides.across(-1.0),
+            );
+            let mesh = piece_mesh(&wild, Quality::Draft);
+            closed(&mesh, false, &format!("wild three-stone {a} {b}"));
+            assert!(mesh.stones == 3);
+        }
+    }
+    for cut in gem::CUTS {
+        for a in nasty {
+            for b in nasty {
+                let polygon = head_polygon(cut, a, b, a);
+                let _ = polygons_apart(&polygon, &polygon);
+                let _ = side_profile(cut, a, b);
+            }
+        }
+    }
+    // Polygons that are not polygons are no distance at all to measure.
+    let square = [Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0), Vec2::new(1.0, 1.0), Vec2::new(0.0, 1.0)];
+    let away: Vec<Vec2> = square.iter().map(|q| *q + Vec2::new(3.0, 4.0)).collect();
+    assert!((polygons_apart(&square, &away) - 13.0f64.sqrt()).abs() < 1e-12, "corner to corner: √(2² + 3²)");
+    let beside: Vec<Vec2> = square.iter().map(|q| *q + Vec2::new(1.5, 0.25)).collect();
+    assert!((polygons_apart(&square, &beside) - 0.5).abs() < 1e-12, "edge to edge");
+    let across: Vec<Vec2> = square.iter().map(|q| *q + Vec2::new(0.5, 0.5)).collect();
+    assert_eq!(polygons_apart(&square, &across), 0.0, "overlapping");
+    let within: Vec<Vec2> = square.iter().map(|q| *q * 0.2 + Vec2::new(0.4, 0.4)).collect();
+    assert_eq!(polygons_apart(&square, &within), 0.0, "one inside the other");
+    assert_eq!(polygons_apart(&square, &[]), f64::INFINITY);
+    assert_eq!(polygons_apart(&square, &[Vec2::new(f64::NAN, 0.0), Vec2::ZERO, Vec2::new(1.0, 1.0)]), f64::INFINITY);
+}
+
+#[test]
+fn a_three_stone_ring_survives_undo_and_a_saved_drawing_and_starts_from_the_menu() {
+    let mut s = mm_drawing();
+    let first = piece(&mut s, json!({"kind": "solitaire", "halo": true}));
+    let second = piece(
+        &mut s,
+        json!({"kind": "threestone", "sideCut": "pear", "sideWidth": 3.2, "sideLength": 4.6, "sideProngs": 5, "profile": "court", "at": [8, -4]}),
+    );
+    assert_eq!(second["params"]["sideWidth"], json!(3.2));
+    let q = params(serde_json::from_str(&second["params"].to_string()).unwrap());
+    assert_eq!(q.json(), second["params"], "the parameters read back as themselves");
+    assert_eq!((q.side_size(), q.side_prongs, q.side_cut.as_deref()), ((4.6, 3.2), 5, Some("pear")));
+    s.undo().unwrap();
+    assert_eq!(query(&mut s), first);
+    assert_no_orphans(&s, &first);
+    s.redo().unwrap();
+    assert_eq!(query(&mut s), second);
+    let dxf = cadcraft_io::write_dxf(s.doc().unwrap());
+    let mut t = Session::new();
+    t.open_drawing(cadcraft_io::read_dxf(dxf.as_bytes()).unwrap(), "reopened", None);
+    let read = query(&mut t);
+    for part in ["params", "size", "metal", "stones", "checks", "at"] {
+        assert_eq!(read[part], second[part], "{part}");
+    }
+    assert_eq!(handles(&read).len(), handles(&second).len());
+    let rebuilt = piece(&mut t, json!({"size": 7}));
+    for key in ["kind", "sideCut", "sideWidth", "sideLength", "sideProngs", "profile"] {
+        assert_eq!(rebuilt["params"][key], second["params"][key], "{key}");
+    }
+    assert_no_orphans(&t, &rebuilt);
+    assert_eq!(t.execute("techsheet", &json!({})).unwrap()["stones"]["count"], json!(3));
+    // From the menu.
+    let mut m = mm_drawing();
+    m.start("piece").unwrap();
+    m.input(crate::Input::Text("Threestone".into())).unwrap();
+    assert!(m.prompt_text().contains("centre"), "{}", m.prompt_text());
+    m.input(crate::Input::Point(Vec2::new(5.0, 5.0))).unwrap();
+    assert_eq!(query(&mut m)["params"]["kind"], "threestone");
+    m.undo().unwrap();
+    assert_eq!(query(&mut m), Value::Null);
+    // The commands say what they take.
+    let specs = crate::command_specs();
+    for id in ["piece", "piecemesh"] {
+        let spec = specs.iter().find(|c| c.id == id).unwrap();
+        for word in ["threestone", "sideWidth", "sideLength", "sideCut", "sideProngs"] {
+            assert!(spec.params.contains(word), "{id}: the params line does not mention `{word}`");
+        }
+    }
+    let e = s.execute("piecemesh", &json!({})).unwrap_err().to_string();
+    assert!(e.contains("threestone"), "{e}");
 }

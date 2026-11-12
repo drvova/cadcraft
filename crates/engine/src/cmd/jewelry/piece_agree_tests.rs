@@ -146,7 +146,7 @@ fn agree(b: &Both, what: &str) {
     let count = sheet["stones"]["count"].as_u64().unwrap();
     assert_eq!(reply["stones"].as_u64().unwrap(), count, "{what}: the sheet and the solid count different stones");
     assert_eq!(u64::from(mesh.stones), count, "{what}");
-    let shown = stone_shells(mesh, "centre stone") + stone_shells(mesh, "melee");
+    let shown = stone_shells(mesh, "centre stone") + stone_shells(mesh, "side stones") + stone_shells(mesh, "melee");
     assert_eq!(shown as u64, count, "{what}: {shown} stone shells for {count} stones");
     assert_eq!(inserts(b).len() as u64, count, "{what}: the sheet's GEM inserts");
     if sheet["stones"].get("fits").is_some() {
@@ -337,6 +337,172 @@ fn agree_solitaire(b: &Both, what: &str) {
     }
 }
 
+/// A three-stone ring: the three stones, each in its own head at the shared angle, as high, as
+/// wide and with its prongs on the same points of its girdle in the sheet and in the solid.
+fn agree_threestone(b: &Both, what: &str) {
+    let (mesh, p, sheet) = (&b.mesh, &b.params, &b.sheet);
+    let (outer, top) = (p.outer() / 2.0, p.crown());
+    let sides = p.sides();
+    assert!(sides.fits && sides.angle > 0.0 && sides.angle <= super::piece_params::MAX_SIDE_ANGLE, "{what}: {sides:?}");
+    assert_eq!(sheet["stones"]["count"], json!(3), "{what}");
+    assert!(sheet["stones"].get("fits").is_none(), "{what}");
+    // The plan: the centre stone first, under the front view, and a side stone each side of it.
+    let placed = inserts(b);
+    assert_eq!(placed.len(), 3, "{what}");
+    let centre_at = placed[0].1;
+    assert!(centre_at.x.abs() < 1e-9 && centre_at.y < -outer, "{what}: {centre_at:?}");
+    assert_eq!(placed[1].0, placed[2].0, "{what}: the two side stones are one stone");
+    let stones = polylines(b, "Stones");
+    assert_eq!(stones.len(), 3, "{what}: three side profiles in the front view");
+    let circles = prong_circles(b);
+    assert_eq!(circles.len() as u32, p.prongs + 2 * p.side_prongs, "{what}: the sheet's prongs");
+    let prongs = part(mesh, "prongs");
+    let wires = shells(prongs);
+    assert_eq!(wires.len(), circles.len(), "{what}: the solid's prongs");
+    assert_eq!(shells(part(mesh, "centre stone")).len(), 1, "{what}");
+    let beside = part(mesh, "side stones");
+    let side_shells = shells(beside);
+    assert_eq!(side_shells.len(), 2, "{what}");
+    assert!(mesh.meshes.iter().all(|m| m.name != "melee" && m.name != "halo seat"), "{what}: a three-stone ring has no halo");
+    let lines: Vec<Vec<Vec2>> = polylines(b, "Settings").into_iter().filter(|d| !d.closed).map(|d| d.pts).collect();
+    assert_eq!(lines.len(), 6, "{what}: the two prongs the front view shows of each head");
+    let flat = |q: &Vec3| Vec2::new(q.x, q.y);
+    let centre_positions: Vec<Vec3> = part(mesh, "centre stone").positions.clone();
+    let (side_length, side_width) = p.side_size();
+    assert!((sides.length - side_length).abs() < 1e-12 && (sides.width - side_width).abs() < 1e-12, "{what}");
+    let seats = [
+        (Vec2::new(0.0, 1.0), Vec2::new(1.0, 0.0), p.head(), p.stone_length, p.stone_width, p.prong_sites().unwrap(), false),
+        (sides.out(1.0), sides.across(1.0), sides.head, side_length, side_width, p.side_prong_sites().unwrap(), true),
+        (sides.out(-1.0), sides.across(-1.0), sides.head, side_length, side_width, p.side_prong_sites().unwrap(), true),
+    ];
+    for (out, across, head, length, width, sites, side) in &seats {
+        // The sheet's profile that stands along this direction.
+        let drawn = stones
+            .iter()
+            .find(|d| {
+                let middle = d.pts.iter().fold(Vec2::ZERO, |acc, q| acc + *q) * (1.0 / d.pts.len() as f64);
+                (middle.normalized() - *out).len() < 1e-6
+            })
+            .unwrap_or_else(|| panic!("{what}: no side profile stands along {out:?}"));
+        let span = |pts: &mut dyn Iterator<Item = f64>| pts.fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| (lo.min(v), hi.max(v)));
+        let (low, mut high) = span(&mut drawn.pts.iter().map(|q| q.dot(*out)));
+        assert!((low - (top + head.clear)).abs() < EXACT, "{what}: the sheet's culet is {low} out, the head's {}", top + head.clear);
+        // (A cabochon's top is on its dome's arc, between two vertices: read it where the head is
+        // upright, and take the head's word where it leans.)
+        let cab = if *side { p.side_cut_data().is_some_and(|c| c.name == "cabochon") } else { p.cut == "cabochon" };
+        if cab {
+            high = if *side { top + head.clear + head.depth } else { drawn.bounds.max.y };
+        }
+        assert!((high - (top + head.clear + head.depth)).abs() < EXACT, "{what}: the sheet's table is {high} out");
+        // The solid's stone that stands there: as high, as wide, as long.
+        let solid: Vec<Vec3> = if *side {
+            let shell = side_shells
+                .iter()
+                .find(|s| flat(&shell_centre(beside, s)).normalized().dot(*out) > 1.0 - 1e-9)
+                .unwrap_or_else(|| panic!("{what}: no side stone stands along {out:?}"));
+            shell.iter().map(|i| beside.positions[*i as usize]).collect()
+        } else {
+            centre_positions.clone()
+        };
+        let (solid_low, solid_high) = span(&mut solid.iter().map(|q| flat(q).dot(*out)));
+        assert!(
+            (solid_low - low).abs() < EXACT && (solid_high - high).abs() < EXACT,
+            "{what}: the solid's stone spans {solid_low}..{solid_high}, the sheet's {low}..{high}"
+        );
+        let (x0, x1) = span(&mut solid.iter().map(|q| flat(q).dot(*across)));
+        let (d0, d1) = span(&mut drawn.pts.iter().map(|q| q.dot(*across)));
+        assert!((d1 - d0 - width).abs() < EXACT, "{what}: the sheet's stone is {} across", d1 - d0);
+        assert!(x1 - x0 <= width + EXACT && x1 - x0 > width - 0.05, "{what}: the solid's stone is {} across, the sheet's {width}", x1 - x0);
+        let (z0, z1) = span(&mut solid.iter().map(|q| q.z));
+        assert!(z1 - z0 <= length + EXACT && z1 - z0 > length - 0.05, "{what}: the solid's stone is {} long, the sheet's {length}", z1 - z0);
+        // Its place in the plan: its girdle's middle, seen from above.
+        let girdle = top + head.girdle_height();
+        let plan_at = centre_at + Vec2::new(out.x * girdle, 0.0);
+        assert!(placed.iter().any(|(_, at)| (*at - plan_at).len() < 1e-9), "{what}: no stone in the plan at {plan_at:?}");
+        // Its prongs: where the shared sites put them, in the plan and on the solid's girdle.
+        let wire = head.prong / 2.0;
+        let mut stood: Vec<Vec3> = Vec::new();
+        for site in sites {
+            assert!(
+                circles.iter().any(|(c, r)| (*c - (plan_at + *site)).len() < 1e-9 && (r - wire).abs() < 1e-9),
+                "{what}: no prong in the plan at {site:?} of the stone along {out:?}"
+            );
+            let on_girdle = Vec3::new(out.x, out.y, 0.0) * girdle + Vec3::new(across.x, across.y, 0.0) * site.x + Vec3::new(0.0, 0.0, -site.y);
+            let nearest = prongs.positions.iter().map(|q| (*q - on_girdle).len()).fold(f64::INFINITY, f64::min);
+            assert!(
+                nearest <= wire + EXACT && nearest > 0.5 * wire,
+                "{what}: no prong stands on {site:?} of the stone along {out:?} ({nearest} away)"
+            );
+            stood.push(on_girdle);
+        }
+        // The prongs' tips: the front view's two lines end at them, and the solid's reach them.
+        let tip = top + head.prong_height();
+        for sign in [-1.0, 1.0] {
+            let end = *across * (sign * width / 2.0) + *out * tip;
+            assert!(lines.iter().any(|pts| pts.last().is_some_and(|q| (*q - end).len() < EXACT)), "{what}: no prong line ends at {end:?}");
+        }
+        let reached = wires
+            .iter()
+            // A wire is this head's when it passes through one of this head's sites.
+            .filter(|s| s.iter().any(|i| stood.iter().any(|at| (prongs.positions[*i as usize] - *at).len() <= wire + EXACT)))
+            .flat_map(|s| s.iter().map(|i| flat(&prongs.positions[*i as usize]).dot(*out)))
+            .fold(f64::NEG_INFINITY, f64::max);
+        assert!(reached <= tip + EXACT && reached > tip - PRONG_TOLERANCE, "{what}: the prongs along {out:?} reach {reached}, the sheet's {tip}");
+        // The side stones keep clear of the centre stone by what the sheet's check reports.
+        if *side && p.cut != "cabochon" && p.side_cut_data().is_some_and(|c| c.name != "cabochon") {
+            let nearest = solid.iter().flat_map(|q| centre_positions.iter().map(move |c| (*q - *c).len())).fold(f64::INFINITY, f64::min);
+            assert!(nearest >= sides.apart - 1e-6, "{what}: the stones are {nearest} apart in the solid, {} on the sheet", sides.apart);
+        }
+    }
+    assert!(sides.between() + 1e-6 >= p.gap, "{what}: {} mm of metal between the settings, {} asked", sides.between(), p.gap);
+    let spacing = sheet["checks"].as_array().unwrap().iter().find(|c| c["id"] == "spacing").unwrap();
+    assert_eq!(spacing["ok"], true, "{what}: {spacing}");
+    assert!(spacing["message"].as_str().unwrap().contains(&super::fmt_mm(sides.angle.to_degrees())), "{what}: {spacing}");
+}
+
+#[test]
+fn a_three_stone_ring_is_one_three_stone_ring() {
+    let stones = [
+        json!({}),
+        json!({"stoneWidth": 5, "gap": 0}),
+        json!({"sideWidth": 3, "sideProngs": 6}),
+        json!({"cut": "oval", "stoneLength": 8, "stoneWidth": 6, "prongs": 4}),
+        json!({"cut": "emerald", "stoneLength": 7, "stoneWidth": 5, "prongs": 4, "sideCut": "trillion", "sideWidth": 3, "sideLength": 3, "sideProngs": 3}),
+        json!({"sideCut": "pear", "sideLength": 4.5, "sideWidth": 3}),
+        json!({"cut": "princess", "stoneWidth": 5, "prongs": 4, "sideCut": "baguette", "sideLength": 4, "sideWidth": 2}),
+        json!({"cut": "cushion", "stoneWidth": 6, "prongs": 4, "sideCut": "round", "sideWidth": 3.5, "sideLength": 3.5, "sideProngs": 8}),
+        json!({"stone": "sapphire", "sideWidth": 4.5, "gap": 0.4}),
+        json!({"cut": "cabochon", "stoneLength": 8, "stoneWidth": 6, "stone": "opal", "sideWidth": 3.5}),
+        json!({"cut": "marquise", "stoneLength": 10, "stoneWidth": 5, "prongs": 4, "sideCut": "cabochon", "sideLength": 4, "sideWidth": 3}),
+        // A stored halo is not a three-stone ring's: it is kept and not drawn.
+        json!({"halo": true}),
+        // Side stones as large as the centre.
+        json!({"stoneWidth": 4, "sideWidth": 4}),
+    ];
+    let bands = [
+        json!({}),
+        json!({"profile": "dome"}),
+        json!({"size": 4, "wall": 2.5, "width": 3.0}),
+        json!({"system": "eu", "size": 62, "wall": 2.0, "width": 3.0, "profile": "comfort"}),
+        json!({"profile": "court", "width": 4.0}),
+        json!({"profile": "knife", "width": 3.0, "metal": "platinum"}),
+        json!({"profile": "bevel", "width": 5.0}),
+        json!({"profile": "concave", "width": 4.0, "wall": 2.0, "hollow": 0.6}),
+    ];
+    let mut n = 0;
+    for stone in &stones {
+        for band in &bands {
+            let build = with(&with(&json!({"kind": "threestone"}), stone), band);
+            let b = both(&build);
+            let what = build.to_string();
+            agree(&b, &what);
+            agree_threestone(&b, &what);
+            n += 1;
+        }
+    }
+    assert_eq!(n, stones.len() * bands.len());
+}
+
 /// The angle of a direction clockwise from 12 o'clock, in 0..2π.
 fn clock(x: f64, y: f64) -> f64 {
     x.atan2(y).rem_euclid(TAU)
@@ -500,6 +666,8 @@ fn every_profile_is_one_band_in_every_kind() {
         json!({"kind": "solitaire", "halo": true, "size": 4}),
         json!({"kind": "solitaire", "cut": "oval", "stoneLength": 8, "stoneWidth": 6, "prongs": 4}),
         json!({"kind": "solitaire", "cut": "cabochon", "stoneLength": 8, "stoneWidth": 6, "stone": "opal", "halo": 1.0}),
+        json!({"kind": "threestone"}),
+        json!({"kind": "threestone", "cut": "oval", "stoneLength": 7, "stoneWidth": 5, "prongs": 4, "sideCut": "round", "sideWidth": 3, "sideLength": 3}),
         json!({"kind": "eternity", "melee": 1.3}),
         json!({"kind": "eternity", "melee": 2.0, "count": 12, "system": "uk", "size": "T"}),
         json!({"kind": "eternity", "cut": "princess", "melee": 1.5}),
@@ -516,6 +684,7 @@ fn every_profile_is_one_band_in_every_kind() {
                 match b.params.kind {
                     PieceKind::Band => {}
                     PieceKind::Solitaire => agree_solitaire(&b, &what),
+                    PieceKind::ThreeStone => agree_threestone(&b, &what),
                     PieceKind::Eternity => {
                         agree_eternity(&b, &what);
                         // One decision about a row on a band that falls away, in both.
@@ -534,7 +703,7 @@ fn every_profile_is_one_band_in_every_kind() {
         }
     }
     println!("{n} pieces over every profile");
-    // Two profiles with one shape each and five with three, on three bands, under ten pieces.
+    // Two profiles with one shape each and five with three, on three bands, under twelve pieces.
     assert_eq!(n, (2 + 5 * 3) * 3 * stones.len());
 }
 

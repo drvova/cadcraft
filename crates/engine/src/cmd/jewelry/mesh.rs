@@ -38,6 +38,12 @@
 //! diamonds of width `halo` at the shared sites — on the girdle offset by half the prong wire,
 //! `gap` and half a melee, as many as keep `gap` between every pair — on a seat plate.
 //!
+//! **Three-stone.** A solitaire's band and centre stone, and one side stone each side of it around
+//! the band at the shared angle ([`shared::Sides`]): each in a head of its own that stands along
+//! its own radius as the centre's stands at +Y, with its own prongs and gallery rail. The side
+//! stones are the part `side stones`. Side stones that do not clear the centre stone within the
+//! limit — which `PIECE` refuses — are still built, at the limit, and the notes say so.
+//!
 //! **Eternity.** The band and its stones in the piece's cut, `melee` wide, evenly around the
 //! outside ([`Row`]): stone `i` of `n` is `2π·i/n` clockwise from 12 o'clock seen from +Z, its
 //! table level with the band's outside and its pavilion in the band. With no `count`, as many as
@@ -525,6 +531,10 @@ impl Sane {
         q.melee = fin(p.melee, 0.1, 20.0, 1.8);
         q.gap = fin(p.gap, 0.0, 20.0, 0.2);
         q.count = p.count.map(|n| n.clamp(1, MAX_PIECE_STONES));
+        q.side_width = p.side_width.filter(|x| x.is_finite()).map(|x| x.clamp(0.1, 60.0));
+        q.side_length = p.side_length.filter(|x| x.is_finite()).map(|x| x.clamp(0.1, 60.0));
+        q.side_prongs = p.side_prongs.clamp(2, 12);
+        q.side_cut = p.side_cut.clone().filter(|name| gem::cut_of(name).is_some());
         if gem::cut_of(&q.cut).is_none() {
             q.cut = "round".to_string();
         }
@@ -827,10 +837,20 @@ struct Parts {
     seat: Buf,
     beads: Buf,
     centre: Buf,
+    sides: Buf,
     melee: Buf,
     notes: Vec<String>,
     stones: u32,
     fits: Option<u32>,
+}
+
+impl Parts {
+    /// A note said once, however many stones it is true of.
+    fn note(&mut self, text: String) {
+        if !self.notes.contains(&text) {
+            self.notes.push(text);
+        }
+    }
 }
 
 /// A stone's shape in its own plan (x across, y along its length), ready to build at any frame
@@ -878,43 +898,59 @@ impl StoneShape {
     }
 }
 
-fn build_solitaire(s: &Sane, d: &Detail, out: &mut Parts) {
+/// A stone to stand on the band in a head of its own.
+struct Standing<'a> {
+    cut: &'static gem::Cut,
+    length: f64,
+    width: f64,
+    head: Head,
+    /// Where its prongs stand on its girdle, or why none are shown.
+    sites: Result<Vec<Vec2>>,
+    /// The outward direction it stands along, in the ring's plane (12 o'clock is +y).
+    out: Vec2,
+    /// Its name in a note.
+    what: &'a str,
+    /// One of a three-stone ring's side stones, not the centre stone.
+    side: bool,
+}
+
+/// A head as built: the stone's shape, the frame of its girdle plane and its girdle's outward
+/// directions.
+struct Stood {
+    shape: StoneShape,
+    frame: Frame,
+    normals: Vec<Vec2>,
+}
+
+/// One stone in its prong head, standing on the band along its own radius: the stone, its prongs
+/// from inside the band's metal up over the girdle, and the gallery rail around its pavilion.
+fn build_head(s: &Sane, d: &Detail, out: &mut Parts, stone: Standing) -> Stood {
     let p = &s.p;
-    let Some(cut) = p.cut_data() else { return };
-    let Some(round_cut) = gem::CUTS.first() else { return };
-    let (length, width) = (p.stone_length, p.stone_width);
-    // The seat: how deep the stone is, how high it stands, its prong wire and its halo.
-    let head: Head = p.head();
-    if let Err(e) = p.centre_stone("piecemesh") {
-        out.notes.push(format!("PIECE does not draw this stone ({e}); it is shown as asked."));
-    }
-    let shape = StoneShape::of(cut, length, width, head.depth, d.outline);
+    let (cut, head) = (stone.cut, stone.head);
+    let shape = StoneShape::of(cut, stone.length, stone.width, head.depth, d.outline);
     if shape.stand_in {
-        out.notes.push(format!(
-            "A {} of {}×{} mm has no usable girdle outline; the stone is shown as an oval of that size.",
+        out.note(format!(
+            "A {} of {}×{} mm has no usable girdle outline; the {} is shown as an oval of that size.",
             cut.name,
-            size_json(length),
-            size_json(width)
+            size_json(stone.length),
+            size_json(stone.width),
+            stone.what
         ));
     }
     let (poly, centre, culet, cab) = (&shape.poly, shape.centre, shape.culet, shape.cab);
     let normals = vertex_normals(poly, centre);
     let (g, hp) = (head.girdle, if cab { 0.0 } else { proportions(head.depth).2 });
-    // The girdle's plane: x across the finger's direction of travel, y along the finger.
-    let frame = Frame {
-        o: Vec3::new(0.0, s.top + head.girdle_height(), 0.0),
-        u: Vec3::new(1.0, 0.0, 0.0),
-        v: Vec3::new(0.0, 0.0, -1.0),
-        w: Vec3::new(0.0, 1.0, 0.0),
-    };
-    shape.build(&mut out.centre, &frame, d.centre, d.dome / 2);
+    // The girdle's plane: x around the band, y along the finger, the table facing outward.
+    let w = Vec3::new(stone.out.x, stone.out.y, 0.0);
+    let frame = Frame { o: w * (s.top + head.girdle_height()), u: Vec3::new(stone.out.y, -stone.out.x, 0.0), v: Vec3::new(0.0, 0.0, -1.0), w };
+    shape.build(if stone.side { &mut out.sides } else { &mut out.centre }, &frame, d.centre, d.dome / 2);
     out.stones += 1;
 
     // The prongs: on the girdle where the sheet draws them.
     let rp = head.prong / 2.0;
     let rail_r = 0.7 * rp;
-    let sites = p.prong_sites().unwrap_or_else(|e| {
-        out.notes.push(format!("No prongs are shown: {e}."));
+    let sites = stone.sites.unwrap_or_else(|e| {
+        out.note(format!("No prongs are shown on the {}: {e}.", stone.what));
         Vec::new()
     });
     // Half-way down the pavilion, just outside it: where the gallery rail runs.
@@ -927,12 +963,14 @@ fn build_solitaire(s: &Sane, d: &Detail, out: &mut Parts) {
         if dir.len() < 0.5 {
             continue;
         }
-        // The foot, inside the band's metal and clear of the finger.
+        // The foot, inside the band's metal and clear of the finger: worked out as at 12 o'clock
+        // and turned to where the head stands.
         let zmax = (p.width / 2.0 - rp).max(0.0) * if s.section.profile == Profile::Flat { 1.0 } else { 0.6 };
-        let z = (-site.y * 0.45).clamp(-zmax, zmax);
+        let z = (-site.y * shared::PRONG_FOOT).clamp(-zmax, zmax);
         let rc = (s.outside_at(z) - 0.5 * rp).max(s.ri + 1.05 * rp);
-        let x = (site.x * 0.45).clamp(-0.5 * rc, 0.5 * rc);
-        let foot = Vec3::new(x, (rc * rc - x * x).max(0.0).sqrt(), z);
+        let x = (site.x * shared::PRONG_FOOT).clamp(-0.5 * rc, 0.5 * rc);
+        let y = (rc * rc - x * x).max(0.0).sqrt();
+        let foot = frame.u * x + frame.w * y + Vec3::new(0.0, 0.0, z);
         let tip = *site - dir * (0.85 * rp);
         let mut path = vec![foot];
         if !cab {
@@ -953,6 +991,74 @@ fn build_solitaire(s: &Sane, d: &Detail, out: &mut Parts) {
             })
             .collect();
         loop_wire(&mut out.head, &rail, frame.w, rail_r, d.radial);
+    }
+    if !shape.round && !cab {
+        out.note(format!(
+            "The {}{} is its girdle outline tapered to a table and to a {}; its facets are not the cut's own.",
+            cut.name,
+            if stone.side { " side stone" } else { "" },
+            if matches!(culet, Culet::Keel(..)) { "keel" } else { "culet" }
+        ));
+    }
+    Stood { shape, frame, normals }
+}
+
+fn build_solitaire(s: &Sane, d: &Detail, out: &mut Parts) {
+    let p = &s.p;
+    let Some(cut) = p.cut_data() else { return };
+    let Some(round_cut) = gem::CUTS.first() else { return };
+    // The seat: how deep the stone is, how high it stands, its prong wire and its halo.
+    let head: Head = p.head();
+    if let Err(e) = p.centre_stone("piecemesh") {
+        out.notes.push(format!("PIECE does not draw this stone ({e}); it is shown as asked."));
+    }
+    let centre = Standing {
+        cut,
+        length: p.stone_length,
+        width: p.stone_width,
+        head,
+        sites: p.prong_sites(),
+        out: Vec2::new(0.0, 1.0),
+        what: "stone",
+        side: false,
+    };
+    let Stood { shape, frame, normals } = build_head(s, d, out, centre);
+    let poly = &shape.poly;
+
+    if p.kind == PieceKind::ThreeStone {
+        // One side stone each side of the centre, around the band, in its own head.
+        let sides = p.sides();
+        if let Err(e) = p.side_stone("piecemesh") {
+            out.notes.push(format!("PIECE does not draw these side stones ({e}); they are shown as asked."));
+        }
+        if let Some(side_cut) = p.side_cut_data() {
+            for side in [1.0, -1.0] {
+                let beside = Standing {
+                    cut: side_cut,
+                    length: sides.length,
+                    width: sides.width,
+                    head: sides.head,
+                    sites: p.side_prong_sites(),
+                    out: sides.out(side),
+                    what: "side stone",
+                    side: true,
+                };
+                build_head(s, d, out, beside);
+            }
+        }
+        if !sides.fits {
+            out.notes.push(format!(
+                "Side stones of {}×{} mm do not clear the centre stone within {}° of the top with {} mm between their settings (PIECE refuses them); they are shown at {}° and overlap or crowd it.",
+                size_json(sides.length),
+                size_json(sides.width),
+                size_json(shared::MAX_SIDE_ANGLE.to_degrees()),
+                size_json(p.gap),
+                size_json(shared::MAX_SIDE_ANGLE.to_degrees())
+            ));
+        }
+        if p.halo.is_some() {
+            out.notes.push("A three-stone ring has no halo: `halo` is not used.".to_string());
+        }
     }
 
     if let Some(seat) = head.halo {
@@ -1003,13 +1109,6 @@ fn build_solitaire(s: &Sane, d: &Detail, out: &mut Parts) {
          and no seat is cut for a stone; a slicer unions them."
             .to_string(),
     );
-    if !shape.round && !cab {
-        out.notes.push(format!(
-            "The {} is its girdle outline tapered to a table and to a {}; its facets are not the cut's own.",
-            cut.name,
-            if matches!(culet, Culet::Keel(..)) { "keel" } else { "culet" }
-        ));
-    }
 }
 
 fn build_eternity(s: &Sane, d: &Detail, out: &mut Parts) {
@@ -1164,7 +1263,7 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
     build_band(&mut parts.band, &s, &d);
     match s.p.kind {
         PieceKind::Band => {}
-        PieceKind::Solitaire => build_solitaire(&s, &d, &mut parts),
+        PieceKind::Solitaire | PieceKind::ThreeStone => build_solitaire(&s, &d, &mut parts),
         PieceKind::Eternity => build_eternity(&s, &d, &mut parts),
     }
     let metal = metal_color(&p.metal);
@@ -1178,6 +1277,7 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
         parts.seat.part("metal", "halo seat", metal),
         parts.beads.part("metal", "beads", metal),
         parts.centre.part("stone", "centre stone", stone),
+        parts.sides.part("stone", "side stones", stone),
         parts.melee.part("stone", "melee", small),
     ]
     .into_iter()
@@ -1284,29 +1384,30 @@ pub(super) fn stl_ascii(tris: &[[Vec3; 4]], title: &str) -> String {
 // The commands
 // ---------------------------------------------------------------------------------------------
 
-const PIECE_KEYS: &str = "kind: band|solitaire|eternity, system?, size? (default US 6), wall?: mm (1.8), width?: mm (2.2), \
+const PIECE_KEYS: &str = "kind: band|solitaire|threestone|eternity, system?, size? (default US 6), wall?: mm (1.8), width?: mm (2.2), \
     profile?: flat|dome|comfort|court|knife|bevel|concave, comfort?|ridge?|bevel?|hollow?: mm (the profile's own number), metal? (gold18), cut? (round), stoneWidth?: mm (6.5), stoneLength?: mm, stone? (diamond), prongs?: 3–8 (6), halo?: bool | melee mm, \
-    melee?: mm (1.8), count?: stones (default: as many as fit), gap?: mm (0.2)";
+    sideWidth?: mm, sideLength?: mm, sideCut?, sideProngs?: 3–8 (4), melee?: mm (1.8), count?: stones (default: as many as fit), gap?: mm (0.2)";
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("piecemesh", "Piece as a Solid", run_piecemesh)
             .params(
-                "{kind: band|solitaire|eternity, …the piece's parameters as PIECE takes them (size, wall, width, profile: flat|dome|comfort|court|knife|bevel|concave with its comfort, ridge, bevel or hollow, metal, cut, stoneWidth, \
-                 stoneLength, stone, prongs, halo, melee, count, gap), quality?: draft|fine (default draft)} → {meshes: [{part: metal|stone, name, \
+                "{kind: band|solitaire|threestone|eternity, …the piece's parameters as PIECE takes them (size, wall, width, profile: flat|dome|comfort|court|knife|bevel|concave with its comfort, ridge, bevel or hollow, metal, cut, stoneWidth, \
+                 stoneLength, stone, prongs, halo, sideWidth, sideLength, sideCut, sideProngs, melee, count, gap), quality?: draft|fine (default draft)} → {meshes: [{part: metal|stone, name, \
                  color: [r,g,b], positions: [x,y,z,…] mm, indices: [i,j,k,…]}], bounds: {min, max}, triangles, size, kind, params (as PIECE \
-                 reports them), quality, level, stones (centre + halo + eternity stones: the count PIECE reports), fits? (eternity: the most \
+                 reports them), quality, level, stones (centre + side + halo + eternity stones: the count PIECE reports), fits? (eternity: the most \
                  that fit at `gap`), metal: {name, density, grams and volumeMm3 (the band alone, exactly: the weight PIECE reports), shells: \
                  {volumeMm3, grams} (the tessellated metal shells summed, overlaps counted twice: approximate, not the metal weight)}, \
                  notes}: the same piece PIECE draws, as closed shells of triangles (finger axis Z, head at +Y), at most 150,000. An eternity \
-                 `count` that does not fit at `gap` (PIECE refuses it) is still built and `notes` say so; changes nothing",
+                 `count` that does not fit at `gap`, or three-stone side stones that do not clear the centre stone (PIECE refuses both), are \
+                 still built and `notes` say so; a three-stone ring's side stones are the part `side stones`; changes nothing",
             )
             .enabled(always)
             .noundo(),
         CommandSpec::new("stlout", "STL Out", run_stlout)
             .alias(&["stlexport"])
             .params(
-                "{kind: band|solitaire|eternity, …the piece's parameters as PIECE takes them, stones?: bool (default false: the metal only, which \
+                "{kind: band|solitaire|threestone|eternity, …the piece's parameters as PIECE takes them, stones?: bool (default false: the metal only, which \
                  is what is cast), quality?: draft|fine (default fine), binary?: bool (default true)} → {format: stl-binary|stl-ascii, \
                  base64 | text, bytes, triangles, name, quality, notes}: the piece as an STL in millimetres; changes nothing",
             )
@@ -1318,7 +1419,10 @@ pub fn specs() -> Vec<CommandSpec> {
 /// The piece a mesh command was handed. With no `kind` there is nothing to build.
 fn piece_of(cmd: &str, p: &Value) -> Result<PieceParams> {
     if str_param(p, "kind").is_none() {
-        return Err(bad(cmd, format!("there is no piece to show: give `kind` (band, solitaire or eternity) and its parameters ({PIECE_KEYS})")));
+        return Err(bad(
+            cmd,
+            format!("there is no piece to show: give `kind` (band, solitaire, threestone or eternity) and its parameters ({PIECE_KEYS})"),
+        ));
     }
     PieceParams::parse(cmd, p)
 }

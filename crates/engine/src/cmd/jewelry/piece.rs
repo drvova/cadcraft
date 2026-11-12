@@ -74,7 +74,7 @@ use cadcraft_geom::{PolyVertex, Vec2, Vec3};
 use serde_json::{Map, Value, json};
 
 use super::super::*;
-use super::piece_params::{self as shared, CROWN, GIRDLE, MIN_CAST_WALL, PieceKind, PieceParams, Row, Section, carat_of, least_spacing};
+use super::piece_params::{self as shared, MIN_CAST_WALL, PieceKind, PieceParams, Row, Section, carat_of, least_spacing};
 use super::sizes::RingSize;
 use super::*;
 use crate::{Accept, Input, Interactive, Prompt, Step};
@@ -100,7 +100,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("piece", "Piece", run_piece)
             .menu(&["Draw", "Piece"])
             .alias(&["ringpiece"])
-            .params("One parametric ring per drawing, drawn as a sheet (front view, section, plan; an eternity band also its stone layout) in millimetres through INSUNITS, and rebuilt when a number changes. {query: true} → {piece: null | P}, changes nothing. {remove: true} → {piece: null, removed: n objects}. Anything else builds or rebuilds in one undo step: the keys given are merged over the stored piece (or over the defaults, and then `kind` is required): {kind: band|solitaire|eternity, at?: [x,y] (the front view's centre; default 0,0 for a new piece, where the band is now for a rebuild), system?: us|uk|eu|jp|cn (default us), size?: number|string in that system (default US 6), wall?: mm 0.3–10 (default 1.8, radial thickness), width?: mm 0.5–30 (default 2.2, along the finger), profile?: flat|dome|comfort|court|knife|bevel|concave (default flat; dome = half-round, comfort = dome outside with the finger side eased, court = a lens curved outside and inside, knife = two faces meeting at a ridge, bevel = flat with 45° chamfered edges, concave = the outside hollowed between two raised edges), comfort?: mm or null (comfort and court: how far the eased inside stands off the finger at the edges; null = a sixth of the wall; 0.05 to the lesser of 40 % of the wall and half the width), ridge?: mm or null (knife: the peak's height; null = 60 % of the wall; 0.05 to 90 % of the wall), bevel?: mm or null (bevel: the chamfer; null = the lesser of a fifth of the width and half the wall; 0.05 to the lesser of 40 % of the width and 80 % of the wall), hollow?: mm or null (concave: the hollow's depth; null = a quarter of the wall; 0.05 to the lesser of 60 % of the wall and 35 % of the width), metal?: gold24|22|18|14|10|9|platinum|palladium|silver|steel|titanium|brass|copper|wax (default gold18), cut?: a GEMLIST cut (default round; the solitaire's centre stone, or every eternity stone), stone?: a GEMLIST stone (default diamond), stoneWidth?: mm 0.5–30 (default 6.5), stoneLength?: mm (default stoneWidth; along the finger), prongs?: 3–8 (default 6), halo?: false|true (1.3)|melee mm 0.8–3 (solitaire: round diamonds around the centre stone), melee?: mm 0.8–6 (default 1.8, the eternity stones' diameter), count?: 1–400 or null (eternity; null = as many as fit at `gap`), gap?: mm 0–5 (default 0.2, least metal between two stones)} → {piece: P, message}, P = {params: {kind, system: \"us\", size, sizeText, sizeSystem, wall, width, profile, comfort, ridge, bevel, hollow, metal, cut, stoneLength, stoneWidth, stone, prongs, halo, melee, count, gap}, handles: [every object of the piece, at most 5000], size: {mm, diameter, circumference, us, usText, uk, eu, jp, cn}, metal: {name, density, grams (the band alone: prongs, head and stone seats are not weighed)}, stones: {count, carat, fits? (eternity: the most that fit at `gap`)}, checks: [{id: wall|stone-seat|spacing|calibrated|size, ok, message}], at: [x,y]}. The finger's size is measured where the inside is narrowest (the middle of the width) and the weight is the profile's exact section swept around the finger. `wall` judges the band where it is thinnest (a knife or bevelled band's edges, the middle of a concave one). A stone stands on the outside in the middle of the width; an eternity row on a band that falls away under the stones' girdles (dome, comfort, court, knife) fails `stone-seat`. A failed check is information; a bad parameter, or an eternity `count` that cannot fit at `gap`, is refused and nothing changes")
+            .params("One parametric ring per drawing, drawn as a sheet (front view, section, plan; an eternity band also its stone layout) in millimetres through INSUNITS, and rebuilt when a number changes. {query: true} → {piece: null | P}, changes nothing. {remove: true} → {piece: null, removed: n objects}. Anything else builds or rebuilds in one undo step: the keys given are merged over the stored piece (or over the defaults, and then `kind` is required): {kind: band|solitaire|threestone|eternity (threestone = a solitaire with one side stone each side of the centre, around the band, each in its own prong head), at?: [x,y] (the front view's centre; default 0,0 for a new piece, where the band is now for a rebuild), system?: us|uk|eu|jp|cn (default us), size?: number|string in that system (default US 6), wall?: mm 0.3–10 (default 1.8, radial thickness), width?: mm 0.5–30 (default 2.2, along the finger), profile?: flat|dome|comfort|court|knife|bevel|concave (default flat; dome = half-round, comfort = dome outside with the finger side eased, court = a lens curved outside and inside, knife = two faces meeting at a ridge, bevel = flat with 45° chamfered edges, concave = the outside hollowed between two raised edges), comfort?: mm or null (comfort and court: how far the eased inside stands off the finger at the edges; null = a sixth of the wall; 0.05 to the lesser of 40 % of the wall and half the width), ridge?: mm or null (knife: the peak's height; null = 60 % of the wall; 0.05 to 90 % of the wall), bevel?: mm or null (bevel: the chamfer; null = the lesser of a fifth of the width and half the wall; 0.05 to the lesser of 40 % of the width and 80 % of the wall), hollow?: mm or null (concave: the hollow's depth; null = a quarter of the wall; 0.05 to the lesser of 60 % of the wall and 35 % of the width), metal?: gold24|22|18|14|10|9|platinum|palladium|silver|steel|titanium|brass|copper|wax (default gold18), cut?: a GEMLIST cut (default round; the solitaire's centre stone, or every eternity stone), stone?: a GEMLIST stone (default diamond), stoneWidth?: mm 0.5–30 (default 6.5), stoneLength?: mm (default stoneWidth; along the finger), prongs?: 3–8 (default 6), halo?: false|true (1.3)|melee mm 0.8–3 (solitaire: round diamonds around the centre stone; a three-stone ring has none), sideWidth?: mm 0.5–30 or null (threestone: a side stone's width, around the band; null = 60 % of stoneWidth), sideLength?: mm 0.5–30 or null (along the finger; null = the centre stone's proportion of sideWidth), sideCut?: a GEMLIST cut or null (null = `cut`), sideProngs?: 3–8 (default 4; the side stones are the piece's `stone`, and stand at the least angle from the top, at most 60°, that keeps `gap` and half of each prong wire between their side profile and the centre stone's), melee?: mm 0.8–6 (default 1.8, the eternity stones' diameter), count?: 1–400 or null (eternity; null = as many as fit at `gap`), gap?: mm 0–5 (default 0.2, least metal between two stones)} → {piece: P, message}, P = {params: {kind, system: \"us\", size, sizeText, sizeSystem, wall, width, profile, comfort, ridge, bevel, hollow, metal, cut, stoneLength, stoneWidth, stone, prongs, halo, sideWidth, sideLength, sideCut, sideProngs, melee, count, gap}, handles: [every object of the piece, at most 5000], size: {mm, diameter, circumference, us, usText, uk, eu, jp, cn}, metal: {name, density, grams (the band alone: prongs, head and stone seats are not weighed)}, stones: {count, carat, fits? (eternity: the most that fit at `gap`)}, checks: [{id: wall|stone-seat|spacing|calibrated|size, ok, message}], at: [x,y]}. The finger's size is measured where the inside is narrowest (the middle of the width) and the weight is the profile's exact section swept around the finger. `wall` judges the band where it is thinnest (a knife or bevelled band's edges, the middle of a concave one). A stone stands on the outside in the middle of the width; an eternity row on a band that falls away under the stones' girdles (dome, comfort, court, knife) fails `stone-seat`. A failed check is information; a bad parameter, or an eternity `count` that cannot fit at `gap`, or side stones that do not clear the centre stone within 60° of the top, is refused and nothing changes. For a three-stone ring stones.count is 3, `stone-seat` covers all three heads and `spacing` is the metal between the centre stone's setting and a side stone's")
             .interactive(|_| Ok(Box::new(PieceM::default()))),
     ]
 }
@@ -167,6 +167,8 @@ struct Design {
     /// Eternity: the most stones that fit at the gap.
     fits: Option<u32>,
     checks: Vec<Value>,
+    /// What the piece did not use of what it was given, said in the reply's message.
+    notes: Vec<String>,
 }
 
 /// A closed outline of straight edges.
@@ -180,28 +182,47 @@ fn rect(c: Vec2, w: f64, h: f64) -> Shape {
     closed(&[c + Vec2::new(-a, -b), c + Vec2::new(a, -b), c + Vec2::new(a, b), c + Vec2::new(-a, b)])
 }
 
-/// A stone's side profile, `w` across and `depth` high, with its culet (or a cabochon's base) on
-/// the origin and its table up.
-fn profile(cut: &gem::Cut, w: f64, depth: f64) -> Vec<(Vec2, f64)> {
-    if cut.name == "cabochon" {
-        return Section::dome(w, depth).outline();
+/// Where a head stands on the sheet: on the band along `up` in the front view (`across` is the
+/// stone's width there), and around `plan_at` in the plan.
+struct Standing {
+    /// The radius of the band's outside where the head stands, and the band's outside radius.
+    top: f64,
+    ro: f64,
+    up: Vec2,
+    across: Vec2,
+    plan_at: Vec2,
+}
+
+/// One stone in its prong head: in the front view its side profile over the band and the two
+/// prongs the view shows, as lines from the band to their tips over the girdle; in the plan its
+/// prongs as circles on the girdle. The stone itself is placed in the plan by the caller. Answers
+/// with how far the head reaches to either side of the front view's middle.
+fn draw_head(
+    shapes: &mut Vec<(On, Shape)>,
+    plan: &mut Vec<(On, Shape)>,
+    stone: &gem::Stone,
+    head: &shared::Head,
+    sites: &[Vec2],
+    at: &Standing,
+) -> f64 {
+    let (top, ro) = (at.top, at.ro);
+    let local = |x: f64, y: f64| at.across * x + at.up * y;
+    let side = shared::side_profile(stone.cut, stone.width, head.depth);
+    shapes.push((On::Stones, place_profile(&side, at.up * (top + head.clear), at.across, at.up)));
+    let half = stone.width / 2.0;
+    let foot = (shared::PRONG_FOOT * half).min(0.9 * ro);
+    let foot_y = (ro * ro - foot * foot).max(0.0).sqrt();
+    let (girdle_bottom, tip) = (top + head.girdle_height() - head.girdle / 2.0, top + head.prong_height());
+    let mut reach = 0.0f64;
+    for sign in [-1.0, 1.0] {
+        let line = [local(sign * foot, foot_y), local(sign * half, girdle_bottom), local(sign * half, tip)];
+        reach = line.iter().fold(reach, |far, q| far.max(q.x.abs()));
+        shapes.push((On::Settings, Shape::Poly { v: line.into_iter().map(|q| (q, 0.0)).collect(), closed: false }));
     }
-    let a = w / 2.0;
-    let table = a * shared::table_ratio(cut);
-    let girdle_top = depth * (1.0 - CROWN);
-    let girdle_bottom = depth * (1.0 - CROWN - GIRDLE);
-    [
-        Vec2::new(-table, depth),
-        Vec2::new(-a, girdle_top),
-        Vec2::new(-a, girdle_bottom),
-        Vec2::new(0.0, 0.0),
-        Vec2::new(a, girdle_bottom),
-        Vec2::new(a, girdle_top),
-        Vec2::new(table, depth),
-    ]
-    .into_iter()
-    .map(|p| (p, 0.0))
-    .collect()
+    for site in sites {
+        plan.push((On::Settings, Shape::Circle { c: at.plan_at + *site, r: head.prong / 2.0 }));
+    }
+    reach
 }
 
 /// A profile moved so its origin is at `at`, its across direction is `across` and its up
@@ -305,6 +326,7 @@ fn design(p: &PieceParams) -> Result<Design> {
     // Where a stone stands: the band's outside in the middle of its width.
     let top = p.crown();
     let mut checks = vec![wall_check(p, &section)];
+    let mut notes: Vec<String> = Vec::new();
     let (mut centre, mut melee, mut carat, mut fits) = (None, None, 0.0, None);
     // How far the front view reaches to the right, and the plan view above and below its middle.
     let mut front_reach = ro;
@@ -325,68 +347,125 @@ fn design(p: &PieceParams) -> Result<Design> {
             checks.push(check("spacing", true, "A plain band: no stones to space".to_string()));
             checks.push(calibrated_check("", None));
         }
-        PieceKind::Solitaire => {
+        PieceKind::Solitaire | PieceKind::ThreeStone => {
             let stone = p.centre_stone(CMD)?;
             let head = p.head();
             let prong = head.prong;
             // Front view: the stone's side profile over the band, and the two prongs the view shows.
-            let side = profile(stone.cut, stone.width, head.depth);
-            let culet = Vec2::new(0.0, top + head.clear);
-            shapes.push((On::Stones, place_profile(&side, culet, Vec2::new(1.0, 0.0), Vec2::new(0.0, 1.0))));
-            let half = stone.width / 2.0;
-            let foot = (0.45 * half).min(0.9 * ro);
-            let foot_y = (ro * ro - foot * foot).max(0.0).sqrt();
-            let (girdle_bottom, tip) = (top + head.girdle_height() - head.girdle / 2.0, top + head.prong_height());
-            for sign in [-1.0, 1.0] {
-                shapes.push((
-                    On::Settings,
-                    Shape::Poly {
-                        v: vec![
-                            (Vec2::new(sign * foot, foot_y), 0.0),
-                            (Vec2::new(sign * half, girdle_bottom), 0.0),
-                            (Vec2::new(sign * half, tip), 0.0),
-                        ],
-                        closed: false,
-                    },
-                ));
-            }
-            front_reach = front_reach.max(half);
             // Plan: the stone itself, its prongs on the girdle, and the halo around it.
+            let upright = Standing { top, ro, up: Vec2::new(0.0, 1.0), across: Vec2::new(1.0, 0.0), plan_at: Vec2::ZERO };
+            front_reach = front_reach.max(draw_head(&mut shapes, &mut plan, &stone, &head, &p.prong_sites()?, &upright));
             plan_stones.push(Placed { melee: false, at: Vec2::ZERO });
-            for site in p.prong_sites()? {
-                plan.push((On::Settings, Shape::Circle { c: site, r: prong / 2.0 }));
-            }
             let mut reach = stone.length.max(stone.width) / 2.0 + prong / 2.0;
             carat = carat_of(&stone);
             let over = (stone.length - p.width).max(0.0) / 2.0;
             let seat_ok = p.width + 1e-9 >= 0.25 * stone.length && 2.0 * ro + 1e-9 >= stone.width + prong;
-            checks.push(check(
-                "stone-seat",
-                seat_ok,
-                if seat_ok {
-                    format!(
-                        "A {} mm band carries the head of a {}×{} mm stone, which overhangs it {} mm each side",
-                        fmt_mm(p.width),
-                        fmt_mm(stone.length),
-                        fmt_mm(stone.width),
-                        fmt_mm(over)
-                    )
-                } else {
-                    format!(
-                        "A {} mm band is slight for the head of a {}×{} mm stone: as a rule of thumb give it at least a quarter of the stone's length ({} mm), and a ring wider outside than the stone",
-                        fmt_mm(p.width),
-                        fmt_mm(stone.length),
-                        fmt_mm(stone.width),
-                        fmt_mm(0.25 * stone.length)
-                    )
-                },
-            ));
-            match p.halo {
-                None => {
+            let side_stones = if p.kind == PieceKind::ThreeStone { Some((p.sides(), p.side_stone(CMD)?)) } else { None };
+            match &side_stones {
+                None => checks.push(check(
+                    "stone-seat",
+                    seat_ok,
+                    if seat_ok {
+                        format!(
+                            "A {} mm band carries the head of a {}×{} mm stone, which overhangs it {} mm each side",
+                            fmt_mm(p.width),
+                            fmt_mm(stone.length),
+                            fmt_mm(stone.width),
+                            fmt_mm(over)
+                        )
+                    } else {
+                        format!(
+                            "A {} mm band is slight for the head of a {}×{} mm stone: as a rule of thumb give it at least a quarter of the stone's length ({} mm), and a ring wider outside than the stone",
+                            fmt_mm(p.width),
+                            fmt_mm(stone.length),
+                            fmt_mm(stone.width),
+                            fmt_mm(0.25 * stone.length)
+                        )
+                    },
+                )),
+                Some((_, small)) => {
+                    // All three heads stand on the band: the same rule of thumb for each.
+                    let sides_ok = p.width + 1e-9 >= 0.25 * small.length;
+                    let long = stone.length.max(small.length);
+                    checks.push(check(
+                        "stone-seat",
+                        seat_ok && sides_ok,
+                        if seat_ok && sides_ok {
+                            format!(
+                                "A {} mm band carries the heads of a {}×{} mm stone and two {}×{} mm side stones; the longest overhangs it {} mm each side",
+                                fmt_mm(p.width),
+                                fmt_mm(stone.length),
+                                fmt_mm(stone.width),
+                                fmt_mm(small.length),
+                                fmt_mm(small.width),
+                                fmt_mm((long - p.width).max(0.0) / 2.0)
+                            )
+                        } else {
+                            format!(
+                                "A {} mm band is slight for the heads of a {}×{} mm stone and two {}×{} mm side stones: as a rule of thumb give it at least a quarter of the longest stone's length ({} mm), and a ring wider outside than the centre stone",
+                                fmt_mm(p.width),
+                                fmt_mm(stone.length),
+                                fmt_mm(stone.width),
+                                fmt_mm(small.length),
+                                fmt_mm(small.width),
+                                fmt_mm(0.25 * long)
+                            )
+                        },
+                    ));
+                }
+            }
+            match (side_stones, p.halo) {
+                (Some((sides, small)), _) => {
+                    if !sides.fits {
+                        return Err(bad(
+                            CMD,
+                            format!(
+                                "{}×{} mm side stones do not fit beside a {}×{} mm centre stone on a size {} band: within {}° of the top they stand {} mm from it, and their settings need {} mm with a {} mm gap. Give smaller side stones, a smaller gap or a larger ring",
+                                fmt_mm(small.length),
+                                fmt_mm(small.width),
+                                fmt_mm(stone.length),
+                                fmt_mm(stone.width),
+                                p.size.us_text(),
+                                fmt_mm(shared::MAX_SIDE_ANGLE.to_degrees()),
+                                fmt_mm(sides.apart.max(0.0)),
+                                fmt_mm(sides.metal + p.gap),
+                                fmt_mm(p.gap)
+                            ),
+                        ));
+                    }
+                    // One side stone each side of the centre, around the band, in its own head.
+                    let sites = p.side_prong_sites()?;
+                    for side in [-1.0, 1.0] {
+                        let out = sides.out(side);
+                        let plan_at = Vec2::new(out.x * (top + sides.head.girdle_height()), 0.0);
+                        let standing = Standing { top, ro, up: out, across: sides.across(side), plan_at };
+                        front_reach = front_reach.max(draw_head(&mut shapes, &mut plan, &small, &sides.head, &sites, &standing));
+                        plan_stones.push(Placed { melee: true, at: plan_at });
+                    }
+                    reach = reach.max(small.length.max(small.width) / 2.0 + sides.head.prong / 2.0);
+                    checks.push(check(
+                        "spacing",
+                        sides.between() + 1e-6 >= p.gap,
+                        format!(
+                            "The side stones stand {}° from the centre stone, {} mm from it: {} mm of metal between their settings (the least asked for is {} mm)",
+                            fmt_mm(sides.angle.to_degrees()),
+                            fmt_mm(sides.apart),
+                            fmt_mm(sides.between().max(0.0)),
+                            fmt_mm(p.gap)
+                        ),
+                    ));
+                    checks.push(calibrated_check("halo", None));
+                    carat += 2.0 * carat_of(&small);
+                    if p.halo.is_some() {
+                        notes.push("A three-stone ring has no halo: `halo` is not used.".to_string());
+                    }
+                    melee = Some(small);
+                }
+                (None, None) => {
                     checks.push(check("spacing", true, "One stone: nothing to space".to_string()));
                     checks.push(calibrated_check("halo", None));
                 }
-                Some(h) => {
+                (None, Some(h)) => {
                     let small = p.halo_stone(CMD)?.ok_or_else(|| bad(CMD, "the halo has no stone"))?;
                     let off = head.halo.map_or(shared::halo_offset(prong, p.gap, h), |seat| seat.offset);
                     let sites = p.halo_sites().ok_or_else(|| {
@@ -439,7 +518,7 @@ fn design(p: &PieceParams) -> Result<Design> {
             }
             let n = seats.count(p.count);
             fits = Some(most);
-            let side = profile(stone.cut, m, depth);
+            let side = shared::side_profile(stone.cut, m, depth);
             let outline = if stone.cut.is_circle(m, m) {
                 None
             } else {
@@ -550,7 +629,7 @@ fn design(p: &PieceParams) -> Result<Design> {
     if !(grams.is_finite() && carat.is_finite()) {
         return Err(bad(CMD, "the piece has no weight"));
     }
-    Ok(Design { params: p.clone(), centre, melee, shapes, placed, grams, carat, fits, checks })
+    Ok(Design { params: p.clone(), centre, melee, shapes, placed, grams, carat, fits, checks, notes })
 }
 
 /// A shape moved by `by`.
@@ -609,6 +688,7 @@ impl Design {
             match p.kind {
                 PieceKind::Band => "Band",
                 PieceKind::Solitaire => "Solitaire",
+                PieceKind::ThreeStone => "Three-stone ring",
                 PieceKind::Eternity => "Eternity band",
             },
             p.size.us_text(),
@@ -633,7 +713,11 @@ impl Design {
                 "; {small} × {} mm {}{}, {:.3} ct",
                 fmt_mm(m.width),
                 m.cut.name,
-                if self.centre.is_some() { " in the halo" } else { "" },
+                match p.kind {
+                    PieceKind::ThreeStone => " at the sides",
+                    PieceKind::Solitaire => " in the halo",
+                    _ => "",
+                },
                 carat_of(m) * small as f64
             ));
         }
@@ -641,6 +725,10 @@ impl Design {
         for message in failed {
             out.push_str("\nCheck: ");
             out.push_str(message);
+        }
+        for note in &self.notes {
+            out.push_str("\nNote: ");
+            out.push_str(note);
         }
         out
     }
@@ -913,9 +1001,10 @@ impl PieceM {
         self.kind = match text.trim().to_ascii_lowercase().as_str() {
             "b" | "band" => Some("band"),
             "s" | "solitaire" => Some("solitaire"),
+            "t" | "three" | "threestone" | "three-stone" | "trilogy" => Some("threestone"),
             "e" | "eternity" => Some("eternity"),
             _ => {
-                s.echo("The piece must be Band, Solitaire or Eternity.");
+                s.echo("The piece must be Band, Solitaire, Threestone or Eternity.");
                 None
             }
         };
@@ -929,7 +1018,7 @@ impl Interactive for PieceM {
     }
     fn prompt(&self, _s: &Session) -> Prompt {
         if self.kind.is_none() {
-            Prompt::new("Kind of piece", Accept::TEXT).kw(&["Band", "Solitaire", "Eternity"]).default("Band")
+            Prompt::new("Kind of piece", Accept::TEXT).kw(&["Band", "Solitaire", "Threestone", "Eternity"]).default("Band")
         } else {
             Prompt::new("Specify the centre of the front view", Accept::POINT)
         }

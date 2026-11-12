@@ -57,6 +57,16 @@
 //!   the stone's lesser dimension, kept between 0.8 and 1.2 mm in diameter ([`prong_wire`]); the
 //!   prongs stand on the girdle where `SETTING` puts them, evenly on a round ([`prong_sites`]),
 //!   and reach [`PRONG_OVER`] wire diameters over the girdle.
+//! - **A three-stone ring's side stones** ([`Sides`]): one each side of the centre stone around
+//!   the band, each in a prong head of its own that stands on the band as the centre's does (its
+//!   axis along its own radius, its culet [`CULET_CLEAR`] over the band, its width around the
+//!   band and its length along the finger). `sideWidth` is 60 % of the centre's width unless
+//!   given, `sideLength` keeps the centre's proportion, `sideCut` is the centre's cut. The angle
+//!   from 12 o'clock is the least at which the two heads, seen along the finger ([`head_polygon`]:
+//!   the stone's table, crown and girdle, and under the girdle the prongs running in to their
+//!   feet on the band), stand apart by `gap` and half of each stone's prong wire, found by
+//!   bisection between 0 and [`MAX_SIDE_ANGLE`] (60°); a side stone that does not clear the
+//!   centre within that angle does not fit, and `PIECE` refuses it.
 //! - **A halo** ([`halo_sites`]): round diamonds of the `halo` width on the centre stone's girdle
 //!   offset outward by half the prong wire, `gap`, and half a melee; as many as keep `gap` of
 //!   metal between every pair.
@@ -89,15 +99,21 @@ pub(super) enum PieceKind {
     Band,
     /// A band with one centre stone in a prong head, and optionally a halo of melee around it.
     Solitaire,
+    /// A band with a centre stone and one side stone each side of it, each in its own head.
+    ThreeStone,
     /// A band with stones of one size all the way around.
     Eternity,
 }
+
+/// The kinds, as a refusal lists them.
+pub(super) const KINDS: &str = "band, solitaire, threestone or eternity";
 
 impl PieceKind {
     pub(super) fn name(self) -> &'static str {
         match self {
             PieceKind::Band => "band",
             PieceKind::Solitaire => "solitaire",
+            PieceKind::ThreeStone => "threestone",
             PieceKind::Eternity => "eternity",
         }
     }
@@ -105,8 +121,9 @@ impl PieceKind {
         match s.trim().to_ascii_lowercase().as_str() {
             "band" => Ok(PieceKind::Band),
             "solitaire" => Ok(PieceKind::Solitaire),
+            "threestone" | "three-stone" | "trilogy" => Ok(PieceKind::ThreeStone),
             "eternity" => Ok(PieceKind::Eternity),
-            _ => Err(bad(cmd, "`kind` must be band, solitaire or eternity")),
+            _ => Err(bad(cmd, format!("`kind` must be {KINDS}"))),
         }
     }
 }
@@ -223,6 +240,15 @@ pub(super) struct PieceParams {
     pub prongs: u32,
     /// Solitaire: the width of the halo's melee, or `None` for no halo.
     pub halo: Option<f64>,
+    /// Three-stone: a side stone's width (around the band), or `None` for 60 % of the centre's.
+    pub side_width: Option<f64>,
+    /// Three-stone: a side stone's length (along the finger), or `None` for the centre stone's
+    /// proportion of its width.
+    pub side_length: Option<f64>,
+    /// Three-stone: the side stones' cut, or `None` for the centre stone's.
+    pub side_cut: Option<String>,
+    /// Three-stone: how many prongs hold each side stone (3–8).
+    pub side_prongs: u32,
     /// Eternity: the stones' diameter.
     pub melee: f64,
     /// Eternity: how many stones go around, or `None` for as many as fit at `gap`.
@@ -249,7 +275,7 @@ fn mm_in(cmd: &str, p: &Value, key: &str, default: f64, min: f64, max: f64) -> R
 impl PieceParams {
     /// Read a piece from a command's JSON. `kind` is required; everything else has a default.
     pub(super) fn parse(cmd: &str, p: &Value) -> Result<Self> {
-        let kind = PieceKind::parse(cmd, str_param(p, "kind").ok_or_else(|| bad(cmd, "give `kind`: band, solitaire or eternity"))?)?;
+        let kind = PieceKind::parse(cmd, str_param(p, "kind").ok_or_else(|| bad(cmd, format!("give `kind`: {KINDS}")))?)?;
         // The system the piece is labelled in: `sizeSystem` when the JSON carries one (it is this
         // type's own JSON, whose `system` only says that `size` is a US number), else `system`.
         let system = system_name(str_param(p, "sizeSystem").or_else(|| str_param(p, "system")).unwrap_or("us"));
@@ -295,12 +321,30 @@ impl PieceParams {
         }
         let stone_width = mm_in(cmd, p, "stoneWidth", 6.5, 0.5, 30.0)?;
         let stone_length = mm_in(cmd, p, "stoneLength", stone_width, 0.5, 30.0)?;
-        let prongs = match p.get("prongs").filter(|v| !v.is_null()) {
-            None => 6,
-            Some(v) => match v.as_u64().filter(|n| (3..=8).contains(n)) {
-                Some(n) => n as u32,
-                None => return Err(bad(cmd, "`prongs` must be a whole number from 3 to 8")),
-            },
+        let prong_count = |key: &str, default: u32| -> Result<u32> {
+            match p.get(key).filter(|v| !v.is_null()) {
+                None => Ok(default),
+                Some(v) => match v.as_u64().filter(|n| (3..=8).contains(n)) {
+                    Some(n) => Ok(n as u32),
+                    None => Err(bad(cmd, format!("`{key}` must be a whole number from 3 to 8"))),
+                },
+            }
+        };
+        let prongs = prong_count("prongs", 6)?;
+        let side_prongs = prong_count("sideProngs", 4)?;
+        let side_size = |key: &str| -> Result<Option<f64>> {
+            if p.get(key).is_none_or(Value::is_null) { Ok(None) } else { mm_in(cmd, p, key, 0.5, 0.5, 30.0).map(Some) }
+        };
+        let (side_width, side_length) = (side_size("sideWidth")?, side_size("sideLength")?);
+        let side_cut = match p.get("sideCut").filter(|v| !v.is_null()) {
+            None => None,
+            Some(v) => {
+                let name = v.as_str().map(|s| s.trim().to_ascii_lowercase()).unwrap_or_default();
+                if gem::cut_of(&name).is_none() {
+                    return Err(bad(cmd, format!("`sideCut`: `{}` is not a cut (GEMLIST lists them)", name.chars().take(24).collect::<String>())));
+                }
+                Some(name)
+            }
         };
         let halo = match p.get("halo").filter(|v| !v.is_null()) {
             None | Some(Value::Bool(false)) => None,
@@ -336,6 +380,10 @@ impl PieceParams {
             stone,
             prongs,
             halo,
+            side_width,
+            side_length,
+            side_cut,
+            side_prongs,
             melee: mm_in(cmd, p, "melee", 1.8, 0.8, 6.0)?,
             count,
             gap: mm_in(cmd, p, "gap", 0.2, 0.0, 5.0)?,
@@ -377,6 +425,10 @@ impl PieceParams {
             "stone": self.stone,
             "prongs": self.prongs,
             "halo": self.halo.map(Value::from).unwrap_or(Value::Bool(false)),
+            "sideWidth": self.side_width,
+            "sideLength": self.side_length,
+            "sideCut": self.side_cut,
+            "sideProngs": self.side_prongs,
             "melee": self.melee,
             "count": self.count,
             "gap": self.gap,
@@ -892,6 +944,136 @@ fn densified(pts: &[Vec2], steps: usize) -> Vec<Vec2> {
     out
 }
 
+/// A side stone's width as a fraction of the centre stone's, when none is given.
+pub(super) const SIDE_WIDTH: f64 = 0.6;
+/// The furthest from 12 o'clock a three-stone ring's side stones may stand (60°).
+pub(super) const MAX_SIDE_ANGLE: f64 = PI / 3.0;
+
+/// A stone's side profile, `w` across and `depth` high, with its culet (or a cabochon's base) on
+/// the origin and its table up: counter-clockwise, each vertex with the bulge of the edge that
+/// follows it. A faceted stone is its table, crown, girdle and pavilion; a cabochon is a dome
+/// on a flat base.
+pub(super) fn side_profile(cut: &gem::Cut, w: f64, depth: f64) -> Vec<(Vec2, f64)> {
+    if cut.name == "cabochon" {
+        return Section::dome(w, depth).outline();
+    }
+    let a = w / 2.0;
+    let table = a * table_ratio(cut);
+    let girdle_top = depth * (1.0 - CROWN);
+    let girdle_bottom = depth * (1.0 - CROWN - GIRDLE);
+    [
+        Vec2::new(-table, depth),
+        Vec2::new(-a, girdle_top),
+        Vec2::new(-a, girdle_bottom),
+        Vec2::new(0.0, 0.0),
+        Vec2::new(a, girdle_bottom),
+        Vec2::new(a, girdle_top),
+        Vec2::new(table, depth),
+    ]
+    .into_iter()
+    .map(|p| (p, 0.0))
+    .collect()
+}
+
+/// Where a prong's foot stands on the band, as a fraction of its site's distance from the
+/// stone's axis: the prongs lean in under the stone.
+pub(super) const PRONG_FOOT: f64 = 0.45;
+
+/// A head seen along the finger, as a convex polygon of straight edges, counter-clockwise, with
+/// the stone's culet (or a cabochon's base) on the origin: the stone's table, crown and girdle
+/// (a cabochon's dome in twelve chords), and under the girdle the prongs running in to their
+/// feet on the band, [`PRONG_FOOT`] of the half-width either side of the axis and `clear` under
+/// the culet. It is what two heads' clearance is measured between.
+pub(super) fn head_polygon(cut: &gem::Cut, w: f64, depth: f64, clear: f64) -> Vec<Vec2> {
+    let a = w / 2.0;
+    let feet = [Vec2::new(-PRONG_FOOT * a, -clear), Vec2::new(PRONG_FOOT * a, -clear)];
+    let mut out = Vec::with_capacity(20);
+    if cut.name == "cabochon" {
+        out.push(Vec2::new(-a, 0.0));
+        out.extend(feet);
+        out.push(Vec2::new(a, 0.0));
+        out.extend(Section::dome(w, depth).outside(12).into_iter().filter(|q| q.y > 1e-9));
+        return out;
+    }
+    // The profile runs table, girdle, culet, girdle, table: the feet take the culet's place.
+    for (i, (p, _)) in side_profile(cut, w, depth).into_iter().enumerate() {
+        if i == 3 { out.extend(feet) } else { out.push(p) }
+    }
+    out
+}
+
+/// The distance from `p` to the segment `a`–`b`.
+fn point_to_segment(p: Vec2, a: Vec2, b: Vec2) -> f64 {
+    let (ab, len2) = (b - a, (b - a).dot(b - a));
+    let t = if len2 > 1e-24 { ((p - a).dot(ab) / len2).clamp(0.0, 1.0) } else { 0.0 };
+    p.dist(a + ab * t)
+}
+
+/// The distance between two convex polygons given counter-clockwise: nothing when they touch or
+/// overlap, and without bound when either is not a polygon of finite points.
+pub(super) fn polygons_apart(a: &[Vec2], b: &[Vec2]) -> f64 {
+    if a.len() < 3 || b.len() < 3 || a.len() > 64 || b.len() > 64 || a.iter().chain(b).any(|p| !p.is_finite()) {
+        return f64::INFINITY;
+    }
+    let edges = |pts: &[Vec2]| -> Vec<(Vec2, Vec2)> { pts.iter().copied().zip(pts.iter().copied().cycle().skip(1)).take(pts.len()).collect() };
+    let (ea, eb) = (edges(a), edges(b));
+    // A point inside a convex polygon is to the left of every edge.
+    let inside = |p: Vec2, es: &[(Vec2, Vec2)]| es.iter().all(|(s, e)| (*e - *s).cross(p - *s) >= 0.0);
+    if a.iter().any(|p| inside(*p, &eb)) || b.iter().any(|p| inside(*p, &ea)) {
+        return 0.0;
+    }
+    let mut least = f64::INFINITY;
+    for (p, q) in &ea {
+        for (r, s) in &eb {
+            // Two edges that cross are no distance apart.
+            let (d1, d2) = ((*q - *p).cross(*r - *p), (*q - *p).cross(*s - *p));
+            let (d3, d4) = ((*s - *r).cross(*p - *r), (*s - *r).cross(*q - *r));
+            if d1 * d2 < 0.0 && d3 * d4 < 0.0 {
+                return 0.0;
+            }
+            least = least.min(point_to_segment(*p, *r, *s)).min(point_to_segment(*q, *r, *s));
+            least = least.min(point_to_segment(*r, *p, *q)).min(point_to_segment(*s, *p, *q));
+        }
+    }
+    least
+}
+
+/// A three-stone ring's side stones: one each side of the centre stone, `angle` from 12 o'clock.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct Sides {
+    /// A side stone's length (along the finger) and width (around the band).
+    pub length: f64,
+    pub width: f64,
+    /// Its head: its depth, its prong wire and how it stands over the band along its own radius.
+    pub head: Head,
+    /// How far from 12 o'clock each stands, in radians: the least that clears the centre stone,
+    /// or [`MAX_SIDE_ANGLE`] when none does.
+    pub angle: f64,
+    /// The distance between the centre stone's head and a side stone's at that angle, seen along
+    /// the finger.
+    pub apart: f64,
+    /// The metal the two stones carry into that distance: half of each one's prong wire.
+    pub metal: f64,
+    /// Whether the side stones clear the centre by `gap` within [`MAX_SIDE_ANGLE`].
+    pub fits: bool,
+}
+
+impl Sides {
+    /// The outward direction of the side stone on the right (`side` = 1) or the left (−1), in
+    /// the ring's plane (+x right, +y to 12 o'clock).
+    pub(super) fn out(&self, side: f64) -> Vec2 {
+        Vec2::new(side * self.angle.sin(), self.angle.cos())
+    }
+    /// The direction across that stone, around the band clockwise.
+    pub(super) fn across(&self, side: f64) -> Vec2 {
+        Vec2::new(self.angle.cos(), -side * self.angle.sin())
+    }
+    /// The clear metal between the centre stone's setting and a side stone's.
+    pub(super) fn between(&self) -> f64 {
+        self.apart - self.metal
+    }
+}
+
 /// How far outside the centre stone's girdle a halo's melee are centred: half the prong wire,
 /// the gap, and half a melee, so the melee clear the prongs.
 pub(super) fn halo_offset(prong: f64, gap: f64, melee: f64) -> f64 {
@@ -1035,19 +1217,90 @@ impl PieceParams {
         stone_of(cmd, &self.cut, self.melee, self.melee, &self.stone)
     }
 
-    /// A solitaire's head.
-    pub(super) fn head(&self) -> Head {
-        let cab = self.cut_data().is_some_and(|c| c.name == "cabochon");
-        let depth = self.cut_data().map_or(0.6 * self.stone_width, |c| stone_depth(c, self.stone_width));
+    /// The head a stone of this cut and size stands in, with a halo of `halo` melee or none.
+    fn head_of(&self, cut: Option<&gem::Cut>, length: f64, width: f64, halo: Option<f64>) -> Head {
+        let cab = cut.is_some_and(|c| c.name == "cabochon");
+        let depth = cut.map_or(0.6 * width, |c| stone_depth(c, width));
         let below = if cab { 0.0 } else { girdle_rise(depth) };
-        let prong = prong_wire(self.stone_length, self.stone_width);
-        let halo = self.halo.map(|h| {
+        let prong = prong_wire(length, width);
+        let halo = halo.map(|h| {
             let melee_depth = gem::CUTS.first().map_or(0.6 * h, |c| stone_depth(c, h));
             HaloSeat { melee: h, depth: melee_depth, offset: halo_offset(prong, self.gap, h), under: girdle_rise(melee_depth) + HALO_UNDER }
         });
         // A halo's seat under a shallow stone would foul the band: the head stands that much higher.
         let lift = halo.map_or(0.0, |h| (h.under - below).max(0.0));
         Head { depth, prong, clear: CULET_CLEAR + lift, below, girdle: if cab { 0.0 } else { GIRDLE * depth }, halo }
+    }
+
+    /// Whether the centre stone has a halo: a solitaire asked for one. (A three-stone ring has
+    /// none: its side stones stand where a halo would be.)
+    pub(super) fn haloed(&self) -> Option<f64> {
+        self.halo.filter(|_| self.kind == PieceKind::Solitaire)
+    }
+
+    /// The centre stone's head (a solitaire's, a three-stone ring's).
+    pub(super) fn head(&self) -> Head {
+        self.head_of(self.cut_data(), self.stone_length, self.stone_width, self.haloed())
+    }
+
+    /// A three-stone ring's side stones' cut: `sideCut`, else the centre stone's.
+    pub(super) fn side_cut_data(&self) -> Option<&'static gem::Cut> {
+        self.side_cut.as_deref().and_then(gem::cut_of).or_else(|| self.cut_data())
+    }
+
+    /// A side stone's length and width: `sideWidth` or 60 % of the centre's width, and
+    /// `sideLength` or the centre stone's proportion of that.
+    pub(super) fn side_size(&self) -> (f64, f64) {
+        let width = self.side_width.unwrap_or(SIDE_WIDTH * self.stone_width);
+        let ratio = self.stone_length / self.stone_width;
+        let length = self.side_length.unwrap_or(if ratio.is_finite() && ratio > 0.0 { width * ratio } else { width });
+        (length, width)
+    }
+
+    /// A side stone, as `GEM` reads it: the piece's material.
+    pub(super) fn side_stone(&self, cmd: &str) -> Result<gem::Stone> {
+        let (length, width) = self.side_size();
+        stone_of(cmd, self.side_cut_data().map_or("round", |c| c.name), length, width, &self.stone)
+    }
+
+    /// Where a side stone's prongs stand on its girdle ([`prong_sites`]).
+    pub(super) fn side_prong_sites(&self) -> Result<Vec<Vec2>> {
+        let cut = self.side_cut_data().ok_or_else(|| bad("setting", "the stone has no cut"))?;
+        let (length, width) = self.side_size();
+        prong_sites(cut, length, width, self.side_prongs)
+    }
+
+    /// A three-stone ring's side stones: their size, their head and the angle they stand at.
+    pub(super) fn sides(&self) -> Sides {
+        let (length, width) = self.side_size();
+        let (head, centre) = (self.head_of(self.side_cut_data(), length, width, None), self.head());
+        let top = self.crown();
+        // Each stone's side, seen along the finger: the centre's upright at 12 o'clock.
+        let stand = |polygon: &[Vec2], clear: f64, angle: f64| -> Vec<Vec2> {
+            let (up, across) = (Vec2::new(angle.sin(), angle.cos()), Vec2::new(angle.cos(), -angle.sin()));
+            polygon.iter().map(|q| up * (top + clear + q.y) + across * q.x).collect()
+        };
+        let middle =
+            stand(&self.cut_data().map_or_else(Vec::new, |c| head_polygon(c, self.stone_width, centre.depth, centre.clear)), centre.clear, 0.0);
+        let beside = self.side_cut_data().map_or_else(Vec::new, |c| head_polygon(c, width, head.depth, head.clear));
+        // The metal each stone carries beyond its girdle: half its prong wire.
+        let metal = (centre.prong + head.prong) / 2.0;
+        let apart = |angle: f64| polygons_apart(&middle, &stand(&beside, head.clear, angle));
+        let need = metal + self.gap;
+        let mut sides = Sides { length, width, head, angle: MAX_SIDE_ANGLE, apart: apart(MAX_SIDE_ANGLE), metal, fits: false };
+        if !(sides.apart.is_finite() && need.is_finite() && top.is_finite()) || sides.apart + 1e-9 < need {
+            return sides;
+        }
+        // The least angle that clears: the stones overlap at 12 o'clock and clear at the limit.
+        let (mut near, mut far) = (0.0, MAX_SIDE_ANGLE);
+        for _ in 0..60 {
+            let mid = (near + far) / 2.0;
+            if apart(mid) >= need { far = mid } else { near = mid }
+        }
+        sides.angle = far;
+        sides.apart = apart(far);
+        sides.fits = true;
+        sides
     }
 
     /// Where a solitaire's prongs stand on its stone's girdle ([`prong_sites`]).
@@ -1059,7 +1312,7 @@ impl PieceParams {
     /// Where a solitaire's halo melee are centred ([`halo_sites`]); `None` without a halo, or
     /// when fewer than three fit.
     pub(super) fn halo_sites(&self) -> Option<Vec<Vec2>> {
-        halo_sites(self.cut_data()?, self.stone_length, self.stone_width, self.halo?, self.gap)
+        halo_sites(self.cut_data()?, self.stone_length, self.stone_width, self.haloed()?, self.gap)
     }
 
     /// An eternity band's row of stones.
