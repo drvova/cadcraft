@@ -13,7 +13,9 @@ Not applicable: hand-rolled — a native `<input type="checkbox">` drawn from th
 ## Examples
 `<Checkbox checked={snap()} onChange={setSnap}>Snap to grid</Checkbox>` — a setting with its label; the whole label is the target.
 
-Real uses, 1 call site (`rg -c "<Checkbox" src/components` → `src/components/PropertiesPanel.tsx:1`):
+Real uses, 3 call sites (`rg -c "<Checkbox" src/components` → `src/components/DraftingSettings.tsx:2`, `src/components/PropertiesPanel.tsx:1`):
+- `src/components/DraftingSettings.tsx:199` — the Drafting Settings dialog's switches (Snap on, Grid on, Polar tracking on, and the rest), each with its label as children and a refusal tied by `describedBy`.
+- `src/components/DraftingSettings.tsx:313` — the dialog's box per object snap: the label is the snap's marker and its name.
 - `src/components/PropertiesPanel.tsx:195` — the palette's yes-or-no rows: named by the row's label, `mixed` when the picked objects disagree.
 
 ### Example files

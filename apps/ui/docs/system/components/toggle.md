@@ -156,7 +156,7 @@ Real uses, 4 call sites (`rg -c "<Toggle" src/components` → `src/components/La
   - Do: `<Toggle tone="info" icon="layer.thawed" iconOn="layer.frozen" ariaLabel="Outline frozen" pressed />`
 
 ### Limits
-- `rule/toggle-touch-target`: When 2 `sm` glyph toggles sit side by side, keep at least 4px between them under a coarse pointer, because each 20px by 22px cell keeps its drawn size there and takes a 24px by 24px target from an invisible `::after`, and cells closer than 4px overlap their targets. Evidence: measured 20px by 22px cell, `src/ui/ui.css:1227`. Check: review `src/styles.css`.
+- `rule/toggle-touch-target`: When 2 `sm` glyph toggles sit side by side, keep at least 4px between them under a coarse pointer, because each 20px by 22px cell keeps its drawn size there and takes a 24px by 24px target from an invisible `::after`, and cells closer than 4px overlap their targets. Evidence: measured 20px by 22px cell, `src/ui/ui.css:1402`. Check: review `src/styles.css`.
   - Don't: `.layer-toggles { gap: 0 }` on a touch screen.
   - Do: `@media (pointer: coarse) { .layer-toggles { gap: var(--gap-4) } }`
 - `rule/toggle-line-height`: When `sm` text toggles stand in a bar whose line is not 22px, set `--ui-toggle-line` on their container to the bar's line, because the word's target is the whole line and a 22px toggle in a 21px line makes the bar 1px taller. Evidence: measured 21px toggles in the 22px status bar under its 1px rule, in the browser, 2026-11-11. Check: review `src/chrome.css`.
@@ -217,3 +217,4 @@ Rests on the native `<button>` element with `aria-pressed`, the drawn glyph hidd
 - `Tooltip`: the hint box this component shows by itself; wrap another control in it, never this one.
 - `Kbd`: the key cap the hint draws for a shortcut.
 - `Row`: the list row a column of small glyph toggles sits beside; a row never nests them.
+- `Dialog`: where a setting's details are edited; the toggle only switches it.

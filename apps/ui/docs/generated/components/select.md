@@ -13,7 +13,8 @@ Not applicable: hand-rolled — a native `<select>` under a drawn face in Field'
 ## Examples
 `<Select value={layer} options={layers} ariaLabel="Layer" onChange={setLayer} />` — the layer an object is on, picked from the drawing's layers.
 
-Real uses, 1 call site (`rg -c "<Select" src/components` → `src/components/PropertiesPanel.tsx:1`):
+Real uses, 2 call sites (`rg -c "<Select" src/components` → `src/components/DraftingSettings.tsx:1`, `src/components/PropertiesPanel.tsx:1`):
+- `src/components/DraftingSettings.tsx:244` — the Drafting Settings dialog's increment angle (`variant="field"`, `size="md"`): the usual angles and Custom, named by a visible `<label for>` through `id`.
 - `src/components/PropertiesPanel.tsx:208` — the palette's choice rows (layer, linetype, colour): `variant="inline" size="sm" align="end"`, `mixed` with the `*VARIES*` placeholder when the picked objects disagree.
 
 ### Example files
@@ -312,6 +313,7 @@ export default function Invalid() {
 | `ariaLabel?` | `string` |  | The accessible name when no visible `<label>` is tied to the control. |
 | `describedBy?` | `string` |  | The `id` of the help line or the error line beside the control (several, space-separated): sets `aria-describedby`. |
 | `disabled?` | `boolean` |  | Blocks the list and drops the ink to the disabled step. |
+| `id?` | `string` |  | The native control's `id`, for a visible `<label for>` beside it: the label is then the name, and no `ariaLabel` is passed. |
 | `invalid?` | `boolean` |  | The value is refused: sets `aria-invalid` and the error stroke. |
 | `mixed?` | `boolean` |  | The selection holds differing values: the `placeholder` shows in the quiet ink, and the first pick replaces them all. |
 | `onChange?` | `((value: string) => void)` |  | Runs when the user picks a choice, with its value. |
@@ -325,6 +327,7 @@ export default function Invalid() {
 - `options`: the choices as data, `{ value, label, disabled? }[]`, in list order.
 - `onChange`: runs with the picked value. A pick the caller does not take is put back.
 - `ariaLabel`: the accessible name when no visible label is tied to the control.
+- `id`: the native control's `id`, for a visible `<label for>` beside it; the label is then the name and no `ariaLabel` is passed.
 - `variant`: `field` (the default) or `inline`.
 - `size`: `md` (the default) or `sm`.
 - `align`: `start` (the default) or `end`.
@@ -348,19 +351,19 @@ export default function Invalid() {
 - There are 2 or 3 views to switch between, each always visible. Use `Tab` instead.
 
 ### Rules
-- `rule/select-options-data`: When a surface offers a choice, pass the choices as `options` and the current one as `value`, because `Select` renders 0 children and a hand-written `<option>` never reaches the list. Evidence: single use `src/ui/Select.tsx:114`, the one place an `<option>` is rendered, from `options`. Check: test `src/ui/Select.test.tsx`.
+- `rule/select-options-data`: When a surface offers a choice, pass the choices as `options` and the current one as `value`, because `Select` renders 0 children and a hand-written `<option>` never reaches the list. Evidence: single use `src/ui/Select.tsx:117`, the one place an `<option>` is rendered, from `options`. Check: test `src/ui/Select.test.tsx`.
   - Don't: `<Select ariaLabel="Layer"><option>0</option></Select>`
   - Do: `<Select ariaLabel="Layer" value={layer} options={layers.map((name) => ({ value: name, label: name }))} onChange={setLayer} />`
-- `rule/select-label-bound`: When a select is rendered without a visible `<label>`, pass `ariaLabel`, because the value is the only text in the box and a screen reader would announce 1 unnamed combo box. Evidence: single use `src/ui/Select.tsx:98`, the `aria-label` the prop sets (the palette's choice rows are named this way today). Check: test `src/ui/Select.test.tsx`.
+- `rule/select-label-bound`: When a select is rendered without a visible `<label>`, pass `ariaLabel`, because the value is the only text in the box and a screen reader would announce 1 unnamed combo box. Evidence: single use `src/ui/Select.tsx:101`, the `aria-label` the prop sets (the palette's choice rows are named this way today). Check: test `src/ui/Select.test.tsx`.
   - Don't: `<Select value={layer} options={layers} />`
   - Do: `<Select ariaLabel="Layer" value={layer} options={layers} onChange={setLayer} />`
-- `rule/select-off-list-value`: When the current value may not be in the list (a layer deleted while an object still names it), pass it as `value` unchanged and leave the list as it is, because the component lists it as 1 more choice at the top and a control that shows another value would misreport the data. Evidence: single use `src/ui/Select.tsx:83`, the extra first choice (the palette adds that option by hand today). Check: test `src/ui/Select.test.tsx`.
+- `rule/select-off-list-value`: When the current value may not be in the list (a layer deleted while an object still names it), pass it as `value` unchanged and leave the list as it is, because the component lists it as 1 more choice at the top and a control that shows another value would misreport the data. Evidence: single use `src/ui/Select.tsx:85`, the extra first choice (the palette adds that option by hand today). Check: test `src/ui/Select.test.tsx`.
   - Don't: `<Select value={layers.includes(layer) ? layer : layers[0]} options={options} ariaLabel="Layer" />`
   - Do: `<Select value={layer} options={options} ariaLabel="Layer" onChange={setLayer} />`
-- `rule/select-mixed-placeholder`: When the selected objects hold differing values, pass `mixed` with a `placeholder`, because a placeholder added to `options` becomes 1 selectable choice that writes itself to every object. Evidence: single use `src/ui/Select.tsx:109`, the placeholder option, hidden and disabled (the palette's `*VARIES*` rows are the case). Check: test `src/ui/Select.test.tsx`.
+- `rule/select-mixed-placeholder`: When the selected objects hold differing values, pass `mixed` with a `placeholder`, because a placeholder added to `options` becomes 1 selectable choice that writes itself to every object. Evidence: single use `src/ui/Select.tsx:112`, the placeholder option, hidden and disabled (the palette's `*VARIES*` rows are the case). Check: test `src/ui/Select.test.tsx`.
   - Don't: `<Select value="*VARIES*" options={[{ value: "*VARIES*", label: "*VARIES*" }, ...options]} ariaLabel="Layer" />`
   - Do: `<Select mixed placeholder="*VARIES*" options={options} ariaLabel="Layer" onChange={setLayer} />`
-- `rule/select-described-by`: When a line of help or an error sits beside a select, give the line an `id` and pass it as `describedBy`, and pass `invalid` while the value is refused, because a line that only sits near the control is read 0 times by a screen reader that lands on it by Tab. Evidence: single use `src/ui/Select.tsx:96`, the tie `Field` makes the same way (`rule/field-described-by`). Check: test `src/ui/Select.test.tsx`.
+- `rule/select-described-by`: When a line of help or an error sits beside a select, give the line an `id` and pass it as `describedBy`, and pass `invalid` while the value is refused, because a line that only sits near the control is read 0 times by a screen reader that lands on it by Tab. Evidence: single use `src/ui/Select.tsx:98`, the tie `Field` makes the same way (`rule/field-described-by`). Check: test `src/ui/Select.test.tsx`.
   - Don't: `<Select ariaLabel="Units" value={units} options={all} invalid /><span>Pick a unit the drawing uses.</span>`
   - Do: `<Select ariaLabel="Units" value={units} options={all} invalid describedBy="units-error" /><span id="units-error">Pick a unit the drawing uses.</span>`
 - `rule/select-inline-in-rows`: When a select sits in a list row beside a label, use `variant="inline"` with `size="sm"` and `align="end"`, because a stroked 24px box in each 22px row draws 1 frame per row and the values no longer share an edge. Evidence: measured 20px box in a 22px row and the value ending 16px before the box's edge, in the browser at 1280 wide, 2026-11-11. Check: review `src/components/PropertiesPanel.tsx`.
@@ -427,3 +430,4 @@ Rests on the native `<select>` element: role, value, the list, type-ahead, the p
 - `Row`: when the list is a menu of actions, or a listbox a search field drives.
 - `Tooltip`: the hint box a clipped value and a `title` show in; never wrap a select in one.
 - `TextArea`: when the value is free text over several lines rather than one of a list.
+- `Dialog`: the surface that holds a form of several choices with its actions.

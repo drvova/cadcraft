@@ -459,7 +459,9 @@
     "--dur-fast",
     "--ease-standard",
     "--focus-ring",
-    "--control-h-input"
+    "--control-h-input",
+    "--gap-2",
+    "--gap-8"
    ],
    "replaces": []
   },
@@ -552,6 +554,51 @@
     "--font-chip",
     "--leading-ui",
     "--text-faint"
+   ],
+   "replaces": []
+  },
+  {
+   "id": "dialog",
+   "name": "Dialog",
+   "import": "../../../../src/ui/Dialog",
+   "source": "src/ui/Dialog.tsx",
+   "page": "/system/components/dialog",
+   "twin": "/system/components/dialog.md",
+   "docs": "/system/components/dialog",
+   "markdown": "/system/components/dialog.md",
+   "entry": "docs/system/components/dialog.md",
+   "status": "ready",
+   "variants": {
+    "size": [
+     "sm",
+     "md",
+     "lg"
+    ]
+   },
+   "states": [
+    "open"
+   ],
+   "tokens": [
+    "--surface-elevated",
+    "--border",
+    "--border-soft",
+    "--radius-block",
+    "--shadow-popover",
+    "--scrim",
+    "--text",
+    "--font-family",
+    "--font-body",
+    "--leading-ui",
+    "--hairline",
+    "--control-h-tab",
+    "--control-h-button",
+    "--gap-6",
+    "--gap-8",
+    "--gap-10",
+    "--gap-16",
+    "--focus-outline-w",
+    "--focus-outline-offset",
+    "--focus-ring"
    ],
    "replaces": []
   }

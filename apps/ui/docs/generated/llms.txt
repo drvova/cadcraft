@@ -14,6 +14,7 @@
 - [Button](docs/generated/components/button.md): It runs one action the moment its label says so: it never navigates and never holds a value.
 - [Checkbox](docs/generated/components/checkbox.md): It holds one yes-or-no value the caller owns, and can say that the things it stands for disagree.
 - [Chip](docs/generated/components/chip.md): It shows one compact fact, a keyword or a suggestion, and it only acts when the caller gives it a handler.
+- [Dialog](docs/generated/components/dialog.md): It holds one task over the page until the task is finished or put away: a titled box of fields with its actions in a footer, while the pa...
 - [Field](docs/generated/components/field.md): It takes one line of text and hands every keystroke back to the caller, who owns the value.
 - [IconButton](docs/generated/components/icon-button.md): It runs one action drawn as a single glyph, and its title is both its accessible name and the hint a sighted person reads.
 - [Kbd](docs/generated/components/kbd.md): It shows the key or shortcut that runs the action beside it, as a fact to read and never as a control.

@@ -92,6 +92,9 @@
   --tooltip-bg: #141414; /* the measured tooltip (Cursor §8) */
   --tooltip-border: rgba(240, 240, 240, 0.15);
   --tooltip-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  /* The veil over the page behind a modal dialog: the shadow's own black at the tooltip shadow's
+     alpha, so it dims without a hue. Nothing is read through it: the page under it is inert. */
+  --scrim: rgba(0, 0, 0, 0.4);
 
   /* Scrollbars: the measured thumb ladder (Cursor §1: thumb .14, hover .22) */
   --scrollbar: rgba(240, 240, 240, 0.14);
@@ -206,6 +209,7 @@
   --tooltip-bg: #F8F8F8;
   --tooltip-border: rgba(20, 20, 20, 0.15);
   --tooltip-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+  --scrim: rgba(0, 0, 0, 0.16); /* the light veil: the light tooltip shadow's alpha */
   --border: rgba(20, 20, 20, 0.12);
   --border-soft: rgba(20, 20, 20, 0.08);
   --text: #141414;

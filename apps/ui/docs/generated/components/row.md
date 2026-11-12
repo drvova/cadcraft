@@ -265,7 +265,7 @@ export default function Menuitem() {
 - `rule/row-label-limit`: When a row's label runs past 40 characters at the 252px sidebar, clip it with an ellipsis on the label's own element and leave `title` for what the hint adds, because the measured row is 22px tall and the sidebar 252px wide, and the hint already reads a clipped label in full on its first line. Evidence: measured 22px row (`docs/system/decisions.md`) and the 252px sidebar (`.sidebar` in `src/styles.css`). Check: review `src/styles.css`.
   - Don't: a 60-character layer name that overflows the row.
   - Do: `<Row><span class="row-label">{name}</span></Row>` with `overflow: hidden; text-overflow: ellipsis` on the label, and no `title` that repeats it.
-- `rule/row-touch-target`: When rows stack in a list, let the list's height follow its rows rather than fixing it to a multiple of 22px, because under a coarse pointer each row grows from 22px to the 24px control height (rows stack with 0 gap, so an overhanging target would only overlap the next row), a menu row grows from 24px to the 28px button height, and a fixed list would cut its last rows. Evidence: measured 22px row, 24px under a coarse pointer, `src/ui/ui.css:1246`. Check: review `src/ui/ui.css`.
+- `rule/row-touch-target`: When rows stack in a list, let the list's height follow its rows rather than fixing it to a multiple of 22px, because under a coarse pointer each row grows from 22px to the 24px control height (rows stack with 0 gap, so an overhanging target would only overlap the next row), a menu row grows from 24px to the 28px button height, and a fixed list would cut its last rows. Evidence: measured 22px row, 24px under a coarse pointer, `src/ui/ui.css:1421`. Check: review `src/ui/ui.css`.
   - Don't: `.my-list { height: calc(var(--control-h-row) * 8); overflow: hidden }`
   - Do: `.my-list { max-height: calc(var(--control-h-input) * 8); overflow-y: auto }`
 
@@ -320,3 +320,4 @@ Rests on the native `<button>` element: role, Enter and Space, `disabled` and fo
 - `Tab`: when the control brings one view of a strip to the front rather than being one band of a list.
 - `Kbd`: when the text is the key that runs an action, shown at the end of the row.
 - `Select`: when the list is a short set of values behind one closed control rather than rows on the page.
+- `Dialog`: when the choice needs several fields and a decision, not one press in a list.

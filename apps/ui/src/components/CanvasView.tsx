@@ -10,8 +10,14 @@
  * it from the left press, where it goes down (`onPoint`), under a crosshair, and the drag that
  * may follow draws no rectangle. One that wants objects takes a click as a point too (the engine
  * picks there) and a rectangle through `onSelectRect`, as at rest. One that wants only what is
- * typed takes nothing from the left button. The middle button and the wheel work throughout, and
- * a right click is `onContext` (the shell's Enter), with the browser's menu kept off the canvas.
+ * typed takes nothing from the left button. The middle button and the wheel work throughout.
+ *
+ * The right button asks for the drawing's menu (`onMenu`), and the browser's own menu is kept off
+ * the drawing. The canvas reports the press and decides nothing: where it was released, how long
+ * it was held and whether it moved (the shell reads a quick click during a command as Enter). A
+ * finger held still for `LONG_PRESS_MS` asks for the menu too, and that press is then over: its
+ * lift is no pick and no point, and its travel no pan. The keyboard's menu key (a `contextmenu`
+ * no button made) asks for it where the pointer last was, or at the middle of the drawing.
  *
  * What follows a mouse or a pen is the engine's answer, asked at most once a frame and drawn on a
  * second canvas over the drawing: at rest and while a command wants objects, the outline of what a
@@ -41,12 +47,14 @@
  */
 
 import { createEffect, createUniqueId, onCleanup, onMount, type Accessor, type JSX } from "solid-js";
+import { LONG_PRESS_MS } from "../context";
 import type { DisplayList } from "../display";
 import { EMPTY_PREVIEW, type AppFacade, type CommandPreview, type SnapPoint } from "../facade";
 import { drawDisplay, drawOverlay, guideIsEmpty, overlayIsEmpty, paletteFrom, samePalette, SNAP_MARKER_HALF, type OverlayGuide, type Palette } from "../canvas";
 import type { PointerWants } from "../prompt";
 import { clickSlop, dragKind, pickReach, sameSelection } from "../selection";
 import { fitAspect, holdsFit, panBy, pinchOf, pinchView, resizeView, screenToWorld, wheelZoomFactor, worldToScreen, zoomAt, type Point, type Rect, type ScreenBox, type ScreenSize } from "../view";
+import type { MenuPoint } from "./ContextMenu";
 import "../canvas.css";
 
 export { CLICK_SLOP } from "../selection";
@@ -87,8 +95,12 @@ export interface CanvasViewProps {
    * Called for a left press while `wants` is "point", and for a click while it is "select".
    */
   onPoint?: (point: Point, worldPerPixel: number) => void;
-  /** A right click on the drawing: Enter, as CAD programs read it. */
-  onContext?: () => void;
+  /**
+   * The drawing's menu was asked for: by the right button (`pointer`: where it was released, how
+   * long it was held in ms and whether it left the click slop), by a finger held still (`touch`)
+   * or by the keyboard's menu key (`keyboard`).
+   */
+  onMenu?: (request: { at: MenuPoint; heldMs: number; moved: boolean }) => void;
   /**
    * The engine's state as the shell last read it (the prompt, the drafting settings): any value
    * that is a new one whenever a command, a click or a toggle may have changed what the engine
@@ -107,7 +119,7 @@ const FALLBACK_PALETTE: Palette = { canvas: "#181818", gridMinor: "#202020", gri
 
 /** What the canvas is and how to work on it without a pointer: its accessible description. */
 export const CANVAS_HELP =
-  "The drawing area. With a pointer: click an object to add it to the selection, drag a rectangle to add several (to the right for those inside it, to the left for those it touches), hold Shift to remove from the selection instead, drag with the middle button to pan, turn the wheel to zoom. While a command asks for a point, a click gives it that point; while it asks for objects, clicks and rectangles pick them. A right click is Enter. With the keyboard: type a command, such as LINE, ZOOM or PAN, and it goes to the command line; Enter or Space repeats the last command, or accepts the running command's default; Escape cancels the running command; F6 moves to the next part of the window.";
+  "The drawing area. With a pointer: click an object to add it to the selection, drag a rectangle to add several (to the right for those inside it, to the left for those it touches), hold Shift to remove from the selection instead, drag with the middle button to pan, turn the wheel to zoom. While a command asks for a point, a click gives it that point; while it asks for objects, clicks and rectangles pick them. A right click, or a finger held still, opens a menu of commands for what is selected or for the running command; while a command runs a quick right click is Enter. With the keyboard: type a command, such as LINE, ZOOM or PAN, and it goes to the command line; Enter or Space repeats the last command, or accepts the running command's default; Escape cancels the running command; the menu key or Shift+F10 opens the drawing's menu; F6 moves to the next part of the window.";
 
 /** Two middle presses this close in time (ms) are a double click: zoom to the extents. */
 const DOUBLE_CLICK_MS = 400;
@@ -244,6 +256,10 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
   const touches = new Map<number, Point>();
   /** The last lone middle press, for the double click. */
   let lastMiddle: { at: number; x: number; y: number } | null = null;
+  /** The right button's press in hand: when and where it went down (client px). */
+  let rightDown: { at: number; x: number; y: number } | null = null;
+  /** The pending long press of a lone finger, or 0. */
+  let longPress = 0;
 
   const dpr = (): number => {
     const raw = typeof window === "undefined" ? 1 : window.devicePixelRatio;
@@ -482,6 +498,7 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     if (frame !== 0) cancelAnimationFrame(frame);
     frame = 0;
     awaitDwell(false);
+    if (longPress !== 0) clearTimeout(longPress);
   });
 
   onMount(() => {
@@ -656,6 +673,24 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
   };
 
+  /**
+   * Wait for a lone finger's press to become a long one, or (null) stop waiting. A press that is
+   * still in hand, still inside the click slop and still alone when the time is up asks for the
+   * menu and is over: nothing follows from its travel or its lift.
+   */
+  const awaitLongPress = (d: Drag | null): void => {
+    if (longPress !== 0) clearTimeout(longPress);
+    longPress =
+      d === null
+        ? 0
+        : window.setTimeout(() => {
+            longPress = 0;
+            if (drag !== d || d.moved || touches.size !== 1) return;
+            drag = null;
+            props.onMenu?.({ at: { x: d.downX, y: d.downY, source: "touch" }, heldMs: LONG_PRESS_MS, moved: false });
+          }, LONG_PRESS_MS);
+  };
+
   /** Note where a mouse or a pen is, for the frame to ask the engine about. */
   const track = (e: PointerEvent): void => {
     if (e.pointerType === "touch") return;
@@ -673,10 +708,17 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       // The second finger makes it a pan and pinch; whatever the first was doing is not a click.
       drag = touches.size === 1 ? { pointerId: e.pointerId, pointerType: e.pointerType, button: 0, mode: "pan", downX: e.clientX, downY: e.clientY, x: e.clientX, y: e.clientY, moved: false } : null;
+      awaitLongPress(drag);
       hideMarquee();
       setGesture(null);
       e.preventDefault();
       capture(e);
+      return;
+    }
+    // The right button's press is only noted: its release asks for the menu. One made while a
+    // press is in hand (a pen's barrel button over a finger's pan) asks for nothing.
+    if (e.button === 2) {
+      rightDown = drag === null && touches.size === 0 ? { at: e.timeStamp, x: e.clientX, y: e.clientY } : null;
       return;
     }
     // One press at a time: a second button, or a pen while a finger is down, starts nothing.
@@ -719,6 +761,7 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
       if (dragKind(e.clientX - d.downX, e.clientY - d.downY, clickSlop(d.pointerType)) === "click") return;
       d.moved = true;
       lastMiddle = null;
+      awaitLongPress(null);
       setGesture(d.mode);
     }
     if (d.mode === "select") {
@@ -767,6 +810,7 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
   const endPointer = (e: PointerEvent, up: boolean): void => {
     if (e.pointerType === "touch") {
       if (!touches.delete(e.pointerId)) return;
+      awaitLongPress(null);
       // One of two fingers lifted: the other carries on as a pan from where it is, and its lift
       // will not be a click.
       if (touches.size === 1 && drag === null) {
@@ -806,15 +850,32 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     props.onSelectRect?.({ x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) }, kind, e.shiftKey, worldPerPixel());
   };
 
+  /** The right button came up over the drawing: its press asks for the menu, where it was released. */
+  const onPointerUp = (e: PointerEvent): void => {
+    const press = e.button === 2 && e.pointerType !== "touch" ? rightDown : null;
+    if (press === null) {
+      endPointer(e, true);
+      return;
+    }
+    rightDown = null;
+    const moved = dragKind(e.clientX - press.x, e.clientY - press.y, clickSlop(e.pointerType)) !== "click";
+    props.onMenu?.({ at: { x: e.clientX, y: e.clientY, source: "pointer" }, heldMs: e.timeStamp - press.at, moved });
+  };
+
   /**
-   * The right button's click. The browser's menu never opens over the drawing; the click itself
-   * is the shell's Enter, unless a press is in hand (a rectangle or a pan under way is not ended
-   * by it) or it came from a finger held down, which is not a right click.
+   * The browser's menu never opens over the drawing. The right button's own menu is asked for
+   * when the button comes up (`onPointerUp`: this event arrives before that on some systems and
+   * after it on others) and a finger's when its press has lasted (`awaitLongPress`). What is left
+   * is the keyboard's menu key: the menu opens where the pointer last was, or at the middle of
+   * the drawing, unless a press is in hand.
    */
   const onContextMenu = (e: MouseEvent): void => {
     e.preventDefault();
-    if (drag !== null || touches.size > 0 || (e instanceof PointerEvent && e.pointerType === "touch")) return;
-    props.onContext?.();
+    if (e.button === 2 || (typeof PointerEvent !== "undefined" && e instanceof PointerEvent && e.pointerType === "touch")) return;
+    const box = stage?.getBoundingClientRect();
+    if (drag !== null || touches.size > 0 || box === undefined) return;
+    const at = pointer ?? { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    props.onMenu?.({ at: { x: at.x, y: at.y, source: "keyboard" }, heldMs: 0, moved: false });
   };
 
   /** The pointer left: what followed it is cleared at once, not at the next frame. */
@@ -826,18 +887,17 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
   };
 
   return (
-    <div class="canvas-stage" ref={stage} role="img" aria-label="Drawing" aria-describedby={helpId} tabindex="0">
+    <div class="canvas-stage" ref={stage} role="img" aria-label="Drawing" aria-describedby={helpId} tabindex="0" onContextMenu={onContextMenu}>
       <canvas
         ref={canvas}
         class="canvas"
         data-wants={wants() === "point" ? "point" : undefined}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={(e) => endPointer(e, true)}
+        onPointerUp={onPointerUp}
         onPointerCancel={(e) => endPointer(e, false)}
         onLostPointerCapture={(e) => endPointer(e, false)}
         onPointerLeave={onPointerLeave}
-        onContextMenu={onContextMenu}
       />
       <canvas ref={overlay} class="canvas-overlay" aria-hidden="true" />
       <div class="canvas-snap-label" ref={snapLabel} hidden aria-hidden="true" />

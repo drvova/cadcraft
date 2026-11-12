@@ -132,6 +132,7 @@ describe("buildMenu", () => {
 describe("classify", () => {
   test("each action class", () => {
     expect(classify("ui.open")).toBe("open");
+    expect(classify("dsettings")).toBe("drafting");
     expect(classify("ui.saveas")).toBe("save");
     expect(classify("ui.sample")).toBe("sample");
     expect(classify("ui.panel.layers")).toBe("visibility");

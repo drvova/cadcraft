@@ -12,7 +12,8 @@ Not applicable: hand-rolled — the 11px uppercase header is measured from the r
 ## Examples
 `<SectionLabel>Layers</SectionLabel>` — the heading above the layers list.
 
-Real uses, 4 call sites (`rg -c "<SectionLabel" src/components` → `src/components/AssistantPane.tsx:5`, `src/components/LayersPanel.tsx:1`, `src/components/PropertiesPanel.tsx:1`):
+Real uses, 5 call sites (`rg -c "<SectionLabel" src/components` → `src/components/AssistantPane.tsx:5`, `src/components/DraftingSettings.tsx:1`, `src/components/LayersPanel.tsx:1`, `src/components/PropertiesPanel.tsx:1`):
+- `src/components/DraftingSettings.tsx:300` — "Snap modes", over the Drafting Settings dialog's grid of object snap boxes.
 - `src/components/AssistantPane.tsx:907` and `:542` — the setup sheet's "Provider" and "Connection" headings.
 - `src/components/LayersPanel.tsx:83` — the "Layers" heading.
 - `src/components/PropertiesPanel.tsx:64` — the "Properties" heading.

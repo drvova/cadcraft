@@ -129,6 +129,11 @@ describe("Select", () => {
     expect(plain.hasAttribute("aria-describedby")).toBe(false);
   });
 
+  test("id is the native select's own, for a visible label's for; without it no attribute is written", () => {
+    expect(selectIn(mount(() => <Select id="polar-angle" value="0" options={LAYERS} />)).id).toBe("polar-angle");
+    expect(selectIn(mount(() => <Select value="0" options={LAYERS} ariaLabel="Layer" />)).hasAttribute("id")).toBe(false);
+  });
+
   test("the face is hidden from assistive tech, which reads the select itself", () => {
     const container = mount(() => <Select value="0" options={LAYERS} ariaLabel="Layer" />);
     expect(container.querySelector(".ui-select-value")?.getAttribute("aria-hidden")).toBe("true");

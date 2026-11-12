@@ -132,6 +132,68 @@ describe("wrapWasmFacade", () => {
     ]);
   });
 
+  test("the grip calls forward every argument, in order, in either spelling", () => {
+    const { instance, calls } = fakeInstance();
+    for (const name of ["grips", "grip_at", "grip_start", "grip_options", "grip_option"]) instance[name] = (...args: unknown[]): string => { calls.push({ name, args }); return "{}"; };
+    const raw = wrapWasmFacade(instance);
+    raw?.grips();
+    raw?.grip_at(1.5, -2, 0.25);
+    raw?.grip_start('["1A:2","1A:0"]');
+    raw?.grip_options("1A:2");
+    raw?.grip_option("1A:2", "lengthen");
+    expect(calls).toEqual([
+      { name: "grips", args: [] },
+      { name: "grip_at", args: [1.5, -2, 0.25] },
+      { name: "grip_start", args: ['["1A:2","1A:0"]'] },
+      { name: "grip_options", args: ["1A:2"] },
+      { name: "grip_option", args: ["1A:2", "lengthen"] },
+    ]);
+    // wasm-bindgen's `js_name` spellings reach the same methods.
+    for (const [snake, camel] of [["grip_at", "gripAt"], ["grip_start", "gripStart"], ["grip_options", "gripOptions"], ["grip_option", "gripOption"]] as const) {
+      instance[camel] = instance[snake];
+      delete instance[snake];
+    }
+    calls.length = 0;
+    const camel = wrapWasmFacade(instance);
+    camel?.grip_at(3, 4, 0);
+    camel?.grip_start('["2B:d2:end"]');
+    camel?.grip_options("2B:d1:at");
+    camel?.grip_option("2B:d1:at", "Closed");
+    expect(calls).toEqual([
+      { name: "grip_at", args: [3, 4, 0] },
+      { name: "grip_start", args: ['["2B:d2:end"]'] },
+      { name: "grip_options", args: ["2B:d1:at"] },
+      { name: "grip_option", args: ["2B:d1:at", "Closed"] },
+    ]);
+  });
+
+  /**
+   * A package built before the grip calls has no grips: it is kept, the looks answer "none", and
+   * a start or an option is refused with the command line it has, never invented.
+   */
+  test("a package without the grip calls is kept, and has no grips", () => {
+    const { instance, calls } = fakeInstance();
+    instance["prompt"] = (): string => { calls.push({ name: "prompt", args: [] }); return '{"prompt":"Command","running":null,"keywords":[],"output":["old line"]}'; };
+    const raw = wrapWasmFacade(instance);
+    expect(raw).not.toBeNull();
+    if (raw === null) return;
+    expect(JSON.parse(raw.grips())).toEqual({ shown: false, size: 0, reach: 0, truncated: false, grips: [] });
+    expect(JSON.parse(raw.grip_at(1, 2, 0))).toEqual({ grip: null });
+    expect(JSON.parse(raw.grip_options("1A:2"))).toEqual({ options: [] });
+    expect(calls).toEqual([]);
+    for (const reply of [raw.grip_start('["1A:2"]'), raw.grip_option("1A:2", "lengthen")]) {
+      const parsed: unknown = JSON.parse(reply);
+      expect(parsed).toMatchObject({ prompt: "Command", running: null, output: [] });
+      expect(JSON.stringify(parsed)).toContain("build:wasm");
+    }
+    expect(calls).toEqual([{ name: "prompt", args: [] }, { name: "prompt", args: [] }]);
+    // One of them alone is used where it is; the rest stay inert.
+    instance["gripAt"] = (): string => '{"grip":{"id":"1A:2"}}';
+    const partial = wrapWasmFacade(instance);
+    expect(JSON.parse(partial?.grip_at(1, 2, 0) ?? "null")).toEqual({ grip: { id: "1A:2" } });
+    expect(JSON.parse(partial?.grips() ?? "null")).toMatchObject({ shown: false, grips: [] });
+  });
+
   /**
    * A wasm package built before the pointer calls existed still carries the whole drawing
    * contract: it is kept (never traded for the mock), and each missing call answers inertly.

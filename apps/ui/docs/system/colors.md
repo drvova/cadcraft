@@ -101,6 +101,7 @@ Dark is the default (`:root`); light restates only the roles that change, under 
 | `--composer-border` | `rgba(240,240,240,.08)` | `rgba(20,20,20,.08)` | The composer's hairline (Cursor §1/§5). |
 | `--composer-border-active` | `rgba(240,240,240,.12)` | `rgba(20,20,20,.12)` | The composer's border once focused. |
 | `--on-accent` | `#191C22` | `#FCFCFC` | The ink on an action fill (the primary button's label). |
+| `--scrim` | `rgba(0,0,0,.4)` | `rgba(0,0,0,.16)` | The veil over the page behind a modal `Dialog`: the shadows' own black at the tooltip shadow's alpha, so it dims without a hue. Nothing is read through it (the page under it is inert), so it holds no contrast threshold. |
 | `--on-error` | `#121418` | `#FCFCFC` | The ink on the error fill (the danger button's label): `--on-accent` measures 4.37 there in dark. |
 
 ## Specimens

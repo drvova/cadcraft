@@ -491,6 +491,39 @@ describe("the layer's recipe, from the stylesheet", () => {
     expect(box).not.toContain("nowrap");
   });
 
+  test("the dialog is the popover's box under a scrim, capped to the window and the dynamic viewport, laid out only while open", () => {
+    const box = rule(uiCss, ".ui-dialog");
+    for (const token of ["--surface-elevated", "--border", "--radius-block", "--shadow-popover"]) expect(box).toContain(`var(${token})`);
+    expect(box).toContain("width: min(var(--ui-dialog-width), calc(100% - 2 * var(--ui-dialog-margin)))");
+    expect(box).toContain("max-height: calc(100dvh - 2 * var(--ui-dialog-margin))");
+    // A closed dialog keeps the platform's `display: none`: only the open one is a flex column.
+    expect(box).not.toContain("display:");
+    expect(rule(uiCss, ".ui-dialog[open]")).toContain("display: flex");
+    expect(rule(uiCss, ".ui-dialog::backdrop")).toContain("background: var(--scrim)");
+    expect(rule(uiCss, ".ui-dialog--sm")).toContain("--ui-dialog-width: 52ch");
+    expect(rule(uiCss, ".ui-dialog--lg")).toContain("--ui-dialog-width: 104ch");
+  });
+
+  test("the dialog does not move or transform (the hint inside it is placed in the window's coordinates), and only its body scrolls", () => {
+    const rules = [...uiCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => /\.ui-dialog/.test(m[1] ?? "")).map((m) => m[2] ?? "");
+    expect(rules.length).toBeGreaterThan(8);
+    for (const body of rules) expect(/transition|animation|transform|filter/.test(body)).toBe(false);
+    expect(rule(uiCss, ".ui-dialog-body")).toContain("overflow-y: auto");
+    expect(rule(uiCss, ".ui-dialog-body")).toContain("overscroll-behavior: contain");
+    expect(rule(uiCss, ".ui-dialog-head")).toContain("flex: 0 0 auto");
+    expect(rule(uiCss, ".ui-dialog-foot")).toContain("flex: 0 0 auto");
+  });
+
+  test("the scrim is a black veil in both themes, and a panel behind in a tab strip is not displayed", () => {
+    for (const [name, theme] of Object.entries(themes)) {
+      const veil = color(theme, "scrim");
+      // No hue, and never opaque: the page stays in sight under it. Light dims less than dark.
+      expect(`${name}: ${veil.r},${veil.g},${veil.b}`).toBe(`${name}: 0,0,0`);
+      expect(veil.a).toBe(name === "light" ? 0.16 : 0.4);
+    }
+    expect(rule(uiCss, ".ui-tabs-panel[hidden]")).toContain("display: none");
+  });
+
   test("the hint fades in on the motion tokens, leaves at once, and does not fade for the next key along or under reduced motion", () => {
     expect(rule(uiCss, ".ui-tooltip")).not.toContain("transition");
     expect(rule(uiCss, ".ui-tooltip--shown")).toContain("transition: opacity var(--dur-fast) var(--ease-standard)");

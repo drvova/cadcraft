@@ -97,3 +97,16 @@
 .canvas-marquee[hidden] {
   display: none;
 }
+
+/* A right-click menu's host (components/ContextMenu.tsx): a box of no size fixed at the point the
+   menu was asked for, over everything in the window. The menu hangs from it as a title's menu
+   hangs from its title (chrome.css), and is pulled back inside the window by the menu's own
+   placement. */
+.context-menu {
+  position: fixed;
+  top: var(--context-y, 0);
+  left: var(--context-x, 0);
+  width: 0;
+  height: 0;
+  z-index: 60;
+}

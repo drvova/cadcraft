@@ -57,6 +57,16 @@ export interface RawFacade {
   pointer(x: number, y: number, aperture: number, nowMs: number, modifiers: number): string;
   /** A pointer click given to the running command, resolved as `pointer` reports. */
   click(x: number, y: number, aperture: number): string;
+  /** The grips of the selection: `{"shown","size","reach","truncated","grips":[…]}`. */
+  grips(): string;
+  /** The grip under a world point: `{"grip":null}` or `{"grip":{…}}`; it changes nothing. */
+  grip_at(x: number, y: number, aperture: number): string;
+  /** Make grips hot and start their edit; `idsJson` is a JSON array of grip ids. Replies as `cmdline`. */
+  grip_start(idsJson: string): string;
+  /** A multifunctional grip's menu: `{"options":[{"id","label","keyword","needsPoint"},…]}`. */
+  grip_options(id: string): string;
+  /** Invoke one of those options by its `id`. Replies as `cmdline`. */
+  grip_option(id: string, option: string): string;
   open_bytes(name: string, bytes: Uint8Array): string;
   load_sample(): string;
   save_bytes(): Uint8Array;
@@ -402,6 +412,221 @@ export interface ClickResult {
   snap: SnapPoint | null;
   /** The point the command was given (snapped, on the grid, along a ray); null when refused. */
   point: Point | null;
+}
+
+/**
+ * What a grip is (`Facade::grips`): an object's own grip, or a dynamic block parameter's grip by
+ * the shape the engine gives it: an arrow along a distance, a square at a position, a triangle
+ * that opens a list of choices.
+ */
+export type GripKind = "standard" | "linear" | "point" | "list";
+
+const GRIP_KINDS: readonly GripKind[] = ["standard", "linear", "point", "list"];
+
+/** Which of a dynamic block parameter's points a grip is at. */
+export type GripPart = "base" | "end" | "at";
+
+const GRIP_PARTS: readonly GripPart[] = ["base", "end", "at"];
+
+/** The dynamic block side of a grip: the parameter it belongs to and the property it changes. */
+export interface GripDynamic {
+  /** The parameter's id in the block's graph. */
+  node: number;
+  part: GripPart;
+  /** The way a `linear` arrow points, a unit vector in world coordinates; zero for the others. */
+  dir: Point;
+  /** The property it changes, as Properties names it ("Width", "Visibility1"). */
+  property: string;
+  /** A `list` grip's choices (the same as `gripOptions` lists); empty for the others. */
+  choices: readonly string[];
+}
+
+/** One grip of the selection (`Facade::grips`, `Facade::grip_at`). */
+export interface Grip {
+  /** What every other grip call takes: `HANDLE:INDEX`, or `HANDLE:dNODE:PART` for a dynamic one.
+   *  It holds while the object keeps its shape: list again after every edit. */
+  id: string;
+  /** The object's hex handle, as `selection()` writes it. */
+  handle: string;
+  /** The grip's index among the object's own grips; null for a dynamic block grip. */
+  index: number | null;
+  /** Where it is, in world coordinates. */
+  point: Point;
+  kind: GripKind;
+  /** `gripOptions` has a menu for it (Lengthen, Add Vertex…, or a list grip's choices). */
+  multi: boolean;
+  /** Its object is on a locked layer: it shows, and an edit of it is refused. */
+  locked: boolean;
+  /** It is one of the grips being edited. */
+  hot: boolean;
+  dynamic: GripDynamic | null;
+}
+
+/** The grips of the selection (`Facade::grips`). */
+export interface GripList {
+  /** A selection shows grips now: GRIPS is on, no more than GRIPOBJLIMIT objects are selected,
+   *  and no command but a grip edit runs. False: `grips` is empty and nothing is to be drawn. */
+  shown: boolean;
+  /** GRIPSIZE: the grip box's size in CSS pixels. */
+  size: number;
+  /** The world distance `gripAt` reaches at the current view (its box's half-size). */
+  reach: number;
+  /** The list was cut short (the engine lists at most 2048 grips). */
+  truncated: boolean;
+  grips: readonly Grip[];
+}
+
+export const NO_GRIPS: GripList = { shown: false, size: 0, reach: 0, truncated: false, grips: [] };
+
+/** The most grips a reply is read for (the engine lists at most 2048). */
+const MAX_GRIPS = 2048;
+/** The most choices a list grip, or options a grip's menu, is read for (the engine sends 256). */
+const MAX_GRIP_CHOICES = 256;
+/** The longest grip id, option id, label or property read (the engine's are far shorter). */
+const MAX_GRIP_TEXT_CHARS = 512;
+/** The most hot grips read or sent (the engine makes at most 1000 hot). */
+const MAX_HOT_GRIPS = 1000;
+
+/** A string no longer than a grip text may be, and not empty; anything else is null. */
+function gripText(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_GRIP_TEXT_CHARS ? value : null;
+}
+
+function parseGripDynamic(value: unknown): GripDynamic | null {
+  if (!isRecord(value)) return null;
+  const node = asNumber(value["node"]);
+  const part = GRIP_PARTS.find((p) => p === value["part"]);
+  if (node === null || !Number.isInteger(node) || part === undefined) return null;
+  const choices: string[] = [];
+  for (const c of Array.isArray(value["choices"]) ? value["choices"] : []) {
+    if (choices.length >= MAX_GRIP_CHOICES) break;
+    const choice = gripText(c);
+    if (choice !== null) choices.push(choice);
+  }
+  return { node, part, dir: parseXy(value["dir"]) ?? { x: 0, y: 0 }, property: (asString(value["property"]) ?? "").slice(0, MAX_GRIP_TEXT_CHARS), choices };
+}
+
+/**
+ * One grip out of a parsed value; null unless it has an id, a handle, a point and a kind this
+ * interface knows. A dynamic kind without its `dynamic` part is not a grip either: there would
+ * be nothing to draw its arrow from.
+ */
+function parseGripValue(value: unknown): Grip | null {
+  if (!isRecord(value)) return null;
+  const id = gripText(value["id"]);
+  const handle = gripText(value["handle"]);
+  const point = parseXy(value["point"]);
+  const kind = GRIP_KINDS.find((k) => k === value["kind"]);
+  if (id === null || handle === null || point === null || kind === undefined) return null;
+  const dynamic = parseGripDynamic(value["dynamic"]);
+  if ((kind === "standard") !== (dynamic === null)) return null;
+  const index = asNumber(value["index"]);
+  return {
+    id,
+    handle,
+    index: index !== null && Number.isInteger(index) && index >= 0 ? index : null,
+    point,
+    kind,
+    multi: value["multi"] === true,
+    locked: value["locked"] === true,
+    hot: value["hot"] === true,
+    dynamic,
+  };
+}
+
+/**
+ * Parse a `grips` reply. A refusal, a malformed reply or anything unreadable is `NO_GRIPS`; a
+ * row that is not a grip is skipped, so one bad row never hides the rest.
+ */
+export function parseGrips(raw: string): GripList {
+  if (typeof raw !== "string" || raw.length === 0 || raw.length > MAX_DISPLAY_REPLY_BYTES) return NO_GRIPS;
+  const parsed = parseJson(raw);
+  if (!isRecord(parsed) || !Array.isArray(parsed["grips"]) || typeof parsed["error"] === "string") return NO_GRIPS;
+  const grips: Grip[] = [];
+  for (const row of parsed["grips"]) {
+    if (grips.length >= MAX_GRIPS) break;
+    const grip = parseGripValue(row);
+    if (grip !== null) grips.push(grip);
+  }
+  const size = asNumber(parsed["size"]);
+  const reach = asNumber(parsed["reach"]);
+  return {
+    shown: parsed["shown"] === true,
+    size: size !== null && size > 0 ? size : 0,
+    reach: reach !== null && reach > 0 ? reach : 0,
+    truncated: parsed["truncated"] === true || parsed["grips"].length > grips.length,
+    grips,
+  };
+}
+
+/** Parse a `grip_at` reply: the grip under the pointer, or null (none, a refusal, unreadable). */
+export function parseGripAt(raw: string): Grip | null {
+  const parsed = parseJson(raw);
+  return isRecord(parsed) ? parseGripValue(parsed["grip"]) : null;
+}
+
+/** One entry of a multifunctional grip's menu (`Facade::grip_options`). */
+export interface GripOption {
+  /** What `gripOption` takes: the engine's name ("addVertex", "lengthen"), or a list grip's choice. */
+  id: string;
+  /** The menu text ("Add Vertex"). */
+  label: string;
+  /** The same option as a keyword of the hot grip's STRETCH prompt; null for a list grip's choice. */
+  keyword: string | null;
+  /** It then asks for a point, dragged and committed like any grip edit; false: it acts at once. */
+  needsPoint: boolean;
+}
+
+/** Parse a `grip_options` reply; a refusal, or anything unreadable, is no options. */
+export function parseGripOptions(raw: string): GripOption[] {
+  const parsed = parseJson(raw);
+  if (!isRecord(parsed) || !Array.isArray(parsed["options"])) return [];
+  const out: GripOption[] = [];
+  for (const row of parsed["options"]) {
+    if (out.length >= MAX_GRIP_CHOICES) break;
+    if (!isRecord(row)) continue;
+    const id = gripText(row["id"]);
+    if (id === null) continue;
+    out.push({ id, label: gripText(row["label"]) ?? id, keyword: gripText(row["keyword"]), needsPoint: row["needsPoint"] === true });
+  }
+  return out;
+}
+
+/** The grip edit a command-line reply says is running (its `gripEdit`). */
+export interface GripEdit {
+  /** The prompt's title in lower case: "stretch", "move", "rotate", "scale", "mirror", or a
+   *  multifunctional option's ("add vertex", "lengthen"…). Null at a prompt without one (Base
+   *  point, Reference): keep showing the last mode. */
+  mode: string | null;
+  /** The ids of the hot grips; the first is the base grip. */
+  hot: readonly string[];
+}
+
+/**
+ * Read the grip edit out of a command-line reply (`prompt`, `cmdline`, `start`, `cancel`, `click`,
+ * `grip_start`, `grip_option`); null when none is running. A reply without the field (an older
+ * engine, the mock) that still says the running command is `grip` is a grip edit of unknown mode.
+ */
+export function parseGripEdit(raw: string): GripEdit | null {
+  const parsed = parseJson(raw);
+  if (!isRecord(parsed)) return null;
+  const edit = parsed["gripEdit"];
+  if (!isRecord(edit)) return edit === undefined && parsed["running"] === "grip" ? { mode: null, hot: [] } : null;
+  const hot: string[] = [];
+  for (const id of Array.isArray(edit["hot"]) ? edit["hot"] : []) {
+    if (hot.length >= MAX_HOT_GRIPS) break;
+    const text = gripText(id);
+    if (text !== null) hot.push(text);
+  }
+  return { mode: gripText(edit["mode"]), hot };
+}
+
+/** What `gripStart` or `gripOption` did: the command line after it, and the grip edit now running. */
+export interface GripResult {
+  /** Folded like `cmdline`; a refusal is its `error`, with nothing started. */
+  state: PromptState;
+  /** The grip edit running after the call; null when refused, or when the option acted at once. */
+  edit: GripEdit | null;
 }
 
 /** One layout tab from `execute("layout.list", {})`. `current` is true when the layout's name
@@ -821,6 +1046,73 @@ export class AppFacade {
     const refused = typeof reply["error"] === "string" && reply["point"] === null;
     const taken = refused ? null : (parseXy(reply["point"]) ?? snap?.point ?? point);
     return { state: reducePrompt(prev, raw, taken === null ? undefined : echo?.(taken)), snap, point: taken };
+  }
+
+  /**
+   * The grips of the selection, to draw: each with its id, point, kind and whether it has a menu
+   * or is hot. Call it when the selection or the drawing's revision changes, and after every
+   * command-line reply while a grip edit runs (the hot flags); never per frame. `NO_GRIPS` when
+   * the selection shows none (GRIPS off, more than GRIPOBJLIMIT objects, another command
+   * running), on a package without the call, and for anything unreadable. It changes nothing.
+   */
+  grips(): GripList {
+    return parseGrips(this.call(() => this.raw.grips()));
+  }
+
+  /**
+   * The grip under `point`, or null: the nearest shown grip whose box holds the point. For the
+   * hover colour, and to decide on a press whether it starts a grip edit. `aperture` is the box's
+   * half-size in world units; 0 is the engine's own (GRIPSIZE plus three pixels at the current
+   * view: needs `setViewport`). Cheap enough for every pointer frame at rest; it changes nothing.
+   */
+  gripAt(point: Point, aperture = 0): Grip | null {
+    if (!usablePoint(point) || !usableAperture(aperture)) return null;
+    return parseGripAt(this.call(() => this.raw.grip_at(point.x, point.y, aperture)));
+  }
+
+  /**
+   * Make grips hot and start editing them, as a press on a grip does. `ids` are grip ids; the
+   * first is the base grip, and several are the grips a Shift+click collected before the press
+   * that starts the edit (STRETCH moves them together). The edit then runs as the command `grip`:
+   * `pointer` drags it (its `preview` is the rubber band), `click` commits it, `cancel` restores
+   * the drawing, `cmdline("")` cycles Stretch, Move, Rotate, Scale, Mirror, and the prompt's
+   * keywords are its options. The whole edit is one undo step. Folded like `cmdline`; a refusal
+   * (an id that is not a shown grip, a locked layer, a list grip, no ids) is `state.error` with
+   * nothing started and nothing cancelled.
+   */
+  gripStart(ids: readonly string[], prev: PromptState = emptyPrompt()): GripResult {
+    if (ids.length === 0 || ids.length > MAX_HOT_GRIPS) return { state: { ...prev, error: "refused a grip edit of no grips, or of too many" }, edit: null };
+    const raw = this.call(() => this.raw.grip_start(JSON.stringify(ids)));
+    return { state: reducePrompt(prev, raw), edit: parseGripEdit(raw) };
+  }
+
+  /**
+   * The menu of a multifunctional grip (one whose `multi` is true), in the order to show it. A
+   * grip with only Stretch, a refusal and a package without the call all answer no options. It
+   * changes nothing.
+   */
+  gripOptions(id: string): GripOption[] {
+    return parseGripOptions(this.call(() => this.raw.grip_options(id)));
+  }
+
+  /**
+   * Invoke one entry of that menu by its `id`. An option whose `needsPoint` is true leaves a grip
+   * edit running at its own prompt (`edit.mode` is its name), dragged and committed like any
+   * other; one that acts at once is done on return (`edit` is null). Either way one undo step.
+   * Folded like `cmdline`; a refusal is `state.error` with nothing changed.
+   */
+  gripOption(id: string, option: string, prev: PromptState = emptyPrompt()): GripResult {
+    const raw = this.call(() => this.raw.grip_option(id, option));
+    return { state: reducePrompt(prev, raw), edit: parseGripEdit(raw) };
+  }
+
+  /**
+   * The grip edit running now, or null: what tells a grip edit from an ordinary command (for
+   * which `PromptState.running` is some other id). Read from the engine's prompt; call it after
+   * a `cmdline`, `click` or `cancel` while an edit runs to follow the mode cycle.
+   */
+  gripEdit(): GripEdit | null {
+    return parseGripEdit(this.call(() => this.raw.prompt()));
   }
 
   layers(): LayerInfo[] {

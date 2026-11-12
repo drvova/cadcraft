@@ -7,7 +7,7 @@ file records the picks and the reasons, so the next surface does not re-litigate
 
 ## Canonical picks
 
-The web UI grows thirteen canonical components under `src/ui/`, each a thin wrapper over the native
+The web UI grows fourteen canonical components under `src/ui/`, each a thin wrapper over the native
 element. The per-surface hand-rolled classes they replace are named below; a class loses because it
 is a one-off with no shared API and no states.
 
@@ -23,6 +23,7 @@ is a one-off with no shared API and no states.
 - **Tooltip** — pick `ui/Tooltip.tsx`: the layer's one hint, a single box on `<body>` placed beside whichever control carries `data-hint`. Every layer component that takes `title` carries it; the `<Tooltip>` wrapper (a `<span>` host; the child keeps its own element and its own accessible name) and the bare `data-hint` attribute give it to a surface's own element. Placements `bottom | top`, flipped and held inside the window by itself; it never takes the pointer. Loses: the native `title` attribute as an icon key's hint (it arrives on the platform's own delay, in the platform's own box, and never on keyboard focus), and any per-surface hover label a panel would draw for itself. The reasons are under "The hint" below.
 - **Tab** — pick `ui/Tab.tsx` (native `<button>` with `role="tab"`, `aria-selected` on the one in front; an optional close key as a sibling button). Sizes `md` (the editor tab, selected at `--tab-active`) and `sm` (the compact tab of a pane header, selected at `--fill-active`). Loses: `.layout-tab` (StatusBar's layout strip — a raw button with its own class), the chat tabs' `Row` workaround (AssistantPane — a `Row` in a width cell beside a close `IconButton`).
 - **Toggle** — pick `ui/Toggle.tsx` (native `<button aria-pressed>`, the state drawn by the face alone). Variants `glyph | text`; sizes `sm` (the cell of a 22px row, the status bar's line) and `md` (24px); tones `neutral | absent | info | caution`. Loses: `.toggle` with `.is-on` / `.is-frozen` / `.is-locked` (LayersPanel — three raw buttons per row, the tone picked by `:first-child` and a class), `.status-toggle` (StatusBar — a raw button with its own hover, ring and on rule). The reasons are under "A setting switched in place" below.
+- **Dialog** — pick `ui/Dialog.tsx` (a native `<dialog>` opened with `showModal()`: the focus trap, Escape, the inert page and the top layer are the platform's). Sizes `sm | md | lg`; a title bar with a close key, a body that scrolls, a footer of actions. Loses: nothing drawn by hand, because the web interface had no dialog (the removed desktop interface's Options, Drafting Settings and Layer Properties Manager were never rebuilt); the command palette's own `<dialog>` and the assistant's setup sheet stay as they are. The reasons are under "A task over the page" below. With it, `ui/Tab.tsx` grows `TabPanels`, the tabs pattern with panels, for a dialog's pages.
 - **Kbd** — pick `ui/Kbd.tsx` (native `<kbd>`, one recipe, no variants). Loses: `.assistant-key` (AssistantPane — the mono face at the disabled ink), `.palette-key` (CommandPalette — the recipe kept, now the pick's own).
 
 ## Prop vocabulary
@@ -59,6 +60,12 @@ is a one-off with no shared API and no states.
 - Toggle `ariaLabel` and `hint`: the fixed name and the hint are two props because they are two strings ("Outline frozen", "Thaw"). `title` is not taken: on every other component it is the hint and also the name or the description, and a toggle's hint is neither. `description`, `shortcut` and `disabled` mean what they mean on IconButton, and `placement` what it means on Tooltip.
 - Toggle `variant`: `glyph | text`, the face. Toggle `tone`: `neutral | absent | info | caution`, which state is the one to notice and its ink; it names the meaning, and the token layer picks the colour per theme.
 - Toggle `icon` and `iconOn`: the glyph of each state. Toggle `tabIndex`: the one pass-through for a group that is one Tab stop; unset, the component writes no attribute.
+- Dialog `open` and `onClose(reason)`: the caller owns whether the dialog shows, as it owns every value in the layer; the dialog only asks, and says why (`escape | backdrop | close | action`). `title` on Dialog is its visible title and its accessible name, not a hint: a dialog has no hint, and the one string is what the title bar shows and what `aria-labelledby` names.
+- Dialog `describedBy`: what it means on Field (`aria-describedby`). The brief that asked for the component called it `ariaDescribedBy`; the layer already had a name for the tie, and a second name for it would be the first prop to break "one name per job".
+- Dialog `initialFocus` (a selector, an element or a function), `footer` (the actions, or a function handed `done`) and `dismissOnBackdrop` (default true).
+- Dialog `size`: `sm | md | lg`. The layer's other components stop at `sm | md`; a dialog's third step is a width, not a control height, and it is the only component that has one.
+- Field and Select `id`: the control's `id`, for a visible `<label for>` beside it. A form in a dialog shows its labels, and `ariaLabel` beside a visible label would say the name twice in two places that can drift.
+- Tab `id`, `controls`, `tabIndex`: what a tab with a panel needs (`aria-labelledby` back from the panel, `aria-controls`, one Tab stop per strip). `TabPanels` sets all three; a bare strip may.
 - No boolean style props (`round`, `big`, `blue`): a prop names a purpose; the token layer picks the look.
 
 ## Motion presets
@@ -600,3 +607,86 @@ selected. It is now the last of the facts at the start of the bar, so nothing th
 goes sits between the toggles and the bar's end. The order in which the bar gives up room is
 unchanged, and the sweep was run again from 300 to 1300 wide with ordinary and long content: no
 toggle is clipped at any width.
+
+## A task over the page
+
+Decided 2026-11-11, with `Dialog`. An audit found the web interface had no dialogs at all: the
+removed desktop interface's Options, Drafting Settings and Layer Properties Manager were never
+rebuilt, and the engine's rule ("programmatic calls never open dialogs") makes a dialog an
+interface surface that reads the engine's state and acts through `execute`. Captures are
+`.design-system/review/wE12-*.png`.
+
+- **Native, shown modally.** `showModal()` gives the focus trap, Escape's close request, the inert
+  page and the top layer in each of the three system webviews; none of them is rebuilt. The
+  caller owns `open`, so the dialog cancels the platform's own close and asks through `onClose`.
+  When the platform closes it without asking (a second Escape in a row), the caller is told, and
+  a caller that keeps `open` true gets its dialog back.
+- **The box is the palette's.** `--surface-elevated`, the `--border` hairline, `--radius-block`
+  and `--shadow-popover`: the command palette's box, value for value, because the two are the
+  same kind of thing (a box over the page) and a second recipe would be a second elevation.
+- **`--scrim` is new**, the layer's first veil: `rgba(0,0,0,.4)` dark, `rgba(0,0,0,.16)` light.
+  The palette leaves the page undimmed because it is a tool over the work; a modal dialog is the
+  opposite, and the dimmed page is what says the page is not taking input. No existing token
+  could be it: the fills are the ink at an alpha (they lighten in dark), and the surfaces are
+  opaque. The colour is the one the shadows already cast with, at the tooltip shadow's alpha in
+  each theme, so no hue and no new value entered the system. Nothing is read through it.
+- **Widths are a measure, not pixels.** `52ch`, `76ch` and `104ch` of the dialog's own 13px type:
+  364, 533 and 729px measured. `76ch` is the palette's width. The brief asked for about 360, 520
+  and 720; a `ch` measure needed no size token and follows the type if the scale ever moves.
+- **No motion.** The palette's reason holds: it is opened from a key or a menu, and anything that
+  plays before the first field reads as lag. The "open" preset stays for menus and popovers. The
+  box also carries no transform, which is what lets the layer's hint, a fixed child of the open
+  dialog, be placed in the window's coordinates.
+- **Focus.** On opening, the first field of the body that is showing (a page behind holds fields
+  too), or `initialFocus`; never the close key. With no field, the dialog itself: a question with
+  two buttons does not put the keyboard on either answer, least of all Delete. Under a coarse
+  pointer the dialog itself as well, because focusing a text field there raises the keyboard over
+  a sheet nobody has read yet. Opening waits a microtask, so the caller's own effects (a form
+  read afresh, the page it opens on) have run before the field is chosen. On closing, the focus
+  goes back to what had it.
+- **Enter is the form's.** The body and the footer are one `<form>` that submits nothing, and the
+  primary action is a `Button type="submit"`. Enter in a single-line field then presses it
+  through the platform's implicit submission: no key handler, so a key an input method is using
+  never does it, and an `aria-disabled` primary refuses it as it refuses any click.
+- **A press outside** counts only when it began and ended outside the box (a selection dragged
+  out of a field ends there and is not a decision), and a caller with work to lose turns it off.
+- **Under 560px it is a sheet from the bottom, not a page.** The actions sit under the thumb and
+  over an on-screen keyboard (the height follows `dvh`), the drawing stays in sight above a short
+  dialog, and a question of two buttons is not a screen of empty space. A full-window page was
+  the other offer; it suits a long form and hides what the dialog is about, and a sheet that is
+  tall enough becomes that page anyway, less the tab strip's height it leaves showing so that it
+  still reads as over the page.
+- **No landmarks inside.** The title bar and the footer are plain boxes: a `<header>` or
+  `<footer>` in a dialog is announced as the page's banner or footer.
+- **The palette stays off it.** Moving `CommandPalette` onto `Dialog` was weighed against "no
+  change in behaviour or look" and does not fit, in six ways: it has no title bar (its name is an
+  `aria-label`) and no footer of actions; its page is not dimmed, on purpose; it hangs from the
+  title bar instead of standing in the middle or on the bottom edge; its `<dialog>` is the whole
+  window with the box inside it, which is how a click beside it is told from one in it; every
+  click inside hands the focus back to its one field; and Escape keeps what was typed for the
+  next opening. A `bare` variant that removes the title bar, the scrim, the placement, the form
+  and the focus rule is not a variant of this component, it is the palette. What the two share
+  is the box's four tokens and the lines that keep the caller's `open` true to the platform, and
+  both already agree.
+- **`TabPanels` is automatic.** A dialog's page is already built, so the arrow keys show it as
+  they move; the layout strip over the drawing stays manual, because a switch there redraws the
+  drawing.
+
+### The first dialog: Drafting Settings
+
+- **No transaction, so the dialog makes its own order.** The engine has no settings object and
+  no undo-free transaction. `planCalls` (`src/drafting.ts`) refuses the whole form when one value
+  would be refused, so nothing is half-applied because of a typing mistake; the calls then all
+  run (they do not depend on one another), each refusal is shown beside its field with a count
+  of what was applied, and the engine is read again and the form planned against it, which also
+  catches a call answered `ok` and not honoured (`dsettings` drops a spacing it does not like
+  without saying so).
+- **One undo step for the spacings.** SNAPUNIT and GRIDUNIT are the drawing's header variables,
+  so writing them is an undoable edit; both go in one `dsettings` call. Everything else is
+  session state the engine records no undo for.
+- **OK and Cancel.** `rule/button-label-verb` asks for a verb; a form of several settings has no
+  one verb, "Apply" traditionally keeps a dialog open, and OK beside Cancel is the pair the
+  dialog's users already read (`rule/dialog-action-labels`). A dialog that does one thing takes
+  its verb.
+- **The snap markers are the canvas's.** Each box shows `snapGlyph(bit)` from `src/canvas.ts` as
+  SVG paths, at the canvas's 12px and 1.5px stroke: one table of figures, drawn in two places.

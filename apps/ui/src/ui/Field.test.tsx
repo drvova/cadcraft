@@ -62,6 +62,19 @@ describe("Field", () => {
     expect(plain.hasAttribute("aria-invalid")).toBe(false);
   });
 
+  test("id is the input's own, for a visible label's for; without it no attribute is written", () => {
+    const container = mount(() => (
+      <div>
+        <label for="snap-x">Snap X spacing</label>
+        <Field id="snap-x" value="0.5" />
+      </div>
+    ));
+    const input = inputIn(container);
+    expect(input.id).toBe("snap-x");
+    expect(container.querySelector("label")?.htmlFor).toBe(input.id);
+    expect(inputIn(mount(() => <Field ariaLabel="Name" />)).hasAttribute("id")).toBe(false);
+  });
+
   test("ties the help line or the error line to the input", () => {
     const input = inputIn(mount(() => <Field ariaLabel="API key" describedBy="key-help key-error" />));
     expect(input.getAttribute("aria-describedby")).toBe("key-help key-error");

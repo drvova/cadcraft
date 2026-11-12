@@ -12,7 +12,7 @@
 //! | call | reply |
 //! |---|---|
 //! | [`Facade::execute`] | `{"ok":true,"result":…}` or `{"ok":false,"error":"…"}` |
-//! | [`Facade::cmdline`] / [`Facade::prompt`] | the command-line state: `prompt`, `running`, `keywords`, `accept`, `default`, `base`, `corner`, `distance`, `deferred`, `output`; `cmdline` adds `error` when the line was refused |
+//! | [`Facade::cmdline`] / [`Facade::prompt`] | the command-line state: `prompt`, `running`, `keywords`, `accept`, `default`, `base`, `corner`, `distance`, `deferred`, `gripEdit`, `output`; `cmdline` adds `error` when the line was refused |
 //! | [`Facade::start`] | the command-line state plus `output` (and `error` for an unknown id): a command started **by id**, as a menu click does |
 //! | [`Facade::state`] | `{"title","dirty","revision","extents","layerCount","entityCount","currentLayer","space"}` (`extents` is `[minx,miny,maxx,maxy]` or `null`) |
 //! | [`Facade::selection`] | `{"count":n,"handles":["1A",…]}` |
@@ -31,6 +31,11 @@
 //! | [`Facade::snap`] | `{"snap":null}` or `{"snap":{"point":[x,y],"mode":1,"name":"Endpoint","deferred":false}}`; plus `error` when refused |
 //! | [`Facade::click`] | the command-line state plus `output`, `snap` (the object snap the point took, or `null`), `point` (the point the command was given, or `null`) and `error` when refused: a pointer click given to the running command, resolved as [`Facade::pointer`] resolves it |
 //! | [`Facade::pointer`] | the pointer resolved for the running command (below), plus `error` when refused |
+//! | [`Facade::grips`] | `{"shown","size","reach","truncated","grips":[…]}`: the grips of the selection (below) |
+//! | [`Facade::grip_at`] | `{"grip":null}` or `{"grip":{…}}`: the grip under the pointer; plus `error` when refused |
+//! | [`Facade::grip_start`] | the command-line state plus `output` (and `error` when refused): the grips made hot and their edit started |
+//! | [`Facade::grip_options`] | `{"options":[{"id","label","keyword","needsPoint"},…]}`: a multifunctional grip's menu; plus `error` when refused |
+//! | [`Facade::grip_option`] | the command-line state plus `output` (and `error` when refused): one of those options invoked |
 //!
 //! # The resolved pointer
 //!
@@ -57,10 +62,41 @@
 //! * `acquired` are the points object-snap tracking holds, and `wait` asks for another call after
 //!   the dwell even if the pointer rests (a point is being acquired).
 //!
+//! # Grips
+//!
+//! A selected object shows grips at its defining points while no command runs (GRIPS on, and no
+//! more than GRIPOBJLIMIT objects selected). [`Facade::grips`] lists them, each as
+//!
+//! ```json
+//! {"id":"1A:2","handle":"1A","index":2,"point":[x,y],"kind":"standard","multi":true,
+//!  "locked":false,"hot":false,"dynamic":null}
+//! ```
+//!
+//! * `id` names the grip in every other grip call: `HANDLE:INDEX` for an object's own grip (the
+//!   index of [`Session::grips_of`]), `HANDLE:dNODE:PART` for a dynamic block parameter's grip.
+//!   It holds for as long as the object keeps its shape; list again after every edit.
+//! * `kind` is `"standard"`, or a dynamic block grip's shape as the engine names it: `"linear"`
+//!   (an arrow, `dynamic.dir` is where it points), `"point"` (a square) or `"list"` (a triangle
+//!   whose choices are `dynamic.choices`). `dynamic` is then
+//!   `{"node":2,"part":"end","dir":[x,y],"property":"Width","choices":[…]}`.
+//! * `multi` says [`Facade::grip_options`] has a menu for it; `locked` that its object is on a
+//!   locked layer (it shows, and an edit of it is refused); `hot` that it is being edited.
+//!
+//! [`Facade::grip_start`] makes grips hot, and from there a grip edit is an ordinary running
+//! command named `grip`: [`Facade::pointer`] resolves the pointer from the grip and draws the
+//! rubber band, [`Facade::click`] commits, [`Facade::cancel`] restores, an empty
+//! [`Facade::cmdline`] line (Enter or Space) cycles STRETCH, MOVE, ROTATE, SCALE and MIRROR, and
+//! the prompt's keywords are its options (Base point, Copy, Undo, Reference, eXit, and a single
+//! hot grip's own: Lengthen, Add vertex…). Each edit, its copies included, is one undo step.
+//! While it runs every command-line reply carries
+//! `"gripEdit":{"mode":"stretch","hot":["1A:2"]}` (`null` otherwise): `mode` is the title of the
+//! prompt in lower case (`"move"`, `"add vertex"`…), `null` at a prompt without one (Base point,
+//! Reference).
+//!
 //! # Points and apertures
 //!
-//! [`Facade::preview`], [`Facade::pick`], [`Facade::snap`], [`Facade::click`], [`Facade::pointer`]
-//! and [`Facade::set_cursor`] take a world point, refused unless both ordinates are finite and within
+//! [`Facade::preview`], [`Facade::pick`], [`Facade::snap`], [`Facade::click`], [`Facade::pointer`],
+//! [`Facade::grip_at`] and [`Facade::set_cursor`] take a world point, refused unless both ordinates are finite and within
 //! [`MAX_COORD`]. An aperture is a world distance: `0` means the engine's own box (PICKBOX or
 //! APERTURE pixels at the current view and [`Facade::set_viewport`] size), a negative or
 //! non-finite one is refused, and a larger one than a view may span is clamped.
@@ -96,10 +132,13 @@
 #![forbid(unsafe_code)]
 
 use cadcraft_color::Rgb;
-use cadcraft_doc::Space;
+use cadcraft_doc::dynblock::{self, DynGrip, GripPart, GripShape};
+use cadcraft_doc::{EntityKind, Handle, Space};
+use cadcraft_engine::cmd::curves::is_locked;
+use cadcraft_engine::grips::{GripAction, grip_actions};
 use cadcraft_engine::snap::SnapHit;
 use cadcraft_engine::snap::tracking::{CursorQuery, PathKind, PathShape, Track};
-use cadcraft_engine::{Input, Session};
+use cadcraft_engine::{Input, Prompt, Session};
 use cadcraft_geom::{Bounds2, Ellipse, TAU, Vec2};
 use cadcraft_render::{DPrim, DisplayList, Kind, Options};
 use serde_json::{Value, json};
@@ -146,6 +185,36 @@ const MAX_VIEWPORT_PX: f64 = 32_768.0;
 /// Handles a [`Facade::pick`] reply carries: what is under a pointer is a handful of objects, and
 /// a hostile aperture that covers the whole drawing must not serialize all of it every frame.
 const MAX_PICK_HANDLES: usize = 64;
+
+/// The id of the running command a grip edit is ([`Session::start_grip_edit`],
+/// [`Session::start_dyn_grip`] and the typed `GRIP` all run under it).
+const GRIP_COMMAND: &str = "grip";
+
+/// Grips a [`Facade::grips`] reply lists, and [`Facade::grip_at`] searches: past it the list is
+/// cut short and says so (`truncated`). A drafter edits a handful; a selected polyline of a
+/// hundred thousand vertices must not serialize them all, nor be searched every frame.
+pub const MAX_GRIPS: usize = 2048;
+
+/// Selected objects whose grips are listed: the engine's own cap on the objects one grip edit
+/// searches (`MAX_HOT` in its hot-grip machine). It only matters with GRIPOBJLIMIT at 0 (no limit).
+const MAX_GRIP_OBJECTS: usize = 1000;
+
+/// Grips [`Facade::grip_start`] makes hot at once: the engine's own cap (it ignores the rest;
+/// here a longer list is refused, so the interface is not told grips are hot that are not).
+pub const MAX_HOT_GRIPS: usize = 1000;
+
+/// The longest grip id: a 16-digit handle, a 20-digit index and the separators fit well inside.
+const MAX_GRIP_ID_BYTES: usize = 64;
+
+/// The longest id list [`Facade::grip_start`] reads: [`MAX_HOT_GRIPS`] ids of the longest form.
+const MAX_GRIP_IDS_BYTES: usize = MAX_HOT_GRIPS * (MAX_GRIP_ID_BYTES + 4);
+
+/// Choices a list grip (a dynamic block's visibility states, a lookup) carries in a reply.
+const MAX_GRIP_CHOICES: usize = 256;
+
+/// The margin, in pixels, the engine adds to GRIPSIZE for the reach of a grip under the pointer
+/// (its typed `GRIP` uses the same: `GripEdit::grips_at`).
+const GRIP_REACH_MARGIN_PX: f64 = 3.0;
 
 /// The latest time [`Facade::pointer`] accepts, in milliseconds: far past any page's lifetime, and
 /// still a whole number of milliseconds in a double.
@@ -304,8 +373,8 @@ fn prim_color(p: &DPrim) -> (u8, u8, u8) {
 /// of the prompt: `base` (the rubber band's origin, `[x,y]` or `null`), `corner` (the base is a
 /// window's first corner, so ortho does not bend the other), `distance` (a point answers with its
 /// distance from the base) and `deferred` (the prompt resolves deferred tangent and
-/// perpendicular snaps).
-fn cmdline_state(s: &Session) -> Value {
+/// perpendicular snaps) and `gripEdit` (the grip edit running, or `null`: [`grip_edit_state`]).
+fn cmdline_state(s: &Session, hot: &[GripRef]) -> Value {
     let p = s.current_prompt();
     let base = p.as_ref().and_then(|p| p.base).filter(|b| b.is_finite());
     json!({
@@ -318,7 +387,126 @@ fn cmdline_state(s: &Session) -> Value {
         "corner": p.as_ref().is_some_and(|p| p.corner),
         "distance": p.as_ref().is_some_and(|p| p.distance),
         "deferred": p.as_ref().is_some_and(|p| p.deferred),
+        "gripEdit": grip_edit_state(s, p.as_ref(), hot),
     })
+}
+
+/// One grip, as an id names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GripRef {
+    /// Grip `index` of an object ([`Session::grips_of`]'s order).
+    Standard { handle: Handle, index: usize },
+    /// The grip at `part` of parameter `node` of a dynamic block reference.
+    Dynamic { handle: Handle, node: i32, part: GripPart },
+}
+
+impl GripRef {
+    fn handle(self) -> Handle {
+        match self {
+            GripRef::Standard { handle, .. } | GripRef::Dynamic { handle, .. } => handle,
+        }
+    }
+
+    /// The id a reply carries: `1A:2`, or `1A:d2:end` for a dynamic block grip.
+    fn id(self) -> String {
+        match self {
+            GripRef::Standard { handle, index } => format!("{}:{index}", handle.hex()),
+            GripRef::Dynamic { handle, node, part } => format!("{}:d{node}:{}", handle.hex(), part.name()),
+        }
+    }
+
+    /// Read an id back. Only the exact text [`GripRef::id`] writes is one: anything else (other
+    /// case, signs, spaces, a number past its type, a part that is not one) is refused.
+    fn parse(id: &str) -> Result<GripRef, String> {
+        let refused = || "that is not a grip id".to_string();
+        if id.len() > MAX_GRIP_ID_BYTES {
+            return Err(refused());
+        }
+        let mut fields = id.split(':');
+        let (handle, second, third, rest) = (fields.next().and_then(Handle::parse_hex), fields.next(), fields.next(), fields.next());
+        let grip = match (handle, second, third, rest) {
+            (Some(handle), Some(index), None, None) => index.parse::<usize>().ok().map(|index| GripRef::Standard { handle, index }),
+            (Some(handle), Some(node), Some(part), None) => node
+                .strip_prefix('d')
+                .and_then(|n| n.parse::<i32>().ok())
+                .zip(GripPart::from_name(part))
+                .map(|(node, part)| GripRef::Dynamic { handle, node, part }),
+            _ => None,
+        };
+        grip.filter(|g| g.id() == id).ok_or_else(refused)
+    }
+}
+
+/// A grip the selection shows: where it is and whose it is.
+#[derive(Clone, Debug)]
+struct ListedGrip {
+    handle: Handle,
+    at: Vec2,
+    detail: GripDetail,
+}
+
+/// What kind of grip a [`ListedGrip`] is.
+#[derive(Clone, Debug)]
+enum GripDetail {
+    /// An object's own grip, by its index.
+    Standard { index: usize },
+    /// A dynamic block parameter's grip.
+    Dynamic(DynGrip),
+}
+
+impl ListedGrip {
+    fn grip(&self) -> GripRef {
+        match &self.detail {
+            GripDetail::Standard { index } => GripRef::Standard { handle: self.handle, index: *index },
+            GripDetail::Dynamic(d) => GripRef::Dynamic { handle: self.handle, node: d.node, part: d.part },
+        }
+    }
+}
+
+/// A dynamic block grip's shape, as the engine's own JSON names it (`blocks.reference.grips`).
+fn shape_name(shape: GripShape) -> &'static str {
+    match shape {
+        GripShape::Linear => "linear",
+        GripShape::Point => "point",
+        GripShape::List => "list",
+    }
+}
+
+/// Whether the running command is a grip edit.
+fn grip_edit_running(s: &Session) -> bool {
+    s.running.as_ref().is_some_and(|r| r.id == GRIP_COMMAND)
+}
+
+/// The mode a grip prompt names: the title between its asterisks (`** MOVE ** Specify move
+/// point` is `"move"`), in lower case. `None` for a prompt without one (Base point, Reference).
+fn grip_mode(message: &str) -> Option<String> {
+    let (title, _) = message.strip_prefix("** ")?.split_once(" **")?;
+    Some(title.to_lowercase())
+}
+
+/// The hot grips of the running grip edit: those the facade started it with, else the one grip
+/// the prompt says it stretches (an edit started by typing `GRIP`).
+fn hot_now(prompt: Option<&Prompt>, hot: &[GripRef]) -> Vec<GripRef> {
+    if !hot.is_empty() {
+        return hot.to_vec();
+    }
+    prompt.and_then(|p| p.grip).map(|(handle, index)| GripRef::Standard { handle, index }).into_iter().collect()
+}
+
+/// The `gripEdit` of a command-line reply: `null`, or while a grip edit runs
+/// `{"mode":"stretch","hot":["1A:2"]}` ([`grip_mode`], [`hot_now`]).
+fn grip_edit_state(s: &Session, prompt: Option<&Prompt>, hot: &[GripRef]) -> Value {
+    if !grip_edit_running(s) {
+        return Value::Null;
+    }
+    let ids: Vec<String> = hot_now(prompt, hot).into_iter().map(GripRef::id).collect();
+    json!({"mode": prompt.and_then(|p| grip_mode(&p.message)), "hot": ids})
+}
+
+/// The command-line reply's name for a multifunctional grip option, as the engine's own JSON
+/// names it (`grip.option`'s `option`: `"addVertex"`, `"lengthen"`…).
+fn action_id(action: GripAction) -> Value {
+    serde_json::to_value(action).unwrap_or(Value::Null)
 }
 
 /// A world point a pointer call may use: both ordinates finite and within [`MAX_COORD`].
@@ -489,6 +677,9 @@ pub struct Facade {
     /// PAN, a view restore) is mirrored into `view`, so `view()` always reports what the canvas
     /// should be showing; the canvas's own `set_view` writes the session view in step.
     engine_view: cadcraft_engine::View,
+    /// The grips [`Facade::grip_start`] made hot, while that grip edit runs (the engine keeps its
+    /// own list private). Emptied as soon as no grip edit is running ([`Facade::refresh`]).
+    hot: Vec<GripRef>,
 }
 
 impl Default for Facade {
@@ -503,7 +694,7 @@ impl Facade {
         install_host_hooks();
         let session = Session::new();
         let engine_view = session.state().map(|st| st.view()).unwrap_or_default();
-        Facade { session, clock: 0.0, modifiers: Modifiers::default(), view: default_view(), space: Space::Model, engine_view }
+        Facade { session, clock: 0.0, modifiers: Modifiers::default(), view: default_view(), space: Space::Model, engine_view, hot: Vec::new() }
     }
 
     /// The sample drawing `--sample` opens: the mechanical bracket, in model space, fitted.
@@ -512,7 +703,8 @@ impl Facade {
         let mut session = Session::empty();
         session.open_drawing(cadcraft_engine::sample::default_sample(), "Bracket", None);
         let engine_view = session.state().map(|st| st.view()).unwrap_or_default();
-        let mut facade = Facade { session, clock: 0.0, modifiers: Modifiers::default(), view: default_view(), space: Space::Model, engine_view };
+        let mut facade =
+            Facade { session, clock: 0.0, modifiers: Modifiers::default(), view: default_view(), space: Space::Model, engine_view, hot: Vec::new() };
         facade.fit_view();
         facade
     }
@@ -573,7 +765,7 @@ impl Facade {
             self.session.tracking.clear();
             self.session.ctrl_down = false;
         }
-        let mut v = cmdline_state(&self.session);
+        let mut v = cmdline_state(&self.session, &self.hot);
         let out: Vec<String> = self.session.log.iter().skip(before).take(MAX_OUTPUT).cloned().collect();
         if let Some(o) = v.as_object_mut() {
             o.insert("output".into(), json!(out));
@@ -616,7 +808,7 @@ impl Facade {
     /// The command-line state: the prompt as shown, the running command, its keywords and
     /// accepted input kinds, and the output tail.
     pub fn prompt(&self) -> String {
-        let mut v = cmdline_state(&self.session);
+        let mut v = cmdline_state(&self.session, &self.hot);
         let out: Vec<String> = self.session.log.iter().rev().take(OUTPUT_TAIL).rev().cloned().collect();
         if let Some(o) = v.as_object_mut() {
             o.insert("output".into(), json!(out));
@@ -1175,6 +1367,336 @@ impl Facade {
         v.to_string()
     }
 
+    /// The grips of the selection, in selection order and each object's own grip order (the
+    /// module documentation, "Grips"):
+    /// `{"shown":true,"size":5.0,"reach":0.16,"truncated":false,"grips":[…]}`.
+    ///
+    /// `shown` is whether a selection shows grips now: GRIPS is on, no more than GRIPOBJLIMIT
+    /// objects are selected, and no command but a grip edit is running (a command hides the grips
+    /// of what it was given). When it is `false` the list is empty. `size` is GRIPSIZE, the grip
+    /// box in pixels; `reach` is the world distance [`Facade::grip_at`] reaches with an aperture of
+    /// `0`. `truncated` says the list was cut at [`MAX_GRIPS`] (or the selection at the engine's
+    /// cap on objects). A grip whose point is not a usable world coordinate is left out.
+    ///
+    /// Call it when the selection or the drawing's revision changes, never per frame. It changes
+    /// nothing. Past [`MAX_DISPLAY_BYTES`] the reply is the empty list with `error`.
+    pub fn grips(&self) -> String {
+        let s = &self.session;
+        let size = finite(s.settings.gripsize).clamp(1.0, 255.0);
+        let reach = finite(self.grip_reach(0.0).unwrap_or(0.0));
+        let (listed, truncated) = self.listed_grips();
+        let hot = self.hot_grips();
+        let grips: Vec<Value> = listed.iter().map(|g| self.grip_json(g, &hot)).collect();
+        let text = json!({"shown": self.grips_shown(), "size": size, "reach": reach, "truncated": truncated, "grips": grips}).to_string();
+        if text.len() > MAX_DISPLAY_BYTES {
+            return json!({"shown": false, "size": size, "reach": reach, "truncated": true, "grips": [], "error": "the selection has too many grips to list"})
+                .to_string();
+        }
+        text
+    }
+
+    /// The grip under the pointer at a world point: `{"grip":null}`, or `{"grip":{…}}` with the
+    /// grip as [`Facade::grips`] lists it. It is the nearest listed grip whose box holds the point,
+    /// the test the engine's own `GRIP` prompt makes. `aperture` is the half-size of that box in
+    /// world units (`0`: the engine's own, GRIPSIZE plus three pixels at the current view and
+    /// canvas size).
+    ///
+    /// It is its own call, not a field of [`Facade::pick`] or [`Facade::pointer`]: those answer
+    /// about objects and about a running command's point, a grip is neither, and the engine keeps
+    /// its grip search private to the `GRIP` prompt, so there is nothing of the engine's to reuse
+    /// in them. It is cheap enough for every pointer frame at rest and it changes nothing. With no
+    /// drawing, no grips shown, or none there, it replies `null`; a point or aperture that is not
+    /// usable replies `null` with `error`.
+    pub fn grip_at(&self, x: f64, y: f64, aperture: f64) -> String {
+        match self.grip_under(x, y, aperture) {
+            Ok(grip) => json!({"grip": grip}).to_string(),
+            Err(e) => json!({"grip": null, "error": e}).to_string(),
+        }
+    }
+
+    /// Make grips hot and start editing them, as a click on a grip does
+    /// ([`Session::start_grip_edit`]; a dynamic block grip: [`Session::start_dyn_grip`]). `ids` is
+    /// a JSON array of grip ids (`["1A:2"]`); the first is the base grip, and several are the
+    /// grips a Shift+click collected before the click that starts the edit: STRETCH moves them
+    /// together. A dynamic block grip is dragged alone, and a list grip is not dragged at all (its
+    /// choices are [`Facade::grip_options`]).
+    ///
+    /// The edit then runs as the command `grip` at the STRETCH prompt: [`Facade::pointer`] and
+    /// [`Facade::click`] drag and commit it, an empty [`Facade::cmdline`] line cycles the modes,
+    /// its keywords are its options, [`Facade::cancel`] restores the drawing. The whole edit is one
+    /// undo step.
+    ///
+    /// The reply has the shape `cmdline` replies (its `gripEdit` names the mode and the hot
+    /// grips). Refused with `error`, and nothing started or cancelled: a list that is not a JSON
+    /// array of ids, is empty or longer than [`MAX_HOT_GRIPS`]; an id that is not one, or names an
+    /// object that is not selected, a grip the object does not have, or an object on a locked
+    /// layer; and any id while the selection shows no grips (another command is running).
+    pub fn grip_start(&mut self, ids: &str) -> String {
+        let before = self.session.log.len();
+        let error = self.usable_grips(ids).and_then(|grips| self.begin_grip_edit(&grips)).err();
+        self.cmdline_reply(before, error)
+    }
+
+    /// The options of a multifunctional grip, in the order its menu shows them:
+    /// `{"options":[{"id":"lengthen","label":"Lengthen","keyword":"Lengthen","needsPoint":true}]}`.
+    /// `id` is what [`Facade::grip_option`] takes (the engine's `grip.option` names), `label` the
+    /// menu text, `keyword` the same option at the hot grip's STRETCH prompt, and `needsPoint`
+    /// whether it then asks for a point (Add Vertex, Convert to Arc, Lengthen, Radius) or acts at
+    /// once (Remove Vertex, Convert to Line). A list grip of a dynamic block offers its property's
+    /// choices: `id` and `label` are the choice, `keyword` is `null`, and it acts at once.
+    ///
+    /// A grip with only Stretch replies no options. An id that is not usable (as
+    /// [`Facade::grip_start`] refuses it) replies none with `error`. It changes nothing.
+    pub fn grip_options(&self, id: &str) -> String {
+        match self.options_of(id) {
+            Ok(options) => json!({"options": options}).to_string(),
+            Err(e) => json!({"options": [], "error": e}).to_string(),
+        }
+    }
+
+    /// Invoke one option of a multifunctional grip (an `id` of [`Facade::grip_options`]). An option
+    /// that needs a point makes the grip hot and leaves its prompt running (`** ADD VERTEX **
+    /// Specify new vertex point`), to be dragged and committed like any grip edit; one that acts
+    /// at once is done when this returns. A list grip's choice sets its property
+    /// (`blocks.reference.set`). Either way it is one undo step.
+    ///
+    /// The reply has the shape `cmdline` replies. Refused with `error`, and nothing changed: an
+    /// id [`Facade::grip_start`] would refuse, or an option that grip does not offer.
+    pub fn grip_option(&mut self, id: &str, option: &str) -> String {
+        let before = self.session.log.len();
+        let error = self.run_grip_option(id, option).err();
+        self.cmdline_reply(before, error)
+    }
+
+    /// Whether a selection shows grips now: GRIPS on, within GRIPOBJLIMIT
+    /// ([`Session::shows_grips`]), and no command but a grip edit running.
+    fn grips_shown(&self) -> bool {
+        let s = &self.session;
+        let Ok(st) = s.state() else { return false };
+        (s.running.is_none() || grip_edit_running(s)) && s.shows_grips(st.selection.len())
+    }
+
+    /// The hot grips of the running grip edit ([`hot_now`]); none when no grip edit runs.
+    fn hot_grips(&self) -> Vec<GripRef> {
+        if !grip_edit_running(&self.session) {
+            return Vec::new();
+        }
+        hot_now(self.session.current_prompt().as_ref(), &self.hot)
+    }
+
+    /// The reach of a grip under the pointer, in world units ([`usable_aperture`] over the
+    /// engine's GRIPSIZE plus [`GRIP_REACH_MARGIN_PX`] pixels at the current view).
+    fn grip_reach(&self, aperture: f64) -> Result<f64, String> {
+        let s = &self.session;
+        usable_aperture(aperture, s.pixel_size() * (s.settings.gripsize.clamp(1.0, 255.0) + GRIP_REACH_MARGIN_PX))
+    }
+
+    /// The grips the selection shows, and whether the list was cut short: each selected object's
+    /// own grips, then a dynamic block reference's parameter grips, up to [`MAX_GRIPS`] over the
+    /// first [`MAX_GRIP_OBJECTS`] objects. Grips at points no pointer call would take are left out.
+    fn listed_grips(&self) -> (Vec<ListedGrip>, bool) {
+        let mut out = Vec::new();
+        let Ok(st) = self.session.state() else { return (out, false) };
+        if !self.grips_shown() {
+            return (out, false);
+        }
+        for &handle in st.selection.iter().take(MAX_GRIP_OBJECTS) {
+            let Some(e) = st.doc.entity(handle) else { continue };
+            let standard =
+                e.kind.grips().into_iter().enumerate().map(|(index, at)| ListedGrip { handle, at, detail: GripDetail::Standard { index } });
+            let parameters = if matches!(e.kind, EntityKind::Insert(_)) { dynblock::grips(&st.doc, handle) } else { Vec::new() };
+            let dynamic = parameters.into_iter().map(|g| ListedGrip { handle, at: g.at, detail: GripDetail::Dynamic(g) });
+            for grip in standard.chain(dynamic) {
+                if world_point(grip.at.x, grip.at.y).is_err() {
+                    continue;
+                }
+                if out.len() >= MAX_GRIPS {
+                    return (out, true);
+                }
+                out.push(grip);
+            }
+        }
+        (out, st.selection.len() > MAX_GRIP_OBJECTS)
+    }
+
+    /// One listed grip as a reply carries it (the module documentation, "Grips").
+    fn grip_json(&self, g: &ListedGrip, hot: &[GripRef]) -> Value {
+        let s = &self.session;
+        let grip = g.grip();
+        let (kind, multi, index, dynamic) = match &g.detail {
+            GripDetail::Standard { index } => {
+                let multi = s.doc().ok().and_then(|d| d.entity(g.handle)).is_some_and(|e| !grip_actions(&e.kind, *index).is_empty());
+                ("standard", multi, json!(index), Value::Null)
+            }
+            GripDetail::Dynamic(d) => {
+                let choices: Vec<&String> = d.choices.iter().filter(|c| c.len() <= MAX_COMMAND_BYTES).take(MAX_GRIP_CHOICES).collect();
+                let property: String = d.property.chars().take(MAX_COMMAND_BYTES).collect();
+                let dynamic = json!({"node": d.node, "part": d.part.name(), "dir": [finite(d.dir.x), finite(d.dir.y)], "property": property, "choices": choices});
+                (shape_name(d.shape), d.shape == GripShape::List, Value::Null, dynamic)
+            }
+        };
+        json!({
+            "id": grip.id(),
+            "handle": g.handle.hex(),
+            "index": index,
+            "point": [g.at.x, g.at.y],
+            "kind": kind,
+            "multi": multi,
+            "locked": is_locked(s, g.handle),
+            "hot": hot.contains(&grip),
+            "dynamic": dynamic,
+        })
+    }
+
+    /// The grip [`Facade::grip_at`] reports: the nearest listed grip whose box holds the point.
+    fn grip_under(&self, x: f64, y: f64, aperture: f64) -> Result<Value, String> {
+        let p = world_point(x, y)?;
+        let reach = self.grip_reach(aperture)?;
+        let (listed, _) = self.listed_grips();
+        let nearest = listed
+            .iter()
+            .filter(|g| (g.at.x - p.x).abs() <= reach && (g.at.y - p.y).abs() <= reach)
+            .min_by(|a, b| a.at.dist(p).total_cmp(&b.at.dist(p)));
+        Ok(nearest.map_or(Value::Null, |g| self.grip_json(g, &self.hot_grips())))
+    }
+
+    /// A grip id the selection shows now: well formed, its object among the selected objects
+    /// that show grips, and the grip one that object has.
+    fn usable_grip(&self, id: &str) -> Result<GripRef, String> {
+        let grip = GripRef::parse(id)?;
+        let Ok(st) = self.session.state() else { return Err("no drawing open".into()) };
+        if !self.grips_shown() {
+            return Err("the selection shows no grips now".into());
+        }
+        if !st.selection.iter().take(MAX_GRIP_OBJECTS).any(|h| *h == grip.handle()) {
+            return Err("that grip's object is not selected".into());
+        }
+        let exists = match grip {
+            GripRef::Standard { handle, index } => {
+                st.doc.entity(handle).is_some_and(|e| e.kind.grips().get(index).is_some_and(|p| world_point(p.x, p.y).is_ok()))
+            }
+            GripRef::Dynamic { handle, node, part } => dynblock::grips(&st.doc, handle).iter().any(|g| g.node == node && g.part == part),
+        };
+        if exists { Ok(grip) } else { Err("that object has no such grip".into()) }
+    }
+
+    /// The grips [`Facade::grip_start`] was given: a JSON array of usable ids, one to
+    /// [`MAX_HOT_GRIPS`] of them.
+    fn usable_grips(&self, ids: &str) -> Result<Vec<GripRef>, String> {
+        if ids.len() > MAX_GRIP_IDS_BYTES {
+            return Err(format!("the grip list is too long: {} bytes (the limit is {MAX_GRIP_IDS_BYTES})", ids.len()));
+        }
+        let parsed: Value = serde_json::from_str(ids).map_err(|e| format!("bad grip list JSON: {e}"))?;
+        let Some(list) = parsed.as_array() else { return Err("the grips must be a JSON array of grip ids".into()) };
+        if list.is_empty() || list.len() > MAX_HOT_GRIPS {
+            return Err(format!("the grips must be 1 to {MAX_HOT_GRIPS} grip ids"));
+        }
+        list.iter().map(|id| id.as_str().ok_or_else(|| "that is not a grip id".to_string()).and_then(|id| self.usable_grip(id))).collect()
+    }
+
+    /// Start the grip edit of usable grips, and remember them as hot. An engine refusal is echoed
+    /// to the command line, as a refused command is.
+    fn begin_grip_edit(&mut self, grips: &[GripRef]) -> Result<(), String> {
+        if grips.iter().any(|g| is_locked(&self.session, g.handle())) {
+            return Err("The object is on a locked layer.".into());
+        }
+        let started = match grips {
+            [GripRef::Dynamic { handle, node, part }] => self.session.start_dyn_grip(*handle, *node, *part),
+            many => {
+                let standard: Option<Vec<(Handle, usize)>> = many
+                    .iter()
+                    .map(|g| match g {
+                        GripRef::Standard { handle, index } => Some((*handle, *index)),
+                        GripRef::Dynamic { .. } => None,
+                    })
+                    .collect();
+                let Some(hot) = standard else { return Err("a dynamic block grip is dragged alone".into()) };
+                self.session.start_grip_edit(&hot)
+            }
+        }
+        .map_err(|e| e.to_string());
+        match started {
+            Ok(()) => {
+                self.hot = grips.to_vec();
+                Ok(())
+            }
+            Err(e) => {
+                self.session.echo(e.clone());
+                Err(e)
+            }
+        }
+    }
+
+    /// The options [`Facade::grip_options`] lists.
+    fn options_of(&self, id: &str) -> Result<Vec<Value>, String> {
+        let grip = self.usable_grip(id)?;
+        let Ok(d) = self.session.doc() else { return Err("no drawing open".into()) };
+        Ok(match grip {
+            GripRef::Standard { handle, index } => d
+                .entity(handle)
+                .map(|e| grip_actions(&e.kind, index))
+                .unwrap_or_default()
+                .into_iter()
+                .map(|a| json!({"id": action_id(a), "label": a.label(), "keyword": a.keyword(), "needsPoint": a.needs_point()}))
+                .collect(),
+            GripRef::Dynamic { handle, node, part } => dynblock::grips(d, handle)
+                .into_iter()
+                .find(|g| g.node == node && g.part == part && g.shape == GripShape::List)
+                .map(|g| g.choices)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|c| c.len() <= MAX_COMMAND_BYTES)
+                .take(MAX_GRIP_CHOICES)
+                .map(|c| json!({"id": c, "label": c, "keyword": null, "needsPoint": false}))
+                .collect(),
+        })
+    }
+
+    /// What [`Facade::grip_option`] does.
+    fn run_grip_option(&mut self, id: &str, option: &str) -> Result<(), String> {
+        let refused = || "that grip has no such option".to_string();
+        if option.len() > MAX_COMMAND_BYTES {
+            return Err(refused());
+        }
+        let grip = self.usable_grip(id)?;
+        match grip {
+            GripRef::Standard { handle, index } => {
+                let action: GripAction = serde_json::from_value(json!(option)).map_err(|_| refused())?;
+                let offered = self.session.doc().ok().and_then(|d| d.entity(handle)).is_some_and(|e| grip_actions(&e.kind, index).contains(&action));
+                if !offered {
+                    return Err(refused());
+                }
+                self.begin_grip_edit(&[grip])?;
+                // The option is the keyword of the hot grip's own prompt, as typing it there is.
+                self.session.input(Input::Keyword(action.keyword().into())).map_err(|e| {
+                    let m = e.to_string();
+                    self.session.echo(m.clone());
+                    // A refused option leaves no grip edit behind it.
+                    if grip_edit_running(&self.session) {
+                        self.session.cancel();
+                    }
+                    m
+                })
+            }
+            GripRef::Dynamic { handle, node, part } => {
+                let list =
+                    self.session.doc().ok().and_then(|d| {
+                        dynblock::grips(d, handle).into_iter().find(|g| g.node == node && g.part == part && g.shape == GripShape::List)
+                    });
+                let Some(list) = list.filter(|g| g.choices.iter().any(|c| c == option)) else { return Err(refused()) };
+                if is_locked(&self.session, handle) {
+                    return Err("The object is on a locked layer.".into());
+                }
+                let params = json!({"handle": handle.hex(), "name": list.property, "value": option});
+                self.session.execute("blocks.reference.set", &params).map(|_| ()).map_err(|e| {
+                    let m = e.to_string();
+                    self.session.echo(m.clone());
+                    m
+                })
+            }
+        }
+    }
+
     /// Load the sample drawing into the running session (the browser's File ▸ Open Sample
     /// Drawing): the same drawing [`Facade::sample`] starts with, replacing what is open, fitted
     /// to the view. Replies `{"ok":true,"title","entityCount"}`.
@@ -1285,6 +1807,9 @@ impl Facade {
     /// old rectangle was in the old space's units); when a command moved the engine's view (ZOOM,
     /// PAN, a view restore), mirror it into the canvas rectangle, keeping the canvas's aspect.
     fn refresh(&mut self) {
+        if !grip_edit_running(&self.session) {
+            self.hot.clear();
+        }
         let (space, ext, engine_view) = match self.session.state() {
             Ok(st) => (st.space.clone(), st.doc.extents(&st.space), st.view()),
             Err(_) => return,
@@ -1497,6 +2022,31 @@ mod bindings {
         #[wasm_bindgen(js_name = click)]
         pub fn click(&mut self, x: f64, y: f64, aperture: f64) -> String {
             self.0.click(x, y, aperture)
+        }
+
+        #[wasm_bindgen(js_name = grips)]
+        pub fn grips(&self) -> String {
+            self.0.grips()
+        }
+
+        #[wasm_bindgen(js_name = gripAt)]
+        pub fn grip_at(&self, x: f64, y: f64, aperture: f64) -> String {
+            self.0.grip_at(x, y, aperture)
+        }
+
+        #[wasm_bindgen(js_name = gripStart)]
+        pub fn grip_start(&mut self, ids: &str) -> String {
+            self.0.grip_start(ids)
+        }
+
+        #[wasm_bindgen(js_name = gripOptions)]
+        pub fn grip_options(&self, id: &str) -> String {
+            self.0.grip_options(id)
+        }
+
+        #[wasm_bindgen(js_name = gripOption)]
+        pub fn grip_option(&mut self, id: &str, option: &str) -> String {
+            self.0.grip_option(id, option)
         }
 
         #[wasm_bindgen(js_name = openBytes)]
@@ -1829,6 +2379,7 @@ mod tests {
             view: default_view(),
             space: Space::Model,
             engine_view: cadcraft_engine::View::default(),
+            hot: Vec::new(),
         }
     }
 
@@ -2603,5 +3154,701 @@ mod tests {
             assert!(micros < 8_000.0, "{label} takes {micros:.0} us: half a frame");
         }
         assert!(preview_line < whole.max(1.0), "a rubber band ({preview_line:.0} us) must cost less than the whole display list ({whole:.0} us)");
+    }
+
+    // ---------------- grips ----------------
+
+    /// No object snap, grid snap, polar, tracking or ortho: a click lands where it is made.
+    fn free_pointer(f: &mut Facade) {
+        let st = &mut f.session.settings;
+        (st.snapmode, st.orthomode, st.polarmode, st.otrack, st.osmode) = (false, false, false, false, 0);
+    }
+
+    /// The handle of the object drawn last, as replies write it.
+    fn last_handle(f: &Facade) -> String {
+        f.session.doc().unwrap().model.iter().last().unwrap().handle.hex()
+    }
+
+    fn select(f: &mut Facade, handles: &[&str]) {
+        let r = parse(&f.execute("select", &json!({ "handles": handles }).to_string()));
+        assert_eq!(r["ok"], json!(true), "{r}");
+    }
+
+    /// The listed grips as (id, x, y).
+    fn grip_points(f: &Facade) -> Vec<(String, f64, f64)> {
+        let listed = parse(&f.grips());
+        listed["grips"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|g| {
+                let (x, y) = point_of(&g["point"]);
+                (g["id"].as_str().unwrap().to_string(), x, y)
+            })
+            .collect()
+    }
+
+    fn undo_depth(f: &Facade) -> u64 {
+        parse(&f.state())["undoDepth"].as_u64().unwrap()
+    }
+
+    fn start_grips(f: &mut Facade, ids: &[&str]) -> Value {
+        parse(&f.grip_start(&json!(ids).to_string()))
+    }
+
+    /// The line of [`line_facade`], selected, with a pointer nothing bends: (facade, handle).
+    fn gripped_line() -> (Facade, String) {
+        let mut f = line_facade();
+        free_pointer(&mut f);
+        let h = last_handle(&f);
+        select(&mut f, &[&h]);
+        (f, h)
+    }
+
+    #[test]
+    fn a_line_shows_three_grips_and_stretching_an_end_moves_that_end_only() {
+        let mut f = line_facade();
+        free_pointer(&mut f);
+        let h = last_handle(&f);
+        let none = parse(&f.grips());
+        assert_eq!((&none["shown"], &none["grips"]), (&json!(true), &json!([])), "nothing selected: {none}");
+        select(&mut f, &[&h]);
+        let listed = parse(&f.grips());
+        assert_eq!(grip_points(&f), [(format!("{h}:0"), 0.0, 0.0), (format!("{h}:1"), 5.0, 0.0), (format!("{h}:2"), 10.0, 0.0)], "{listed}");
+        // GRIPSIZE 5 px and the engine's 3 px margin at 0.02 units per pixel.
+        assert_eq!(listed["size"], json!(5.0), "{listed}");
+        assert!((listed["reach"].as_f64().unwrap() - 0.16).abs() < 1e-9, "{listed}");
+        let end = &listed["grips"][2];
+        assert_eq!(
+            (&end["handle"], &end["index"], &end["kind"], &end["multi"], &end["locked"], &end["hot"], &end["dynamic"]),
+            (&json!(h), &json!(2), &json!("standard"), &json!(true), &json!(false), &json!(false), &Value::Null),
+            "an end offers Lengthen: {end}"
+        );
+        assert_eq!(listed["grips"][1]["multi"], json!(false), "the midpoint only stretches: {listed}");
+
+        // Hover: inside the grip's box, and outside it.
+        let before = fingerprint(&f);
+        assert_eq!(parse(&f.grip_at(10.1, -0.1, 0.0))["grip"]["id"], json!(format!("{h}:2")));
+        assert_eq!(parse(&f.grip_at(10.2, 0.0, 0.0)), json!({"grip": null}));
+        assert_eq!(parse(&f.grip_at(7.0, 0.0, 2.5))["grip"]["id"], json!(format!("{h}:1")), "the nearest inside a wider box");
+        assert_eq!(fingerprint(&f), before, "looking at grips changes nothing");
+
+        // Press: the end grip is hot and its edit is a running command at the STRETCH prompt.
+        let depth = undo_depth(&f);
+        let started = start_grips(&mut f, &[&format!("{h}:2")]);
+        assert!(started.get("error").is_none(), "{started}");
+        assert_eq!(started["running"], json!("grip"), "{started}");
+        assert_eq!(started["gripEdit"], json!({"mode": "stretch", "hot": [format!("{h}:2")]}), "{started}");
+        assert_eq!(started["base"], json!([10.0, 0.0]), "the rubber band starts at the grip: {started}");
+        let keywords: Vec<&str> = started["keywords"].as_array().unwrap().iter().filter_map(Value::as_str).collect();
+        assert_eq!(keywords, ["Base point", "Copy", "Undo", "Lengthen", "eXit"], "{started}");
+        assert_eq!(parse(&f.prompt())["gripEdit"], started["gripEdit"], "`prompt()` says the same");
+        assert_eq!(parse(&f.grips())["grips"][2]["hot"], json!(true));
+
+        // Drag: the existing pointer call draws the stretched line; nothing is changed yet.
+        let digest = f.digest();
+        let moved = parse(&f.pointer(12.0, 4.0, 0.0, 16.0, 0.0));
+        assert_eq!(moved["point"], json!([12.0, 4.0]), "{moved}");
+        assert!(!moved["preview"]["prims"].as_array().unwrap().is_empty(), "{moved}");
+        assert_eq!(f.digest(), digest);
+
+        // Release: one undo step, the far end where it was, the selection kept.
+        let done = parse(&f.click(12.0, 4.0, 0.0));
+        assert!(done.get("error").is_none() && done["running"].is_null() && done["gripEdit"].is_null(), "{done}");
+        assert_eq!(grip_points(&f), [(format!("{h}:0"), 0.0, 0.0), (format!("{h}:1"), 6.0, 2.0), (format!("{h}:2"), 12.0, 4.0)]);
+        assert_eq!(undo_depth(&f), depth + 1, "one undo step");
+        assert_eq!(parse(&f.selection())["handles"], json!([h]));
+        assert_eq!(parse(&f.grips())["grips"][2]["hot"], json!(false));
+        assert_eq!(parse(&f.execute("undoto", &json!({ "depth": depth }).to_string()))["ok"], json!(true));
+        // An undo drops the selection with the edit: no grips until the line is selected again.
+        assert_eq!(parse(&f.grips())["grips"], json!([]));
+        select(&mut f, &[&h]);
+        assert_eq!(grip_points(&f)[2], (format!("{h}:2"), 10.0, 0.0));
+    }
+
+    #[test]
+    fn a_circles_centre_grip_moves_it_and_a_quadrant_grip_changes_the_radius() {
+        let mut f = Facade::new();
+        free_pointer(&mut f);
+        assert_eq!(parse(&f.execute("circle", r#"{"center":[0,0],"radius":5}"#))["ok"], json!(true));
+        let h = last_handle(&f);
+        select(&mut f, &[&h]);
+        let at = |f: &Facade| grip_points(f).into_iter().map(|(_, x, y)| (x, y)).collect::<Vec<_>>();
+        assert_eq!(at(&f), [(0.0, 0.0), (5.0, 0.0), (0.0, 5.0), (-5.0, 0.0), (0.0, -5.0)]);
+        assert!(parse(&f.grips())["grips"].as_array().unwrap().iter().all(|g| g["multi"] == json!(false)));
+
+        assert!(start_grips(&mut f, &[&format!("{h}:0")]).get("error").is_none());
+        assert!(parse(&f.click(3.0, 3.0, 0.0)).get("error").is_none());
+        assert_eq!(at(&f), [(3.0, 3.0), (8.0, 3.0), (3.0, 8.0), (-2.0, 3.0), (3.0, -2.0)], "the centre grip moves the circle");
+
+        assert!(start_grips(&mut f, &[&format!("{h}:1")]).get("error").is_none());
+        assert!(parse(&f.click(10.0, 3.0, 0.0)).get("error").is_none());
+        assert_eq!(at(&f), [(3.0, 3.0), (10.0, 3.0), (3.0, 10.0), (-4.0, 3.0), (3.0, -4.0)], "a quadrant grip sets the radius");
+    }
+
+    #[test]
+    fn space_cycles_the_modes_and_move_moves_the_whole_selection() {
+        let mut f = line_facade();
+        free_pointer(&mut f);
+        let a = last_handle(&f);
+        assert_eq!(parse(&f.execute("line", r#"{"points":[[0,5],[10,5]]}"#))["ok"], json!(true));
+        let b = last_handle(&f);
+        select(&mut f, &[&a, &b]);
+        let depth = undo_depth(&f);
+        assert!(start_grips(&mut f, &[&format!("{a}:0")]).get("error").is_none());
+        let modes: Vec<Value> = (0..5).map(|_| parse(&f.cmdline(""))["gripEdit"]["mode"].clone()).collect();
+        assert_eq!(modes, [json!("move"), json!("rotate"), json!("scale"), json!("mirror"), json!("stretch")]);
+        let moving = parse(&f.cmdline(""));
+        assert_eq!(moving["gripEdit"], json!({"mode": "move", "hot": [format!("{a}:0")]}), "{moving}");
+        assert!(moving["prompt"].as_str().unwrap().contains("** MOVE **"), "{moving}");
+        // A sub-prompt has no title: the mode is not said there, the edit still is.
+        let base = parse(&f.cmdline("B"));
+        assert_eq!(base["gripEdit"], json!({"mode": null, "hot": [format!("{a}:0")]}), "{base}");
+        assert_eq!(parse(&f.cmdline("0,0"))["gripEdit"]["mode"], json!("move"));
+        let done = parse(&f.click(0.0, 20.0, 0.0));
+        assert!(done.get("error").is_none() && done["running"].is_null(), "{done}");
+        let ys: Vec<f64> = grip_points(&f).into_iter().map(|(_, _, y)| y).collect();
+        assert_eq!(ys, [20.0, 20.0, 20.0, 25.0, 25.0, 25.0], "both selected lines moved");
+        assert_eq!(undo_depth(&f), depth + 1, "one undo step");
+    }
+
+    #[test]
+    fn copy_leaves_the_original_and_the_whole_edit_is_one_undo_step() {
+        let (mut f, h) = gripped_line();
+        let (depth, count) = (undo_depth(&f), entity_count(&f));
+        assert!(start_grips(&mut f, &[&format!("{h}:2")]).get("error").is_none());
+        assert!(parse(&f.cmdline("C")).get("error").is_none());
+        let first = parse(&f.click(10.0, 5.0, 0.0));
+        assert_eq!(first["running"], json!("grip"), "Copy carries on: {first}");
+        f.click(10.0, 9.0, 0.0);
+        assert_eq!(entity_count(&f), count + 2, "two copies");
+        // Undo (the prompt's own keyword) takes back the last copy only.
+        f.cmdline("U");
+        assert_eq!(entity_count(&f), count + 1);
+        // Enter after copies ends the edit.
+        let done = parse(&f.cmdline(""));
+        assert!(done["running"].is_null() && done["gripEdit"].is_null(), "{done}");
+        assert_eq!(grip_points(&f)[2], (format!("{h}:2"), 10.0, 0.0), "the original stays");
+        assert_eq!(undo_depth(&f), depth + 1, "one undo step for the whole edit");
+        assert_eq!(parse(&f.execute("undoto", &json!({ "depth": depth }).to_string()))["ok"], json!(true));
+        assert_eq!(entity_count(&f), count);
+    }
+
+    #[test]
+    fn escape_restores_the_drawing_and_then_drops_the_grips() {
+        let (mut f, h) = gripped_line();
+        let (digest, depth) = (f.digest(), undo_depth(&f));
+        assert!(start_grips(&mut f, &[&format!("{h}:0")]).get("error").is_none());
+        f.pointer(-3.0, 7.0, 0.0, 16.0, 0.0);
+        let cancelled = parse(&f.cancel());
+        assert!(cancelled["running"].is_null() && cancelled["gripEdit"].is_null(), "{cancelled}");
+        assert_eq!((f.digest(), undo_depth(&f)), (digest.clone(), depth), "nothing changed");
+        assert_eq!(grip_points(&f).len(), 3, "the grips stay after the first Escape");
+        assert!(parse(&f.grips())["grips"].as_array().unwrap().iter().all(|g| g["hot"] == json!(false)));
+        // Escape in Copy mode keeps the copies made, as one undo step.
+        start_grips(&mut f, &[&format!("{h}:0")]);
+        f.cmdline("C");
+        f.click(0.0, 5.0, 0.0);
+        f.cancel();
+        assert_eq!(undo_depth(&f), depth + 1);
+        // With nothing running, Escape clears the selection: no grips.
+        f.cancel();
+        assert_eq!(parse(&f.grips())["grips"], json!([]));
+        assert_eq!(parse(&f.grip_at(0.0, 0.0, 0.0)), json!({"grip": null}));
+    }
+
+    #[test]
+    fn several_hot_grips_stretch_together() {
+        let mut f = Facade::new();
+        free_pointer(&mut f);
+        assert_eq!(parse(&f.execute("pline", r#"{"vertices":[[0,0],[10,0],[10,10],[0,10]],"closed":true}"#))["ok"], json!(true));
+        let h = last_handle(&f);
+        select(&mut f, &[&h]);
+        let id_at = |f: &Facade, x: f64, y: f64| grip_points(f).into_iter().find(|g| (g.1, g.2) == (x, y)).map(|g| g.0).unwrap();
+        let (low, high) = (id_at(&f, 10.0, 0.0), id_at(&f, 10.0, 10.0));
+        let started = start_grips(&mut f, &[&low, &high]);
+        assert_eq!(started["gripEdit"]["hot"], json!([low, high]), "{started}");
+        let hot = parse(&f.grips())["grips"].as_array().unwrap().iter().filter(|g| g["hot"] == json!(true)).count();
+        assert_eq!(hot, 2);
+        // Two hot grips have no multifunctional options at the prompt.
+        assert_eq!(started["keywords"], json!(["Base point", "Copy", "Undo", "eXit"]), "{started}");
+        assert!(parse(&f.click(15.0, 0.0, 0.0)).get("error").is_none());
+        let points: Vec<(f64, f64)> = grip_points(&f).into_iter().map(|g| (g.1, g.2)).collect();
+        assert!(points.contains(&(15.0, 0.0)) && points.contains(&(15.0, 10.0)), "{points:?}");
+    }
+
+    #[test]
+    fn a_multifunctional_grip_lists_its_options_and_runs_them() {
+        let mut f = Facade::new();
+        free_pointer(&mut f);
+        assert_eq!(parse(&f.execute("pline", r#"{"vertices":[[0,0],[10,0],[10,10]]}"#))["ok"], json!(true));
+        let h = last_handle(&f);
+        select(&mut f, &[&h]);
+        let id_at = |f: &Facade, x: f64, y: f64| grip_points(f).into_iter().find(|g| (g.1, g.2) == (x, y)).map(|g| g.0).unwrap();
+        let corner = id_at(&f, 10.0, 0.0);
+        let options = parse(&f.grip_options(&corner));
+        assert_eq!(
+            options,
+            json!({"options": [
+                {"id": "addVertex", "label": "Add Vertex", "keyword": "Add vertex", "needsPoint": true},
+                {"id": "removeVertex", "label": "Remove Vertex", "keyword": "Remove vertex", "needsPoint": false},
+            ]})
+        );
+        let ids = |f: &Facade, id: &str| -> Vec<String> {
+            parse(&f.grip_options(id))["options"].as_array().unwrap().iter().map(|o| o["id"].as_str().unwrap().to_string()).collect()
+        };
+        assert_eq!(ids(&f, &id_at(&f, 5.0, 0.0)), ["addVertex", "toArc"], "a segment's midpoint");
+
+        // An option that needs a point leaves its prompt running; the click commits it.
+        let depth = undo_depth(&f);
+        let asked = parse(&f.grip_option(&corner, "addVertex"));
+        assert!(asked.get("error").is_none(), "{asked}");
+        assert_eq!(asked["gripEdit"], json!({"mode": "add vertex", "hot": [corner]}), "{asked}");
+        assert!(!parse(&f.pointer(15.0, 5.0, 0.0, 16.0, 0.0))["preview"]["prims"].as_array().unwrap().is_empty());
+        assert!(parse(&f.click(15.0, 5.0, 0.0))["running"].is_null());
+        assert_eq!(grip_points(&f).len(), 7, "four vertices and three midpoints");
+        assert_eq!(undo_depth(&f), depth + 1, "one undo step");
+
+        // One that acts at once is done when the call returns.
+        let added = id_at(&f, 15.0, 5.0);
+        let removed = parse(&f.grip_option(&added, "removeVertex"));
+        assert!(removed.get("error").is_none() && removed["running"].is_null(), "{removed}");
+        assert_eq!(grip_points(&f).len(), 5);
+        assert_eq!(undo_depth(&f), depth + 2);
+
+        // An option the grip does not offer, or that is none, is refused and changes nothing.
+        let before = fingerprint(&f);
+        for option in ["radius", "lengthen", "explode", "", "AddVertex", "Add vertex"] {
+            let r = parse(&f.grip_option(&id_at(&f, 5.0, 0.0), option));
+            assert!(r["error"].is_string() && r["running"].is_null(), "{option}: {r}");
+            assert_eq!(fingerprint(&f), before, "{option}");
+        }
+        // A line's end offers Lengthen; its midpoint nothing.
+        assert_eq!(parse(&f.execute("line", r#"{"points":[[0,20],[10,20]]}"#))["ok"], json!(true));
+        let line = last_handle(&f);
+        select(&mut f, &[&line]);
+        assert_eq!(ids(&f, &format!("{line}:2")), ["lengthen"]);
+        assert_eq!(parse(&f.grip_options(&format!("{line}:1"))), json!({"options": []}));
+        assert_eq!(parse(&f.grip_option(&format!("{line}:2"), "lengthen"))["gripEdit"]["mode"], json!("lengthen"));
+        f.click(15.0, 23.0, 0.0);
+        assert_eq!(grip_points(&f)[2], (format!("{line}:2"), 15.0, 20.0), "the picked point is projected onto the line");
+    }
+
+    #[test]
+    fn grips_obey_grips_gripobjlimit_locked_layers_and_running_commands() {
+        let (mut f, h) = gripped_line();
+        assert_eq!(parse(&f.execute("line", r#"{"points":[[0,5],[10,5]]}"#))["ok"], json!(true));
+        let other = last_handle(&f);
+        let id = format!("{h}:0");
+        let dark = |f: &mut Facade, why: &str| {
+            let listed = parse(&f.grips());
+            assert_eq!((&listed["shown"], &listed["grips"]), (&json!(false), &json!([])), "{why}: {listed}");
+            assert_eq!(parse(&f.grip_at(0.0, 0.0, 0.0)), json!({"grip": null}), "{why}");
+            assert!(parse(&f.grip_options(&id))["error"].is_string(), "{why}");
+            let before = fingerprint(f);
+            assert!(start_grips(f, &[&id])["error"].is_string(), "{why}");
+            assert!(parse(&f.grip_option(&id, "lengthen"))["error"].is_string(), "{why}");
+            assert_eq!(fingerprint(f), before, "{why}: a refused grip call changes nothing, and cancels nothing");
+        };
+        // GRIPS off.
+        f.session.settings.grips = 0;
+        dark(&mut f, "GRIPS 0");
+        f.session.settings.grips = 1;
+        // More objects selected than GRIPOBJLIMIT.
+        select(&mut f, &[&h, &other]);
+        f.session.settings.gripobjlimit = 1;
+        dark(&mut f, "GRIPOBJLIMIT 1");
+        f.session.settings.gripobjlimit = 0;
+        assert_eq!(grip_points(&f).len(), 6, "0 is no limit");
+        f.session.settings.gripobjlimit = 100;
+        // Another command running.
+        f.start("circle");
+        dark(&mut f, "a command is running");
+        f.cancel();
+        assert_eq!(grip_points(&f).len(), 6);
+        // A stale id: the object is no longer selected.
+        select(&mut f, &[&other]);
+        assert!(start_grips(&mut f, &[&id])["error"].as_str().is_some_and(|e| e.contains("not selected")));
+        // A locked layer: the grips show, flagged, and an edit is refused.
+        select(&mut f, &[&h]);
+        assert_eq!(parse(&f.execute("layer.set", r#"{"name":"0","locked":true}"#))["ok"], json!(true));
+        assert_eq!(parse(&f.grips())["grips"][0]["locked"], json!(true));
+        let refused = start_grips(&mut f, &[&id]);
+        assert!(refused["error"].as_str().is_some_and(|e| e.contains("locked")) && refused["running"].is_null(), "{refused}");
+        assert!(parse(&f.grip_option(&id, "lengthen"))["error"].is_string());
+    }
+
+    /// DXF text from lines of `code value`.
+    fn dxf(src: &str) -> String {
+        src.lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(|l| {
+                let (code, value) = l.split_once(' ').unwrap_or((l, ""));
+                format!("{code}\n{value}\n")
+            })
+            .collect()
+    }
+
+    /// A facade on the io tests' synthetic DOOR dynamic block with the grips the engine's own
+    /// `dynamic_grips` tests add (Width's end grip, the visibility list grip) and one reference
+    /// to it at (100, 0), selected: (facade, the reference's handle).
+    fn door_facade() -> (Facade, String) {
+        let grip =
+            "0 BLOCKLINEARGRIP\n5 68\n330 61\n100 AcDbEvalExpr\n90 9\n98 33\n99 232\n100 AcDbBlockElement\n300 End Grip\n98 33\n99 232\n1071 0\n";
+        let src = include_str!("../../io/tests/data/dynblock_door.txt")
+            .replace("\r\n", "\n")
+            .replace("170 4\n91 0\n91 0\n", "170 4\n91 8\n91 9\n")
+            .replace("1030 0\n93 0\n170 0\n171 0\n100 AcDbBlockVisibilityParameter", "1030 0\n93 10\n170 0\n171 0\n100 AcDbBlockVisibilityParameter")
+            .replace("91 5\n93 32\n95 6\n360 67", "91 5\n93 32\n95 6\n360 67\n92 -1\n92 -1\n92 -1\n92 -1\n91 6\n93 32\n95 9\n360 68")
+            .replace("95 1\n333 63\n", "95 2\n333 63\n333 68\n")
+            .replace("0 BLOCKFLIPGRIP", &format!("{grip}0 BLOCKFLIPGRIP"));
+        let drawing = cadcraft_io::read_dxf(dxf(&src).as_bytes()).unwrap();
+        let mut f = empty_facade();
+        f.session.open_drawing(drawing, "door", None);
+        free_pointer(&mut f);
+        // The reference stands at (100, 0): a view that holds it, so its preview is not culled.
+        assert_eq!(parse(&f.set_view(60.0, -40.0, 180.0, 40.0))["ok"], json!(true));
+        let r = parse(&f.execute("insert", r#"{"name":"Door","at":[100,0]}"#));
+        let h = r["result"]["handle"].as_str().unwrap().to_string();
+        select(&mut f, &[&h]);
+        (f, h)
+    }
+
+    fn door_property(f: &mut Facade, h: &str, name: &str) -> String {
+        let r = parse(&f.execute("blocks.reference", &json!({ "handle": h }).to_string()));
+        let p = r["result"]["properties"].as_array().unwrap().iter().find(|p| p["name"] == json!(name)).cloned().unwrap_or(Value::Null);
+        p["value"].as_str().unwrap_or_default().to_string()
+    }
+
+    #[test]
+    fn a_dynamic_blocks_parameter_grips_are_listed_dragged_and_chosen_from() {
+        let (mut f, h) = door_facade();
+        let listed = parse(&f.grips());
+        let grips = listed["grips"].as_array().unwrap();
+        let kinds: Vec<(&str, &str)> = grips.iter().map(|g| (g["id"].as_str().unwrap(), g["kind"].as_str().unwrap())).collect();
+        let (insert, list, end) = (format!("{h}:0"), format!("{h}:d1:at"), format!("{h}:d2:end"));
+        assert_eq!(kinds, [(insert.as_str(), "standard"), (list.as_str(), "list"), (end.as_str(), "linear")], "{listed}");
+        let width = &grips[2];
+        assert_eq!((&width["point"], &width["index"], &width["multi"]), (&json!([136.0, -4.0]), &Value::Null, &json!(false)), "{width}");
+        assert_eq!(
+            (&width["dynamic"]["node"], &width["dynamic"]["part"], &width["dynamic"]["property"]),
+            (&json!(2), &json!("end"), &json!("Width"))
+        );
+        assert!(width["dynamic"]["dir"].as_array().is_some_and(|d| d.len() == 2), "{width}");
+        assert_eq!(grips[1]["multi"], json!(true), "a list grip is chosen from: {listed}");
+        assert_eq!(parse(&f.grip_at(136.0, -4.0, 0.5))["grip"]["id"], json!(end));
+
+        // Drag the distance's arrow: its own prompt, a preview of the reference, one undo step.
+        let depth = undo_depth(&f);
+        let started = start_grips(&mut f, &[&end]);
+        assert!(started.get("error").is_none(), "{started}");
+        assert_eq!(started["gripEdit"], json!({"mode": "stretch", "hot": [end]}), "{started}");
+        assert_eq!(started["base"], json!([136.0, -4.0]), "{started}");
+        assert!(parse(&f.pointer(132.0, 0.0, 0.0, 16.0, 0.0))["preview"]["prims"].as_array().unwrap().len() > 1);
+        let done = parse(&f.click(132.2, 3.0, 0.0));
+        assert!(done.get("error").is_none() && done["running"].is_null(), "{done}");
+        assert_eq!(door_property(&mut f, &h, "Width"), "32.0000");
+        assert_eq!(undo_depth(&f), depth + 1, "one undo step");
+        // Escape restores.
+        start_grips(&mut f, &[&end]);
+        f.pointer(120.0, 0.0, 0.0, 32.0, 0.0);
+        f.cancel();
+        assert_eq!(door_property(&mut f, &h, "Width"), "32.0000");
+        assert_eq!(undo_depth(&f), depth + 1);
+
+        // A dynamic grip is dragged alone, and a list grip is not dragged.
+        let before = fingerprint(&f);
+        assert!(start_grips(&mut f, &[&end, &insert])["error"].is_string());
+        assert_eq!(fingerprint(&f), before);
+        assert!(start_grips(&mut f, &[&list])["error"].is_string());
+        assert!(parse(&f.prompt())["running"].is_null());
+        assert!(start_grips(&mut f, &[&format!("{h}:d2:base")])["error"].is_string(), "a grip the reference does not show");
+        assert_eq!(parse(&f.grip_options(&end)), json!({"options": []}));
+
+        // The list grip offers its property's choices; choosing one is one undo step.
+        let options = parse(&f.grip_options(&list));
+        let choices: Vec<&str> = options["options"].as_array().unwrap().iter().filter_map(|o| o["id"].as_str()).collect();
+        assert!(choices.contains(&"Open") && choices.contains(&"Closed"), "{options}");
+        assert_eq!(options["options"][0]["needsPoint"], json!(false), "{options}");
+        let property = grips[1]["dynamic"]["property"].as_str().unwrap().to_string();
+        let depth = undo_depth(&f);
+        let chosen = parse(&f.grip_option(&list, "Closed"));
+        assert!(chosen.get("error").is_none() && chosen["running"].is_null(), "{chosen}");
+        assert_eq!(door_property(&mut f, &h, &property), "Closed");
+        assert_eq!(undo_depth(&f), depth + 1);
+        assert!(parse(&f.grip_option(&list, "Ajar"))["error"].is_string(), "not one of its choices");
+        assert!(parse(&f.grip_option(&list, "addVertex"))["error"].is_string());
+    }
+
+    #[test]
+    fn a_typed_grip_edit_reports_its_grip_too() {
+        // An edit the facade did not start (GRIP typed at the command line): `gripEdit` still
+        // says it runs, and names the grip the engine's prompt says it stretches.
+        let (mut f, h) = gripped_line();
+        let picking = parse(&f.cmdline("GRIP"));
+        assert_eq!(picking["gripEdit"], json!({"mode": null, "hot": []}), "{picking}");
+        f.cmdline("10,0");
+        let editing = parse(&f.cmdline(""));
+        assert_eq!(editing["gripEdit"], json!({"mode": "stretch", "hot": [format!("{h}:2")]}), "{editing}");
+        assert_eq!(parse(&f.grips())["grips"][2]["hot"], json!(true));
+        f.cancel();
+        assert!(parse(&f.prompt())["gripEdit"].is_null());
+    }
+
+    #[test]
+    fn hostile_grip_input_never_panics() {
+        // In every state a grip call can meet: no drawing, the sample with everything selected, a
+        // selected line at rest, the same with a grip edit running, and a dynamic block.
+        let mut everything = Facade::sample();
+        let all: Vec<Handle> = everything.session.doc().unwrap().model.iter().map(|e| e.handle).collect();
+        everything.session.set_selection(all);
+        everything.session.settings.gripobjlimit = 0;
+        let (resting, h) = gripped_line();
+        let (mut editing, _) = gripped_line();
+        assert!(start_grips(&mut editing, &[&format!("{h}:2")]).get("error").is_none());
+        let (door, door_handle) = door_facade();
+        let long = "A".repeat(10_000);
+        let deep = "[".repeat(100_000);
+        let many = json!(vec![format!("{h}:0"); MAX_HOT_GRIPS + 1]).to_string();
+        let ids = [
+            "",
+            ":",
+            "::",
+            ":0",
+            "ZZ:0",
+            "-1:0",
+            "0:0",
+            " 1A:0",
+            "1A:0 ",
+            "1A:",
+            "1A:-1",
+            "1A:+0",
+            "1A:00",
+            "1A:1.5",
+            "1A:1e3",
+            "1A:NaN",
+            "1A:99999999999999999999999999",
+            "1A:0:0",
+            "1A:0:end",
+            "1A:d:end",
+            "1A:d2",
+            "1A:d2:middle",
+            "1A:d2:END",
+            "1A:d-0:end",
+            "1A:d99999999999:end",
+            "1A:d2:end:x",
+            "1a:0",
+            "FFFFFFFFFFFFFFFF:0",
+            "FFFFFFFFFFFFFFFFF:0",
+            "\u{0}:\u{0}",
+            "１Ａ:０",
+            long.as_str(),
+        ];
+        for mut f in [empty_facade(), everything, resting, editing, door] {
+            let before = fingerprint(&f);
+            let absurd =
+                [format!("{h}:3"), format!("{h}:18446744073709551615"), format!("{h}:d2:end"), format!("{door_handle}:d7:at"), "FFFF:0".to_string()];
+            for id in ids.iter().copied().chain(absurd.iter().map(String::as_str)) {
+                let shown = &id[..id.len().min(40)];
+                // An id of another facade's drawing may happen to be a grip here: only the
+                // malformed ones must be refused, none may panic or change anything by a look.
+                let options = parse(&f.grip_options(id));
+                assert!(options["options"].is_array(), "options of {shown:?}: {options}");
+                let malformed = GripRef::parse(id).is_err();
+                if malformed {
+                    assert!(options["error"].is_string(), "options of {shown:?}: {options}");
+                    assert!(parse(&f.grip_start(&json!([id]).to_string()))["error"].is_string(), "start {shown:?}");
+                    for option in ["lengthen", "", long.as_str(), "\u{0}"] {
+                        assert!(parse(&f.grip_option(id, option))["error"].is_string(), "option of {shown:?}");
+                    }
+                    assert_eq!(fingerprint(&f), before, "a refused grip id changed something: {shown:?}");
+                }
+            }
+            // Lists that are not a list of ids.
+            for list in [
+                "",
+                " ",
+                "null",
+                "{}",
+                "[]",
+                "0",
+                "[1,2]",
+                "[null]",
+                r#"[["1A:0"]]"#,
+                r#""1A:0""#,
+                "not json",
+                "[",
+                deep.as_str(),
+                many.as_str(),
+                long.as_str(),
+            ] {
+                let r = parse(&f.grip_start(list));
+                assert!(r["error"].is_string(), "start {:?}: {r}", &list[..list.len().min(40)]);
+                assert_eq!(fingerprint(&f), before, "a refused grip list changed something");
+            }
+            // An option that is none, of a grip that may be one.
+            for option in ["", "explode", long.as_str(), "\u{0}", "null", "1e308"] {
+                for id in [format!("{h}:0"), format!("{door_handle}:d1:at"), format!("{door_handle}:d2:end")] {
+                    assert!(parse(&f.grip_option(&id, option))["error"].is_string(), "{id} {option:?}");
+                }
+            }
+            assert_eq!(fingerprint(&f), before, "a refused grip option changed something");
+            // Hostile points and apertures under the pointer.
+            for &a in &HOSTILE {
+                for &b in &[0.0, 1.0, a] {
+                    for (x, y) in [(a, b), (b, a)] {
+                        let r = parse(&f.grip_at(x, y, 1.0));
+                        assert!(r["grip"].is_null() && r["error"].is_string(), "grip_at {x},{y}: {r}");
+                    }
+                }
+                for aperture in [a, -1.0, -0.0, -f64::MIN_POSITIVE] {
+                    let r = parse(&f.grip_at(1.0, 1.0, aperture));
+                    assert!(r.get("grip").is_some(), "grip_at aperture {aperture}: {r}");
+                    if !aperture.is_finite() || aperture < 0.0 {
+                        assert!(r["grip"].is_null() && r["error"].is_string(), "grip_at aperture {aperture}: {r}");
+                    }
+                }
+                // Hostile grip settings: the replies stay JSON a canvas can read.
+                let (size, limit) = (f.session.settings.gripsize, f.session.settings.gripobjlimit);
+                f.session.settings.gripsize = a;
+                f.session.settings.gripobjlimit = u32::MAX;
+                let listed = parse(&f.grips());
+                assert!(listed["size"].as_f64().is_some_and(|s| (1.0..=255.0).contains(&s)), "GRIPSIZE {a}: {}", listed["size"]);
+                assert!(listed["reach"].as_f64().is_some_and(|r| r.is_finite() && r >= 0.0), "GRIPSIZE {a}: {}", listed["reach"]);
+                assert!(listed["grips"].as_array().is_some_and(|g| g.len() <= MAX_GRIPS), "GRIPSIZE {a}");
+                assert!(parse(&f.grip_at(1.0, 1.0, 0.0)).get("grip").is_some(), "GRIPSIZE {a}");
+                (f.session.settings.gripsize, f.session.settings.gripobjlimit) = (size, limit);
+            }
+            assert_eq!(fingerprint(&f), before, "looking at grips changed something");
+            // The facade still answers after all of it.
+            let listed = parse(&f.grips());
+            assert!(listed.get("error").is_none() && listed["grips"].is_array(), "{listed}");
+            assert!(parse(&f.grip_at(1.0, 1.0, 0.0)).get("error").is_none());
+        }
+    }
+
+    #[test]
+    fn ids_the_selection_does_not_show_are_refused_and_change_nothing() {
+        // Well-formed ids of grips that are not there: an index past the object's grips, the
+        // largest index, a dynamic grip of an object that is no block, an object that does not
+        // exist, and a grip of an object that was selected a moment ago.
+        let (mut f, h) = gripped_line();
+        assert_eq!(parse(&f.execute("line", r#"{"points":[[0,5],[10,5]]}"#))["ok"], json!(true));
+        let stale = format!("{}:0", last_handle(&f));
+        for running in [false, true] {
+            if running {
+                assert!(start_grips(&mut f, &[&format!("{h}:2")]).get("error").is_none());
+            }
+            let before = fingerprint(&f);
+            for id in [
+                format!("{h}:3"),
+                format!("{h}:{}", usize::MAX),
+                format!("{h}:d2:end"),
+                format!("{h}:d{}:at", i32::MIN),
+                "FFFF:0".to_string(),
+                stale.clone(),
+            ] {
+                assert!(GripRef::parse(&id).is_ok(), "{id} is well formed");
+                let options = parse(&f.grip_options(&id));
+                assert!(options["error"].is_string() && options["options"] == json!([]), "{id}: {options}");
+                let started = start_grips(&mut f, &[&id]);
+                assert!(started["error"].is_string(), "{id}: {started}");
+                // One bad id refuses the whole list: no grip is made hot beside it.
+                assert!(start_grips(&mut f, &[&format!("{h}:0"), &id])["error"].is_string(), "{id}");
+                assert!(parse(&f.grip_option(&id, "lengthen"))["error"].is_string(), "{id}");
+                assert_eq!(fingerprint(&f), before, "{id} (a grip edit running: {running})");
+            }
+            // The running edit is still the one that was started.
+            assert_eq!(parse(&f.prompt())["gripEdit"]["hot"], if running { json!([format!("{h}:2")]) } else { Value::Null });
+        }
+    }
+
+    #[test]
+    fn a_huge_selection_lists_a_capped_number_of_grips() {
+        // A polyline of more vertices than a reply lists: the list is cut and says so, and a grip
+        // past the cut is still one the object has.
+        let mut f = Facade::new();
+        let count = u32::try_from(MAX_GRIPS).unwrap();
+        let vertices: Vec<[f64; 2]> = (0..count).map(|i| [f64::from(i), f64::from(i % 2)]).collect();
+        assert_eq!(parse(&f.execute("pline", &json!({ "vertices": vertices }).to_string()))["ok"], json!(true));
+        let h = last_handle(&f);
+        select(&mut f, &[&h]);
+        let listed = parse(&f.grips());
+        assert_eq!(listed["truncated"], json!(true), "{}", listed["truncated"]);
+        assert_eq!(listed["grips"].as_array().map(Vec::len), Some(MAX_GRIPS));
+        assert!(f.grips().len() < MAX_DISPLAY_BYTES);
+        assert!(parse(&f.grip_options(&format!("{h}:{}", MAX_GRIPS + 10)))["options"].as_array().is_some_and(|o| !o.is_empty()));
+    }
+
+    /// What the grip calls cost on the sample drawing with everything selected, printed in
+    /// microseconds: `cargo test -p cadcraft-wasm --release grip_calls_are_cheap -- --nocapture`.
+    /// `grip_at` runs once per animation frame at rest and `pointer` once per frame of a drag, so
+    /// each must stay a small part of a 16 ms frame; `grips` runs once per selection change. The
+    /// bounds are loose enough for a debug build on a busy machine.
+    #[test]
+    fn grip_calls_are_cheap() {
+        const ROUNDS: u32 = 200;
+        let mut f = Facade::sample();
+        free_pointer(&mut f);
+        assert_eq!(parse(&f.set_viewport(1280.0, 800.0))["ok"], json!(true));
+        let all: Vec<Handle> = f.session.doc().unwrap().model.iter().map(|e| e.handle).collect();
+        let objects = all.len();
+        f.session.set_selection(all);
+        f.session.settings.gripobjlimit = 0;
+        let view = parse(&f.view());
+        let ((x0, y0), (x1, y1)) = (point_of(&view["min"]), point_of(&view["max"]));
+        let at = |i: u32| {
+            let t = f64::from(i % ROUNDS) / f64::from(ROUNDS);
+            (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)
+        };
+        let time = |label: &str, call: &mut dyn FnMut(f64, f64) -> usize| {
+            let started = std::time::Instant::now();
+            let mut bytes = 0;
+            for i in 0..ROUNDS {
+                let (x, y) = at(i);
+                bytes += call(x, y);
+            }
+            let micros = started.elapsed().as_secs_f64() * 1e6 / f64::from(ROUNDS);
+            println!("{label}: {micros:.1} us per call, {} reply bytes on average", bytes / ROUNDS as usize);
+            micros
+        };
+        let listed = grip_points(&f);
+        println!("the sample with everything selected: {objects} objects, {} grips", listed.len());
+        assert!(listed.len() > objects, "every object shows grips");
+        let (first, fx, fy) = listed.first().cloned().unwrap();
+        let list = time("grips (the whole selection)", &mut |_, _| f.grips().len());
+        let hover = time("grip_at (sweeping the view, the engine's reach)", &mut |x, y| f.grip_at(x, y, 0.0).len());
+        let hover_hit = time("grip_at (resting on a grip)", &mut |_, _| f.grip_at(fx, fy, 0.0).len());
+        let options = time("grip_options (one grip)", &mut |_, _| f.grip_options(&first).len());
+        let ids = json!([first]).to_string();
+        let start = time("grip_start then cancel", &mut |_, _| {
+            let n = f.grip_start(&ids).len();
+            f.cancel();
+            n
+        });
+        assert!(parse(&f.grip_start(&ids)).get("error").is_none());
+        let mut tick = 0.0;
+        let drag = time("pointer (dragging one hot grip: STRETCH)", &mut |x, y| {
+            tick += 16.0;
+            f.pointer(x, y, 0.0, tick, 0.0).len()
+        });
+        f.cmdline("");
+        let drag_all = time("pointer (dragging in MOVE: the whole selection)", &mut |x, y| {
+            tick += 16.0;
+            f.pointer(x, y, 0.0, tick, 0.0).len()
+        });
+        let depth = undo_depth(&f);
+        let started = std::time::Instant::now();
+        let committed = parse(&f.click((x0 + x1) / 2.0, (y0 + y1) / 2.0, 0.0));
+        println!("click (commit the MOVE of everything): {:.1} us", started.elapsed().as_secs_f64() * 1e6);
+        assert!(committed.get("error").is_none() && committed["running"].is_null(), "{committed}");
+        assert_eq!(undo_depth(&f), depth + 1, "one undo step");
+        for (label, micros) in [("grip_at", hover.max(hover_hit)), ("grip_options", options), ("pointer while dragging", drag.max(drag_all))] {
+            assert!(micros < 8_000.0, "{label} takes {micros:.0} us: half a frame");
+        }
+        for (label, micros) in [("grips", list), ("grip_start", start)] {
+            assert!(micros < 100_000.0, "{label} takes {micros:.0} us: a selection change must not stall");
+        }
     }
 }

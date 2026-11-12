@@ -20,12 +20,16 @@ import { applyPick, pickAperture, type PickRule } from "./selection";
 import { parseProperties, type PropertiesReply } from "./props";
 import { chordCommand, classify, isMacPlatform, pressShortcut, shortcutLabel, UI_ITEMS } from "./commands";
 import { paletteItems, rememberCommand } from "./palette";
+import { drawingMenu, layerMenu, layoutMenu, rightClickAction, type ContextAction, type ContextMenuModel } from "./context";
 import { defaultFileName, downloadBytes, pickFile } from "./files";
 import { TopBar } from "./components/TopBar";
 import { MenuBar } from "./components/MenuBar";
 import { ToolStrip } from "./components/ToolStrip";
 import { LayoutTabs, STATUS_TOGGLES, StatusBar } from "./components/StatusBar";
 import { CommandPalette } from "./components/CommandPalette";
+import { DraftingSettings } from "./components/DraftingSettings";
+import { draftingTabFor, opensDraftingSettings, type DraftingTab } from "./drafting";
+import { ContextMenu, isMenuKey, type MenuPoint, type OpenContextMenu } from "./components/ContextMenu";
 import { AssistantPane } from "./components/AssistantPane";
 import { createAssistantSession, type AssistantSession } from "./assistant-session";
 import { CanvasView } from "./components/CanvasView";
@@ -68,6 +72,17 @@ const OWN_KEYS = "input, textarea, select, [contenteditable], dialog, .assistant
 /** What takes Escape before the shell does while it is open: a menu, the palette, the assistant's setup sheet. */
 const SHEET = ".assistant-setup";
 const OVERLAYS = `.menu-drop, dialog[open], ${SHEET}`;
+
+/** What has a right-click menu of its own: the drawing, a layer's row, a layout's tab. */
+const MENU_OWNERS = ".canvas-stage, .layer-row, .editor-tabs [role='tab'], .status-toggles button";
+
+/** What a right-click menu is for. */
+type ContextTarget = { kind: "drawing" } | { kind: "layer"; name: string } | { kind: "layout"; name: string };
+
+/** The handles a `select` or `qselect` reply names (`{handles: [hex]}`), read with checked narrowing. */
+function replyHandles(result: unknown): string[] {
+  return result !== null && typeof result === "object" && "handles" in result && Array.isArray(result.handles) ? result.handles.filter((h): h is string => typeof h === "string") : [];
+}
 
 /** Whether a key went down on the drawing, or with the keyboard on nothing at all. */
 function onDrawing(target: Element | null): boolean {
@@ -347,6 +362,14 @@ export function App(props: AppProps): JSX.Element {
         setPaletteOpen((v) => !v);
         return;
       }
+      // The menu key and Shift+F10 on something that has a menu of its own: the surface answers a
+      // `contextmenu` no button made exactly as it answers the pointer's, and opens its menu
+      // beside what has the focus. Anywhere else the key is the browser's.
+      if (isMenuKey(e) && e.target instanceof Element && e.target.closest(MENU_OWNERS) !== null && document.querySelector(OVERLAYS) === null) {
+        e.preventDefault();
+        if (!e.repeat) e.target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+        return;
+      }
       // Ctrl+1 and Ctrl+9 are the keys the Window menu prints beside Properties Inspector and
       // Command Line (the desktop's; a browser keeps them for its tabs, the desktop window does not).
       if (mod && !e.shiftKey && !e.altKey && (key === "7" || key === "b" || key === "j" || key === "1" || key === "9")) {
@@ -381,7 +404,7 @@ export function App(props: AppProps): JSX.Element {
       }
       // A drafting toggle's function key (the cap its status key shows) flips that setting.
       if (!mod && !e.altKey && !e.shiftKey && !e.repeat) {
-        const toggle = STATUS_TOGGLES.find((t) => t.shortcut === e.key);
+        const toggle = document.querySelector(OVERLAYS) === null ? STATUS_TOGGLES.find((t) => t.shortcut === e.key) : undefined;
         if (toggle !== undefined) {
           e.preventDefault();
           onStatusCommand(toggle.id, { on: !settings()[toggle.key] });
@@ -530,7 +553,18 @@ export function App(props: AppProps): JSX.Element {
    * the drawing. The engine hears the view on screen first, and the canvas follows a view the
    * command moved (ZOOM, PAN, a view restore).
    */
+  /** The Drafting Settings dialog: whether it shows, and the page it opens on. */
+  const [drafting, setDrafting] = createSignal<{ open: boolean; tab: DraftingTab }>({ open: false, tab: "snap-grid" });
+  const openDrafting = (tab: DraftingTab = "snap-grid"): void => {
+    setDrafting({ open: true, tab });
+  };
+
   const onCommand = (text: string): void => {
+    // Its name typed at an idle command line opens the dialog, as its menu item does.
+    if (prompt().running === null && opensDraftingSettings(text)) {
+      openDrafting();
+      return;
+    }
     setNotice(null);
     const before = engineView();
     setPrompt(props.facade.cmdline(text, prompt()));
@@ -643,6 +677,9 @@ export function App(props: AppProps): JSX.Element {
       case "palette":
         setPaletteOpen(true);
         return;
+      case "drafting":
+        openDrafting();
+        return;
       case "focus":
         if (id === "ui.focus.cmdline") focusCommandLine();
         else focusRegion(id === "ui.focus.previous" ? -1 : 1);
@@ -706,12 +743,7 @@ export function App(props: AppProps): JSX.Element {
       refresh();
       return;
     }
-    // The reply is `{selected, handles}`; read the handles with checked narrowing.
-    const picked: string[] =
-      env.result !== null && typeof env.result === "object" && "handles" in env.result && Array.isArray(env.result.handles)
-        ? env.result.handles.filter((h): h is string => typeof h === "string")
-        : [];
-    const next = applyPick(before, picked, { gesture, shift, pickadd: pickAdd() });
+    const next = applyPick(before, replyHandles(env.result), { gesture, shift, pickadd: pickAdd() });
     const applied = props.facade.execute("select", next.length === 0 ? { clear: true } : { handles: next });
     setNotice(applied.ok ? null : applied.error);
     refresh();
@@ -801,6 +833,115 @@ export function App(props: AppProps): JSX.Element {
     refresh();
   };
 
+  /** The right-click menu that is open: where it stands and what it is for. */
+  const [contextAt, setContextAt] = createSignal<{ at: MenuPoint; target: ContextTarget } | null>(null);
+
+  /** The open menu's rows and their actions, from the state as it is now (`context.ts` decides them). */
+  const contextModel = createMemo((): ContextMenuModel | null => {
+    const target = contextAt()?.target;
+    if (target === undefined) return null;
+    if (target.kind === "layout") return layoutMenu(commands(), target.name);
+    if (target.kind === "layer") {
+      const layer = layers().find((l) => l.name === target.name);
+      return layer === undefined ? null : layerMenu(commands(), layer);
+    }
+    const state = prompt();
+    return drawingMenu({ registry: commands(), selected: selection().length, running: state.running, keywords: state.keywords, accept: state.accept, output: state.output, remembered: recentCommands() });
+  });
+
+  /** The menu to show: none while nothing asked for one, or what it was for is gone or has no row. */
+  const contextMenu = createMemo((): OpenContextMenu | null => {
+    const open = contextAt();
+    const model = contextModel();
+    return open === null || model === null || model.items.length === 0 ? null : { at: open.at, label: model.label, items: model.items };
+  });
+
+  /**
+   * Open the menu of `target` at a point; says whether there is one to show (a registry with none
+   * of its commands leaves it no row). The menu key held, or heard twice, opens it once.
+   */
+  const openContext = (target: ContextTarget, at: MenuPoint): boolean => {
+    if (at.source === "keyboard" && contextMenu() !== null) return true;
+    setContextAt({ at, target });
+    if (contextMenu() !== null) return true;
+    setContextAt(null);
+    return false;
+  };
+
+  /**
+   * The drawing's menu was asked for. While a command runs a quick right click is Enter (it ends
+   * or accepts, as it always has) and a longer press shows the menu; at rest every right click
+   * shows it (`rightClickAction`). The engine has no setting that chooses between the two. With
+   * no menu to show, the right button is Enter, as it was before the drawing had a menu.
+   */
+  const onDrawingMenu = (request: { at: MenuPoint; heldMs: number; moved: boolean }): void => {
+    const enter = rightClickAction(prompt().running !== null, request.at.source, request.heldMs, request.moved) === "enter";
+    if (enter || (!openContext({ kind: "drawing" }, request.at) && request.at.source === "pointer")) onCommand("");
+  };
+
+  /** Run a command's JSON form for a menu row: no prompt and no dialog; the canvas follows a view it moved. */
+  const runQuiet = (id: string, params: Record<string, unknown>): void => {
+    const before = engineView();
+    const env = props.facade.execute(id, params);
+    setNotice(env.ok ? null : env.error);
+    refresh();
+    followView(before);
+  };
+
+  /** Carry out the action of a menu row. */
+  const runContextAction = (action: ContextAction): void => {
+    switch (action.kind) {
+      case "invoke":
+        if (action.layout !== undefined && action.layout !== space()) onLayout(action.layout);
+        onInvoke(action.id);
+        return;
+      case "submit":
+        onCommand(action.text);
+        return;
+      case "type":
+        // The command is started for the thing the menu was on, and the prompt that is left (a
+        // new name) is the person's to answer at the command line.
+        for (const line of action.lines) onCommand(line);
+        return;
+      case "cancel":
+        cancelCommand();
+        return;
+      case "execute":
+        runQuiet(action.id, action.params);
+        return;
+      case "properties":
+        setShowSidebar(true);
+        setShowProperties(true);
+        return;
+      case "isolate": {
+        // LAYISO takes objects, not a name: the layer's objects are found, the selection is put
+        // back as it was, and the objects are handed over.
+        const held = selection();
+        const found = props.facade.execute("qselect", { layer: action.layer });
+        props.facade.execute("select", held.length === 0 ? { clear: true } : { handles: held });
+        if (found.ok) runQuiet("layiso", { handles: replyHandles(found.result) });
+        else {
+          setNotice(found.error);
+          refresh();
+        }
+        return;
+      }
+    }
+  };
+
+  /**
+   * A row of the open menu was chosen: the menu closes, then the row's action runs. The focus is
+   * back where it was, and on a layer's row or a tab the next Enter would press that control: a
+   * command the row left running takes the keyboard to the command line, where Enter answers it.
+   */
+  const onContextInvoke = (id: string): void => {
+    const action = contextModel()?.actions.get(id);
+    setContextAt(null);
+    if (action === undefined) return;
+    runContextAction(action);
+    if (prompt().running !== null && !onDrawing(document.activeElement)) focusCommandLine();
+  };
+
   const currentLayer = createMemo(() => drawing()?.currentLayer ?? layers().find((l) => l.current)?.name ?? "0");
 
   return (
@@ -828,7 +969,7 @@ export function App(props: AppProps): JSX.Element {
         <Show when={showSidebar() && (showLayers() || showProperties())}>
           <aside class="sidebar" aria-label="Drawing">
             <Show when={showLayers()}>
-              <LayersPanel layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} />
+              <LayersPanel layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} onMenu={(name, at) => openContext({ kind: "layer", name }, at)} />
             </Show>
             <Show when={showProperties()}>
               <PropertiesPanel properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={onPropertyNotice} />
@@ -836,7 +977,7 @@ export function App(props: AppProps): JSX.Element {
           </aside>
         </Show>
         <div class="editor">
-          <LayoutTabs layouts={layouts()} space={space()} onLayout={onLayout} />
+          <LayoutTabs layouts={layouts()} space={space()} onLayout={onLayout} onMenu={(name, at) => openContext({ kind: "layout", name }, at)} />
           <main class="stage">
             <CanvasView
               facade={props.facade}
@@ -850,7 +991,7 @@ export function App(props: AppProps): JSX.Element {
               onSelectRect={onSelectRect}
               wants={wants}
               onPoint={onPoint}
-              onContext={() => onCommand("")}
+              onMenu={onDrawingMenu}
               engineState={engineState}
               onBeforeQuery={tellView}
               onCursor={setCursor}
@@ -888,9 +1029,18 @@ export function App(props: AppProps): JSX.Element {
           formatPoint={coordText}
           selectionCount={selection().length}
           onCommand={onStatusCommand}
+          onSettings={(id) => openDrafting(draftingTabFor(id))}
         />
       </Show>
+      <DraftingSettings
+        facade={props.facade}
+        open={drafting().open}
+        tab={drafting().tab}
+        onClose={() => setDrafting((d) => ({ ...d, open: false }))}
+        onApplied={refresh}
+      />
       <CommandPalette open={paletteOpen} items={palette} recent={recentCommands} onRun={onPaletteRun} onClose={() => setPaletteOpen(false)} />
+      <ContextMenu menu={contextMenu} onInvoke={onContextInvoke} onClose={() => setContextAt(null)} />
     </div>
   );
 }

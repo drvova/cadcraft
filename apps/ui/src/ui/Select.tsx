@@ -51,6 +51,8 @@ export interface SelectProps {
   onChange?: (value: string) => void;
   /** The accessible name when no visible `<label>` is tied to the control. */
   ariaLabel?: string;
+  /** The native control's `id`, for a visible `<label for>` beside it: the label is then the name, and no `ariaLabel` is passed. */
+  id?: string;
   /** The look. Defaults to `field`. */
   variant?: SelectVariant;
   /** The box size. Defaults to `md`. */
@@ -95,6 +97,7 @@ export function Select(props: SelectProps): JSX.Element {
       <select
         ref={(el: HTMLSelectElement) => describeByHint(el, () => props.title, () => props.describedBy)}
         class="ui-select-control"
+        id={props.id}
         aria-label={props.ariaLabel}
         aria-invalid={props.invalid ? "true" : undefined}
         disabled={props.disabled}

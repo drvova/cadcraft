@@ -57,6 +57,8 @@ export interface FieldProps {
   placeholder?: string;
   /** The accessible name when no visible `<label>` is tied to the input. */
   ariaLabel?: string;
+  /** The input's `id`, for a visible `<label for>` beside it: the label is then the name, and no `ariaLabel` is passed. */
+  id?: string;
   /** The native input type. Defaults to `text`; the app uses `search` for the command line. */
   type?: "text" | "email" | "search" | "password";
   /** Blocks typing and drops the ink to the disabled step. */
@@ -127,6 +129,7 @@ export function Field(props: FieldProps): JSX.Element {
       }}
       class={`ui-field ui-field--${props.variant ?? "field"} ui-field--${props.size ?? "md"} ui-field--${props.align ?? "start"}`}
       classList={{ "ui-field--mixed": props.mixed === true }}
+      id={props.id}
       type={props.type ?? "text"}
       value={props.value ?? ""}
       placeholder={props.placeholder}

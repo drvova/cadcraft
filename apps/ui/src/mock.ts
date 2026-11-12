@@ -762,6 +762,33 @@ export class MockFacade implements RawFacade {
     return JSON.stringify({ ...(typeof parsed === "object" && parsed !== null ? parsed : {}), snap: null, point: [x, y] });
   }
 
+  /** The mock has no grips: a selection shows none, in the engine's own reply shape. */
+  grips(): string {
+    return JSON.stringify({ shown: false, size: 0, reach: 0, truncated: false, grips: [] });
+  }
+
+  /** Never a grip under the pointer, with `error` for input the engine refuses. */
+  grip_at(x: number, y: number, aperture: number): string {
+    if (!usableOrdinate(x) || !usableOrdinate(y)) return JSON.stringify({ grip: null, error: "the point is not a usable world coordinate" });
+    if (!Number.isFinite(aperture) || aperture < 0) return JSON.stringify({ grip: null, error: "the aperture must be a finite world distance, 0 or more" });
+    return JSON.stringify({ grip: null });
+  }
+
+  /** No grip to make hot: refused, the command line as it was. */
+  grip_start(_idsJson: string): string {
+    return JSON.stringify({ ...this.promptJson(), gripEdit: null, output: [], error: "the selection shows no grips now" });
+  }
+
+  /** No grip has a menu. */
+  grip_options(_id: string): string {
+    return JSON.stringify({ options: [], error: "the selection shows no grips now" });
+  }
+
+  /** No option to invoke: refused, the command line as it was. */
+  grip_option(_id: string, _option: string): string {
+    return JSON.stringify({ ...this.promptJson(), gripEdit: null, output: [], error: "the selection shows no grips now" });
+  }
+
   open_bytes(name: string, bytes: Uint8Array): string {
     if (bytes.length > 8 * 1024 * 1024) return envelope(false, { error: "open_bytes: the file is too large for the mock" });
     this.reset();

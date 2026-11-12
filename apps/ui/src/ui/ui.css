@@ -1098,6 +1098,181 @@
   align-self: stretch;
 }
 
+/* ---- TabPanels: <div class="ui-tabs"> around <div role="tablist" class="ui-tabs-strip"> (compact
+        tabs) and one <div role="tabpanel" class="ui-tabs-panel"> per tab ---- */
+
+/* The views of one place that swap in place (a dialog's pages). The strip is a row of compact
+   tabs closed by a hairline, so the panel under it reads as theirs; a strip too long for its box
+   wraps to a second row instead of clipping a tab. A panel behind is `hidden`. */
+.ui-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-12);
+  min-width: 0;
+}
+
+.ui-tabs-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-2);
+  padding-bottom: var(--gap-8);
+  border-bottom: var(--hairline) solid var(--border-soft);
+}
+
+.ui-tabs-panel {
+  min-width: 0;
+}
+
+.ui-tabs-panel[hidden] {
+  display: none;
+}
+
+/* ---- Dialog: <dialog class="ui-dialog ui-dialog--{size}"> holding <div class="ui-dialog-head">
+        (the <h2 class="ui-dialog-title"> and the close key) and <form class="ui-dialog-form">
+        (<div class="ui-dialog-body">, <div class="ui-dialog-foot">) ---- */
+
+/* A task over the page: the popover's surface, stroke and shadow at the block radius (the command
+   palette's box), in the top layer, with the page behind it dimmed by `--scrim` and inert. The
+   width is a measure of the dialog's own type (sm 52ch, md 76ch, lg 104ch: about 360, 520 and
+   720px at 13px), never wider than the window less a margin on each side, and the height is the
+   content's, never taller than the dynamic viewport less the same margin: past that the body
+   scrolls and the title bar and the footer stay. It arrives and leaves without motion: it is
+   opened from a menu or a key and anything that plays before the first field reads as lag. The
+   box carries no transform, so the layer's hint (a fixed child of the open dialog) is placed in
+   the window's own coordinates. */
+.ui-dialog {
+  --ui-dialog-width: 76ch;
+  --ui-dialog-margin: var(--gap-16);
+  flex-direction: column;
+  width: min(var(--ui-dialog-width), calc(100% - 2 * var(--ui-dialog-margin)));
+  max-width: none;
+  max-height: calc(100dvh - 2 * var(--ui-dialog-margin));
+  margin: auto;
+  padding: 0;
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-block);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-popover);
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-body);
+  line-height: var(--leading-ui);
+  overflow: hidden;
+}
+
+/* Only an open dialog is laid out: a closed one keeps the platform's `display: none`. */
+.ui-dialog[open] {
+  display: flex;
+}
+
+.ui-dialog--sm {
+  --ui-dialog-width: 52ch;
+}
+
+.ui-dialog--lg {
+  --ui-dialog-width: 104ch;
+}
+
+/* The page behind is dimmed, not tinted: a neutral veil that says the page is not taking input. */
+.ui-dialog::backdrop {
+  background: var(--scrim);
+}
+
+/* The dialog itself takes the focus when it has no field to give it to: the ring is the box's. */
+.ui-dialog:focus-visible {
+  outline: var(--focus-outline-w) solid var(--focus-ring);
+  outline-offset: var(--focus-outline-offset);
+}
+
+/* The title bar: the tab strip's height, the title on the body's inset, the close key on the
+   inset a 24px key needs to stand as far from the top as from the side. */
+.ui-dialog-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-8);
+  min-height: var(--control-h-tab);
+  padding: 0 var(--gap-6) 0 var(--gap-16);
+  border-bottom: var(--hairline) solid var(--border-soft);
+}
+
+.ui-dialog-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--font-body);
+  font-weight: 600;
+  line-height: var(--leading-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-dialog-head .ui-icon-button {
+  flex: 0 0 auto;
+}
+
+.ui-dialog-form {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+}
+
+/* The body scrolls by itself, and a scroll that reaches its end does not move the page behind. */
+.ui-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--gap-16);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* The footer: the actions at the end of the bar, the primary one last, wrapping before clipping. */
+.ui-dialog-foot {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--gap-8);
+  padding: var(--gap-10) var(--gap-16);
+  border-top: var(--hairline) solid var(--border-soft);
+}
+
+/* An action is never narrower than two and a half of its heights: "OK" is as easy to land on as
+   "Cancel", and the two read as a pair. */
+.ui-dialog-foot > .ui-button {
+  min-width: calc(var(--control-h-button) * 2.5);
+}
+
+/* A narrow window: a sheet from the bottom edge, as wide as the window. The actions stay under
+   the thumb and above an on-screen keyboard (the height follows the dynamic viewport), the page
+   stays in sight over a short dialog, and a question of two buttons is not a page of empty space.
+   It keeps a tab strip's height of the page showing above it, so it still reads as over the page.
+   The footer's actions share the width, each a whole target, clear of a phone's home bar. */
+@media (max-width: 560px) {
+  .ui-dialog {
+    width: 100%;
+    max-height: calc(100dvh - var(--control-h-tab));
+    margin: auto 0 0;
+    border-width: var(--hairline) 0 0;
+    border-radius: var(--radius-block) var(--radius-block) 0 0;
+  }
+
+  .ui-dialog-foot {
+    flex-wrap: nowrap;
+    padding-bottom: max(var(--gap-10), env(safe-area-inset-bottom));
+  }
+
+  .ui-dialog-foot > .ui-button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
 /* ---- Kbd: <kbd class="ui-kbd"> ---- */
 
 /* A key cap beside an action: the shortcut at the chip size in the quiet ink, on the hairline. */

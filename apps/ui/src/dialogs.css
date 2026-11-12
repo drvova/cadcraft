@@ -1,0 +1,176 @@
+/*
+ * The dialogs' own layout: what stands inside the layer's Dialog (`ui/ui.css` draws the box, the
+ * title bar and the footer, and every control). A page of a dialog is a column of groups; a group
+ * is a switch with its values under it, each value a label on the left and its control in one
+ * column on the right, so the page reads down two edges. Every value is a token.
+ */
+
+/* ---- Drafting Settings ---- */
+
+.drafting {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-12);
+  min-width: 0;
+}
+
+/* The pages are as tall as the tallest of them (Object Snap), so the box does not change height
+   and the footer does not move as the tabs are walked; a window too short for it scrolls the body. */
+.drafting .ui-tabs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+}
+
+.drafting .ui-tabs-panel {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+/* A page behind keeps its room and gives up everything else: it is neither seen, read nor reached. */
+.drafting .ui-tabs-panel[hidden] {
+  display: block;
+  visibility: hidden;
+}
+
+.drafting-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-16);
+}
+
+.drafting-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-8);
+  min-width: 0;
+}
+
+/* The two switches of the Object Snap page stand side by side while there is room for both. */
+.drafting-switches {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--gap-8) var(--gap-16);
+}
+
+.drafting-switch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-4);
+  min-width: 0;
+}
+
+/* A value under a switch starts on the switch's own words: the box's width and its gap in. */
+.drafting-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-4);
+  min-width: 0;
+  padding-left: calc(var(--icon-size-md) + var(--gap-6));
+}
+
+/* The label, then its control in a column 20 characters wide that every row of the page shares. */
+.drafting-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 20ch);
+  align-items: center;
+  gap: var(--gap-12);
+  min-height: var(--control-h-input);
+}
+
+.drafting-pair > .ui-select,
+.drafting-pair > .ui-field {
+  width: 100%;
+}
+
+/* A value too long for the column (a list of angles): the label over a field as wide as the page. */
+.drafting-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-4);
+  min-width: 0;
+}
+
+.drafting-label {
+  min-width: 0;
+  color: var(--text-dim);
+  line-height: var(--leading-ui);
+}
+
+.drafting-help,
+.drafting-note {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--font-label);
+  line-height: var(--leading-ui);
+  text-wrap: pretty;
+}
+
+.drafting-note {
+  padding-left: calc(var(--icon-size-md) + var(--gap-6));
+}
+
+/* A refusal is said in words under its field, in the error ink; the field's stroke repeats it. */
+.drafting-error {
+  color: var(--error);
+  font-size: var(--font-label);
+  line-height: var(--leading-ui);
+  overflow-wrap: anywhere;
+}
+
+/* What happened to the whole form, over the tabs so it shows whichever page is in front. */
+.drafting-summary {
+  margin: 0;
+  padding: var(--gap-6) var(--gap-8);
+  border: var(--hairline) solid var(--error);
+  border-radius: var(--radius-card);
+  color: var(--text);
+  line-height: var(--leading-ui);
+  text-wrap: pretty;
+}
+
+.drafting-modes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-8);
+  min-height: var(--control-h-input);
+}
+
+.drafting-actions {
+  display: inline-flex;
+  gap: var(--gap-4);
+}
+
+/* The snap boxes in as many columns as hold the longest name, reading across. */
+.drafting-modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(24ch, 1fr));
+  gap: var(--gap-8) var(--gap-16);
+}
+
+.drafting-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-6);
+}
+
+/* The marker the drawing shows for the snap, at the drawing's own size: 12px of figure in a 14px
+   box, the stroke the canvas draws. It is a picture of the marker, in the glyph ink. */
+.drafting-glyph {
+  flex: 0 0 auto;
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+  color: var(--icon);
+}
+
+/* Under a finger a row is a target: the boxes stand further apart. */
+@media (pointer: coarse) {
+  .drafting-modes {
+    gap: var(--gap-12) var(--gap-16);
+  }
+
+  .drafting-group {
+    gap: var(--gap-12);
+  }
+}

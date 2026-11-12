@@ -22,6 +22,12 @@ import {
   parsePreview,
   parsePromptAnchor,
   parseSnap,
+  NO_GRIPS,
+  parseGripAt,
+  parseGripEdit,
+  parseGripOptions,
+  parseGrips,
+  type RawFacade,
 } from "./facade";
 import { MockFacade } from "./mock";
 import { emptyPrompt, promptText } from "./prompt";
@@ -224,6 +230,11 @@ describe("AppFacade over the mock", () => {
         snap: trap,
         pointer: trap,
         click: trap,
+        grips: trap,
+        grip_at: trap,
+        grip_start: trap,
+        grip_options: trap,
+        grip_option: trap,
         open_bytes: () => "",
         load_sample: () => "",
         save_bytes: () => new Uint8Array(),
@@ -248,6 +259,228 @@ describe("AppFacade over the mock", () => {
     const clicked = facade.click({ x: 1, y: 2 });
     expect(clicked.snap).toBeNull();
     expect(clicked.state.running).toBeNull();
+    // The grip calls too: no grips, nothing under the pointer, no menu, and a refused start.
+    expect(facade.grips()).toBe(NO_GRIPS);
+    expect(facade.gripAt({ x: 1, y: 2 })).toBeNull();
+    expect(facade.gripOptions("1A:0")).toEqual([]);
+    const started = facade.gripStart(["1A:0"]);
+    expect(started.edit).toBeNull();
+    expect(started.state.error).toContain("trap");
+    const chosen = facade.gripOption("1A:0", "lengthen");
+    expect(chosen.edit).toBeNull();
+    expect(chosen.state.error).toContain("trap");
+  });
+});
+
+describe("the grip replies", () => {
+  const END = { id: "1A:2", handle: "1A", index: 2, point: [10, 0], kind: "standard", multi: true, locked: false, hot: false, dynamic: null };
+  const ARROW = { id: "2B:d2:end", handle: "2B", index: null, point: [136, -4], kind: "linear", multi: false, locked: false, hot: true, dynamic: { node: 2, part: "end", dir: [1, 0], property: "Width", choices: [] } };
+  const LIST = { id: "2B:d1:at", handle: "2B", index: null, point: [100, 5], kind: "list", multi: true, locked: true, hot: false, dynamic: { node: 1, part: "at", dir: [0, 0], property: "Visibility1", choices: ["Open", "Closed"] } };
+
+  test("parseGrips reads the list, its box size and reach, and each kind of grip", () => {
+    const list = parseGrips(JSON.stringify({ shown: true, size: 5, reach: 0.16, truncated: false, grips: [END, ARROW, LIST] }));
+    expect(list.shown).toBe(true);
+    expect(list.size).toBe(5);
+    expect(list.reach).toBe(0.16);
+    expect(list.truncated).toBe(false);
+    expect(list.grips).toEqual([
+      { id: "1A:2", handle: "1A", index: 2, point: { x: 10, y: 0 }, kind: "standard", multi: true, locked: false, hot: false, dynamic: null },
+      { id: "2B:d2:end", handle: "2B", index: null, point: { x: 136, y: -4 }, kind: "linear", multi: false, locked: false, hot: true, dynamic: { node: 2, part: "end", dir: { x: 1, y: 0 }, property: "Width", choices: [] } },
+      { id: "2B:d1:at", handle: "2B", index: null, point: { x: 100, y: 5 }, kind: "list", multi: true, locked: true, hot: false, dynamic: { node: 1, part: "at", dir: { x: 0, y: 0 }, property: "Visibility1", choices: ["Open", "Closed"] } },
+    ]);
+  });
+
+  test("parseGrips skips rows that are not grips, and says the list is short", () => {
+    const rows: unknown[] = [
+      END,
+      null,
+      7,
+      "1A:0",
+      [],
+      { ...END, id: "" },
+      { ...END, id: 7 },
+      { ...END, id: "x".repeat(600) },
+      { ...END, handle: null },
+      { ...END, point: [null, 0] },
+      { ...END, point: "10,0" },
+      { ...END, kind: "endpoint" },
+      { ...END, kind: "linear" },
+      { ...ARROW, kind: "standard" },
+      { ...ARROW, dynamic: { ...ARROW.dynamic, part: "middle" } },
+      { ...ARROW, dynamic: { ...ARROW.dynamic, node: 1.5 } },
+      { ...ARROW, dynamic: [] },
+    ];
+    const list = parseGrips(JSON.stringify({ shown: true, size: 5, reach: 0.16, truncated: false, grips: rows }));
+    expect(list.grips.map((g) => g.id)).toEqual(["1A:2"]);
+    expect(list.truncated).toBe(true);
+    // Fields that are not what they should be fall to the inert value, never through.
+    const loose = parseGrips(JSON.stringify({ shown: "yes", size: -5, reach: "far", grips: [{ ...END, index: -1, multi: 1, locked: "no", hot: null }, { ...LIST, dynamic: { ...LIST.dynamic, dir: "up", property: 9, choices: ["Open", 3, "", null, "Closed"] } }] }));
+    expect(loose.shown).toBe(false);
+    expect(loose.size).toBe(0);
+    expect(loose.reach).toBe(0);
+    expect(loose.grips[0]).toMatchObject({ index: null, multi: false, locked: false, hot: false });
+    expect(loose.grips[1]?.dynamic).toEqual({ node: 1, part: "at", dir: { x: 0, y: 0 }, property: "", choices: ["Open", "Closed"] });
+    // No more than the engine lists are read.
+    const flood = parseGrips(JSON.stringify({ shown: true, size: 5, reach: 1, truncated: false, grips: Array.from({ length: 3000 }, (_, i) => ({ ...END, id: `1A:${i}` })) }));
+    expect(flood.grips.length).toBe(2048);
+    expect(flood.truncated).toBe(true);
+  });
+
+  test("parseGrips answers no grips for a refusal and for anything unreadable", () => {
+    for (const raw of ["", "junk", "null", "[]", "7", '{"grips":7}', '{"shown":true}', '{"shown":false,"size":5,"reach":0.1,"truncated":true,"grips":[],"error":"the selection has too many grips to list"}', '{"ok":false,"error":"the facade call failed"}']) {
+      expect(parseGrips(raw)).toBe(NO_GRIPS);
+    }
+    expect(parseGrips(JSON.stringify({ shown: false, size: 5, reach: 0.16, truncated: false, grips: [] }))).toEqual({ shown: false, size: 5, reach: 0.16, truncated: false, grips: [] });
+  });
+
+  test("parseGripAt reads the grip under the pointer, or null", () => {
+    expect(parseGripAt(JSON.stringify({ grip: END }))?.id).toBe("1A:2");
+    expect(parseGripAt(JSON.stringify({ grip: LIST }))?.dynamic?.choices).toEqual(["Open", "Closed"]);
+    for (const raw of ['{"grip":null}', '{"grip":null,"error":"the point is not a usable world coordinate"}', '{"grip":"1A:2"}', '{"grip":{"id":"1A:2"}}', "{}", "[]", "junk", ""]) {
+      expect(parseGripAt(raw)).toBeNull();
+    }
+  });
+
+  test("parseGripOptions reads a grip's menu and a list grip's choices", () => {
+    const menu = parseGripOptions('{"options":[{"id":"addVertex","label":"Add Vertex","keyword":"Add vertex","needsPoint":true},{"id":"removeVertex","label":"Remove Vertex","keyword":"Remove vertex","needsPoint":false}]}');
+    expect(menu).toEqual([
+      { id: "addVertex", label: "Add Vertex", keyword: "Add vertex", needsPoint: true },
+      { id: "removeVertex", label: "Remove Vertex", keyword: "Remove vertex", needsPoint: false },
+    ]);
+    expect(parseGripOptions('{"options":[{"id":"Closed","label":"Closed","keyword":null,"needsPoint":false}]}')).toEqual([{ id: "Closed", label: "Closed", keyword: null, needsPoint: false }]);
+    // A row without an id is skipped; a missing label is the id; a loose flag is false.
+    expect(parseGripOptions('{"options":[null,{"label":"x"},{"id":""},{"id":7},{"id":"radius","needsPoint":"yes"}]}')).toEqual([{ id: "radius", label: "radius", keyword: null, needsPoint: false }]);
+    for (const raw of ['{"options":[],"error":"that is not a grip id"}', '{"options":{"0":{"id":"x"}}}', "{}", "[]", "junk", ""]) {
+      expect(parseGripOptions(raw)).toEqual([]);
+    }
+  });
+
+  test("parseGripEdit tells a grip edit from an ordinary command", () => {
+    expect(parseGripEdit('{"running":"grip","gripEdit":{"mode":"stretch","hot":["1A:2"]}}')).toEqual({ mode: "stretch", hot: ["1A:2"] });
+    expect(parseGripEdit('{"running":"grip","gripEdit":{"mode":null,"hot":["1A:2","1A:0"]}}')).toEqual({ mode: null, hot: ["1A:2", "1A:0"] });
+    expect(parseGripEdit('{"running":"grip","gripEdit":{"mode":7,"hot":[1,"","1A:2",null]}}')).toEqual({ mode: null, hot: ["1A:2"] });
+    expect(parseGripEdit('{"running":"grip","gripEdit":{}}')).toEqual({ mode: null, hot: [] });
+    // An ordinary command, nothing running, and a refusal: no grip edit.
+    expect(parseGripEdit('{"running":"line","gripEdit":null}')).toBeNull();
+    expect(parseGripEdit('{"running":null,"gripEdit":null,"error":"that is not a grip id"}')).toBeNull();
+    expect(parseGripEdit('{"running":"line"}')).toBeNull();
+    // The engine's word is taken over the command's name, and an older reply is read by the name.
+    expect(parseGripEdit('{"running":"grip","gripEdit":null}')).toBeNull();
+    expect(parseGripEdit('{"running":"grip"}')).toEqual({ mode: null, hot: [] });
+    for (const raw of ['{"gripEdit":"stretch"}', '{"gripEdit":[]}', "[]", "null", "junk", ""]) {
+      expect(parseGripEdit(raw)).toBeNull();
+    }
+  });
+
+  /** A raw facade whose grip calls answer what the engine answers for one selected line. */
+  function gripFacade(calls: Array<{ name: string; args: unknown[] }>): AppFacade {
+    const prompt = (edit: unknown, extra: Record<string, unknown> = {}): string =>
+      JSON.stringify({ prompt: edit === null ? "Command" : "** STRETCH ** Specify stretch point or [Base point/Copy/Undo/Lengthen/eXit]", running: edit === null ? null : "grip", keywords: edit === null ? [] : ["Base point", "Copy", "Undo", "Lengthen", "eXit"], accept: { point: true, enter: true }, base: edit === null ? null : [10, 0], gripEdit: edit, output: [], ...extra });
+    const record = <A extends unknown[]>(name: string, reply: (...args: A) => string) => (...args: A): string => {
+      calls.push({ name, args });
+      return reply(...args);
+    };
+    const mock = new MockFacade();
+    const raw: RawFacade = {
+      execute: (c, p) => mock.execute(c, p),
+      cmdline: (t) => mock.cmdline(t),
+      start: (id) => mock.start(id),
+      cancel: () => mock.cancel(),
+      prompt: record("prompt", () => prompt({ mode: "move", hot: ["1A:2"] })),
+      state: () => mock.state(),
+      selection: () => mock.selection(),
+      settings: () => mock.settings(),
+      format_point: (x, y) => mock.format_point(x, y),
+      commands: () => mock.commands(),
+      source: () => mock.source(),
+      run_script: (t) => mock.run_script(t),
+      display: (m) => mock.display(m),
+      set_view: (a, b, c, d) => mock.set_view(a, b, c, d),
+      view: () => mock.view(),
+      set_viewport: (w, h) => mock.set_viewport(w, h),
+      set_cursor: (x, y) => mock.set_cursor(x, y),
+      preview: (x, y) => mock.preview(x, y),
+      pick: (x, y, a) => mock.pick(x, y, a),
+      snap: (x, y, a) => mock.snap(x, y, a),
+      pointer: (x, y, a, n, m) => mock.pointer(x, y, a, n, m),
+      click: (x, y, a) => mock.click(x, y, a),
+      grips: record("grips", () => JSON.stringify({ shown: true, size: 5, reach: 0.16, truncated: false, grips: [END] })),
+      grip_at: record("grip_at", (x: number) => JSON.stringify({ grip: x > 9 ? END : null })),
+      grip_start: record("grip_start", (ids: string) => (ids === '["1A:2"]' ? prompt({ mode: "stretch", hot: ["1A:2"] }) : prompt(null, { error: "that grip's object is not selected" }))),
+      grip_options: record("grip_options", () => '{"options":[{"id":"lengthen","label":"Lengthen","keyword":"Lengthen","needsPoint":true}]}'),
+      grip_option: record("grip_option", (_id: string, option: string) => (option === "lengthen" ? prompt({ mode: "lengthen", hot: ["1A:2"] }) : prompt(null, { error: "that grip has no such option" }))),
+      open_bytes: (n, b) => mock.open_bytes(n, b),
+      load_sample: () => mock.load_sample(),
+      save_bytes: () => mock.save_bytes(),
+      digest: () => mock.digest(),
+    };
+    return new AppFacade(raw, { kind: "wasm", detail: "test" });
+  }
+
+  test("AppFacade forwards the grip calls and narrows what comes back", () => {
+    const calls: Array<{ name: string; args: unknown[] }> = [];
+    const facade = gripFacade(calls);
+    expect(facade.grips().grips.map((g) => g.id)).toEqual(["1A:2"]);
+    expect(facade.gripAt({ x: 10, y: 0 })?.id).toBe("1A:2");
+    expect(facade.gripAt({ x: 3, y: 0 }, 0.5)).toBeNull();
+    expect(facade.gripOptions("1A:2")).toEqual([{ id: "lengthen", label: "Lengthen", keyword: "Lengthen", needsPoint: true }]);
+    const started = facade.gripStart(["1A:2"]);
+    expect(started.edit).toEqual({ mode: "stretch", hot: ["1A:2"] });
+    expect(started.state.running).toBe("grip");
+    expect(started.state.error).toBeNull();
+    expect(started.state.keywords).toEqual(["Base point", "Copy", "Undo", "Lengthen", "eXit"]);
+    expect(started.state.anchor.base).toEqual({ x: 10, y: 0 });
+    const asked = facade.gripOption("1A:2", "lengthen", started.state);
+    expect(asked.edit).toEqual({ mode: "lengthen", hot: ["1A:2"] });
+    expect(facade.gripEdit()).toEqual({ mode: "move", hot: ["1A:2"] });
+    expect(calls).toEqual([
+      { name: "grips", args: [] },
+      { name: "grip_at", args: [10, 0, 0] },
+      { name: "grip_at", args: [3, 0, 0.5] },
+      { name: "grip_options", args: ["1A:2"] },
+      { name: "grip_start", args: ['["1A:2"]'] },
+      { name: "grip_option", args: ["1A:2", "lengthen"] },
+      { name: "prompt", args: [] },
+    ]);
+  });
+
+  test("a refused grip call is an error on the command line, and input the engine would refuse never reaches it", () => {
+    const calls: Array<{ name: string; args: unknown[] }> = [];
+    const facade = gripFacade(calls);
+    const stale = facade.gripStart(["9F:0"]);
+    expect(stale.edit).toBeNull();
+    expect(stale.state.error).toBe("that grip's object is not selected");
+    expect(stale.state.running).toBeNull();
+    const none = facade.gripOption("1A:2", "explode");
+    expect(none.edit).toBeNull();
+    expect(none.state.error).toBe("that grip has no such option");
+    calls.length = 0;
+    // No ids, too many ids, and points and apertures that are not usable stop here.
+    const prev = { ...emptyPrompt(), prompt: "kept" };
+    const empty = facade.gripStart([], prev);
+    expect(empty.edit).toBeNull();
+    expect(empty.state.prompt).toBe("kept");
+    expect(empty.state.error).toContain("refused");
+    expect(facade.gripStart(Array.from({ length: 1001 }, () => "1A:2")).edit).toBeNull();
+    for (const [point, aperture] of [[{ x: NaN, y: 0 }, 0], [{ x: 0, y: Infinity }, 0], [{ x: 10, y: 0 }, -1], [{ x: 10, y: 0 }, NaN], [{ x: 10, y: 0 }, Infinity]] as const) {
+      expect(facade.gripAt(point, aperture)).toBeNull();
+    }
+    expect(calls).toEqual([]);
+  });
+
+  test("the mock has no grips, in the engine's own reply shapes", () => {
+    const facade = mockFacade();
+    facade.execute("select", { at: [50, 30] });
+    expect(facade.grips()).toEqual(NO_GRIPS);
+    expect(facade.gripAt({ x: 0, y: 0 })).toBeNull();
+    expect(facade.gripOptions("1A:0")).toEqual([]);
+    const before = facade.currentPrompt();
+    const started = facade.gripStart(["1A:0"], before);
+    expect(started.edit).toBeNull();
+    expect(started.state.error).toContain("no grips");
+    expect(started.state.running).toBe(before.running);
+    expect(facade.gripOption("1A:0", "lengthen").state.error).toContain("no grips");
+    expect(facade.gripEdit()).toBeNull();
   });
 });
 
@@ -718,6 +951,11 @@ describe("the extended facade contract over the mock", () => {
       snap: () => '{"snap":{"point":[null,2],"mode":"end"}}',
       pointer: () => '{"point":[null,2],"paths":7,"preview":[]}',
       click: () => "not json",
+      grips: () => '{"shown":true,"grips":{"0":{"id":"1A:0"}}}',
+      grip_at: () => '{"grip":["1A:0"]}',
+      grip_start: () => "not json",
+      grip_options: () => '{"options":"lengthen"}',
+      grip_option: () => "[]",
       open_bytes: () => "",
       load_sample: () => "",
       save_bytes: () => new Uint8Array(),
@@ -757,6 +995,15 @@ describe("the extended facade contract over the mock", () => {
     expect(clicked.state.anchor).toBe(NO_ANCHOR);
     expect(facade.pointer({ x: 3, y: 4 }, { now: 0 })).toEqual(freePointer({ x: 3, y: 4 }));
     expect(facade.hover({ x: 0, y: 0 })).toBeNull();
+    // The grip replies: each malformed one is the inert answer too.
+    expect(facade.grips()).toBe(NO_GRIPS);
+    expect(facade.gripAt({ x: 0, y: 0 })).toBeNull();
+    expect(facade.gripOptions("1A:0")).toEqual([]);
+    const gripped = facade.gripStart(["1A:0"], state);
+    expect(gripped.edit).toBeNull();
+    expect(gripped.state.error).toContain("unreadable");
+    expect(facade.gripOption("1A:0", "lengthen", state).state.error).toContain("unreadable");
+    expect(facade.gripEdit()).toBeNull();
   });
 
   test("MockFacade satisfies every RawFacade method the shim uses", () => {
@@ -784,6 +1031,11 @@ describe("the extended facade contract over the mock", () => {
       "snap",
       "pointer",
       "click",
+      "grips",
+      "grip_at",
+      "grip_start",
+      "grip_options",
+      "grip_option",
       "open_bytes",
       "load_sample",
       "save_bytes",
@@ -815,6 +1067,11 @@ describe("the extended facade contract over the mock", () => {
     expect(typeof mock.snap(0, -Infinity, NaN)).toBe("string");
     expect(typeof mock.pointer(NaN, -Infinity, NaN, -1, 1e308)).toBe("string");
     expect(typeof mock.click(NaN, NaN, NaN)).toBe("string");
+    expect(typeof mock.grips()).toBe("string");
+    expect(typeof mock.grip_at(NaN, 1e308, -1)).toBe("string");
+    expect(typeof mock.grip_start("not json")).toBe("string");
+    expect(typeof mock.grip_options("")).toBe("string");
+    expect(typeof mock.grip_option("", "")).toBe("string");
     expect(typeof mock.open_bytes("x", new Uint8Array())).toBe("string");
     expect(typeof mock.load_sample()).toBe("string");
     expect(mock.save_bytes()).toBeInstanceOf(Uint8Array);

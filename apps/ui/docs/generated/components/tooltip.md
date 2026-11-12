@@ -158,7 +158,7 @@ A fact that is not a control (a `<span>`) takes no keyboard focus, so its hint i
 - `rule/tooltip-not-a-name`: When a control carries a tooltip, give the control its own `aria-label` or visible text, because the box is `aria-hidden` and a control named only by its hint has 0 names for a screen reader. Evidence: single use `src/ui/Tooltip.tsx:243`, `aria-hidden="true"` on the box. Check: test `src/ui/Tooltip.test.tsx`.
   - Don't: `<Tooltip text="Close"><button>✕</button></Tooltip>`
   - Do: `<Tooltip text="Close the panel"><button aria-label="Close the panel">✕</button></Tooltip>`
-- `rule/tooltip-never-blocks`: When the tooltip shows, the box keeps `pointer-events: none`, because it sits beside the control and a hint that takes the click is worse than 0 hints. Evidence: single use `src/ui/ui.css:1162`, `pointer-events: none` on the box. Check: test `src/ui/recipe.test.ts`.
+- `rule/tooltip-never-blocks`: When the tooltip shows, the box keeps `pointer-events: none`, because it sits beside the control and a hint that takes the click is worse than 0 hints. Evidence: single use `src/ui/ui.css:1337`, `pointer-events: none` on the box. Check: test `src/ui/recipe.test.ts`.
   - Don't: a tooltip box with a hover handler of its own.
   - Do: `pointer-events: none` on `.ui-tooltip`.
 - `rule/tooltip-no-touch`: When the pointer is a finger, show 0 hints, because a finger has no hover and a tap would leave the box up over the control it just pressed. Evidence: single use `src/ui/Tooltip.tsx:327`, the `pointerType === "touch"` guard. Check: test `src/ui/Tooltip.test.tsx`.
@@ -182,7 +182,7 @@ A fact that is not a control (a `<span>`) takes no keyboard focus, so its hint i
   - Do: `<Tooltip text="Snap Mode" shortcut="F9"><button aria-label="Snap Mode">Snap</button></Tooltip>`
 
 ### Limits
-- `rule/tooltip-length-limit`: When a hint runs past 64 characters, move the explanation into the control's label or help text, because the box wraps at a 32ch measure (207px at 12px type) and a third line reads as a paragraph over the surface it covers. Evidence: measured 207px by 40px box, 2 lines, for the 46-character "To save, choose a provider or type a base URL." at 1280px and at 390px, `src/ui/ui.css:1147`. Check: test `src/ui/recipe.test.ts`.
+- `rule/tooltip-length-limit`: When a hint runs past 64 characters, move the explanation into the control's label or help text, because the box wraps at a 32ch measure (207px at 12px type) and a third line reads as a paragraph over the surface it covers. Evidence: measured 207px by 40px box, 2 lines, for the 46-character "To save, choose a provider or type a base URL." at 1280px and at 390px, `src/ui/ui.css:1322`. Check: test `src/ui/recipe.test.ts`.
   - Don't: a 120-character hint over the composer.
   - Do: a 3-word hint and a visible line of help for the rest.
 
@@ -222,3 +222,4 @@ The box is for the eye and is hidden from assistive tech; the same words reach a
 - `Chip`: the pickable keyword form; its `title` shows here.
 - `Field`: its `title` shows here and joins its description.
 - `Kbd`: the key cap the box draws for a shortcut; and the pick when the key should stay on the surface rather than show on hover.
+- `Dialog`: when the content is a task with controls rather than a hint.

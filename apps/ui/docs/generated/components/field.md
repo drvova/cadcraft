@@ -13,7 +13,9 @@ Not applicable: hand-rolled — the 24px height, the hairline stroke and the foc
 ## Examples
 `<Field value={name} ariaLabel="Layer name" onInput={setName} />` — the layer name, owned by the panel.
 
-Real uses, 4 call sites (`rg -c "<Field" src/components` → `src/components/AssistantPane.tsx:3`, `src/components/PropertiesPanel.tsx:1`; the provider sheet's Base URL, API key and Model, and the palette's typed values):
+Real uses, 6 call sites (`rg -c "<Field" src/components` → `src/components/AssistantPane.tsx:3`, `src/components/DraftingSettings.tsx:2`, `src/components/PropertiesPanel.tsx:1`; the provider sheet's Base URL, API key and Model, the palette's typed values, and the Drafting Settings dialog's spacings and angles):
+- `src/components/DraftingSettings.tsx:178` — the dialog's typed numbers (`align="end"`, `inputMode="decimal"`, `selectOnFocus`), each named by a visible `<label for>` through `id`, marked `invalid` with its refusal tied by `describedBy`.
+- `src/components/DraftingSettings.tsx:270` — the dialog's additional angles, a list typed in one field under its label, with a line of help tied by `describedBy`.
 - `src/components/AssistantPane.tsx` — the composer pilot: the provider popover's Base URL, Model and API key inputs; the composer's own multi-line editor is a bespoke `<textarea>` until it moves onto `TextArea`.
 - `src/components/PropertiesPanel.tsx:226` — the palette's typed values: `variant="inline" size="sm" align="end"`, `mixed` for `*VARIES*`, `invalid` while a value is refused, committing on Enter and on leaving the field.
 - (planned) `src/components/CommandLine.tsx` — `class="cmd-input"` (1 use) moves onto `<Field type="search">` in a later arc; the command line keeps its own input for now.
@@ -376,6 +378,7 @@ export default function ReadOnly() {
 | `describedBy?` | `string` |  | The `id` of the help line or the error line under the field (several, space-separated): sets `aria-describedby`. |
 | `disabled?` | `boolean` |  | Blocks typing and drops the ink to the disabled step. |
 | `expanded?` | `boolean` |  | A combobox: whether its list is showing now (`aria-expanded`). |
+| `id?` | `string` |  | The input's `id`, for a visible `<label for>` beside it: the label is then the name, and no `ariaLabel` is passed. |
 | `inputMode?` | `FieldInputMode` |  | The keyboard a phone shows: `decimal` for a number with a fraction, `numeric` for digits. |
 | `invalid?` | `boolean` |  | The value is refused: sets `aria-invalid` and the error stroke. |
 | `maxLength?` | `number` |  | The most characters the field takes. |
@@ -400,6 +403,7 @@ export default function ReadOnly() {
 - `onInput`: runs on every keystroke with the new value.
 - `placeholder`: the hint; never the only name.
 - `ariaLabel`: the accessible name when no visible label is tied to the input.
+- `id`: the input's `id`, for a visible `<label for>` beside it; the label is then the name and no `ariaLabel` is passed.
 - `type`: the native input type; defaults to `text`.
 - `disabled`: blocks typing and drops the ink to the disabled step.
 - `title`: the hint (a value the box cuts short shows in full above it, whether or not there is a `title`, except a password's), shown in the layer's hint box (after 0.4s under a mouse or a pen, at once when a key moves focus in, away at the first keystroke) and added to the field's accessible description after `describedBy`. It is never the name (pass `ariaLabel`), and no native `title` attribute is rendered. Used at 0 call sites; a line of help under the field, tied by `describedBy`, is the usual pick because it stays on the page.
@@ -523,3 +527,4 @@ Rests on the native `<input>` element: typing, selection, IME and autofill come 
 - `Row`: when the value is picked from a list rather than typed.
 - `Button`: when the field's value is submitted.
 - `Tooltip`: the hint box a field's `title` shows in; never wrap a field in one.
+- `Dialog`: the surface that holds a form of several fields with its actions.

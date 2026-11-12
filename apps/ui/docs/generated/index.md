@@ -3,7 +3,7 @@
 
 ## Description
 
-The CADCraft web interface's design system: the tokens, the thirteen canonical components and the rules the interface is built from, serving the SolidJS app in `apps/ui` over the cadcraft-wasm facade. Foundation: hand-rolled — the system is the app's own, measured from the running Cursor 3.27.22, and no registry item ships it.
+The CADCraft web interface's design system: the tokens, the fourteen canonical components and the rules the interface is built from, serving the SolidJS app in `apps/ui` over the cadcraft-wasm facade. Foundation: hand-rolled — the system is the app's own, measured from the running Cursor 3.27.22, and no registry item ships it.
 
 ## Importing a component
 
@@ -44,6 +44,7 @@ The app's real shell, in order (from `src/app.tsx`):
   </div>
   <StatusBar … />                     <!-- the status bar, one 22px line -->
   <CommandPalette … />                <!-- a dialog over the page (Ctrl+Shift+P) -->
+  <!-- a modal dialog (Drafting Settings) is a `Dialog` mounted here, beside the palette, its `open` held by the shell -->
 </div>
 ```
 
@@ -77,6 +78,7 @@ Ask only for an amount or a limit the task did not give (a new size, a new durat
 - [Button](docs/generated/components/button.md): It runs one action the moment its label says so: it never navigates and never holds a value.
 - [Checkbox](docs/generated/components/checkbox.md): It holds one yes-or-no value the caller owns, and can say that the things it stands for disagree.
 - [Chip](docs/generated/components/chip.md): It shows one compact fact, a keyword or a suggestion, and it only acts when the caller gives it a handler.
+- [Dialog](docs/generated/components/dialog.md): It holds one task over the page until the task is finished or put away: a titled box of fields with its actions in a footer, while the pa...
 - [Field](docs/generated/components/field.md): It takes one line of text and hands every keystroke back to the caller, who owns the value.
 - [IconButton](docs/generated/components/icon-button.md): It runs one action drawn as a single glyph, and its title is both its accessible name and the hint a sighted person reads.
 - [Kbd](docs/generated/components/kbd.md): It shows the key or shortcut that runs the action beside it, as a fact to read and never as a control.

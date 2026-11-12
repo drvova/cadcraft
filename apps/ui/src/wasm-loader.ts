@@ -61,15 +61,27 @@ const POINTER: readonly (readonly string[])[] = [
   ["pointer"],
 ];
 
-const STALE_REFUSAL = JSON.stringify({ ok: false, error: "the wasm package is older than this interface: run `bun run build:wasm`" });
+/**
+ * The grip calls, added after `pointer`. A package without them has no grips: the selection
+ * lists none, nothing is under the pointer, no grip has a menu, and starting an edit or invoking
+ * an option is refused with the command line left as it is. Nothing is made up in their place.
+ */
+const GRIPS: readonly (readonly string[])[] = [["grips"], ["grip_at", "gripAt"], ["grip_start", "gripStart"], ["grip_options", "gripOptions"], ["grip_option", "gripOption"]];
 
-/** What each pointer call answers when the wasm package does not have it. */
+const STALE_MESSAGE = "the wasm package is older than this interface: run `bun run build:wasm`";
+
+const STALE_REFUSAL = JSON.stringify({ ok: false, error: STALE_MESSAGE });
+
+/** What each pointer or grip call answers when the wasm package does not have it. */
 const STALE: Readonly<Record<string, string>> = {
   set_viewport: STALE_REFUSAL,
   set_cursor: STALE_REFUSAL,
   preview: JSON.stringify({ verts: [], prims: [], drag: null }),
   pick: JSON.stringify({ handles: [] }),
   snap: JSON.stringify({ snap: null }),
+  grips: JSON.stringify({ shown: false, size: 0, reach: 0, truncated: false, grips: [] }),
+  grip_at: JSON.stringify({ grip: null }),
+  grip_options: JSON.stringify({ options: [] }),
 };
 
 /** The facade class among the module's exports: the `Facade`-named one, else the first class. */
@@ -118,7 +130,7 @@ export function wrapWasmFacade(instance: WasmModule): RawFacade | null {
     if (method === null) return null;
     resolved.set(names[0] as string, method);
   }
-  for (const names of POINTER) {
+  for (const names of [...POINTER, ...GRIPS]) {
     const method = resolveMethod(instance, names);
     if (method !== null) resolved.set(names[0] as string, method);
   }
@@ -194,6 +206,11 @@ export function wrapWasmFacade(instance: WasmModule): RawFacade | null {
     snap: (x, y, aperture) => pointer("snap", [x, y, aperture]),
     pointer: (x, y, aperture, nowMs, modifiers) => (resolved.has("pointer") ? text("pointer", [x, y, aperture, nowMs, modifiers]) : stalePointer(x, y, aperture)),
     click: (x, y, aperture) => (resolved.has("click") ? text("click", [x, y, aperture]) : typedClick(x, y)),
+    grips: () => pointer("grips", []),
+    grip_at: (x, y, aperture) => pointer("grip_at", [x, y, aperture]),
+    grip_start: (idsJson) => (resolved.has("grip_start") ? text("grip_start", [idsJson]) : withError(text("prompt", []), STALE_MESSAGE)),
+    grip_options: (id) => pointer("grip_options", [id]),
+    grip_option: (id, option) => (resolved.has("grip_option") ? text("grip_option", [id, option]) : withError(text("prompt", []), STALE_MESSAGE)),
     open_bytes: (name, bytes) => text("open_bytes", [name, bytes]),
     load_sample: () => text("load_sample", []),
     save_bytes: () => {

@@ -13,6 +13,7 @@ import { createEffect, createMemo, For, Show, type JSX } from "solid-js";
 import type { FacadeMode, SettingsState } from "../facade";
 import { Tab } from "../ui/Tab";
 import { Toggle } from "../ui/Toggle";
+import { menuPoint, type MenuPoint } from "./ContextMenu";
 import { rovingBand, scrollBand } from "./ToolStrip";
 
 /** The boolean drafting settings a status toggle can flip. */
@@ -52,9 +53,15 @@ export interface LayoutTabsProps {
   /** "Model" or the active layout's name. */
   space: string;
   onLayout: (name: string) => void;
+  /** A tab's menu was asked for, at this point of the window. */
+  onMenu?: (name: string, at: MenuPoint) => void;
 }
 
-/** The editor tabs over the drawing: Model, then each layout; the active one is the pane's fill. */
+/**
+ * The editor tabs over the drawing: Model, then each layout; the active one is the pane's fill. A
+ * right click on a tab, or the menu key with the keyboard on one, asks for that tab's menu
+ * (`onMenu`): at the pointer, or under the tab.
+ */
 export function LayoutTabs(props: LayoutTabsProps): JSX.Element {
   const tabs = (): readonly string[] => ["Model", ...props.layouts];
   let strip: HTMLDivElement | undefined;
@@ -80,6 +87,14 @@ export function LayoutTabs(props: LayoutTabsProps): JSX.Element {
         // Moving does not select because a switch redraws the whole drawing, which is slow on a
         // large one: walking past three layouts must not load each of them.
         rovingBand(element, '[role="tab"]', () => element.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]'));
+      }}
+      onContextMenu={(event) => {
+        // The tab is found by its place in the strip: its text may be a clipped label.
+        const tab = event.target instanceof Element ? event.target.closest('[role="tab"]') : null;
+        const name = tab === null ? undefined : tabs()[Array.from(event.currentTarget.querySelectorAll('[role="tab"]')).indexOf(tab)];
+        if (tab === null || name === undefined || props.onMenu === undefined) return;
+        event.preventDefault();
+        props.onMenu(name, menuPoint(event, tab));
       }}
     >
       <For each={tabs()}>
@@ -117,6 +132,8 @@ export interface StatusBarProps {
   formatPoint: (x: number, y: number) => string;
   selectionCount: number;
   onCommand: (id: string, params?: Record<string, unknown>) => void;
+  /** A right click (or the menu key) on a drafting toggle: open that toggle's settings. */
+  onSettings?: (toggleId: string) => void;
 }
 
 /**
@@ -175,7 +192,19 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
           </span>
         </Show>
       </span>
-      <div class="status-toggles" role="toolbar" aria-label="Drafting settings" ref={(element) => rovingBand(element, "button")}>
+      <div
+        class="status-toggles"
+        role="toolbar"
+        aria-label="Drafting settings"
+        ref={(element) => rovingBand(element, "button")}
+        onContextMenu={(event) => {
+          const key = event.target instanceof Element ? event.target.closest("button") : null;
+          const toggle = key === null ? undefined : STATUS_TOGGLES[Array.from(event.currentTarget.querySelectorAll("button")).indexOf(key)];
+          if (toggle === undefined || props.onSettings === undefined) return;
+          event.preventDefault();
+          props.onSettings(toggle.id);
+        }}
+      >
         <For each={STATUS_TOGGLES}>
           {(toggle) => (
             <Toggle

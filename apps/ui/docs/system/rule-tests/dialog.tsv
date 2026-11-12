@@ -1,0 +1,13 @@
+rule_id	falsify	negation	two_agent	sweep	verdict	notes
+rule/dialog-mounted-open	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/dialog-close-answered	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/dialog-primary-submit	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/dialog-initial-focus	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/dialog-backdrop-work	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/dialog-refusal-beside-field	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/dialog-title-names-task	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/dialog-action-labels	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/dialog-canonical-element	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/dialog-no-page-landmarks	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/dialog-size-by-content	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
+rule/dialog-narrow-one-column	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	

@@ -14,6 +14,10 @@
  * at the end ("…-PHASE-1", "…-PHASE-2") as often as at the start. The two halves are for the eye
  * only; the row's name for assistive tech is the whole name, once, and the system's hint shows it
  * whole under the pointer and on keyboard focus.
+ *
+ * A right click anywhere on a row, or the menu key with the keyboard on one of its keys, asks for
+ * the layer's menu (`onMenu`): at the pointer, or under the row. The browser's own menu is kept
+ * off a row only while the shell answers.
  */
 
 import { createSignal, Index, Show, type Accessor, type JSX } from "solid-js";
@@ -23,12 +27,15 @@ import { Row } from "../ui/Row";
 import { SectionLabel } from "../ui/SectionLabel";
 import { Toggle } from "../ui/Toggle";
 import { Tooltip } from "../ui/Tooltip";
+import { menuPoint, type MenuPoint } from "./ContextMenu";
 
 export interface LayersPanelProps {
   layers: Accessor<LayerInfo[]>;
   currentLayer: Accessor<string>;
   onToggle: (name: string, flag: "on" | "frozen" | "locked", value: boolean) => void;
   onMakeCurrent: (name: string) => void;
+  /** A layer's menu was asked for, at this point of the window. */
+  onMenu?: (name: string, at: MenuPoint) => void;
 }
 
 function rgb(c: readonly [number, number, number]): string {
@@ -98,6 +105,11 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
               role="listitem"
               aria-current={layer().current ? "true" : undefined}
               aria-description={layer().description !== "" ? layer().description : undefined}
+              onContextMenu={(event) => {
+                if (props.onMenu === undefined) return;
+                event.preventDefault();
+                props.onMenu(layer().name, menuPoint(event, event.currentTarget));
+              }}
             >
               <span class="layer-swatch" role="img" aria-label={`Color: ${layer().colorName}`} style={{ background: rgb(layer().colorRgb) }} data-hint={`${layer().colorName}, RGB ${layer().colorRgb.join(", ")}`} />
               <Tooltip text={layerHint(layer())}>

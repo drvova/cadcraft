@@ -2,7 +2,7 @@
 
 ## Description
 
-The CADCraft web interface's design system: the tokens, the thirteen canonical components and the rules the interface is built from, serving the SolidJS app in `apps/ui` over the cadcraft-wasm facade. Foundation: hand-rolled — the system is the app's own, measured from the running Cursor 3.27.22, and no registry item ships it.
+The CADCraft web interface's design system: the tokens, the fourteen canonical components and the rules the interface is built from, serving the SolidJS app in `apps/ui` over the cadcraft-wasm facade. Foundation: hand-rolled — the system is the app's own, measured from the running Cursor 3.27.22, and no registry item ships it.
 
 ## Importing a component
 
@@ -43,6 +43,7 @@ The app's real shell, in order (from `src/app.tsx`):
   </div>
   <StatusBar … />                     <!-- the status bar, one 22px line -->
   <CommandPalette … />                <!-- a dialog over the page (Ctrl+Shift+P) -->
+  <!-- a modal dialog (Drafting Settings) is a `Dialog` mounted here, beside the palette, its `open` held by the shell -->
 </div>
 ```
 

@@ -10,6 +10,9 @@ Foundation: hand-rolled. Traps checked: trap/button-div, trap/role-button, trap/
 ### Foundation
 Not applicable: hand-rolled — the editor tab (13px type on a 12px inset in the 35px strip, the active one filled with `--tab-active`, the `.08` fill on hover, a hairline between tabs) is measured from the running Cursor 3.27.22 (`docs/system/decisions.md`), and no registry item ships it. It replaces two hand-built tabs: the raw `<button class="layout-tab" role="tab">` of the layout strip, and a `Row` in a width cell beside a close `IconButton` in the assistant's header.
 
+### Parts
+- `TabPanels` (the same file) is the whole tabs pattern for views that swap in place, a dialog's pages: a `role="tablist"` strip of `sm` tabs named by `ariaLabel`, and one `role="tabpanel"` per tab, tied both ways (`aria-controls`, `aria-labelledby`). The caller passes `panels` (`{ id, label, content }`), the `selected` id and `onChange(id)`. The strip is one Tab stop; Left, Right, Home and End move the focus and bring that page to the front at once (automatic activation: a page is already built, so showing it costs nothing, where the layout strip switches only on Enter because a switch redraws the drawing). A page behind is `hidden`, not removed, so a field keeps what was typed in it. Used at 1 call site, `src/components/DraftingSettings.tsx:350`.
+
 ## Examples
 `<Tab selected onClick={show}>Model</Tab>` — the model-space tab over the drawing.
 
@@ -27,6 +30,7 @@ Real uses, 2 call sites (`rg -c "<Tab" src/components` → `src/components/Assis
 | `docs/system/examples/tab/size-sm.tsx` | size=sm | The compact tab of a pane header, with its close key. |
 | `docs/system/examples/tab/selected.tsx` | state:selected | The tab in front at the active fill, announced as selected. |
 | `docs/system/examples/tab/in-layout-tabs.tsx` | composition:LayoutTabs | The layout strip over the drawing: Model in front, two layouts behind. |
+| `docs/system/examples/tab/in-tab-panels.tsx` | composition:TabPanels | `TabPanels`: a strip of compact tabs over the panels they show, one Tab stop, walked with the arrow keys. |
 
 Example: One editor tab at rest. (`docs/system/examples/tab/default.tsx`)
 
@@ -50,6 +54,29 @@ export default function InLayoutTabs() {
       <Tab title="Switch to Layout1">Layout1</Tab>
       <Tab title="Switch to Layout2">Layout2</Tab>
     </div>
+  );
+}
+```
+
+Example: `TabPanels`: a strip of compact tabs over the panels they show, one Tab stop, walked with the arrow keys. (`docs/system/examples/tab/in-tab-panels.tsx`)
+
+```tsx
+import { createSignal } from "solid-js";
+import { TabPanels } from "../../../../src/ui/Tab";
+
+export default function InTabPanels() {
+  const [page, setPage] = createSignal("snap-grid");
+  return (
+    <TabPanels
+      ariaLabel="Drafting settings"
+      selected={page()}
+      onChange={setPage}
+      panels={[
+        { id: "snap-grid", label: "Snap and Grid", content: () => <p>The snap and grid spacing.</p> },
+        { id: "polar", label: "Polar Tracking", content: () => <p>The increment angle.</p> },
+        { id: "osnap", label: "Object Snap", content: () => <p>The running object snaps.</p> },
+      ]}
+    />
   );
 }
 ```
@@ -126,15 +153,29 @@ export default function Selected() {
 ## Props
 
 <!-- Props generated from src/ui/Tab.tsx with TypeScript by scripts/props-table.mjs -->
+### Tab
+
 | Prop | Type | Default | Purpose |
 |---|---|---|---|
 | `children?` | `Element` |  | The tab's label. |
 | `closeLabel?` | `string` |  | The close key's accessible name and tooltip. |
+| `controls?` | `string` |  | The `id` of the panel this tab shows: sets `aria-controls`. |
+| `id?` | `string` |  | The tab's own `id`, for the panel it shows to name it (`aria-labelledby`). |
 | `onClick?` | `((event: MouseEvent) => void)` |  | Runs on click: the caller brings this tab to the front. |
 | `onClose?` | `(() => void)` |  | Draws a trailing close key that runs this, and never `onClick`. |
 | `selected?` | `boolean` |  | The tab in front: the active fill, the full ink, and `aria-selected="true"`. |
 | `size?` | `TabSize` |  | The size. |
+| `tabIndex?` | `number` |  | For a strip that is one Tab stop: `0` on the tab in front, `-1` on the others. |
 | `title?` | `string` |  | The hint: what the tab switches to. |
+
+### TabPanels
+
+| Prop | Type | Default | Purpose |
+|---|---|---|---|
+| `ariaLabel` | `string` |  | The strip's accessible name: what the views are views of ("Drafting settings"). |
+| `onChange` | `(id: string) => void` |  | Runs when a click or an arrow key asks for another view, with its `id`. |
+| `panels` | `readonly TabPanel[]` |  | The views, in the strip's order. |
+| `selected` | `string` |  | The `id` of the view in front. |
 
 - `selected`: the tab in front; sets `aria-selected="true"` (and `"false"` otherwise) and the selected fill of its size.
 - `size`: `sm` or `md`; defaults to `md`.
@@ -142,6 +183,9 @@ export default function Selected() {
 - `onClick`: runs on click; the caller brings this tab to the front.
 - `onClose`: draws the trailing close key and runs when it is clicked; the tab's `onClick` does not run.
 - `closeLabel`: the close key's accessible name and tooltip; defaults to "Close".
+- `id`: the tab's own `id`, for the panel it shows to name it (`aria-labelledby`).
+- `controls`: the `id` of the panel the tab shows; sets `aria-controls`.
+- `tabIndex`: for a strip that is one Tab stop, `0` on the tab in front and `-1` on the others; unset, no attribute is written and every tab is a Tab stop.
 - `children`: the tab's label.
 
 ## Usage
@@ -184,12 +228,12 @@ export default function Selected() {
 - `rule/tab-md-label-limit`: When an `md` tab's label runs past 24 characters, pass the whole label as the children and leave the shortening to the tab, because the tab clips at `max-width: 24ch` with an ellipsis and shows the full label in its hint by itself, and uncapped the 56-character "A1 Ground floor general arrangement plan, sheet 12 of 40" draws a 357.8px tab that pushes the other layouts out of the strip. Evidence: measured 168.2px clipped `md` tab at 1280px, `src/ui/ui.css:1048`. Check: test `src/ui/Tab.test.tsx`.
   - Don't: `<Tab title="A1 Ground floor general arrangement plan, sheet 12 of 40">A1 Ground floor…</Tab>` — the label a screen reader hears is the cut one.
   - Do: `<Tab>A1 Ground floor general arrangement plan, sheet 12 of 40</Tab>`
-- `rule/tab-touch-target`: When `sm` tabs are laid out in a pane header, leave the header room for a 24px tab, because under a coarse pointer the 22px tab grows to the 24px control height (it clips its own overflow for the ellipsis, so it cannot take an overhanging target) and a header fixed at 22px would cut it. Evidence: measured 22px `sm` tab, 24px under a coarse pointer, `src/ui/ui.css:1246`. Check: review `src/ui/ui.css`.
+- `rule/tab-touch-target`: When `sm` tabs are laid out in a pane header, leave the header room for a 24px tab, because under a coarse pointer the 22px tab grows to the 24px control height (it clips its own overflow for the ellipsis, so it cannot take an overhanging target) and a header fixed at 22px would cut it. Evidence: measured 22px `sm` tab, 24px under a coarse pointer, `src/ui/ui.css:1421`. Check: review `src/ui/ui.css`.
   - Don't: `.my-head { height: var(--control-h-row); overflow: hidden }`
   - Do: `.my-head { min-height: var(--control-h-button); align-items: center }`
 
 ## Accessibility
-Rests on the native `<button>` element with `role="tab"`: Enter and Space and focus come from the platform. Every tab stays in the tab order; the strip has no arrow-key handler, so a tab is reached by Tab, not by the arrow keys. The caller owns the `tablist` container, and no `tabpanel` is wired (`aria-controls` is not set).
+Rests on the native `<button>` element with `role="tab"`: Enter and Space and focus come from the platform. A bare `Tab` stays in the tab order and has no arrow-key handler of its own: the caller owns the `tablist` container and its walk (the layout strip roves from its container), and wires a `tabpanel` through `id` and `controls` when it has one. `TabPanels` does all of it: one Tab stop, the arrow keys, Home and End, and a `tabpanel` per tab.
 
 ### Keyboard
 | Key | Where focus is | Effect | Focus after | Checked by |
@@ -198,7 +242,10 @@ Rests on the native `<button>` element with `role="tab"`: Enter and Space and fo
 | Enter | The focused tab. | Brings the tab to the front. | Stays on the tab. | by hand |
 | Space | The focused tab. | Brings the tab to the front on release. | Stays on the tab. | by hand |
 | Enter | The focused close key. | Runs `onClose`; the tab's `onClick` does not run. | The caller decides: the closed tab leaves the strip. | by hand |
-| ArrowRight | The focused tab. | Nothing: the strip has no arrow-key handler. | Stays on the tab. | by hand |
+| ArrowRight | The focused tab, bare. | Nothing from the tab: a strip's walk is its container's. | Stays on the tab. | by hand |
+| ArrowRight, ArrowLeft | A tab of a `TabPanels`. | Asks for the next or the previous page, wrapping at the ends, and shows it. | On that page's tab. | test |
+| Home, End | A tab of a `TabPanels`. | Asks for the first or the last page and shows it. | On that page's tab. | test |
+| Tab | A tab of a `TabPanels`. | Leaves the strip: the tabs behind are not Tab stops. | The first control of the page in front. | by hand |
 
 ### ARIA
 | Part | Role | Accessible name from | States and properties | Announced | Checked by |
@@ -206,6 +253,8 @@ Rests on the native `<button>` element with `role="tab"`: Enter and Space and fo
 | The tab | `tab` (on a native `<button>`) | Its text content, in full even when the tab clips it for the eye | `aria-selected="true"` on the tab in front, `"false"` on the others; `aria-describedby` pointing at the `title`'s words when they add to the label | "Model, tab, selected, Switch to model space" | test |
 | The hint | None: the box is `aria-hidden="true"` | — | It shows the full label and the description for the eye | Nothing | test |
 | The close key | `button` (native, an `IconButton`) | `closeLabel` as `aria-label` | none | "Close hello, button" | test |
+| The strip of a `TabPanels` | `tablist` | `ariaLabel` | none | "Drafting settings, tab list" | test |
+| A panel of a `TabPanels` | `tabpanel` | Its tab, through `aria-labelledby` | `hidden` while its tab is behind; its tab names it back with `aria-controls` | "Polar Tracking, tab panel" on entering it | test |
 
 ## Tokens
 | Part | State | Token |
@@ -221,6 +270,7 @@ Rests on the native `<button>` element with `role="tab"`: Enter and Space and fo
 | The ring | focus-visible | `--focus-outline-w`, `--focus-ring`, `--focus-outline-offset` |
 | The motion | hover, selected | `--dur-fast`, `--ease-standard` |
 | The tab | sm, coarse pointer | `--control-h-input` |
+| The strip of a `TabPanels` | all | `--gap-2`, `--gap-8`, `--gap-12`, `--hairline`, `--border-soft` |
 
 ## Related
 - `Row`: when the item is one band of a full-width list rather than one view of a strip.
