@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use super::gem;
 use super::mesh::*;
-use super::piece_params::{PieceKind, PieceParams};
+use super::piece_params::{CROWN, CULET_CLEAR, GIRDLE, PRONG_OVER, PieceKind, PieceParams, proportions, table_ratio};
 use crate::Session;
 use crate::cmd::file::base64_decode;
 
@@ -30,7 +30,7 @@ fn find(parent: &mut [usize], mut i: usize) -> usize {
 }
 
 /// The part's closed shells, each as its triangles' indices.
-fn shells(m: &PartMesh) -> Vec<Vec<u32>> {
+pub(super) fn shells(m: &PartMesh) -> Vec<Vec<u32>> {
     let mut parent: Vec<usize> = (0..m.positions.len()).collect();
     for t in m.indices.chunks_exact(3) {
         let a = find(&mut parent, t[0] as usize);
@@ -82,13 +82,18 @@ fn check(mesh: &PieceMesh, strict: bool, what: &str) {
     }
 }
 
-fn part<'a>(mesh: &'a PieceMesh, name: &str) -> &'a PartMesh {
+pub(super) fn part<'a>(mesh: &'a PieceMesh, name: &str) -> &'a PartMesh {
     mesh.meshes.iter().find(|m| m.name == name).unwrap_or_else(|| panic!("no part named {name}"))
 }
 
-fn extent(m: &PartMesh, axis: usize) -> (f64, f64) {
+pub(super) fn extent(m: &PartMesh, axis: usize) -> (f64, f64) {
     let get = |p: &Vec3| [p.x, p.y, p.z][axis];
     (m.positions.iter().map(get).fold(f64::INFINITY, f64::min), m.positions.iter().map(get).fold(f64::NEG_INFINITY, f64::max))
+}
+
+/// The band's outside radius.
+fn outer_of(p: &PieceParams) -> f64 {
+    p.outer() / 2.0
 }
 
 fn has_note(notes: &Value, word: &str) -> bool {
@@ -140,8 +145,18 @@ fn a_solitaire_has_its_parts_where_the_contract_puts_them() {
     assert_eq!(shells(part(&mesh, "head")).len(), 1);
     let halo = shells(part(&mesh, "melee")).len();
     assert_eq!(mesh.stones as usize, 1 + halo);
-    // floor(π · (6.5 + 1.3 + 2 × 0.2) / (1.3 + 0.2)) = 17, less the chords' shortfall.
-    assert!((16..=17).contains(&halo), "a 6.5 mm round takes {halo} melee of 1.3 mm");
+    // The sheet's halo: on a circle of the girdle + half the 0.975 mm prong wire + the gap + half
+    // a melee, as many as keep the gap between them by their chord.
+    assert_eq!(halo, p.halo_sites().unwrap().len());
+    assert_eq!(halo, 19, "a 6.5 mm round takes 19 melee of 1.3 mm at 0.2 mm, as PIECE counts them");
+    let seat = p.head().halo.unwrap();
+    let melee = part(&mesh, "melee");
+    let girdle_y = outer_of(&p) + p.head().girdle_height();
+    let ring = 3.25 + seat.offset;
+    assert!((seat.offset - (0.975 / 2.0 + 0.2 + 0.65)).abs() < 1e-12);
+    let reach = melee.positions.iter().filter(|q| (q.y - girdle_y).abs() < 0.03).map(|q| q.x.hypot(q.z)).fold(0.0, f64::max);
+    assert!((reach - (ring + 0.65)).abs() < 1e-6, "the halo's girdles reach {reach}, not {}", ring + 0.65);
+    assert_eq!(melee.color, stone_color("diamond"));
     // The head is at +Y, centred on the finger's axis, and the stone is as deep as the cut says.
     let stone = part(&mesh, "centre stone");
     let outer = p.outer() / 2.0;
@@ -156,7 +171,8 @@ fn a_solitaire_has_its_parts_where_the_contract_puts_them() {
     // A round brilliant: an eight-sided table on top, 57 % of the diameter corner to corner.
     let table: Vec<&Vec3> = stone.positions.iter().filter(|q| (q.y - y1).abs() < 1e-9).collect();
     assert_eq!(table.len(), 8);
-    assert!(table.iter().all(|q| (q.x.hypot(q.z) - ROUND_TABLE * 3.25).abs() < 1e-9));
+    assert!(table.iter().all(|q| (q.x.hypot(q.z) - 0.57 * 3.25).abs() < 1e-9));
+    assert_eq!(table_ratio(gem::cut_of("round").unwrap()), 0.57);
     // No metal reaches into the finger.
     let inner = p.inner() / 2.0;
     for m in mesh.meshes.iter().filter(|m| m.part == "metal") {
@@ -171,50 +187,96 @@ fn a_solitaire_has_its_parts_where_the_contract_puts_them() {
 
 #[test]
 fn an_eternity_band_carries_the_number_that_fits() {
-    // n = floor(π · outside diameter / (melee + gap)).
+    // The number PIECE counts: the most that keep the gap between neighbouring girdles on the
+    // circle the girdles lie on (outer/2 − 0.28 × depth).
     let p = params(json!({"kind": "eternity", "size": 6, "wall": 1.8, "melee": 1.8, "gap": 0.2}));
-    let expected = (PI * (p.size.diameter + 3.6) / 2.0).floor() as u32;
-    assert_eq!(eternity_count(&p), expected);
-    assert_eq!(expected, 31, "a size 6 band with a 1.8 mm wall takes 31 stones of 1.8 mm at 0.2 mm");
+    let row = p.eternity_row();
+    let expected = row.fits;
+    assert_eq!(expected, 30, "a size 6 band with a 1.8 mm wall takes 30 stones of 1.8 mm at 0.2 mm");
+    assert!(row.between(30) >= 0.2 && row.between(31) < 0.2);
+    let depth = gem::default_depth(gem::cut_of("round").unwrap(), 1.8);
+    assert_eq!(row.depth, depth);
+    assert!((row.radius - (p.outer() / 2.0 - 0.28 * depth)).abs() < 1e-12);
     let mesh = piece_mesh(&p, Quality::Draft);
     assert_eq!(mesh.stones, expected);
+    assert_eq!(mesh.fits, Some(expected));
     assert_eq!(shells(part(&mesh, "melee")).len(), expected as usize);
     assert_eq!(shells(part(&mesh, "beads")).len(), 2 * expected as usize, "two beads between neighbours");
     let inner = p.inner() / 2.0;
     assert!(part(&mesh, "beads").positions.iter().all(|q| q.x.hypot(q.y) >= inner), "no bead reaches into the finger");
+    assert!(!mesh.notes.iter().any(|n| n.contains("overlap")), "{:?}", mesh.notes);
     // A given count is taken as given.
     let p = params(json!({"kind": "eternity", "count": 20}));
-    assert_eq!(eternity_count(&p), 20);
+    assert_eq!(p.eternity_row().count(p.count), 20);
     let mesh = piece_mesh(&p, Quality::Draft);
     assert_eq!(shells(part(&mesh, "melee")).len(), 20);
-    // The tables face outward: the first stone is at 12 o'clock, its table the highest thing.
-    let (_, top) = extent(part(&mesh, "melee"), 1);
-    let depth = gem::default_depth(gem::cut_of("round").unwrap(), 1.8);
-    let want = p.outer() / 2.0 + 0.08 * 1.8 + (GIRDLE / 2.0 + CROWN) * depth;
+    assert_eq!(mesh.fits, Some(30));
+    // The tables face outward and lie level with the band's outside: the first stone is at
+    // 12 o'clock, its table at the outside radius and its culet a depth inside it.
+    let melee = part(&mesh, "melee");
+    let (_, top) = extent(melee, 1);
+    let want = p.outer() / 2.0;
     assert!((top - want).abs() < 1e-9, "table at {top}, not {want}");
-    let (lo, hi) = mesh.bounds();
-    assert_eq!(hi[1], r3(want));
-    assert!(lo[1] < -p.outer() / 2.0, "a stone at 6 o'clock too");
-    // More stones than fit are shown, and said to overlap.
+    let furthest = melee.positions.iter().map(|q| q.x.hypot(q.y)).fold(0.0, f64::max);
+    let nearest = melee.positions.iter().map(|q| q.x.hypot(q.y)).fold(f64::INFINITY, f64::min);
+    // (The table is flat, so its corners are a little further from the axis than its middle.)
+    assert!((furthest - want.hypot(0.57 * 0.9)).abs() < 1e-9 && (nearest - (want - depth)).abs() < 1e-9, "{nearest}..{furthest}");
+    let girdle = want - (CROWN + GIRDLE / 2.0) * depth;
+    assert!((girdle - p.eternity_row().radius).abs() < 1e-12);
+    let (lo, _) = mesh.bounds();
+    assert!(lo[1] <= r3(-want), "a stone at 6 o'clock too");
+    // More stones than fit are shown, and said to overlap (PIECE refuses them).
     let crowded = piece_mesh(&params(json!({"kind": "eternity", "count": 60})), Quality::Draft);
-    assert!(crowded.notes.iter().any(|n| n.contains("overlap")), "{:?}", crowded.notes);
+    assert!(crowded.notes.iter().any(|n| n.contains("overlap") && n.contains("at most 30")), "{:?}", crowded.notes);
+    assert_eq!(crowded.stones, 60);
     check(&crowded, true, "crowded");
+    // Another cut goes around as itself, as deep as that cut is.
+    let square = params(json!({"kind": "eternity", "cut": "princess", "melee": 2, "width": 3, "wall": 2}));
+    let mesh = piece_mesh(&square, Quality::Draft);
+    check(&mesh, true, "princess eternity");
+    let row = square.eternity_row();
+    assert_eq!(shells(part(&mesh, "melee")).len(), row.fits as usize);
+    assert_eq!(row.depth, gem::default_depth(gem::cut_of("princess").unwrap(), 2.0));
+    let nearest = part(&mesh, "melee").positions.iter().map(|q| q.x.hypot(q.y)).fold(f64::INFINITY, f64::min);
+    assert!((nearest - (square.outer() / 2.0 - row.depth)).abs() < 1e-9, "a princess is {} deep: {nearest}", row.depth);
 }
 
 // ---------------------------------------------------------------- volume and weight
 
 #[test]
 fn the_band_is_the_analytic_volume() {
-    for (size, wall, width) in [(6.0, 1.8, 2.2), (3.0, 0.8, 1.5), (13.0, 3.0, 8.0)] {
+    // A low dome (one arc), a true half-round (wall = width/2) and a high one (sides under a
+    // semicircle) among them.
+    for (size, wall, width) in [(6.0, 1.8f64, 2.2f64), (3.0, 0.8, 1.5), (13.0, 3.0, 8.0), (6.0, 1.0, 4.0), (7.0, 1.5, 3.0)] {
         let p = params(json!({"kind": "band", "size": size, "wall": wall, "width": width}));
         let (r, big) = (p.inner() / 2.0, p.outer() / 2.0);
         let flat = PI * (big * big - r * r) * width;
-        // Pappus: the half-ellipse's area times the path of its centroid.
-        let dome = 2.0 * PI * (r + 4.0 * wall / (3.0 * PI)) * (PI * (width / 2.0) * wall / 2.0);
-        for (profile, exact, draft_tol, fine_tol) in [("flat", flat, 1e-3, 2.5e-4), ("dome", dome, 8e-3, 2.5e-3)] {
+        assert!((p.band_volume() - flat).abs() / flat < 1e-12, "a flat band is the annulus");
+        for (profile, draft_tol, fine_tol) in [("flat", 1e-3, 2.5e-4), ("dome", 8e-3, 2.5e-3)] {
             let p = params(json!({"kind": "band", "size": size, "wall": wall, "width": width, "profile": profile}));
-            let draft = piece_mesh(&p, Quality::Draft).metal_volume();
-            let fine = piece_mesh(&p, Quality::Fine).metal_volume();
+            // The volume PIECE weighs: the shared section's area swept at its centroid (Pappus).
+            let section = p.section();
+            let exact = p.band_volume();
+            assert_eq!(exact, 2.0 * PI * (r + section.centroid()) * section.area());
+            if profile == "dome" {
+                // Worked by hand: straight sides of `wall − rise` under a circular segment.
+                let a = width / 2.0;
+                let rise = wall.min(a);
+                let side = wall - rise;
+                let big = (a * a + rise * rise) / (2.0 * rise);
+                let theta = 2.0 * (a / big).asin();
+                let segment = big * big / 2.0 * (theta - theta.sin());
+                let up = side + 4.0 * big * (theta / 2.0).sin().powi(3) / (3.0 * (theta - theta.sin())) - (big - rise);
+                let (area, moment) = (width * side + segment, width * side * side / 2.0 + segment * up);
+                assert!((section.area() - area).abs() < 1e-9, "{} against {area}", section.area());
+                assert!((section.centroid() - moment / area).abs() < 1e-9, "{} against {}", section.centroid(), moment / area);
+                if (wall - a).abs() < 1e-12 {
+                    // A true half-round: a semicircle.
+                    assert!((exact - 2.0 * PI * (r + 4.0 * a / (3.0 * PI)) * (PI * a * a / 2.0)).abs() < 1e-9);
+                }
+            }
+            let draft = piece_mesh(&p, Quality::Draft).shells_volume();
+            let fine = piece_mesh(&p, Quality::Fine).shells_volume();
             let (ed, ef) = ((draft - exact).abs() / exact, (fine - exact).abs() / exact);
             println!(
                 "band size {size} wall {wall} width {width} {profile}: exact {exact:.4} mm³, draft {draft:.4} ({:.4} %), fine {fine:.4} ({:.4} %)",
@@ -230,18 +292,62 @@ fn the_band_is_the_analytic_volume() {
 }
 
 #[test]
-fn the_mesh_weighs_what_ring_weighs() {
+fn the_dome_is_the_sheets_section() {
+    // Every vertex of a domed band lies on the shared section's outline, and the crown and the
+    // sides are where the sheet draws them.
+    for (wall, width) in [(1.8f64, 2.2f64), (1.0, 4.0), (1.5, 3.0)] {
+        let p = params(json!({"kind": "band", "wall": wall, "width": width, "profile": "dome"}));
+        let section = p.section();
+        let (ri, a) = (p.inner() / 2.0, width / 2.0);
+        assert!((section.height_at(0.0) - wall).abs() < 1e-12, "the crown is the wall");
+        assert!((section.height_at(a) - (wall - a).max(0.0)).abs() < 1e-9, "the sides are wall − width/2 high");
+        assert!((section.height_at(-a) - section.height_at(a)).abs() < 1e-12);
+        let mesh = piece_mesh(&p, Quality::Fine);
+        let band = part(&mesh, "band");
+        let mut crown = 0.0f64;
+        for q in &band.positions {
+            let radius = q.x.hypot(q.y);
+            assert!(q.z.abs() <= a + 1e-9);
+            assert!(radius >= ri - 1e-9 && radius <= ri + section.height_at(q.z) + 1e-9, "a vertex outside the section at z {}", q.z);
+            if radius > ri + 1e-6 {
+                assert!((radius - ri - section.height_at(q.z)).abs() < 1e-9, "an outside vertex off the outline at z {}", q.z);
+            }
+            crown = crown.max(radius);
+        }
+        assert!((crown - (ri + wall)).abs() < 1e-9);
+        // The sheet draws that same outline: its bulged polyline has the section's area.
+        let poly = cadcraft_geom::Polyline {
+            vertices: section.outline().iter().map(|(q, b)| cadcraft_geom::PolyVertex::with_bulge(*q, *b)).collect(),
+            closed: true,
+        };
+        assert!((poly.area().abs() - section.area()).abs() < 1e-9);
+        assert!((poly.centroid().unwrap().y - section.centroid()).abs() < 1e-9);
+    }
+}
+
+#[test]
+fn the_metal_weight_is_the_bands_and_the_one_ring_weighs() {
     let mut s = Session::new();
     let ring = s.execute("ring", &json!({"at": [0, 0], "size": 6, "wall": 1.8, "width": 2.2, "gap": 0, "metal": "gold18"})).unwrap();
     let grams = ring["weight"]["grams"].as_f64().unwrap();
     for (quality, tol) in [("draft", 0.01), ("fine", 0.001)] {
         let r =
             s.execute("piecemesh", &json!({"kind": "band", "size": 6, "wall": 1.8, "width": 2.2, "metal": "gold18", "quality": quality})).unwrap();
-        let mesh = r["metal"]["grams"].as_f64().unwrap();
-        println!("RING {grams} g, PIECEMESH {quality} {mesh} g ({:.4} %)", (mesh - grams).abs() / grams * 100.0);
-        assert!((mesh - grams).abs() / grams < tol, "{quality}: {mesh} g against RING's {grams} g");
+        // The metal weight is the band's, exactly, whatever the tessellation.
+        assert_eq!(r["metal"]["grams"], ring["weight"]["grams"], "{quality}");
         assert_eq!(r["metal"]["density"], json!(15.5));
+        // The shells' sum is the approximation, kept apart from it.
+        let shells = r["metal"]["shells"]["grams"].as_f64().unwrap();
+        println!("RING {grams} g, PIECEMESH {quality} shells {shells} g ({:.4} %)", (shells - grams).abs() / grams * 100.0);
+        assert!((shells - grams).abs() / grams < tol, "{quality}: {shells} g against RING's {grams} g");
+        assert!(shells < grams);
     }
+    // A solitaire's metal weight is still the band's: the head is only in the shells' sum.
+    let band = s.execute("piecemesh", &json!({"kind": "band", "profile": "dome"})).unwrap();
+    let solitaire = s.execute("piecemesh", &json!({"kind": "solitaire", "profile": "dome", "halo": true})).unwrap();
+    assert_eq!(solitaire["metal"]["grams"], band["metal"]["grams"]);
+    assert_eq!(solitaire["metal"]["volumeMm3"], band["metal"]["volumeMm3"]);
+    assert!(solitaire["metal"]["shells"]["grams"].as_f64().unwrap() > band["metal"]["shells"]["grams"].as_f64().unwrap());
 }
 
 // ---------------------------------------------------------------- the reply
@@ -274,7 +380,14 @@ fn bounds_are_the_true_extents() {
     assert_eq!(lo[1], r3(-p.outer() / 2.0));
     let depth = gem::default_depth(gem::cut_of("round").unwrap(), 6.5);
     let (g, hc, hp) = proportions(depth);
-    assert!((table - (p.outer() / 2.0 + CULET_CLEARANCE + hp + g + hc)).abs() < 1e-9);
+    assert_eq!(CULET_CLEAR, 0.5);
+    assert!((table - (p.outer() / 2.0 + CULET_CLEAR + hp + g + hc)).abs() < 1e-9);
+    // The prongs reach 1.15 wire diameters over the top of the girdle (their caps lean in a little).
+    let head = p.head();
+    assert!((head.prong - 0.975).abs() < 1e-12);
+    let reach = p.outer() / 2.0 + CULET_CLEAR + hp + g + PRONG_OVER * head.prong;
+    assert!((reach - (p.outer() / 2.0 + head.prong_height())).abs() < 1e-12);
+    assert!(tips <= reach + 1e-9 && tips > reach - 0.1, "the prongs' tips at {tips}, not {reach}");
     assert!((g + hc + hp - depth).abs() < 1e-12);
 }
 
@@ -450,7 +563,7 @@ fn a_binary_stl_is_84_plus_50_bytes_a_triangle_and_reads_back() {
             six += v(a).dot(v(b).cross(v(c)));
         }
         if !stones {
-            assert!((six / 6.0 - mesh.metal_volume()).abs() / mesh.metal_volume() < 1e-4, "the STL encloses the metal's volume");
+            assert!((six / 6.0 - mesh.shells_volume()).abs() / mesh.shells_volume() < 1e-4, "the STL encloses the metal shells' volume");
         }
         assert!(r["name"].as_str().unwrap().ends_with("-us6-gold18.stl"), "{}", r["name"]);
         assert_eq!(r["quality"], quality.name());
@@ -610,6 +723,6 @@ fn hostile_input_is_refused_or_handled_and_never_nan() {
     wild.count = None;
     wild.melee = 1e-300;
     wild.gap = 0.0;
-    assert!(eternity_count(&wild) <= 400);
+    assert!(wild.eternity_row().count(wild.count) <= 400);
     check(&piece_mesh(&wild, Quality::Draft), false, "wild eternity, no count");
 }

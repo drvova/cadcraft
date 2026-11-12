@@ -224,6 +224,12 @@ fn a_solitaire_seats_its_stone_over_the_band_with_prongs_and_a_halo() {
     let oval = piece(&mut s, json!({"cut": "oval", "stoneLength": 8, "stoneWidth": 6, "halo": true, "stone": "diamond"}));
     assert_eq!(check(&oval, "spacing")["ok"], true, "{oval}");
     assert!(oval["stones"]["count"].as_u64().unwrap() > 12, "{}", oval["stones"]);
+    // A cut with straight sides takes every prong it is asked for: a trillion's fourth prong
+    // stands on a side (it used to be left out, and the sheet drew three).
+    let trillion = piece(&mut s, json!({"cut": "trillion", "stoneLength": 6, "stoneWidth": 6, "prongs": 4, "halo": false}));
+    assert_eq!(on_layer_count(&s, &trillion, "Settings", |k| matches!(k, EntityKind::Circle(_))), 4);
+    let square = piece(&mut s, json!({"cut": "princess", "stoneLength": 5, "stoneWidth": 5, "prongs": 6}));
+    assert_eq!(on_layer_count(&s, &square, "Settings", |k| matches!(k, EntityKind::Circle(_))), 6);
 }
 
 #[test]

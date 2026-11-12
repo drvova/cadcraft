@@ -16,9 +16,9 @@
 //!   `TECHSHEET` and `DESCRIBE` read the band's size, metal and weight with no special case, and
 //!   `RINGSIZES {handle}` measures it. A solitaire's stone stands on top at 12 o'clock as its
 //!   side profile (table, crown, girdle, pavilion, culet) with the culet 0.5 mm clear of the band
-//!   and the two prongs the view shows drawn as lines from the band to just over the girdle. An
-//!   eternity band's stones are drawn as their side profiles at their angles, tables level with
-//!   the band's outside.
+//!   and the two prongs the view shows drawn as lines from the band to their tips over the
+//!   girdle. An eternity band's stones are drawn as their side profiles at their angles, tables
+//!   level with the band's outside.
 //! - **Section** (to the right): the band's cross-section, `width` across by `wall` high, the
 //!   finger side down. A dome is a half-round: a circular arc over the full width whose rise is
 //!   the wall, and when the wall is more than half the width, straight sides under a semicircle.
@@ -38,10 +38,13 @@
 //!
 //! # The numbers
 //!
+//! Every number the sheet shares with the solid (`PIECEMESH`) is worked out in
+//! [`super::piece_params`], where each is defined; the sheet only draws them.
+//!
 //! - A stone's side profile splits its depth (the cut's usual proportion of its width) into a
-//!   crown of 26 %, a girdle of 4 % and a pavilion of 70 %, under a table of 57 % of the width
-//!   (a round) or 60 % (the other cuts): a round brilliant's usual proportions. A cabochon is a
-//!   dome on a flat base.
+//!   crown of 26 %, a girdle of 4 % and a pavilion of 70 %, under the table `GEM` draws for the
+//!   cut (57 % of the width for a round, 65 % for the step cuts, 60 % for an oval, 62 % for the
+//!   rest). A cabochon is a dome on a flat base.
 //! - An eternity band's stones are as long as they are wide (`melee`), seated with their tables
 //!   level with the band's outside, so their girdles lie on a circle of radius
 //!   `R = outer/2 − 0.28 × depth`. The metal between two neighbours is measured there, between
@@ -49,8 +52,9 @@
 //!   fit is the largest `n` that leaves `gap`; a `count` above it is refused with that number.
 //! - A halo's melee (round diamonds of the `halo` width) lie on the centre stone's girdle offset
 //!   outward by half the prong wire, `gap`, and half a melee, so they clear the prongs; as many
-//!   as keep `gap` of metal between them. The prong wire is 15 % of the stone's width, kept
-//!   between 0.8 and 1.2 mm.
+//!   as keep `gap` of metal between them. The prong wire is 15 % of the stone's lesser
+//!   dimension, kept between 0.8 and 1.2 mm; the prongs stand on the girdle where `SETTING` puts
+//!   them (evenly on a round) and reach 1.15 wire diameters over it.
 //! - **Metal weight** is the band alone: its section's area swept around the finger at the
 //!   section's centroid (Pappus), at the alloy's density — for a flat band exactly the annulus
 //!   `RING` weighs. The prongs and the head are not weighed, and the seats cut for the stones
@@ -64,12 +68,12 @@
 //! save and open keeps both. A rebuild puts the sheet where the band's front view is now (so a
 //! piece that was moved rebuilds where it was moved to), unless `at` is given.
 
-use cadcraft_doc::{Entity, EntityKind, Group, Handle, Layer};
+use cadcraft_doc::{EntityKind, Group, Handle, Layer};
 use cadcraft_geom::{PolyVertex, Vec2, Vec3};
 use serde_json::{Map, Value, json};
 
 use super::super::*;
-use super::piece_params::{MAX_PIECE_STONES, MIN_CAST_WALL, PieceKind, PieceParams, Profile};
+use super::piece_params::{self as shared, CROWN, GIRDLE, MIN_CAST_WALL, PieceKind, PieceParams, Row, Section, carat_of, least_spacing};
 use super::sizes::RingSize;
 use super::*;
 use crate::{Accept, Input, Interactive, Prompt, Step};
@@ -85,11 +89,6 @@ const MAX_HANDLES: usize = 5_000;
 const VIEW_GAP: f64 = 8.0;
 /// The least metal either side of a stone set into a band (mm).
 const MIN_EDGE: f64 = 0.3;
-/// How far a solitaire's culet stands clear of the band (mm).
-const CULET_CLEAR: f64 = 0.5;
-/// A stone's crown and girdle as fractions of its depth; the rest is pavilion.
-const CROWN: f64 = 0.26;
-const GIRDLE: f64 = 0.04;
 /// Furthest a sheet may be placed from the origin, in drawing units.
 const MAX_AT: f64 = 1.0e9;
 /// The layers a piece is drawn on, with the colour each is made in when it is missing.
@@ -180,49 +179,14 @@ fn rect(c: Vec2, w: f64, h: f64) -> Shape {
     closed(&[c + Vec2::new(-a, -b), c + Vec2::new(a, -b), c + Vec2::new(a, b), c + Vec2::new(-a, b)])
 }
 
-/// A flat-based shape `w` across and `h` high with its base centred on the origin: a rectangle,
-/// or (domed) an arc over the full width whose rise is `h`, on straight sides when `h` is more
-/// than half of `w`. Counter-clockwise, bulges exact.
-fn section(w: f64, h: f64, domed: bool) -> Vec<(Vec2, f64)> {
-    let a = w / 2.0;
-    if !domed {
-        return vec![(Vec2::new(-a, 0.0), 0.0), (Vec2::new(a, 0.0), 0.0), (Vec2::new(a, h), 0.0), (Vec2::new(-a, h), 0.0)];
-    }
-    // A bulge is the arc's rise over half its chord.
-    let rise = h.min(a);
-    let side = h - rise;
-    let bulge = if a > 0.0 { rise / a } else { 0.0 };
-    if side <= 1e-9 {
-        vec![(Vec2::new(-a, 0.0), 0.0), (Vec2::new(a, 0.0), bulge)]
-    } else {
-        vec![(Vec2::new(-a, 0.0), 0.0), (Vec2::new(a, 0.0), 0.0), (Vec2::new(a, side), bulge), (Vec2::new(-a, side), 0.0)]
-    }
-}
-
-/// The area of a [`section`] and the height of its centroid above its base.
-fn section_area(v: &[(Vec2, f64)]) -> Option<(f64, f64)> {
-    let poly = cadcraft_geom::Polyline { vertices: v.iter().map(|(p, b)| PolyVertex::with_bulge(*p, *b)).collect(), closed: true };
-    let area = poly.area().abs();
-    let centroid = poly.centroid()?;
-    (area.is_finite() && area > 0.0 && centroid.is_finite()).then_some((area, centroid.y))
-}
-
-/// The band's weight in grams: its section swept around the finger at the section's centroid.
-fn band_grams(p: &PieceParams) -> Result<f64> {
-    let (area, rise) =
-        section_area(&section(p.width, p.wall, p.profile == Profile::Dome)).ok_or_else(|| bad(CMD, "the band's section has no area"))?;
-    let volume = cadcraft_geom::TAU * (p.inner() / 2.0 + rise) * area;
-    Ok(volume / 1000.0 * p.density)
-}
-
 /// A stone's side profile, `w` across and `depth` high, with its culet (or a cabochon's base) on
 /// the origin and its table up.
 fn profile(cut: &gem::Cut, w: f64, depth: f64) -> Vec<(Vec2, f64)> {
     if cut.name == "cabochon" {
-        return section(w, depth, true);
+        return Section { width: w, wall: depth, domed: true }.outline();
     }
     let a = w / 2.0;
-    let table = a * if cut.name == "round" { 0.57 } else { 0.60 };
+    let table = a * shared::table_ratio(cut);
     let girdle_top = depth * (1.0 - CROWN);
     let girdle_bottom = depth * (1.0 - CROWN - GIRDLE);
     [
@@ -239,79 +203,10 @@ fn profile(cut: &gem::Cut, w: f64, depth: f64) -> Vec<(Vec2, f64)> {
     .collect()
 }
 
-/// How far below its table a stone's girdle lies (the middle of the girdle).
-fn girdle_drop(depth: f64) -> f64 {
-    depth * (CROWN + GIRDLE / 2.0)
-}
-
 /// A profile moved so its origin is at `at`, its across direction is `across` and its up
 /// direction is `up` (unit vectors at right angles).
 fn place_profile(v: &[(Vec2, f64)], at: Vec2, across: Vec2, up: Vec2) -> Shape {
     Shape::Poly { v: v.iter().map(|(p, b)| (at + across * p.x + up * p.y, *b)).collect(), closed: true }
-}
-
-/// The stone a piece holds, as `GEM` reads one.
-fn stone_of(cut: &str, length: f64, width: f64, material: &str) -> Result<gem::Stone> {
-    let mut p = Map::new();
-    p.insert("cut".into(), json!(cut));
-    p.insert("length".into(), json!(length));
-    p.insert("width".into(), json!(width));
-    // Diamond is the stone a bare `GEM` places, so a piece's diamonds share its blocks.
-    if material != "diamond" {
-        p.insert("stone".into(), json!(material));
-    }
-    gem::stone_params(CMD, &Value::Object(p))
-}
-
-fn carat_of(s: &gem::Stone) -> f64 {
-    gem::carat(s.cut, s.length, s.width, s.depth, s.sg)
-}
-
-/// A stone's girdle sampled in millimetres, centred on the stone.
-fn girdle(s: &gem::Stone) -> Result<Vec<Vec2>> {
-    let e = Entity::new(Handle(0), gem::outline(s.cut, s.length, s.width));
-    let (pts, _) = entity_loop(&e, 1.0).ok_or_else(|| bad(CMD, "the stone has no outline"))?;
-    if pts.len() < 3 || pts.iter().any(|p| !p.is_finite()) {
-        return Err(bad(CMD, "the stone has no outline"));
-    }
-    Ok(pts)
-}
-
-/// `n` points evenly spaced by length around a closed loop.
-fn around(loop_pts: &[Vec2], n: usize) -> Vec<Vec2> {
-    let count = loop_pts.len();
-    let edges: Vec<(Vec2, Vec2, f64)> = loop_pts.iter().zip(loop_pts.iter().cycle().skip(1)).take(count).map(|(a, b)| (*a, *b, a.dist(*b))).collect();
-    let total: f64 = edges.iter().map(|e| e.2).sum();
-    let mut out = Vec::with_capacity(n);
-    if !(total.is_finite() && total > 1e-9) || n == 0 {
-        return out;
-    }
-    let step = total / n as f64;
-    let (mut walked, mut edge) = (0.0, 0usize);
-    for i in 0..n {
-        let want = (i as f64 + 0.5) * step;
-        while let Some((a, b, len)) = edges.get(edge) {
-            if walked + len >= want || edge + 1 == edges.len() {
-                let t = if *len > 1e-12 { ((want - walked) / len).clamp(0.0, 1.0) } else { 0.0 };
-                out.push(*a + (*b - *a) * t);
-                break;
-            }
-            walked += len;
-            edge += 1;
-        }
-    }
-    out
-}
-
-/// The least distance between any two of `pts`.
-fn least_spacing(pts: &[Vec2]) -> f64 {
-    let mut least = f64::INFINITY;
-    for (i, a) in pts.iter().enumerate() {
-        for b in pts.iter().skip(i + 1) {
-            least = least.min(a.dist(*b));
-        }
-    }
-    least
 }
 
 /// A check for the reply, in a jeweler's words.
@@ -372,8 +267,7 @@ fn design(p: &PieceParams) -> Result<Design> {
     if !(ri.is_finite() && ro.is_finite() && ri > 0.0 && ro > ri) {
         return Err(bad(CMD, "the band has no size"));
     }
-    let grams = band_grams(p)?;
-    let domed = p.profile == Profile::Dome;
+    let grams = p.band_grams();
     let mut shapes: Vec<(On, Shape)> = Vec::new();
     let mut placed: Vec<Placed> = Vec::new();
     let mut checks = vec![if p.wall + 1e-9 >= MIN_CAST_WALL {
@@ -402,17 +296,17 @@ fn design(p: &PieceParams) -> Result<Design> {
             checks.push(calibrated_check("", None));
         }
         PieceKind::Solitaire => {
-            let stone = stone_of(&p.cut, p.stone_length, p.stone_width, &p.stone)?;
-            let outline = girdle(&stone)?;
-            let prong = (0.15 * stone.width).clamp(0.8, 1.2);
+            let stone = p.centre_stone(CMD)?;
+            let head = p.head();
+            let prong = head.prong;
             // Front view: the stone's side profile over the band, and the two prongs the view shows.
-            let side = profile(stone.cut, stone.width, stone.depth);
-            let culet = Vec2::new(0.0, ro + CULET_CLEAR);
+            let side = profile(stone.cut, stone.width, head.depth);
+            let culet = Vec2::new(0.0, ro + head.clear);
             shapes.push((On::Stones, place_profile(&side, culet, Vec2::new(1.0, 0.0), Vec2::new(0.0, 1.0))));
             let half = stone.width / 2.0;
             let foot = (0.45 * half).min(0.9 * ro);
             let foot_y = (ro * ro - foot * foot).max(0.0).sqrt();
-            let (girdle_bottom, girdle_top) = (culet.y + stone.depth * (1.0 - CROWN - GIRDLE), culet.y + stone.depth * (1.0 - CROWN));
+            let (girdle_bottom, tip) = (ro + head.girdle_height() - head.girdle / 2.0, ro + head.prong_height());
             for sign in [-1.0, 1.0] {
                 shapes.push((
                     On::Settings,
@@ -420,7 +314,7 @@ fn design(p: &PieceParams) -> Result<Design> {
                         v: vec![
                             (Vec2::new(sign * foot, foot_y), 0.0),
                             (Vec2::new(sign * half, girdle_bottom), 0.0),
-                            (Vec2::new(sign * half, girdle_top + prong / 2.0), 0.0),
+                            (Vec2::new(sign * half, tip), 0.0),
                         ],
                         closed: false,
                     },
@@ -429,12 +323,10 @@ fn design(p: &PieceParams) -> Result<Design> {
             front_reach = front_reach.max(half);
             // Plan: the stone itself, its prongs on the girdle, and the halo around it.
             plan_stones.push(Placed { melee: false, at: Vec2::ZERO });
-            let target =
-                setting::Target { outline: outline.clone(), at: Vec2::ZERO, rotation: 0.0, scale: 1.0, cut: Some(stone.cut.name.to_string()) };
-            for site in setting::prong_sites(&target, Some(p.prongs as usize))? {
+            for site in p.prong_sites()? {
                 plan.push((On::Settings, Shape::Circle { c: site, r: prong / 2.0 }));
             }
-            let mut head = stone.length.max(stone.width) / 2.0 + prong / 2.0;
+            let mut reach = stone.length.max(stone.width) / 2.0 + prong / 2.0;
             carat = carat_of(&stone);
             let over = (stone.length - p.width).max(0.0) / 2.0;
             let seat_ok = p.width + 1e-9 >= 0.25 * stone.length && 2.0 * ro + 1e-9 >= stone.width + prong;
@@ -465,40 +357,11 @@ fn design(p: &PieceParams) -> Result<Design> {
                     checks.push(calibrated_check("halo", None));
                 }
                 Some(h) => {
-                    let small = stone_of("round", h, h, "diamond")?;
-                    let off = prong / 2.0 + p.gap + h / 2.0;
-                    let pitch = h + p.gap;
-                    let sites = if stone.cut.is_circle(stone.length, stone.width) {
-                        // A round centre: the melee lie on a circle, spaced by their chord.
-                        let r = stone.width / 2.0 + off;
-                        let n = (cadcraft_geom::PI / (pitch / (2.0 * r)).clamp(0.0, 1.0).asin() + 1e-9).floor();
-                        let n = if n.is_finite() { (n as usize).min(MAX_PIECE_STONES as usize) } else { 0 };
-                        (0..n)
-                            .map(|i| {
-                                let a = cadcraft_geom::PI / 2.0 - cadcraft_geom::TAU * i as f64 / n as f64;
-                                Vec2::new(a.cos(), a.sin()) * r
-                            })
-                            .collect::<Vec<_>>()
-                    } else {
-                        // Any other cut: along the girdle's offset, fewer until they keep the gap.
-                        let ring = setting::offset_loop(&outline, off)?;
-                        let length: f64 = ring.iter().zip(ring.iter().cycle().skip(1)).take(ring.len()).map(|(a, b)| a.dist(*b)).sum();
-                        let first = if length.is_finite() { ((length / pitch).floor() as usize).min(MAX_PIECE_STONES as usize) } else { 0 };
-                        let mut sites = around(&ring, first);
-                        for n in (3..first).rev().take(64) {
-                            if least_spacing(&sites) + 1e-9 >= pitch {
-                                break;
-                            }
-                            sites = around(&ring, n);
-                        }
-                        sites
-                    };
-                    if sites.len() < 3 {
-                        return Err(bad(
-                            CMD,
-                            format!("a halo of {} mm melee does not fit around this stone at a {} mm gap", fmt_mm(h), fmt_mm(p.gap)),
-                        ));
-                    }
+                    let small = p.halo_stone(CMD)?.ok_or_else(|| bad(CMD, "the halo has no stone"))?;
+                    let off = head.halo.map_or(shared::halo_offset(prong, p.gap, h), |seat| seat.offset);
+                    let sites = p.halo_sites().ok_or_else(|| {
+                        bad(CMD, format!("a halo of {} mm melee does not fit around this stone at a {} mm gap", fmt_mm(h), fmt_mm(p.gap)))
+                    })?;
                     let between = least_spacing(&sites) - h;
                     checks.push(check(
                         "spacing",
@@ -513,55 +376,51 @@ fn design(p: &PieceParams) -> Result<Design> {
                     ));
                     checks.push(calibrated_check("halo", Some(h)));
                     carat += carat_of(&small) * sites.len() as f64;
-                    head = stone.length.max(stone.width) / 2.0 + off + h / 2.0;
+                    reach = stone.length.max(stone.width) / 2.0 + off + h / 2.0;
                     plan_stones.extend(sites.into_iter().map(|at| Placed { melee: true, at }));
                     melee = Some(small);
                 }
             }
-            plan_reach = plan_reach.max(head);
+            plan_reach = plan_reach.max(reach);
             centre = Some(stone);
         }
         PieceKind::Eternity => {
             let m = p.melee;
-            let stone = stone_of(&p.cut, m, m, &p.stone)?;
-            let depth = stone.depth;
-            // The girdles' circle: the tables are level with the band's outside.
-            let rg = ro - girdle_drop(depth);
+            let stone = p.row_stone(CMD)?;
+            // The girdles' circle (the tables are level with the band's outside) and the count.
+            let seats = p.eternity_row();
+            let (depth, rg, most) = (seats.depth, seats.radius, seats.fits);
             if !(rg.is_finite() && rg > m / 2.0) {
                 return Err(bad(CMD, format!("{} mm stones are too large to go around this band", fmt_mm(m))));
             }
-            // The metal between two neighbours' girdles, for `n` stones.
-            let reach = rg.hypot(m / 2.0);
-            let lean = (m / (2.0 * rg)).atan();
-            let between = |n: u32| 2.0 * reach * (cadcraft_geom::PI / f64::from(n) - lean).sin();
-            let most = (cadcraft_geom::PI / (lean + (p.gap / (2.0 * reach)).clamp(0.0, 1.0).asin()) + 1e-9).floor();
-            let most = if most.is_finite() && most >= 1.0 { (most as u32).min(MAX_PIECE_STONES) } else { 0 };
             if most == 0 {
                 return Err(bad(CMD, format!("no {} mm stone fits around this band at a {} mm gap", fmt_mm(m), fmt_mm(p.gap))));
             }
-            let n = match p.count {
-                Some(n) if n > most => {
-                    return Err(bad(
-                        CMD,
-                        format!(
-                            "{n} stones of {} mm do not fit around a size {} band at a {} mm gap: {most} fit",
-                            fmt_mm(m),
-                            p.size.us_text(),
-                            fmt_mm(p.gap)
-                        ),
-                    ));
-                }
-                Some(n) => n,
-                None => most,
-            };
+            if let Some(n) = p.count.filter(|n| *n > most) {
+                return Err(bad(
+                    CMD,
+                    format!(
+                        "{n} stones of {} mm do not fit around a size {} band at a {} mm gap: {most} fit",
+                        fmt_mm(m),
+                        p.size.us_text(),
+                        fmt_mm(p.gap)
+                    ),
+                ));
+            }
+            let n = seats.count(p.count);
             fits = Some(most);
             let side = profile(stone.cut, m, depth);
-            let outline = if stone.cut.is_circle(m, m) { None } else { Some(girdle(&stone)?) };
+            let outline = if stone.cut.is_circle(m, m) {
+                None
+            } else {
+                Some(shared::girdle_outline(stone.cut, m, m).ok_or_else(|| bad(CMD, "the stone has no outline"))?)
+            };
             let length = cadcraft_geom::TAU * rg;
             for i in 0..n {
                 // The angle from 12 o'clock, clockwise.
-                let phi = cadcraft_geom::TAU * f64::from(i) / f64::from(n);
-                let (out, along) = (Vec2::new(phi.sin(), phi.cos()), Vec2::new(-phi.cos(), phi.sin()));
+                let phi = Row::angle(i, n);
+                let out = Row::out(i, n);
+                let along = Vec2::new(-out.y, out.x);
                 // Front view: the stone's side, its table on the band's outside.
                 shapes.push((On::Stones, place_profile(&side, out * (ro - depth), along, out)));
                 // Plan: the upper half, each stone as wide as the cosine of its angle leaves it.
@@ -580,7 +439,7 @@ fn design(p: &PieceParams) -> Result<Design> {
             }
             seated = Some(side);
             unrolled = Some(length);
-            let metal = between(n);
+            let metal = seats.between(n);
             let edge = (p.width - m) / 2.0;
             let under = p.wall - depth;
             let seat_ok = edge + 1e-9 >= MIN_EDGE && under >= -1e-9;
@@ -631,10 +490,9 @@ fn design(p: &PieceParams) -> Result<Design> {
 
     // The section, to the right of the front view, its base (the finger side) down.
     let section_at = Vec2::new(front_reach + VIEW_GAP + p.width / 2.0, -p.wall / 2.0);
-    shapes
-        .push((On::Metal, Shape::Poly { v: section(p.width, p.wall, domed).into_iter().map(|(q, b)| (section_at + q, b)).collect(), closed: true }));
-    if let (Some(side), Some(stone)) = (&seated, &melee) {
-        let seat = section_at + Vec2::new(0.0, p.wall - stone.depth);
+    shapes.push((On::Metal, Shape::Poly { v: p.section().outline().into_iter().map(|(q, b)| (section_at + q, b)).collect(), closed: true }));
+    if let Some(side) = &seated {
+        let seat = section_at + Vec2::new(0.0, p.wall - p.eternity_row().depth);
         shapes.push((On::Stones, place_profile(side, seat, Vec2::new(1.0, 0.0), Vec2::new(0.0, 1.0))));
     }
     // The plan, under the front view.
@@ -693,7 +551,7 @@ impl Design {
             o.insert("fits".into(), json!(fits));
         }
         json!({
-            "params": params_json(p),
+            "params": p.json(),
             "handles": handles.iter().take(MAX_HANDLES).map(|h| h.hex()).collect::<Vec<_>>(),
             "size": p.size.json(),
             "metal": { "name": p.metal, "density": p.density, "grams": (self.grams * 1000.0).round() / 1000.0 },
@@ -764,12 +622,6 @@ enum Kept {
     Foreign,
 }
 
-/// A ring-size system's name, or `us` for anything else.
-fn system_name(s: &str) -> String {
-    let s = s.trim().to_ascii_lowercase();
-    if matches!(s.as_str(), "us" | "uk" | "eu" | "jp" | "cn") { s } else { "us".to_string() }
-}
-
 /// A sheet position: two finite numbers within reach.
 fn at_value(v: &Value) -> Option<Vec2> {
     let a = v.as_array().filter(|a| a.len() == 2)?;
@@ -777,28 +629,9 @@ fn at_value(v: &Value) -> Option<Vec2> {
     (x.is_finite() && y.is_finite() && x.abs() <= MAX_AT && y.abs() <= MAX_AT).then_some(Vec2::new(x, y))
 }
 
-/// Parameters as their stored JSON reads: the size system the piece was given in is carried
-/// across (the JSON keeps the size itself as a US number).
-fn read_params(stored: &Value, system: &str) -> Result<PieceParams> {
-    let mut out = PieceParams::parse(CMD, stored)?;
-    out.system = system_name(system);
-    Ok(out)
-}
-
-/// A piece's parameters as the command reports and stores them: [`PieceParams::json`], with the
-/// US size freed of the float noise its formula leaves (`5.999999999999997` reads `6`).
-fn params_json(p: &PieceParams) -> Value {
-    let mut v = p.json();
-    if let Some(o) = v.as_object_mut() {
-        o.insert("size".into(), json!((p.size.us * 1e9).round() / 1e9));
-    }
-    v
-}
-
 /// Parameters read through their own JSON, so what is drawn, stored and read back are one piece.
 fn settled(p: &PieceParams) -> Result<PieceParams> {
-    read_params(&params_json(p), &p.system)
-        .map_err(|_| bad(CMD, "that size is at the very edge of the ring sizes; give one a little inside the range"))
+    PieceParams::parse(CMD, &p.json())
 }
 
 /// Read the stored piece.
@@ -807,8 +640,7 @@ fn kept(d: &cadcraft_doc::Drawing) -> Kept {
     let members: Vec<Handle> = g.members.iter().copied().filter(|h| d.entity(*h).is_some()).take(MAX_STONES * 2).collect();
     let Ok(record) = serde_json::from_str::<Value>(&g.description) else { return Kept::Foreign };
     let Some(stored) = record.get("params").filter(|v| v.is_object()) else { return Kept::Foreign };
-    let system = str_param(stored, "sizeSystem").unwrap_or("us");
-    match read_params(stored, system) {
+    match PieceParams::parse(CMD, stored) {
         Ok(params) => Kept::Piece { params: Box::new(params), at: record.get("at").and_then(at_value).unwrap_or(Vec2::ZERO), members },
         Err(e) => Kept::Unreadable { members, why: e.to_string() },
     }
@@ -816,7 +648,7 @@ fn kept(d: &cadcraft_doc::Drawing) -> Kept {
 
 /// The one line a piece is stored as.
 fn record(p: &PieceParams, at: Vec2) -> String {
-    json!({ "at": [at.x, at.y], "params": params_json(p) }).to_string()
+    json!({ "at": [at.x, at.y], "params": p.json() }).to_string()
 }
 
 /// A `true`/`false` switch that is refused when it is anything else.
@@ -919,14 +751,14 @@ fn run_build(s: &mut Session, p: &Value) -> Result<Value> {
     // without a `size` renames the size without changing the finger.
     let has = |key: &str| given.get(key).is_some_and(|v| !v.is_null());
     let (new_size, new_system) = (has("size"), has("system"));
-    let mut merged = base.as_ref().map(params_json).and_then(|v| v.as_object().cloned()).unwrap_or_default();
+    let mut merged = base.as_ref().map(PieceParams::json).and_then(|v| v.as_object().cloned()).unwrap_or_default();
     for (key, value) in &given {
         if !matches!(key.as_str(), "query" | "remove" | "at") {
             merged.insert(key.clone(), value.clone());
         }
     }
     let was = base.as_ref().map(|b| b.system.clone());
-    let asked = given.get("system").and_then(Value::as_str).map(system_name);
+    let asked = given.get("system").and_then(Value::as_str).map(shared::system_name);
     let system = match (new_size, new_system) {
         (true, false) => {
             let system = was.unwrap_or_else(|| "us".to_string());
@@ -938,7 +770,7 @@ fn run_build(s: &mut Session, p: &Value) -> Result<Value> {
             match &base {
                 Some(b) => {
                     merged.insert("system".into(), json!("us"));
-                    merged.insert("size".into(), json!((b.size.us * 1e9).round() / 1e9));
+                    merged.insert("size".into(), json!(shared::round_us(b.size.us)));
                 }
                 None => {
                     merged.remove("size");
@@ -952,7 +784,7 @@ fn run_build(s: &mut Session, p: &Value) -> Result<Value> {
     let mut asked_for = PieceParams::parse(CMD, &Value::Object(merged))?;
     asked_for.system = system;
     let stored = settled(&asked_for)?;
-    let params = settled(&stored)?;
+    let params = stored.clone();
     let plan = design(&params)?;
     // Where the sheet goes: where it was asked for, else where the band is now, else where it was.
     let at = at_given

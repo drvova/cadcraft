@@ -20,6 +20,9 @@ mod mesh;
 mod mesh_tests;
 mod pave;
 mod piece;
+#[cfg(test)]
+#[path = "jewelry/piece_agree_tests.rs"]
+mod piece_agree_tests;
 mod piece_params;
 #[cfg(test)]
 #[path = "jewelry/piece_tests.rs"]

@@ -7,48 +7,55 @@
 //!
 //! # The solids
 //!
-//! **Band.** The section revolved about Z, centred on Z = 0, from the inside radius
-//! `size.diameter / 2` to that plus `wall`. Flat: the rectangle `width` × `wall`, edges sharp.
-//! Dome: a flat inside and a half-ellipse outside with semi-axes `width / 2` (along the finger)
-//! and `wall` (radial) — a true half-round when `wall = width / 2`, and never wider than the band
-//! whatever the wall. Its volume by Pappus is `2π · (r + 4·wall / 3π) · (π · width · wall / 4)`.
+//! The solid is the same piece `PIECE` draws as a sheet: every number the two share — the band's
+//! section and weight, a stone's proportions, a solitaire's seat, prongs and halo, an eternity
+//! band's count and seat — is worked out in [`super::piece_params`], where each is defined, and
+//! only built here.
 //!
-//! **Stones.** A stone is `depth = gem::default_depth(cut, width)` deep, split crown 26 %, girdle
-//! 4 %, pavilion 70 %. A round is a brilliant: an eight-sided table 57 % of the diameter, eight
-//! stars, eight bezel kites (planar), sixteen upper-girdle facets, the girdle, sixteen lower-girdle
-//! facets and eight pavilion mains to the culet. Every other cut is its own girdle outline
-//! (`gem::outline`) tapered up to a table (the outline scaled about its centroid) and down to a
-//! culet point (pear, heart, trillion, and anything as long as wide) or to a keel line along the
-//! long axis. A cabochon is a dome on a flat base.
+//! **Band.** The section ([`Section`]) revolved about Z, centred on Z = 0, from the inside radius
+//! `size.diameter / 2` to that plus `wall`. Flat: the rectangle `width` × `wall`, edges sharp.
+//! Dome: a half-round — a circular arc over the full width rising to the wall, on straight sides
+//! of `wall − width/2` when the wall is more than half the width — sampled evenly along its arc,
+//! so the mesh is inscribed in the solid whose volume `PIECE` weighs.
+//!
+//! **Stones.** A stone is as deep as `GEM` has its cut, split crown 26 %, girdle 4 %, pavilion
+//! 70 %, under the table `GEM` draws for the cut. A round is a brilliant: an eight-sided table,
+//! eight stars, eight bezel kites (planar), sixteen upper-girdle facets, the girdle, sixteen
+//! lower-girdle facets and eight pavilion mains to the culet. Every other cut is its own girdle
+//! outline (`gem::outline`) tapered up to a table (the outline scaled about its centroid) and
+//! down to a culet point (pear, heart, trillion, and anything as long as wide) or to a keel line
+//! along the long axis. A cabochon is a dome on a flat base.
 //!
 //! **Solitaire.** The band, and on top of it at +Y the centre stone, its length along the finger,
-//! its culet 0.25 mm above the band. The prongs are round wire, `0.075 × the stone's lesser
-//! dimension` in radius (0.3–0.8 mm), from inside the band, through a gallery rail half-way down
-//! the pavilion, up the girdle and over it, capped with a hemisphere. They stand where `SETTING`
-//! puts them (`setting::prong_sites`: corners first, then the points furthest apart); on a round
-//! they are evenly spaced starting half a step off the band's direction. A halo is round melee of
-//! width `halo` on the girdle outline offset by `halo / 2 + max(gap, 0.15)`, as many as fit:
-//! `n = floor(perimeter of that offset outline / (halo + gap))`, at least three, on a seat plate.
+//! its culet 0.5 mm above the band ([`Head`]). The prongs are round wire of the shared diameter
+//! (15 % of the stone's lesser dimension, 0.8–1.2 mm), from inside the band, through a gallery
+//! rail half-way down the pavilion, up through the girdle and over it by 1.15 wire diameters,
+//! capped with a hemisphere. They stand on the girdle at the shared sites (where `SETTING` puts
+//! them; evenly on a round, starting half a step off the band's direction). A halo is round
+//! diamonds of width `halo` at the shared sites — on the girdle offset by half the prong wire,
+//! `gap` and half a melee, as many as keep `gap` between every pair — on a seat plate.
 //!
-//! **Eternity.** The band and `count` round stones of diameter `melee` evenly around the outside,
-//! the first at 12 o'clock, tables outward, girdles `max(0.05, 0.08 × melee)` above the band's
-//! outside surface, pavilions in the band. With no `count`, as many as fit with `gap` between
-//! them on the band's outside circle:
-//!
-//! ```text
-//! n = floor(π · (size.diameter + 2 · wall) / (melee + gap))      clamped to 1 ..= 400
-//! ```
-//!
-//! ([`eternity_count`]; the sheet uses the same number.) Between neighbours close enough to share
-//! them stand two bead prongs.
+//! **Eternity.** The band and its stones in the piece's cut, `melee` wide, evenly around the
+//! outside ([`Row`]): stone `i` of `n` is `2π·i/n` clockwise from 12 o'clock seen from +Z, its
+//! table level with the band's outside and its pavilion in the band. With no `count`, as many as
+//! keep `gap` of metal between neighbouring girdles (the number `PIECE` reports as `fits`). A
+//! `count` that does not fit — which `PIECE` refuses — is still built, because this is a viewer,
+//! and the reply's `notes` say so. Between neighbours close enough to share them stand two bead
+//! prongs.
 //!
 //! # Shells
 //!
 //! Every part is a closed shell, wound counter-clockwise seen from outside. The band, the rail,
 //! the prongs, the halo seat and the beads are separate shells that pass through each other where
 //! they join, and stone seats are not cut from the metal: that is how such a model is commonly
-//! handed to a caster's slicer, which unions them. The metal volume reported is the sum of the
-//! shells, so where shells overlap it counts the overlap twice.
+//! handed to a caster's slicer, which unions them.
+//!
+//! # Metal weight
+//!
+//! `metal.grams` and `metal.volumeMm3` are the band alone, exactly: the figure `PIECE` reports,
+//! from the same function ([`PieceParams::band_grams`]). `metal.shells` is the sum of the
+//! tessellated metal shells (band, rail, prongs, halo seat, beads) — approximate, and where
+//! shells overlap it counts the overlap twice. It is not a second metal weight.
 //!
 //! # Limits
 //!
@@ -61,7 +68,8 @@ use cadcraft_geom::{PI, TAU, Vec2, Vec3};
 use serde_json::{Value, json};
 
 use super::super::*;
-use super::piece_params::{MAX_PIECE_STONES, MIN_CAST_WALL, PieceKind, PieceParams, Profile};
+use super::piece_params::{self as shared, Head, MAX_PIECE_STONES, MIN_CAST_WALL, PieceKind, PieceParams, Row, Section, proportions};
+use super::sizes::RingSize;
 use super::*;
 
 /// The most triangles a reply holds.
@@ -71,18 +79,10 @@ const MAX_JSON_ESTIMATE: usize = 3_600_000;
 /// The most triangles an ASCII STL holds (about 200 bytes each).
 const MAX_ASCII_TRIANGLES: usize = 30_000;
 
-/// A stone's depth, split: crown, girdle, pavilion.
-pub(super) const CROWN: f64 = 0.26;
-pub(super) const GIRDLE: f64 = 0.04;
-pub(super) const PAVILION: f64 = 0.70;
-/// A round brilliant's table, corner to corner, as a fraction of its diameter.
-pub(super) const ROUND_TABLE: f64 = 0.57;
 /// How far a star facet reaches from the table's edge to the girdle.
 const STAR_LENGTH: f64 = 0.5;
 /// Where the lower-girdle facets meet, as a fraction of the way in from the girdle.
 const LOWER_HALF: f64 = 0.77;
-/// The gap between a centre stone's lowest point and the band under it.
-pub(super) const CULET_CLEARANCE: f64 = 0.25;
 
 /// How finely the solid is tessellated.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -181,6 +181,8 @@ pub(super) struct PieceMesh {
     pub notes: Vec<String>,
     /// How many stones the piece carries.
     pub stones: u32,
+    /// Eternity: the most stones that fit at the gap (what `PIECE` reports as `fits`).
+    pub fits: Option<u32>,
     /// The tessellation level it was built at (0 fine, 1 draft, 2 and 3 coarser).
     pub level: usize,
     /// Even the coarsest level is over the budget (never so for `PIECEMESH`).
@@ -191,8 +193,9 @@ impl PieceMesh {
     pub(super) fn triangles(&self) -> usize {
         self.meshes.iter().map(PartMesh::triangles).sum()
     }
-    /// The metal shells' volume in cubic millimetres (overlaps counted twice).
-    pub(super) fn metal_volume(&self) -> f64 {
+    /// The tessellated metal shells' volume in cubic millimetres (overlaps counted twice): an
+    /// approximation, not the piece's metal weight.
+    pub(super) fn shells_volume(&self) -> f64 {
         self.meshes.iter().filter(|m| m.part == "metal").map(PartMesh::volume).sum()
     }
     /// The corners of the box around every vertex, rounded as the reply rounds them.
@@ -239,17 +242,6 @@ pub(super) fn signed_volume(positions: &[Vec3], indices: &[u32]) -> f64 {
         }
     }
     six / 6.0
-}
-
-/// How many stones an eternity band carries: `count` when given, else as many as fit around the
-/// band's outside circle with `gap` between them — `floor(π · outer diameter / (melee + gap))`.
-pub(super) fn eternity_count(p: &PieceParams) -> u32 {
-    if let Some(n) = p.count {
-        return n.clamp(1, MAX_PIECE_STONES);
-    }
-    let pitch = p.melee + p.gap;
-    let n = if pitch.is_finite() && pitch > 1e-6 { (PI * p.outer() / pitch).floor() } else { 1.0 };
-    if n.is_finite() { n.clamp(1.0, f64::from(MAX_PIECE_STONES)) as u32 } else { 1 }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -498,22 +490,14 @@ fn smooth_path(pts: &[Vec3], sub: usize) -> Vec<Vec3> {
 // The band
 // ---------------------------------------------------------------------------------------------
 
-/// A piece's numbers with every one made safe to build from, whatever it was given.
+/// A piece with every number made safe to build from, whatever it was given. Parameters that
+/// came through the parser are already inside these limits, so for them nothing changes.
 struct Sane {
-    kind: PieceKind,
+    p: PieceParams,
     /// Inside and outside radius.
     ri: f64,
     ro: f64,
-    wall: f64,
-    width: f64,
-    dome: bool,
-    stone_length: f64,
-    stone_width: f64,
-    prongs: usize,
-    halo: Option<f64>,
-    melee: f64,
-    gap: f64,
-    count: u32,
+    section: Section,
 }
 
 fn fin(x: f64, lo: f64, hi: f64, default: f64) -> f64 {
@@ -522,48 +506,48 @@ fn fin(x: f64, lo: f64, hi: f64, default: f64) -> f64 {
 
 impl Sane {
     fn of(p: &PieceParams) -> Sane {
-        let ri = fin(p.inner() / 2.0, 1.0, 50.0, 8.255);
-        let wall = fin(p.wall, 0.05, 20.0, 1.8);
-        Sane {
-            kind: p.kind,
-            ri,
-            ro: ri + wall,
-            wall,
-            width: fin(p.width, 0.1, 60.0, 2.2),
-            dome: p.profile == Profile::Dome,
-            stone_length: fin(p.stone_length, 0.1, 60.0, 6.5),
-            stone_width: fin(p.stone_width, 0.1, 60.0, 6.5),
-            prongs: (p.prongs as usize).clamp(2, 12),
-            halo: p.halo.filter(|h| h.is_finite()).map(|h| h.clamp(0.1, 10.0)),
-            melee: fin(p.melee, 0.1, 20.0, 1.8),
-            gap: fin(p.gap, 0.0, 20.0, 0.2),
-            count: eternity_count(p),
+        let mut q = p.clone();
+        if !(q.size.diameter.is_finite() && (2.0..=100.0).contains(&q.size.diameter))
+            && let Some(six) = RingSize::from_us(6.0)
+        {
+            q.size = six;
         }
+        q.wall = fin(p.wall, 0.05, 20.0, 1.8);
+        q.width = fin(p.width, 0.1, 60.0, 2.2);
+        q.stone_length = fin(p.stone_length, 0.1, 60.0, 6.5);
+        q.stone_width = fin(p.stone_width, 0.1, 60.0, 6.5);
+        q.prongs = p.prongs.clamp(2, 12);
+        q.halo = p.halo.filter(|h| h.is_finite()).map(|h| h.clamp(0.1, 10.0));
+        q.melee = fin(p.melee, 0.1, 20.0, 1.8);
+        q.gap = fin(p.gap, 0.0, 20.0, 0.2);
+        q.count = p.count.map(|n| n.clamp(1, MAX_PIECE_STONES));
+        if gem::cut_of(&q.cut).is_none() {
+            q.cut = "round".to_string();
+        }
+        let ri = fin(q.inner() / 2.0, 1.0, 50.0, 8.255);
+        Sane { ri, ro: ri + q.wall, section: q.section(), p: q }
     }
     /// The band's outside radius at `z` along the finger.
     fn outside_at(&self, z: f64) -> f64 {
-        if !self.dome {
-            return self.ro;
-        }
-        let t = (2.0 * z / self.width).clamp(-1.0, 1.0);
-        self.ri + self.wall * (1.0 - t * t).max(0.0).sqrt()
+        self.ri + self.section.height_at(z)
     }
 }
 
-/// The band's section as (radius, z), in the order that faces the revolved surface outward.
+/// The band's section as (radius, z), in the order that faces the revolved surface outward: the
+/// shared [`Section`], its dome sampled evenly along the arc.
 fn band_section(s: &Sane, d: &Detail) -> Vec<(f64, f64)> {
-    let h = s.width / 2.0;
-    if !s.dome {
-        return vec![(s.ri, -h), (s.ri, h), (s.ro, h), (s.ro, -h)];
+    let h = s.p.width / 2.0;
+    let mut pts = vec![(s.ri, -h), (s.ri, h)];
+    if !s.section.domed {
+        pts.extend([(s.ro, h), (s.ro, -h)]);
+        return pts;
     }
     let m = (d.dome.clamp(2, 256) / 2) * 2;
-    let mut pts = Vec::with_capacity(m + 1);
-    pts.push((s.ri, -h));
-    pts.push((s.ri, h));
-    for j in 1..m {
-        let a = PI * j as f64 / m as f64;
-        pts.push((s.ri + s.wall * a.sin(), h * a.cos()));
-    }
+    let outside = s.section.outside(m);
+    // A dome with no sides to speak of comes down to the inside corners themselves.
+    let sides = s.section.side() > 2e-3;
+    let last = outside.len().saturating_sub(1);
+    pts.extend(outside.iter().enumerate().filter(|(j, _)| sides || (*j != 0 && *j != last)).map(|(_, q)| (s.ri + q.y, q.x)));
     pts
 }
 
@@ -591,23 +575,20 @@ fn build_band(buf: &mut Buf, s: &Sane, d: &Detail) {
 // Stones
 // ---------------------------------------------------------------------------------------------
 
-/// A stone's girdle thickness, crown height and pavilion depth from its whole depth.
-pub(super) fn proportions(depth: f64) -> (f64, f64, f64) {
-    (GIRDLE * depth, CROWN * depth, PAVILION * depth)
-}
-
-/// A round brilliant of `radius`, `k` girdle points to each sixteenth.
-fn round_brilliant(buf: &mut Buf, f: &Frame, radius: f64, depth: f64, k: usize) {
+/// A round brilliant of `radius` under a table `table` of its diameter (corner to corner), `k`
+/// girdle points to each sixteenth.
+fn round_brilliant(buf: &mut Buf, f: &Frame, radius: f64, depth: f64, table: f64, k: usize) {
     if !(radius.is_finite() && depth.is_finite() && radius > 1e-6 && depth > 1e-6) {
         return;
     }
+    let table = fin(table, 0.3, 0.8, 0.57);
     let k = k.clamp(1, 8) as u32;
     let (g, hc, hp) = proportions(depth);
     let n = 16 * k;
     let e = PI / 8.0;
     let polar = |r: f64, a: f64, h: f64| f.at(r * a.cos(), r * a.sin(), h);
     let (zg, zt, zc) = (g / 2.0, g / 2.0 + hc, -g / 2.0 - hp);
-    let rt = ROUND_TABLE * radius;
+    let rt = table * radius;
     // A star's tip lies in the plane of the bezel facets either side of it, so the kites are flat.
     let edge = rt * e.cos();
     let rs = edge + STAR_LENGTH * (radius - edge);
@@ -833,64 +814,6 @@ fn vertex_normals(poly: &[Vec2], centre: Vec2) -> Vec<Vec2> {
         .collect()
 }
 
-/// `count` points evenly along a closed polygon by length, the first at its first vertex.
-fn along_loop(pts: &[Vec2], count: usize) -> Vec<Vec2> {
-    let n = pts.len();
-    if n < 2 || count == 0 {
-        return Vec::new();
-    }
-    let seg = |i: usize| (pts.get(i % n).copied().unwrap_or(Vec2::ZERO), pts.get((i + 1) % n).copied().unwrap_or(Vec2::ZERO));
-    let total: f64 = (0..n)
-        .map(|i| {
-            let (a, b) = seg(i);
-            a.dist(b)
-        })
-        .sum();
-    if !(total.is_finite() && total > 1e-9) {
-        return Vec::new();
-    }
-    let mut out = Vec::with_capacity(count);
-    let (mut i, mut before) = (0usize, 0.0f64);
-    for k in 0..count {
-        let want = total * k as f64 / count as f64;
-        loop {
-            let (a, b) = seg(i);
-            let len = a.dist(b);
-            if before + len >= want || i + 1 >= n {
-                let t = if len > 1e-12 { ((want - before) / len).clamp(0.0, 1.0) } else { 0.0 };
-                out.push(a.lerp(b, t));
-                break;
-            }
-            before += len;
-            i += 1;
-        }
-    }
-    out
-}
-
-/// A closed polygon with its long edges divided, so no two neighbours are further apart than
-/// about one `steps`-th of the way around. Every original vertex is kept.
-fn densified(pts: &[Vec2], steps: usize) -> Vec<Vec2> {
-    let n = pts.len();
-    let steps = steps.clamp(8, 1024);
-    let spacing = loop_length(pts) / steps as f64;
-    if !(spacing.is_finite() && spacing > 1e-9) {
-        return pts.to_vec();
-    }
-    let mut out = Vec::with_capacity(n + steps);
-    for i in 0..n {
-        let (Some(a), Some(b)) = (pts.get(i).copied(), pts.get((i + 1) % n).copied()) else { continue };
-        let pieces = ((a.dist(b) / spacing).ceil() as usize).clamp(1, steps);
-        out.extend((0..pieces).map(|k| a.lerp(b, k as f64 / pieces as f64)));
-    }
-    out
-}
-
-fn loop_length(pts: &[Vec2]) -> f64 {
-    let n = pts.len();
-    (0..n).map(|i| pts.get(i).zip(pts.get((i + 1) % n)).map_or(0.0, |(a, b)| a.dist(*b))).sum()
-}
-
 // ---------------------------------------------------------------------------------------------
 // The pieces
 // ---------------------------------------------------------------------------------------------
@@ -907,106 +830,117 @@ struct Parts {
     melee: Buf,
     notes: Vec<String>,
     stones: u32,
+    fits: Option<u32>,
 }
 
-fn build_solitaire(p: &PieceParams, s: &Sane, d: &Detail, out: &mut Parts) {
-    let Some(round_cut) = gem::CUTS.first() else { return };
-    let cut = gem::cut_of(&p.cut).unwrap_or(round_cut);
-    let (length, width) = (s.stone_length, s.stone_width);
-    let cab = cut.name == "cabochon";
-    let round = !cab && cut.is_circle(length, width);
-    let lesser = length.min(width);
-    let depth = fin(gem::default_depth(cut, if round { width } else { lesser }), 0.05, 60.0, 0.6 * lesser);
-    let (g, _, hp) = proportions(depth);
-    // The girdle in plan: x across the finger's direction of travel, y along the finger.
-    let (poly, centre) = if round {
-        (ellipse_polygon(width, width, d.outline), Vec2::ZERO)
-    } else {
-        match girdle_polygon(cut, length, width, d.outline) {
-            Some(found) => found,
-            None => {
-                out.notes.push(format!(
-                    "A {} of {}×{} mm has no usable girdle outline; the stone is shown as an oval of that size.",
-                    cut.name,
-                    size_json(length),
-                    size_json(width)
-                ));
-                (ellipse_polygon(length, width, d.outline), Vec2::ZERO)
-            }
-        }
-    };
-    let culet = if round { Culet::Point(Vec2::ZERO) } else { culet_of(cut.name, &poly, centre) };
-    let normals = vertex_normals(&poly, centre);
-    let below = if cab { 0.0 } else { g / 2.0 + hp };
+/// A stone's shape in its own plan (x across, y along its length), ready to build at any frame
+/// whose origin is on the girdle's plane (a cabochon's base).
+struct StoneShape {
+    /// A brilliant: the girdle is a circle.
+    round: bool,
+    cab: bool,
+    poly: Vec<Vec2>,
+    centre: Vec2,
+    culet: Culet,
+    width: f64,
+    depth: f64,
+    /// The table as a fraction of the width.
+    table: f64,
+    /// The cut had no usable outline at this size; an oval stands in for it.
+    stand_in: bool,
+}
 
-    // The halo's stones and the plate they sit on, worked out first: the head stands high enough
-    // for the plate to clear the band.
-    let halo = s.halo.map(|h| {
-        let between = s.gap.max(0.15);
-        let offset = |by: f64| -> Vec<Vec2> { poly.iter().zip(&normals).map(|(q, n)| *q + *n * by).collect() };
-        let track = offset(h / 2.0 + between);
-        let fit = (loop_length(&track) / (h + s.gap)).floor();
-        let count = if fit.is_finite() { fit.clamp(3.0, f64::from(MAX_PIECE_STONES)) as usize } else { 3 };
-        let halo_depth = fin(gem::default_depth(round_cut, h), 0.05, 20.0, 0.6 * h);
-        let (hg, _, hhp) = proportions(halo_depth);
-        (h, halo_depth, along_loop(&track, count), offset((between - 0.1).max(0.02)), offset(between + h + 0.2), hg / 2.0 + hhp + 0.2)
-    });
-    let drop = halo.as_ref().map_or(below, |h| below.max(h.5));
+impl StoneShape {
+    fn of(cut: &gem::Cut, length: f64, width: f64, depth: f64, max_pts: usize) -> StoneShape {
+        let cab = cut.name == "cabochon";
+        let round = !cab && cut.is_circle(length, width);
+        let (poly, centre, stand_in) = if round {
+            (ellipse_polygon(width, width, max_pts), Vec2::ZERO, false)
+        } else {
+            match girdle_polygon(cut, length, width, max_pts) {
+                Some((poly, centre)) => (poly, centre, false),
+                None => (ellipse_polygon(length, width, max_pts), Vec2::ZERO, true),
+            }
+        };
+        let culet = if round { Culet::Point(Vec2::ZERO) } else { culet_of(cut.name, &poly, centre) };
+        StoneShape { round, cab, poly, centre, culet, width, depth, table: shared::table_ratio(cut), stand_in }
+    }
+
+    /// One closed shell: `k` girdle points to a sixteenth of a brilliant, `steps` up a cabochon.
+    fn build(&self, buf: &mut Buf, f: &Frame, k: usize, steps: usize) {
+        if self.round {
+            round_brilliant(buf, f, self.width / 2.0, self.depth, self.table, k);
+        } else if self.cab {
+            cabochon(buf, f, &self.poly, self.centre, self.depth, steps);
+        } else {
+            fancy_stone(buf, f, &self.poly, self.centre, self.depth, self.table, self.culet);
+        }
+    }
+}
+
+fn build_solitaire(s: &Sane, d: &Detail, out: &mut Parts) {
+    let p = &s.p;
+    let Some(cut) = p.cut_data() else { return };
+    let Some(round_cut) = gem::CUTS.first() else { return };
+    let (length, width) = (p.stone_length, p.stone_width);
+    // The seat: how deep the stone is, how high it stands, its prong wire and its halo.
+    let head: Head = p.head();
+    if let Err(e) = p.centre_stone("piecemesh") {
+        out.notes.push(format!("PIECE does not draw this stone ({e}); it is shown as asked."));
+    }
+    let shape = StoneShape::of(cut, length, width, head.depth, d.outline);
+    if shape.stand_in {
+        out.notes.push(format!(
+            "A {} of {}×{} mm has no usable girdle outline; the stone is shown as an oval of that size.",
+            cut.name,
+            size_json(length),
+            size_json(width)
+        ));
+    }
+    let (poly, centre, culet, cab) = (&shape.poly, shape.centre, shape.culet, shape.cab);
+    let normals = vertex_normals(poly, centre);
+    let (g, hp) = (head.girdle, if cab { 0.0 } else { proportions(head.depth).2 });
+    // The girdle's plane: x across the finger's direction of travel, y along the finger.
     let frame = Frame {
-        o: Vec3::new(0.0, s.ro + CULET_CLEARANCE + drop, 0.0),
+        o: Vec3::new(0.0, s.ro + head.girdle_height(), 0.0),
         u: Vec3::new(1.0, 0.0, 0.0),
         v: Vec3::new(0.0, 0.0, -1.0),
         w: Vec3::new(0.0, 1.0, 0.0),
     };
-
-    if round {
-        round_brilliant(&mut out.centre, &frame, width / 2.0, depth, d.centre);
-    } else if cab {
-        cabochon(&mut out.centre, &frame, &poly, centre, depth, d.dome / 2);
-    } else {
-        let table = if matches!(cut.name, "emerald" | "baguette" | "rect" | "radiant") { 0.65 } else { 0.60 };
-        fancy_stone(&mut out.centre, &frame, &poly, centre, depth, table, culet);
-    }
+    shape.build(&mut out.centre, &frame, d.centre, d.dome / 2);
     out.stones += 1;
 
-    // The prongs: where SETTING puts them on this girdle; on a round, evenly.
-    let rp = (0.075 * lesser).clamp(0.3, 0.8);
+    // The prongs: on the girdle where the sheet draws them.
+    let rp = head.prong / 2.0;
     let rail_r = 0.7 * rp;
-    let sites: Vec<Vec2> = if round {
-        (0..s.prongs)
-            .map(|k| {
-                let a = PI / s.prongs as f64 + TAU * k as f64 / s.prongs as f64;
-                Vec2::new(a.cos(), a.sin()) * (width / 2.0)
-            })
-            .collect()
-    } else {
-        // The corners stay vertices; the straight runs between them get points a prong can stand on.
-        let target = setting::Target { outline: densified(&poly, 128), at: Vec2::ZERO, rotation: 0.0, scale: 1.0, cut: Some(cut.name.to_string()) };
-        setting::prong_sites(&target, Some(s.prongs)).unwrap_or_default()
-    };
+    let sites = p.prong_sites().unwrap_or_else(|e| {
+        out.notes.push(format!("No prongs are shown: {e}."));
+        Vec::new()
+    });
     // Half-way down the pavilion, just outside it: where the gallery rail runs.
     let rail_h = -(g / 2.0 + 0.5 * hp);
     let rail_at = |q: Vec2, outward: Vec2| q.lerp(culet.under(q), 0.5) + outward * (1.2 * rail_r);
+    // The wire's axis ends its own radius under the tips' height.
+    let tip_h = head.prong_height() - head.girdle_height() - rp;
     for site in sites.iter().filter(|q| q.is_finite()) {
         let dir = (*site - centre).normalized();
         if dir.len() < 0.5 {
             continue;
         }
         // The foot, inside the band's metal and clear of the finger.
-        let zmax = (s.width / 2.0 - rp).max(0.0) * if s.dome { 0.6 } else { 1.0 };
+        let zmax = (p.width / 2.0 - rp).max(0.0) * if s.section.domed { 0.6 } else { 1.0 };
         let z = (-site.y * 0.45).clamp(-zmax, zmax);
         let rc = (s.outside_at(z) - 0.5 * rp).max(s.ri + 1.05 * rp);
         let x = (site.x * 0.45).clamp(-0.5 * rc, 0.5 * rc);
         let foot = Vec3::new(x, (rc * rc - x * x).max(0.0).sqrt(), z);
-        let seat = *site + dir * (0.7 * rp);
-        let tip = *site - dir * (0.15 * rp);
+        let tip = *site - dir * (0.85 * rp);
         let mut path = vec![foot];
         if !cab {
             let q = rail_at(*site, dir);
             path.push(frame.at(q.x, q.y, rail_h));
         }
-        path.push(frame.at(seat.x, seat.y, 0.0));
-        path.push(frame.at(tip.x, tip.y, g / 2.0 + 1.3 * rp));
+        path.push(frame.at(site.x, site.y, 0.0));
+        path.push(frame.at(tip.x, tip.y, tip_h));
         capsule(&mut out.prongs, &smooth_path(&path, d.sub), rp, d.radial, d.cap);
     }
     if !cab {
@@ -1021,30 +955,47 @@ fn build_solitaire(p: &PieceParams, s: &Sane, d: &Detail, out: &mut Parts) {
         loop_wire(&mut out.head, &rail, frame.w, rail_r, d.radial);
     }
 
-    if let Some((h, halo_depth, centres, inner, outer, plate)) = halo {
-        for c in &centres {
-            let f = Frame { o: frame.at(c.x, c.y, 0.0), ..frame };
-            round_brilliant(&mut out.melee, &f, h / 2.0, halo_depth, d.melee);
-            out.stones += 1;
-        }
-        // The seat: a flat ring under the halo, from just outside the centre stone to just
-        // outside the melee.
-        let top = -0.04 * h;
-        let mut first: Option<Ring> = None;
-        let mut prev: Option<Ring> = None;
-        for (a, b) in inner.iter().zip(&outer) {
-            let ring = out.seat.ring([frame.at(a.x, a.y, -plate), frame.at(a.x, a.y, top), frame.at(b.x, b.y, top), frame.at(b.x, b.y, -plate)]);
-            if let Some(q) = prev {
-                out.seat.bridge(q, ring);
+    if let Some(seat) = head.halo {
+        match p.halo_sites() {
+            None => out.notes.push(format!(
+                "A halo of {} mm melee does not fit around this stone at a {} mm gap (PIECE refuses it); none is shown.",
+                size_json(seat.melee),
+                size_json(p.gap)
+            )),
+            Some(centres) => {
+                for c in &centres {
+                    let f = Frame { o: frame.at(c.x, c.y, 0.0), ..frame };
+                    round_brilliant(&mut out.melee, &f, seat.melee / 2.0, seat.depth, shared::table_ratio(round_cut), d.melee);
+                    out.stones += 1;
+                }
+                // The seat: a flat ring under the halo, from just outside the centre stone to
+                // just outside the melee.
+                let near = seat.offset - seat.melee / 2.0;
+                let offset = |by: f64| -> Vec<Vec2> { poly.iter().zip(&normals).map(|(q, n)| *q + *n * by).collect() };
+                let (inner, outer) = (offset((near - 0.1).max(0.02)), offset(near + seat.melee + 0.2));
+                let top = -0.04 * seat.melee;
+                let mut first: Option<Ring> = None;
+                let mut prev: Option<Ring> = None;
+                for (a, b) in inner.iter().zip(&outer) {
+                    let ring = out.seat.ring([
+                        frame.at(a.x, a.y, -seat.under),
+                        frame.at(a.x, a.y, top),
+                        frame.at(b.x, b.y, top),
+                        frame.at(b.x, b.y, -seat.under),
+                    ]);
+                    if let Some(q) = prev {
+                        out.seat.bridge(q, ring);
+                    }
+                    first = first.or(Some(ring));
+                    prev = Some(ring);
+                }
+                if let (Some(a), Some(b)) = (prev, first) {
+                    out.seat.bridge(a, b);
+                }
+                if cut.name == "heart" {
+                    out.notes.push("Around a heart the halo follows the lobes and the point; in the cleft its seat is approximate.".to_string());
+                }
             }
-            first = first.or(Some(ring));
-            prev = Some(ring);
-        }
-        if let (Some(a), Some(b)) = (prev, first) {
-            out.seat.bridge(a, b);
-        }
-        if cut.name == "heart" {
-            out.notes.push("Around a heart the halo follows the lobes and the point; in the cleft its stones crowd.".to_string());
         }
     }
     out.notes.push(
@@ -1052,7 +1003,7 @@ fn build_solitaire(p: &PieceParams, s: &Sane, d: &Detail, out: &mut Parts) {
          and no seat is cut for a stone; a slicer unions them."
             .to_string(),
     );
-    if !round && !cab {
+    if !shape.round && !cab {
         out.notes.push(format!(
             "The {} is its girdle outline tapered to a table and to a {}; its facets are not the cut's own.",
             cut.name,
@@ -1062,59 +1013,74 @@ fn build_solitaire(p: &PieceParams, s: &Sane, d: &Detail, out: &mut Parts) {
 }
 
 fn build_eternity(s: &Sane, d: &Detail, out: &mut Parts) {
-    let Some(round_cut) = gem::CUTS.first() else { return };
-    let n = s.count.clamp(1, MAX_PIECE_STONES);
-    let radius = s.melee / 2.0;
-    let depth = fin(gem::default_depth(round_cut, s.melee), 0.05, 20.0, 0.6 * s.melee);
-    let (g, _, hp) = proportions(depth);
-    let lift = (0.08 * s.melee).max(0.05);
-    let girdle_r = s.ro + lift;
-    let step = TAU / f64::from(n);
-    let radial = |a: f64| Vec3::new(a.cos(), a.sin(), 0.0);
+    let p = &s.p;
+    let Some(cut) = p.cut_data() else { return };
+    // The row: how deep the stones are, the circle their girdles lie on, and how many fit.
+    let row: Row = p.eternity_row();
+    let n = row.count(p.count);
+    out.fits = Some(row.fits);
+    let (m, radius, depth) = (row.melee, row.melee / 2.0, row.depth);
+    let shape = StoneShape::of(cut, m, m, depth, 16 * d.melee.clamp(1, 8));
+    // A cabochon's frame is its base; a faceted stone's is its girdle.
+    let seat_r = if shape.cab { s.ro - depth } else { row.radius };
+    let radial = |v: Vec2| Vec3::new(v.x, v.y, 0.0);
     for k in 0..n {
-        let a = PI / 2.0 + step * f64::from(k);
-        let w = radial(a);
-        let f = Frame { o: w * girdle_r, u: Vec3::new(-a.sin(), a.cos(), 0.0), v: Vec3::Z, w };
-        round_brilliant(&mut out.melee, &f, radius, depth, d.melee);
+        let w = radial(Row::out(k, n));
+        let f = Frame { o: w * seat_r, u: Vec3::new(-w.y, w.x, 0.0), v: Vec3::Z, w };
+        shape.build(&mut out.melee, &f, d.melee, 2);
     }
     out.stones += n;
 
     // Bead prongs, two between each pair of neighbours that are close enough to share them.
-    let rb = (0.16 * s.melee).clamp(0.2, 0.5);
-    let half_pitch = girdle_r * (PI / f64::from(n)).sin();
+    let rb = (0.16 * m).clamp(0.2, 0.5);
+    let half_pitch = row.radius * (PI / f64::from(n)).sin();
     if n >= 2 && half_pitch <= radius + 0.8 * rb {
         let reach = radius + 0.6 * rb;
-        let z0 = (reach * reach - half_pitch * half_pitch).max(0.0).sqrt().min((s.width / 2.0 - rb).max(0.0));
+        let z0 = (reach * reach - half_pitch * half_pitch).max(0.0).sqrt().min((p.width / 2.0 - rb).max(0.0));
         let zs: &[f64] = if z0 < 0.6 * rb { &[0.0] } else { &[-1.0, 1.0] };
+        let step = TAU / f64::from(n);
         for k in 0..n {
-            let w = radial(PI / 2.0 + step * (f64::from(k) + 0.5));
+            let phi = step * (f64::from(k) + 0.5);
+            let w = Vec3::new(phi.sin(), phi.cos(), 0.0);
             for sign in zs {
                 let z = sign * z0;
-                let r = (s.outside_at(z) + lift - 0.2 * rb).max(s.ri + rb + 0.02);
+                let r = (s.outside_at(z) - 0.2 * rb).max(s.ri + rb + 0.02);
                 bead(&mut out.beads, w * r + Vec3::Z * z, w, rb, d.bead_radial, d.bead_lat);
             }
         }
     } else if n >= 2 {
         out.notes.push("The stones stand too far apart to share bead prongs; none are shown.".to_string());
     }
-    let fits = (TAU * s.ro / (s.melee + s.gap)).floor();
-    if f64::from(n) > fits {
+    if let Err(e) = p.row_stone("piecemesh") {
+        out.notes.push(format!("PIECE does not draw these stones ({e}); they are shown as asked."));
+    }
+    if shape.stand_in {
+        out.notes.push(format!("A {} of {} mm has no usable girdle outline; the stones are shown as rounds.", cut.name, size_json(m)));
+    }
+    if row.fits == 0 {
         out.notes.push(format!(
-            "{n} stones of {} mm do not fit around this band with {} mm between them (at most {fits:.0} do); they overlap.",
-            size_json(s.melee),
-            size_json(s.gap)
+            "No {} mm stone fits around this band with {} mm between girdles (PIECE refuses it); the {n} shown overlap.",
+            size_json(m),
+            size_json(p.gap)
+        ));
+    } else if n > row.fits {
+        out.notes.push(format!(
+            "{n} stones of {} mm do not fit around this band with {} mm between girdles (at most {} do, and PIECE refuses more); they overlap.",
+            size_json(m),
+            size_json(p.gap),
+            row.fits
         ));
     }
-    if g / 2.0 + hp - lift > s.wall {
+    if depth > p.wall + 1e-9 {
         out.notes.push(format!(
-            "The stones' culets reach through the {} mm wall: {} mm stones want a wall of {} mm or more.",
-            size_json(s.wall),
-            size_json(s.melee),
-            size_json(g / 2.0 + hp - lift + 0.3)
+            "The stones' culets reach through the {} mm wall: {} mm stones are {} mm deep.",
+            size_json(p.wall),
+            size_json(m),
+            size_json(depth)
         ));
     }
-    if s.melee > s.width + 1e-9 {
-        out.notes.push(format!("The stones ({} mm) are wider than the band ({} mm).", size_json(s.melee), size_json(s.width)));
+    if m > p.width + 1e-9 {
+        out.notes.push(format!("The stones ({} mm) are wider than the band ({} mm).", size_json(m), size_json(p.width)));
     }
     out.notes.push(
         "The band and the bead prongs are separate closed shells that pass through each other, and no seat is cut for a stone; a slicer unions them."
@@ -1188,13 +1154,15 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
     let s = Sane::of(p);
     let mut parts = Parts::default();
     build_band(&mut parts.band, &s, &d);
-    match s.kind {
+    match s.p.kind {
         PieceKind::Band => {}
-        PieceKind::Solitaire => build_solitaire(p, &s, &d, &mut parts),
+        PieceKind::Solitaire => build_solitaire(&s, &d, &mut parts),
         PieceKind::Eternity => build_eternity(&s, &d, &mut parts),
     }
     let metal = metal_color(&p.metal);
     let stone = stone_color(&p.stone);
+    // A halo's melee are diamonds whatever the centre stone is; an eternity band's are the piece's stone.
+    let small = if s.p.kind == PieceKind::Solitaire { stone_color("diamond") } else { stone };
     let meshes = [
         parts.band.part("metal", "band", metal),
         parts.head.part("metal", "head", metal),
@@ -1202,12 +1170,12 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
         parts.seat.part("metal", "halo seat", metal),
         parts.beads.part("metal", "beads", metal),
         parts.centre.part("stone", "centre stone", stone),
-        parts.melee.part("stone", "melee", stone),
+        parts.melee.part("stone", "melee", small),
     ]
     .into_iter()
     .flatten()
     .collect();
-    PieceMesh { meshes, notes: parts.notes, stones: parts.stones, level, over: false }
+    PieceMesh { meshes, notes: parts.notes, stones: parts.stones, fits: parts.fits, level, over: false }
 }
 
 fn piece_mesh_within(p: &PieceParams, quality: Quality, budget: Budget) -> PieceMesh {
@@ -1318,9 +1286,12 @@ pub fn specs() -> Vec<CommandSpec> {
             .params(
                 "{kind: band|solitaire|eternity, …the piece's parameters as PIECE takes them (size, wall, width, profile, metal, cut, stoneWidth, \
                  stoneLength, stone, prongs, halo, melee, count, gap), quality?: draft|fine (default draft)} → {meshes: [{part: metal|stone, name, \
-                 color: [r,g,b], positions: [x,y,z,…] mm, indices: [i,j,k,…]}], bounds: {min, max}, triangles, size, kind, params, quality, level, stones, \
-                 metal: {name, density, volumeMm3, grams}, notes}: the piece as closed shells of triangles (finger axis Z, head at +Y), at most \
-                 150,000; changes nothing",
+                 color: [r,g,b], positions: [x,y,z,…] mm, indices: [i,j,k,…]}], bounds: {min, max}, triangles, size, kind, params (as PIECE \
+                 reports them), quality, level, stones (centre + halo + eternity stones: the count PIECE reports), fits? (eternity: the most \
+                 that fit at `gap`), metal: {name, density, grams and volumeMm3 (the band alone, exactly: the weight PIECE reports), shells: \
+                 {volumeMm3, grams} (the tessellated metal shells summed, overlaps counted twice: approximate, not the metal weight)}, \
+                 notes}: the same piece PIECE draws, as closed shells of triangles (finger axis Z, head at +Y), at most 150,000. An eternity \
+                 `count` that does not fit at `gap` (PIECE refuses it) is still built and `notes` say so; changes nothing",
             )
             .enabled(always)
             .noundo(),
@@ -1350,7 +1321,8 @@ fn run_piecemesh(_s: &mut Session, p: &Value) -> Result<Value> {
     let quality = Quality::parse(cmd, p, Quality::Draft)?;
     let mesh = piece_mesh(&piece, quality);
     let (lo, hi) = mesh.bounds();
-    let volume = mesh.metal_volume();
+    let shells = mesh.shells_volume();
+    let band = piece.band_volume();
     let meshes: Vec<Value> = mesh
         .meshes
         .iter()
@@ -1359,7 +1331,7 @@ fn run_piecemesh(_s: &mut Session, p: &Value) -> Result<Value> {
             json!({ "part": m.part, "name": m.name, "color": m.color, "positions": positions, "indices": m.indices })
         })
         .collect();
-    Ok(json!({
+    let mut reply = json!({
         "meshes": meshes,
         "bounds": { "min": lo, "max": hi },
         "triangles": mesh.triangles(),
@@ -1372,11 +1344,16 @@ fn run_piecemesh(_s: &mut Session, p: &Value) -> Result<Value> {
         "metal": {
             "name": piece.metal,
             "density": piece.density,
-            "volumeMm3": r3(volume),
-            "grams": r3(volume / 1000.0 * piece.density),
+            "volumeMm3": r3(band),
+            "grams": r3(piece.band_grams()),
+            "shells": { "volumeMm3": r3(shells), "grams": r3(shells / 1000.0 * piece.density) },
         },
         "notes": mesh.notes,
-    }))
+    });
+    if let (Some(fits), Some(o)) = (mesh.fits, reply.as_object_mut()) {
+        o.insert("fits".into(), json!(fits));
+    }
+    Ok(reply)
 }
 
 fn run_stlout(_s: &mut Session, p: &Value) -> Result<Value> {
