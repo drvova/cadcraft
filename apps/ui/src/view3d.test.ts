@@ -38,7 +38,30 @@ import {
   VERTEX_FLOATS,
   viewMatrix,
   zoomCamera,
+  AXIS_ENDS,
+  axisCamera,
+  axisEndOf,
+  DISPLAY_MODES,
+  drawPlan,
+  easeCamera,
+  EDGE_FLOATS,
+  eyeFrame,
+  featureEdges,
+  gizmoEnds,
+  isDisplayMode,
+  loadView3d,
+  MAX_EDGES,
+  modeHasEdges,
+  PICK_MESH_CAP,
+  pickPart,
+  pickRay,
+  pickTargets,
+  placeRegions,
+  projectToView,
+  regionAnchors,
+  saveView3d,
   type Camera,
+  type DrawPass,
   type PieceMesh,
   type Scene,
   type Vec3,
@@ -488,5 +511,407 @@ describe("the mock's stand-in solid", () => {
     const count = new DataView(file.bytes.buffer).getUint32(80, true);
     expect(file.bytes.length).toBe(84 + count * 50);
     expect(count).toBeGreaterThan(0);
+  });
+});
+
+describe("the display modes", () => {
+  const faces = (plan: DrawPass[]): Extract<DrawPass, { kind: "faces" }>[] => plan.filter((pass): pass is Extract<DrawPass, { kind: "faces" }> => pass.kind === "faces");
+
+  test("there are four, and anything else is not one", () => {
+    expect(DISPLAY_MODES.map((entry) => entry.mode)).toEqual(["shaded", "wireframe", "ghosted", "xray"]);
+    for (const entry of DISPLAY_MODES) expect(isDisplayMode(entry.mode)).toBe(true);
+    for (const value of ["", "Shaded", null, 3, undefined]) expect(isDisplayMode(value)).toBe(false);
+    expect(DISPLAY_MODES.filter((entry) => modeHasEdges(entry.mode)).map((entry) => entry.mode)).toEqual(["wireframe", "xray"]);
+  });
+
+  test("shaded is the solid metal, the ground behind it, then the stones", () => {
+    const plan = drawPlan("shaded");
+    expect(plan.map((pass) => (pass.kind === "faces" ? pass.what : pass.kind))).toEqual(["metal", "ground", "stone"]);
+    for (const pass of faces(plan)) expect(pass).toMatchObject({ color: true, depthTest: true, depthWrite: true, opacity: null, pushed: false });
+  });
+
+  test("a wireframe colours no face: the faces only hide the edges behind them, pushed back so a line on them wins", () => {
+    const plan = drawPlan("wireframe");
+    expect(faces(plan).every((pass) => !pass.color && pass.depthWrite && pass.pushed)).toBe(true);
+    expect(plan.at(-1)).toEqual({ kind: "edges", depthTest: true, alpha: 1, bold: true });
+  });
+
+  test("ghosted keeps the stones solid and in depth before any see-through metal, and draws no edges", () => {
+    const plan = drawPlan("ghosted");
+    expect(plan[0]).toMatchObject({ kind: "faces", what: "stone", opacity: null, depthWrite: true });
+    expect(plan.some((pass) => pass.kind === "edges")).toBe(false);
+    const metal = faces(plan).filter((pass) => pass.what === "metal");
+    expect(metal.every((pass) => pass.depthTest)).toBe(true);
+    expect(metal.filter((pass) => pass.color).every((pass) => pass.opacity !== null && pass.opacity < 0.5 && !pass.depthWrite)).toBe(true);
+  });
+
+  test("a see-through kind is a haze, then its depth alone, then its nearest layer: never an order of triangles", () => {
+    for (const mode of ["ghosted", "xray"] as const) {
+      const plan = drawPlan(mode);
+      for (const what of ["metal", "stone"] as const) {
+        const own = faces(plan).filter((pass) => pass.what === what && (pass.opacity !== null || !pass.color));
+        if (own.length === 0) continue;
+        expect(own.map((pass) => (pass.color ? "colour" : "depth"))).toEqual(["colour", "depth", "colour"]);
+        // The nearest layer is drawn at the depth just written, with the same push.
+        expect(own[2]?.depthTest).toBe(true);
+        expect(own[2]?.pushed).toBe(own[1]?.pushed ?? false);
+        expect((own[2]?.opacity ?? 0) > (own[0]?.opacity ?? 1)).toBe(true);
+      }
+    }
+  });
+
+  test("an X-ray draws the hidden edges faintly, then the ones in front at full strength", () => {
+    const edges = drawPlan("xray").filter((pass) => pass.kind === "edges");
+    expect(edges).toEqual([
+      { kind: "edges", depthTest: false, alpha: 0.22, bold: false },
+      { kind: "edges", depthTest: true, alpha: 1, bold: true },
+    ]);
+    expect(drawPlan("xray").at(-1)?.kind).toBe("edges");
+  });
+});
+
+describe("the feature edges", () => {
+  /** The edges of a batch as [from, to, sharp] rows. */
+  const rows = (batch: ReturnType<typeof featureEdges>): { from: Vec3; to: Vec3; sharp: boolean }[] => {
+    const out: { from: Vec3; to: Vec3; sharp: boolean }[] = [];
+    for (let edge = 0; edge < batch.vertices / 2; edge += 1) {
+      const at = edge * 2 * EDGE_FLOATS;
+      const d = batch.data;
+      const mid: Vec3 = [d[at] ?? 0, d[at + 1] ?? 0, d[at + 2] ?? 0];
+      const half: Vec3 = [d[at + 3] ?? 0, d[at + 4] ?? 0, d[at + 5] ?? 0];
+      const sharp = [0, 1, 2].every((axis) => (d[at + 6 + axis] ?? 0) === -(d[at + 9 + axis] ?? 0));
+      out.push({ from: [mid[0] + half[0], mid[1] + half[1], mid[2] + half[2]], to: [mid[0] - half[0], mid[1] - half[1], mid[2] - half[2]], sharp });
+    }
+    return out;
+  };
+
+  test("a cube is its twelve edges and none of its faces' diagonals", () => {
+    const batch = featureEdges(parsed(reply([metalCube()])));
+    expect(batch.sharp).toBe(12);
+    expect(batch.smooth).toBe(0);
+    expect(batch.dropped).toBe(0);
+    expect(batch.vertices).toBe(24);
+    for (const row of rows(batch)) {
+      expect(row.sharp).toBe(true);
+      // Along one axis, two units long: an edge of the cube, not a diagonal.
+      const span = [0, 1, 2].map((axis) => Math.abs((row.from[axis] ?? 0) - (row.to[axis] ?? 0)));
+      expect(span.filter((v) => v > 1e-6)).toEqual([2]);
+    }
+  });
+
+  test("both ends of an edge carry the same middle and normals, and the part's colour", () => {
+    const batch = featureEdges(parsed(reply([metalCube()])));
+    for (let edge = 0; edge < batch.vertices / 2; edge += 1) {
+      const a = edge * 2 * EDGE_FLOATS;
+      const b = a + EDGE_FLOATS;
+      for (const k of [0, 1, 2, 6, 7, 8, 9, 10, 11, 12, 13, 14]) expect(batch.data[a + k]).toBe(batch.data[b + k] ?? NaN);
+      for (const k of [3, 4, 5]) expect(batch.data[a + k]).toBe(-(batch.data[b + k] ?? NaN));
+      expect(batch.data[a + 12]).toBeCloseTo(200 / 255, 6);
+    }
+  });
+
+  test("the same cube sent as loose triangles, no vertex shared, has the same twelve edges", () => {
+    const { positions, indices } = cube();
+    const loose: number[] = [];
+    for (const index of indices) loose.push(positions[index * 3] ?? 0, positions[index * 3 + 1] ?? 0, positions[index * 3 + 2] ?? 0);
+    const batch = featureEdges(parsed(reply([{ part: "metal", name: "band", color: [1, 2, 3], positions: loose, indices: loose.map((_, i) => i).slice(0, indices.length) }])));
+    expect(batch.sharp).toBe(12);
+    expect(batch.smooth).toBe(0);
+  });
+
+  test("a smooth torus has no edge that is always drawn: every one is an outline, with its two faces' normals", () => {
+    const batch = featureEdges(parsed(reply([{ part: "metal", name: "band", color: [1, 2, 3], ...torus(10, 1, 48, 16) }])));
+    expect(batch.sharp).toBe(0);
+    // Every side of every quad is a candidate; the diagonal inside a quad lies between two faces of one plane and is none.
+    expect(batch.smooth).toBe(48 * 16 * 2);
+    expect(rows(batch).some((row) => row.sharp)).toBe(false);
+  });
+
+  test("an open surface's rim is an edge; the flat seam inside it is none", () => {
+    const quad = { part: "metal", name: "plate", color: [1, 2, 3], positions: [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0], indices: [0, 1, 2, 0, 2, 3] };
+    const batch = featureEdges(parsed(reply([quad])));
+    expect(batch.sharp).toBe(4);
+    expect(batch.smooth).toBe(0);
+  });
+
+  test("a stone's shallow facets are edges where metal's shallow bends are not", () => {
+    // Two triangles folded by ten degrees along their shared edge.
+    const fold = Math.tan((10 * Math.PI) / 180);
+    const shape = { positions: [0, 0, 0, 0, 1, 0, -1, 0, 0, 1, 0, -fold], indices: [0, 1, 2, 1, 0, 3] };
+    const stone = featureEdges(parsed(reply([{ part: "stone", name: "gem", color: [1, 2, 3], ...shape }])));
+    const metal = featureEdges(parsed(reply([{ part: "metal", name: "band", color: [1, 2, 3], ...shape }])));
+    expect(stone.sharp).toBe(5);
+    expect(metal.sharp).toBe(4);
+    expect(metal.smooth).toBe(1);
+  });
+
+  test("a triangle with no area makes no edge, and the count is capped with the sharp edges kept first", () => {
+    const flat = { part: "metal", name: "sliver", color: [1, 2, 3], positions: [0, 0, 0, 1, 0, 0, 2, 0, 0], indices: [0, 1, 2] };
+    expect(featureEdges(parsed(reply([flat]))).vertices).toBe(0);
+    // A rippled sheet with more bends than the cap holds, beside a cube: the sheet's rim and the cube's twelve are all kept.
+    const side = 230;
+    const positions: number[] = [];
+    const indices: number[] = [];
+    for (let i = 0; i < side; i += 1) for (let j = 0; j < side; j += 1) positions.push(i * 0.3 + 5, j * 0.3 + 5, 0.4 * Math.sin(i * 0.37) * Math.cos(j * 0.41));
+    for (let i = 0; i + 1 < side; i += 1) {
+      for (let j = 0; j + 1 < side; j += 1) {
+        const a = i * side + j;
+        indices.push(a, a + side, a + side + 1, a, a + side + 1, a + 1);
+      }
+    }
+    const rim = 4 * (side - 1);
+    const batch = featureEdges(parsed(reply([{ part: "metal", name: "sheet", color: [1, 2, 3], positions, indices }, metalCube()])));
+    expect(batch.vertices).toBe(MAX_EDGES * 2);
+    expect(batch.sharp).toBe(rim + 12);
+    expect(batch.smooth).toBe(MAX_EDGES - rim - 12);
+    expect(batch.dropped).toBeGreaterThan(0);
+    expect(batch.data.length).toBe(MAX_EDGES * 2 * EDGE_FLOATS);
+  });
+});
+
+describe("the orientation gizmo", () => {
+  test("from the front, X points right, Y up and Z at the eye", () => {
+    const ends = gizmoEnds(standardCamera("front", SCENE, 1));
+    const of = (id: string) => ends.find((entry) => entry.end.id === id);
+    expect(of("+x")).toMatchObject({ x: 1, depth: 0 });
+    expect(of("+y")?.y).toBeCloseTo(1, 12);
+    expect(of("+z")?.depth).toBeCloseTo(1, 12);
+    expect(Math.hypot(of("+z")?.x ?? 1, of("+z")?.y ?? 1)).toBeCloseTo(0, 12);
+    expect(of("-z")?.depth).toBeCloseTo(-1, 12);
+  });
+
+  test("the ends come in the table's order, each opposite its pair, on the unit sphere", () => {
+    for (const camera of [standardCamera("three-quarter", SCENE, 1.3), { target: [1, 2, 3] as Vec3, yaw: -2.2, pitch: -0.9, distance: 7 }]) {
+      const ends = gizmoEnds(camera);
+      expect(ends.map((entry) => entry.end.id)).toEqual(AXIS_ENDS.map((end) => end.id));
+      for (let i = 0; i < ends.length; i += 2) {
+        const a = ends[i];
+        const b = ends[i + 1];
+        expect(a?.x).toBeCloseTo(-(b?.x ?? NaN), 12);
+        expect(a?.y).toBeCloseTo(-(b?.y ?? NaN), 12);
+        expect(a?.depth).toBeCloseTo(-(b?.depth ?? NaN), 12);
+        expect(Math.hypot(a?.x ?? 0, a?.y ?? 0, a?.depth ?? 0)).toBeCloseTo(1, 12);
+      }
+    }
+  });
+
+  test("a camera with no numbers still places the ends", () => {
+    for (const entry of gizmoEnds({ target: [NaN, NaN, NaN], yaw: NaN, pitch: Infinity, distance: NaN })) {
+      expect([entry.x, entry.y, entry.depth].every(Number.isFinite)).toBe(true);
+    }
+  });
+
+  test("a press on an end stands the eye on that end, framed, and the end then reads as the one in front", () => {
+    for (const end of AXIS_ENDS) {
+      const camera = axisCamera(end, SCENE, 1.5);
+      const basis = cameraBasis(camera);
+      expect(near(basis.forward, [-end.direction[0], -end.direction[1], -end.direction[2]])).toBe(true);
+      expect(camera.distance).toBeCloseTo(fitDistance(SCENE, 1.5), 9);
+      expect(axisEndOf(camera)?.id).toBe(end.id);
+      const seen = gizmoEnds(camera).find((entry) => entry.end.id === end.id);
+      expect(seen?.depth).toBeCloseTo(1, 12);
+    }
+    expect(axisEndOf(standardCamera("three-quarter", SCENE, 1))).toBeNull();
+  });
+
+  test("the ends agree with the bar's views, and say so in the engine's frame", () => {
+    const name = (view: "front" | "top" | "side") => axisEndOf(standardCamera(view, SCENE, 1))?.id;
+    expect(name("front")).toBe("+z");
+    expect(name("top")).toBe("+y");
+    expect(name("side")).toBe("+x");
+    expect(AXIS_ENDS.find((end) => end.id === "+y")?.hint).toBe("Look down on the head");
+    expect(AXIS_ENDS.find((end) => end.id === "+z")?.hint).toContain("through the ring");
+    expect(new Set(AXIS_ENDS.map((end) => end.name)).size).toBe(6);
+  });
+
+  test("the eased turn starts where it was, ends exactly where it is going, and goes the short way round", () => {
+    const from: Camera = { target: [0, 0, 0], yaw: 3, pitch: 0.2, distance: 40 };
+    const to: Camera = { target: [1, 1, 1], yaw: -3, pitch: 0, distance: 50 };
+    expect(easeCamera(from, to, 0)).toEqual(from);
+    expect(easeCamera(from, to, 1)).toBe(to);
+    expect(easeCamera(from, to, 7)).toBe(to);
+    expect(easeCamera(from, to, NaN)).toBe(to);
+    let last = 0;
+    for (let i = 1; i < 10; i += 1) {
+      const mid = easeCamera(from, to, i / 10);
+      expect(finiteCamera(mid)).toBe(true);
+      // From 3 to −3 the short way is through π, never through 0.
+      expect(Math.abs(mid.yaw)).toBeGreaterThanOrEqual(3 - 1e-12);
+      expect(mid.distance).toBeGreaterThan(last);
+      last = mid.distance;
+    }
+    // Eased out: more than half the way at half the time.
+    expect(easeCamera(from, to, 0.5).distance).toBeGreaterThan(45);
+    expect(easeCamera(from, to, -1)).toEqual(from);
+  });
+});
+
+describe("the region labels", () => {
+  const BOUNDS = { min: [-10, -10, -2] as Vec3, max: [10, 14, 2] as Vec3 };
+
+  test("the anchors are places in the engine's box: the top at its highest, the bottom at its lowest, the axis one radius up", () => {
+    const regions = regionAnchors(BOUNDS);
+    const at = (id: string) => regions?.anchors.find((anchor) => anchor.id === id)?.at;
+    expect(at("top")).toEqual([0, 14, 0]);
+    expect(at("bottom")).toEqual([0, -10, 0]);
+    expect(regions?.center).toEqual([0, 0, 0]);
+    expect(regions?.axis[0][0]).toBe(0);
+    expect(regions?.axis[0][1]).toBe(0);
+    expect(regions?.axis[0][2]).toBeLessThan(BOUNDS.min[2]);
+    expect(regions?.axis[1][2]).toBeGreaterThan(BOUNDS.max[2]);
+    const left = at("shoulder-left") ?? [0, 0, 0];
+    const right = at("shoulder-right") ?? [0, 0, 0];
+    // On the band's outer circle, above the axis, either side of the head.
+    expect(Math.hypot(left[0], left[1])).toBeCloseTo(10, 9);
+    expect(left[0]).toBeCloseTo(-right[0], 12);
+    expect(left[1]).toBeGreaterThan(0);
+    expect(left[1]).toBeLessThan(10);
+    expect(regions?.anchors.map((anchor) => anchor.label)).toEqual(["Top", "Bottom", "Shoulder", "Shoulder", "Finger axis"]);
+  });
+
+  test("a box with no size, or no numbers, has no regions", () => {
+    expect(regionAnchors({ min: [0, 0, 0], max: [0, 0, 0] })).toBeNull();
+    expect(regionAnchors({ min: [NaN, 0, 0], max: [1, 1, 1] })).toBeNull();
+    expect(placeRegions({ min: [0, 0, 0], max: [0, 0, 0] }, MAT4_IDENTITY, 800, 600)).toEqual({ labels: [], axis: null });
+    expect(placeRegions(BOUNDS, MAT4_IDENTITY, 0, 600).labels).toEqual([]);
+  });
+
+  test("a point projects to the pixel it is drawn at, and one behind the eye is not shown", () => {
+    const scene = sceneOf(BOUNDS);
+    const camera = standardCamera("front", scene, 800 / 600);
+    const view = eyeFrame(camera, scene, 800 / 600);
+    const middle = projectToView(view.viewProj, scene.center, 800, 600);
+    expect(middle.x).toBeCloseTo(400, 6);
+    expect(middle.y).toBeCloseTo(300, 6);
+    expect(middle.shown).toBe(true);
+    const up = projectToView(view.viewProj, [scene.center[0], scene.center[1] + 5, scene.center[2]], 800, 600);
+    expect(up.x).toBeCloseTo(400, 6);
+    expect(up.y).toBeLessThan(300);
+    expect(projectToView(view.viewProj, [0, 0, camera.distance * 3], 800, 600).shown).toBe(false);
+    expect(projectToView([NaN], [0, 0, 0], 800, 600).shown).toBe(false);
+  });
+
+  test("from the front the top stands off upward, the bottom downward, the shoulders to their sides, and the axis is a dot that is not drawn", () => {
+    const scene = sceneOf(BOUNDS);
+    const view = eyeFrame(standardCamera("front", scene, 800 / 600), scene, 800 / 600);
+    const placed = placeRegions(BOUNDS, view.viewProj, 800, 600);
+    const of = (id: string) => placed.labels.find((label) => label.id === id);
+    expect(of("top")?.dy).toBeCloseTo(-1, 9);
+    expect(of("bottom")?.dy).toBeCloseTo(1, 9);
+    expect(of("shoulder-left")?.dx).toBeLessThan(-0.5);
+    expect(of("shoulder-right")?.dx).toBeGreaterThan(0.5);
+    expect(of("top")?.y).toBeLessThan(of("bottom")?.y ?? 0);
+    expect(placed.axis).toBeNull();
+    expect(of("axis")?.shown).toBe(false);
+    for (const label of placed.labels) expect(Math.hypot(label.dx, label.dy)).toBeCloseTo(1, 9);
+  });
+
+  test("two names on one place of the view: only the one nearer the eye is shown", () => {
+    const scene = sceneOf(BOUNDS);
+    const shown = (view: "top" | "side" | "front"): string[] => {
+      const frame = eyeFrame(standardCamera(view, scene, 800 / 600), scene, 800 / 600);
+      return placeRegions(BOUNDS, frame.viewProj, 800, 600)
+        .labels.filter((label) => label.shown)
+        .map((label) => label.id);
+    };
+    // From above, the bottom is under the top; from the right, the left shoulder is behind the right one.
+    expect(shown("top")).toEqual(["top", "shoulder-left", "shoulder-right", "axis"]);
+    expect(shown("side")).toEqual(["top", "bottom", "shoulder-right", "axis"]);
+    expect(shown("front")).toEqual(["top", "bottom", "shoulder-left", "shoulder-right"]);
+  });
+
+  test("from the side the axis is a line across the view with its name at its end", () => {
+    const scene = sceneOf(BOUNDS);
+    const view = eyeFrame(standardCamera("side", scene, 800 / 600), scene, 800 / 600);
+    const placed = placeRegions(BOUNDS, view.viewProj, 800, 600);
+    expect(placed.axis).not.toBeNull();
+    expect(Math.abs((placed.axis?.x2 ?? 0) - (placed.axis?.x1 ?? 0))).toBeGreaterThan(50);
+    expect(placed.axis?.y1).toBeCloseTo(placed.axis?.y2 ?? NaN, 6);
+    const axis = placed.labels.find((label) => label.id === "axis");
+    expect(axis?.shown).toBe(true);
+    expect(axis?.x).toBeCloseTo(placed.axis?.x2 ?? NaN, 6);
+  });
+});
+
+describe("what is under the pointer", () => {
+  const two = (): PieceMesh => {
+    const far = cube();
+    const shifted = far.positions.map((v, i) => (i % 3 === 2 ? v - 6 : v));
+    return parsed(reply([{ part: "stone", name: "centre stone", color: [1, 2, 3], ...cube() }, { part: "metal", name: "band", color: [1, 2, 3], positions: shifted, indices: far.indices }]));
+  };
+  const scene: Scene = { center: [0, 0, 0], radius: 8 };
+
+  test("the ray through the middle of the view runs along the camera's forward, from the eye", () => {
+    const camera = standardCamera("front", scene, 1.5);
+    const ray = pickRay(camera, 0, 0, 1.5);
+    expect(near(ray?.direction ?? [0, 0, 0], [0, 0, -1])).toBe(true);
+    expect(near(ray?.origin ?? [0, 0, 0], cameraBasis(camera).eye)).toBe(true);
+    expect(pickRay(camera, NaN, 0, 1.5)).toBeNull();
+    // A point of the scene and the ray through where it is drawn agree.
+    const view = eyeFrame(camera, scene, 1.5);
+    const p: Vec3 = [2, -1, 0.5];
+    const at = projectToView(view.viewProj, p, 2, 2);
+    const through = pickRay(camera, at.x - 1, 1 - at.y, 1.5);
+    const eye = cameraBasis(camera).eye;
+    const to = normalize([p[0] - eye[0], p[1] - eye[1], p[2] - eye[2]]);
+    expect(near(through?.direction ?? [0, 0, 0], to, 1e-9)).toBe(true);
+  });
+
+  test("the nearer part is the one named, with how far along the ray it is", () => {
+    const targets = pickTargets(two());
+    expect(targets.map((target) => target.name)).toEqual(["centre stone", "band"]);
+    expect(targets[1]?.center).toEqual([0, 0, -6]);
+    const front = pickPart(targets, { origin: [0.2, 0.3, 20], direction: [0, 0, -1] });
+    expect(front).toMatchObject({ name: "centre stone", part: "stone" });
+    expect(front?.distance).toBeCloseTo(19, 9);
+    // From behind, the band is nearer.
+    expect(pickPart(targets, { origin: [0.2, 0.3, -20], direction: [0, 0, 1] })?.name).toBe("band");
+  });
+
+  test("a ray that passes beside everything, or starts past it, names nothing", () => {
+    const targets = pickTargets(two());
+    expect(pickPart(targets, { origin: [5, 5, 20], direction: [0, 0, -1] })).toBeNull();
+    expect(pickPart(targets, { origin: [0, 0, 20], direction: [0, 0, 1] })).toBeNull();
+    // Inside a mesh's sphere but past its corner: the sphere lets it through, the triangles do not.
+    expect(pickPart(targets, { origin: [1.2, 1.2, 20], direction: [0, 0, -1] })).toBeNull();
+    expect(pickPart(targets, { origin: [NaN, 0, 0], direction: [0, 0, -1] })).toBeNull();
+    expect(pickPart([], { origin: [0, 0, 20], direction: [0, 0, -1] })).toBeNull();
+  });
+
+  test("a mesh over the size cap is passed over, so what is behind it is named", () => {
+    const targets = pickTargets(two());
+    const stone = targets[0];
+    if (stone === undefined) throw new Error("no target");
+    // The same cube, its triangles repeated past the cap.
+    const many = new Uint32Array((PICK_MESH_CAP + 1) * 3);
+    for (let i = 0; i < many.length; i += 1) many[i] = stone.indices[i % stone.indices.length] ?? 0;
+    const heavy = { ...stone, indices: many };
+    expect(pickPart([heavy, ...targets.slice(1)], { origin: [0.2, 0.3, 20], direction: [0, 0, -1] })?.name).toBe("band");
+  });
+});
+
+describe("what the browser remembers of the 3D view", () => {
+  const store = (held: Record<string, string> = {}) => ({ held, getItem: (key: string) => held[key] ?? null, setItem: (key: string, value: string) => void (held[key] = value) });
+
+  test("it starts shaded with the names off, and comes back as it was left", () => {
+    expect(loadView3d(null)).toEqual({ mode: "shaded", labels: false });
+    const s = store();
+    expect(loadView3d(s)).toEqual({ mode: "shaded", labels: false });
+    saveView3d({ mode: "xray", labels: true }, s);
+    expect(loadView3d(s)).toEqual({ mode: "xray", labels: true });
+  });
+
+  test("a value it does not know, or a store that throws, is the default and never an error", () => {
+    expect(loadView3d(store({ "cadcraft.view3d.mode": "sparkly", "cadcraft.view3d.labels": "yes" }))).toEqual({ mode: "shaded", labels: false });
+    const broken = {
+      getItem: (): string | null => {
+        throw new Error("refused");
+      },
+      setItem: (): void => {
+        throw new Error("full");
+      },
+    };
+    expect(loadView3d(broken)).toEqual({ mode: "shaded", labels: false });
+    expect(() => saveView3d({ mode: "ghosted", labels: true }, broken)).not.toThrow();
   });
 });

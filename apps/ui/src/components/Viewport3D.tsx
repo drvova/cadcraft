@@ -2,16 +2,26 @@
  * The 3D view of the piece: the stage the "3D" tab over the drawing brings to the front. It shows
  * the solid the engine makes of the parametric piece (`piecemesh`), shaded, under an orbit camera.
  *
- * The geometry is the engine's. This file is the thin WebGL part: two small shader programs, three
- * vertex buffers, the pointer and the keys. The math it leans on (matrices, the camera and its
- * clamps, the checked reading of the reply, the normals) is in `../view3d.ts`, which is tested.
+ * The geometry is the engine's. This file is the stage: the pointer and the keys, the bar, the
+ * orientation gizmo, the region names and the readout. The drawing itself (the shader programs,
+ * the buffers, a frame as its passes) is `../render3d.ts`, shared with the stills made off screen;
+ * the math both lean on (matrices, the camera and its clamps, the checked reading of the reply,
+ * the normals, the feature edges, the order of the passes, what is under the pointer) is in
+ * `../view3d.ts`, which is tested.
+ *
+ * The solid is shown one of four ways (`DisplayMode`): shaded, as a wireframe of its feature
+ * edges, with the metal ghosted so the stones show through it, or as an X-ray. The gizmo in the
+ * corner draws the engine's three axes as the camera sees them; each of its six ends is a key
+ * that turns the eye to stand on it. The region names (off until asked for) hang on places taken
+ * from the box the engine measured. The mode and the names are remembered by the browser.
  *
  * It is mounted only while its tab is in front and lies over the 2D canvas, which stays mounted
  * under it at its own size, so the drawing's view is exactly as it was left. While this view is up
  * the canvas under it is `inert`: it takes no focus and no pointer.
  *
- * It draws when something changed (a new mesh, a camera move, a resize, a theme change) and never
- * on an idle loop. Its inks are the theme's: the background and the grid are read from the tokens
+ * It draws when something changed (a new mesh, a camera move, a resize, a theme change, a mode)
+ * and never on an idle loop: a turn to a standard view animates for its short time and stops, and
+ * does not animate at all where motion is turned down. Its inks are the theme's: the background and the grid are read from the tokens
  * on the element, and a part's colour is the one the engine sent.
  */
 
@@ -20,37 +30,56 @@ import type { Envelope } from "../facade";
 import { downloadBytes } from "../files";
 import { isRecord } from "../json";
 import { wheelZoomFactor } from "../view";
+import { createRenderer, type Renderer } from "../render3d";
 import {
+  AXIS_ENDS,
+  axisCamera,
+  axisEndOf,
   buildBuffers,
-  cameraBasis,
   clampCamera,
+  DISPLAY_MODES,
+  drawPlan,
+  easeCamera,
+  eyeFrame,
+  featureEdges,
   fitCamera,
   formatSize,
   formatTriangles,
-  GRID_FLOATS,
+  gizmoEnds,
   groundGrid,
+  isDisplayMode,
   isUnknownCommand,
-  mat4Multiply,
-  normalize,
+  loadView3d,
+  modeHasEdges,
   orbitCamera,
   panCamera,
   parseMeshReply,
   parseStlReply,
-  projectionMatrix,
+  pickPart,
+  pickRay,
+  pickTargets,
+  placeRegions,
+  saveView3d,
   sceneOf,
   standardCamera,
   standardViewOf,
-  VERTEX_FLOATS,
-  viewMatrix,
   zoomCamera,
+  type AxisEnd,
   type Buffers,
   type Camera,
+  type DisplayMode,
+  type EdgeBatch,
+  type GizmoEnd,
+  type PickTarget,
+  type PieceMesh,
+  type PlacedRegions,
   type Scene,
   type StandardView,
   type Vec3,
 } from "../view3d";
 import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
+import { Select } from "../ui/Select";
 import { Toggle } from "../ui/Toggle";
 import { rovingBand } from "./ToolStrip";
 import "../view3d.css";
@@ -98,263 +127,22 @@ const KEY_TURN = Math.PI / 12;
 const KEY_ZOOM = 0.8;
 /** After the drawing has been quiet this long, the draft mesh is replaced by the fine one. */
 const FINE_AFTER_MS = 350;
+/** A stage narrower than this (CSS pixels) folds the bar: the Front, Top and Side keys go, and the gizmo's ends do their work. */
+const COMPACT_BELOW = 560;
+/** A turn to a standard view takes this long when the token that sets it cannot be read. */
+const FLIGHT_MS = 200;
+const NO_REGIONS: PlacedRegions = { labels: [], axis: null };
+
+/** The display modes as the bar's list. */
+const MODE_OPTIONS = DISPLAY_MODES.map((entry) => ({ value: entry.mode, label: entry.label }));
+/** How far from the gizmo's middle an axis end stands, of the gizmo's half width. */
+const GIZMO_REACH = 0.7;
 
 /**
  * The camera as it was left, for the next time the tab comes to the front: there is one 3D stage
  * in the window, and it is unmounted while a layout shows.
  */
 let remembered: { camera: Camera; framed: boolean } | null = null;
-
-// ---- the shaders ----
-
-const MESH_VERTEX = `
-attribute vec3 aPosition;
-attribute vec3 aNormal;
-attribute vec3 aColor;
-uniform mat4 uViewProj;
-varying vec3 vPosition;
-varying vec3 vNormal;
-varying vec3 vColor;
-void main() {
-  vPosition = aPosition;
-  vNormal = aNormal;
-  vColor = aColor;
-  gl_Position = uViewProj * vec4(aPosition, 1.0);
-}`;
-
-/**
- * One program for both kinds. Metal: a key and a fill light over an ambient floor, a soft
- * highlight in the metal's own colour, and a broad light-above, dark-below reflection so a curved
- * band reads as polished. Stone: the colour lifted toward white, a tight highlight, a bright rim
- * where the surface turns away (a Fresnel-like term), and a little see-through. No refraction.
- */
-const MESH_FRAGMENT = `
-#ifdef GL_FRAGMENT_PRECISION_HIGH
-precision highp float;
-#else
-precision mediump float;
-#endif
-uniform vec3 uEye;
-uniform vec3 uKey;
-uniform vec3 uFill;
-uniform vec3 uUp;
-uniform float uStone;
-varying vec3 vPosition;
-varying vec3 vNormal;
-varying vec3 vColor;
-void main() {
-  vec3 n = normalize(vNormal);
-  vec3 v = normalize(uEye - vPosition);
-  if (dot(n, v) < 0.0) n = -n;
-  float key = max(dot(n, uKey), 0.0);
-  float fill = max(dot(n, uFill), 0.0);
-  float facing = max(dot(n, v), 0.0);
-  float rim = pow(1.0 - facing, 3.0);
-  vec3 r = reflect(-v, n);
-  float sky = smoothstep(-0.45, 0.8, dot(r, uUp));
-  float glint = max(dot(n, normalize(uKey + v)), 0.0);
-  vec3 color;
-  float alpha = 1.0;
-  if (uStone < 0.5) {
-    vec3 lit = vColor * (0.20 + 0.50 * key + 0.18 * fill);
-    vec3 mirror = vColor * (0.04 + 0.46 * sky);
-    vec3 shine = mix(vColor, vec3(1.0), 0.55) * (0.50 * pow(glint, 42.0) + 0.10 * pow(glint, 8.0));
-    color = lit + mirror + shine + vColor * rim * 0.10;
-  } else {
-    vec3 base = mix(vColor, vec3(1.0), 0.45);
-    float flash = pow(glint, 60.0);
-    color = base * (0.52 + 0.30 * key + 0.14 * fill + 0.16 * sky) + vec3(1.0) * (0.45 * flash + 0.45 * rim);
-    alpha = clamp(0.62 + 0.38 * rim + 0.5 * flash, 0.0, 1.0);
-  }
-  gl_FragColor = vec4(min(color, vec3(1.0)), alpha);
-}`;
-
-const GRID_VERTEX = `
-attribute vec3 aPosition;
-attribute float aShow;
-uniform mat4 uViewProj;
-varying float vShow;
-void main() {
-  vShow = aShow;
-  gl_Position = uViewProj * vec4(aPosition, 1.0);
-}`;
-
-const GRID_FRAGMENT = `
-precision mediump float;
-uniform vec3 uInk;
-varying float vShow;
-void main() {
-  gl_FragColor = vec4(uInk, vShow);
-}`;
-
-// ---- the renderer ----
-
-interface Frame {
-  viewProj: readonly number[];
-  eye: Vec3;
-  key: Vec3;
-  fill: Vec3;
-  up: Vec3;
-  background: Vec3;
-  gridInk: Vec3;
-}
-
-interface Renderer {
-  upload: (buffers: Buffers | null, grid: { data: Float32Array; vertices: number } | null) => void;
-  draw: (frame: Frame, width: number, height: number) => void;
-  dispose: () => void;
-}
-
-/** Build the programs and buffers on a context, or say in words why it cannot be done. */
-function createRenderer(gl: WebGLRenderingContext): Renderer | string {
-  const compile = (type: number, source: string): WebGLShader | string => {
-    const shader = gl.createShader(type);
-    if (shader === null) return "a shader could not be created";
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) !== true) {
-      const log = gl.getShaderInfoLog(shader) ?? "";
-      gl.deleteShader(shader);
-      return `a shader did not compile: ${log.slice(0, 200)}`;
-    }
-    return shader;
-  };
-  const link = (vertex: string, fragment: string): WebGLProgram | string => {
-    const vs = compile(gl.VERTEX_SHADER, vertex);
-    if (typeof vs === "string") return vs;
-    const fs = compile(gl.FRAGMENT_SHADER, fragment);
-    if (typeof fs === "string") {
-      gl.deleteShader(vs);
-      return fs;
-    }
-    const program = gl.createProgram();
-    if (program === null) return "a program could not be created";
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    // The program keeps what it needs of them; flagged now, they go with it.
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
-    if (gl.getProgramParameter(program, gl.LINK_STATUS) !== true) {
-      const log = gl.getProgramInfoLog(program) ?? "";
-      gl.deleteProgram(program);
-      return `the shaders did not link: ${log.slice(0, 200)}`;
-    }
-    return program;
-  };
-  const mesh = link(MESH_VERTEX, MESH_FRAGMENT);
-  if (typeof mesh === "string") return mesh;
-  const grid = link(GRID_VERTEX, GRID_FRAGMENT);
-  if (typeof grid === "string") {
-    gl.deleteProgram(mesh);
-    return grid;
-  }
-  const metalBuffer = gl.createBuffer();
-  const stoneBuffer = gl.createBuffer();
-  const gridBuffer = gl.createBuffer();
-  let metalCount = 0;
-  let stoneCount = 0;
-  let gridCount = 0;
-  const meshAt = { position: gl.getAttribLocation(mesh, "aPosition"), normal: gl.getAttribLocation(mesh, "aNormal"), color: gl.getAttribLocation(mesh, "aColor") };
-  const meshU = {
-    viewProj: gl.getUniformLocation(mesh, "uViewProj"),
-    eye: gl.getUniformLocation(mesh, "uEye"),
-    key: gl.getUniformLocation(mesh, "uKey"),
-    fill: gl.getUniformLocation(mesh, "uFill"),
-    up: gl.getUniformLocation(mesh, "uUp"),
-    stone: gl.getUniformLocation(mesh, "uStone"),
-  };
-  const gridAt = { position: gl.getAttribLocation(grid, "aPosition"), show: gl.getAttribLocation(grid, "aShow") };
-  const gridU = { viewProj: gl.getUniformLocation(grid, "uViewProj"), ink: gl.getUniformLocation(grid, "uInk") };
-  const BYTES = Float32Array.BYTES_PER_ELEMENT;
-
-  const fill = (buffer: WebGLBuffer | null, data: Float32Array | null): void => {
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, data ?? new Float32Array(0), gl.STATIC_DRAW);
-  };
-  const point = (location: number, size: number, stride: number, offset: number): void => {
-    if (location < 0) return;
-    gl.enableVertexAttribArray(location);
-    gl.vertexAttribPointer(location, size, gl.FLOAT, false, stride * BYTES, offset * BYTES);
-  };
-  const unpoint = (...locations: number[]): void => {
-    for (const location of locations) if (location >= 0) gl.disableVertexAttribArray(location);
-  };
-  const drawMesh = (buffer: WebGLBuffer | null, count: number, stone: boolean): void => {
-    if (count === 0) return;
-    gl.uniform1f(meshU.stone, stone ? 1 : 0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    point(meshAt.position, 3, VERTEX_FLOATS, 0);
-    point(meshAt.normal, 3, VERTEX_FLOATS, 3);
-    point(meshAt.color, 3, VERTEX_FLOATS, 6);
-    gl.drawArrays(gl.TRIANGLES, 0, count);
-  };
-
-  return {
-    upload(buffers, ground) {
-      fill(metalBuffer, buffers?.metal.data ?? null);
-      fill(stoneBuffer, buffers?.stone.data ?? null);
-      fill(gridBuffer, ground?.data ?? null);
-      metalCount = buffers?.metal.vertices ?? 0;
-      stoneCount = buffers?.stone.vertices ?? 0;
-      gridCount = ground?.vertices ?? 0;
-    },
-    draw(frame, width, height) {
-      gl.viewport(0, 0, width, height);
-      gl.clearColor(frame.background[0], frame.background[1], frame.background[2], 1);
-      gl.clearDepth(1);
-      gl.depthMask(true);
-      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-      gl.enable(gl.DEPTH_TEST);
-      gl.depthFunc(gl.LEQUAL);
-      // Both sides of a face are lit (the shader turns the normal to the eye), so a part that is
-      // an open surface is still seen from behind.
-      gl.disable(gl.CULL_FACE);
-      const viewProj = new Float32Array(frame.viewProj);
-
-      gl.useProgram(mesh);
-      gl.uniformMatrix4fv(meshU.viewProj, false, viewProj);
-      gl.uniform3f(meshU.eye, frame.eye[0], frame.eye[1], frame.eye[2]);
-      gl.uniform3f(meshU.key, frame.key[0], frame.key[1], frame.key[2]);
-      gl.uniform3f(meshU.fill, frame.fill[0], frame.fill[1], frame.fill[2]);
-      gl.uniform3f(meshU.up, frame.up[0], frame.up[1], frame.up[2]);
-      gl.disable(gl.BLEND);
-      drawMesh(metalBuffer, metalCount, false);
-      unpoint(meshAt.position, meshAt.normal, meshAt.color);
-
-      // The ground's lines: behind the metal where it covers them, and never written to depth.
-      gl.enable(gl.BLEND);
-      gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-      if (gridCount > 0) {
-        gl.useProgram(grid);
-        gl.depthMask(false);
-        gl.uniformMatrix4fv(gridU.viewProj, false, viewProj);
-        gl.uniform3f(gridU.ink, frame.gridInk[0], frame.gridInk[1], frame.gridInk[2]);
-        gl.bindBuffer(gl.ARRAY_BUFFER, gridBuffer);
-        point(gridAt.position, 3, GRID_FLOATS, 0);
-        point(gridAt.show, 1, GRID_FLOATS, 3);
-        gl.drawArrays(gl.LINES, 0, gridCount);
-        unpoint(gridAt.position, gridAt.show);
-        gl.depthMask(true);
-      }
-
-      // The stones last, over what is behind them.
-      gl.useProgram(mesh);
-      drawMesh(stoneBuffer, stoneCount, true);
-      unpoint(meshAt.position, meshAt.normal, meshAt.color);
-      gl.disable(gl.BLEND);
-    },
-    dispose() {
-      gl.bindBuffer(gl.ARRAY_BUFFER, null);
-      gl.useProgram(null);
-      gl.deleteBuffer(metalBuffer);
-      gl.deleteBuffer(stoneBuffer);
-      gl.deleteBuffer(gridBuffer);
-      gl.deleteProgram(mesh);
-      gl.deleteProgram(grid);
-    },
-  };
-}
 
 /**
  * A token's colour as red, green and blue in 0…1, whatever notation the token is written in: the
@@ -377,11 +165,26 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
   const [readout, setReadout] = createSignal<Readout | null>(null);
   const [standard, setStandard] = createSignal<StandardView | null>(null);
   const [gesture, setGesture] = createSignal<"orbit" | "pan" | null>(null);
+  const memory = loadView3d();
+  const [mode, setMode] = createSignal<DisplayMode>(memory.mode);
+  const [labels, setLabels] = createSignal(memory.labels);
+  const [compact, setCompact] = createSignal(false);
+  const [gizmo, setGizmo] = createSignal<GizmoEnd[]>(gizmoEnds(remembered?.camera ?? standardCamera("three-quarter", { center: [0, 0, 0], radius: 10 }, 1)));
+  const [onEnd, setOnEnd] = createSignal<AxisEnd["id"] | null>(null);
+  const [regions, setRegions] = createSignal<PlacedRegions>(NO_REGIONS);
+  /** The part under the pointer, by the engine's name for it; null when the pointer is on none. */
+  const [pointed, setPointed] = createSignal<string | null>(null);
+  /** The pointer can rest over the stage without pressing (a mouse, not a finger): only then is the part under it named. */
+  const hovers = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 
   // What is drawn. None of it is reactive: a change calls `schedule`.
   let gl: WebGLRenderingContext | null = null;
   let renderer: Renderer | null = null;
   let buffers: Buffers | null = null;
+  /** The reply the buffers were made from: the edges and the pick are made from it when they are first wanted. */
+  let solid: PieceMesh | null = null;
+  let edges: EdgeBatch | null = null;
+  let targets: PickTarget[] | null = null;
   let ground: { data: Float32Array; vertices: number } | null = null;
   let scene: Scene | null = null;
   let camera: Camera | null = remembered?.camera ?? null;
@@ -399,25 +202,11 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
     if (renderer === null || gl === null || gl.isContextLost() || size.pxW === 0 || size.pxH === 0) return;
     const use = scene ?? { center: [0, 0, 0] as const, radius: 10 };
     const eye = clampCamera(camera ?? standardCamera("three-quarter", use, aspect()), use);
-    const basis = cameraBasis(eye);
-    const back: Vec3 = [-basis.forward[0], -basis.forward[1], -basis.forward[2]];
-    // The lights travel with the eye, so the form reads the same from every side: the key from
-    // over the left shoulder, the fill low from the right.
-    const mix = (r: number, u: number, b: number): Vec3 =>
-      normalize([basis.right[0] * r + basis.up[0] * u + back[0] * b, basis.right[1] * r + basis.up[1] * u + back[1] * b, basis.right[2] * r + basis.up[2] * u + back[2] * b]);
-    renderer.draw(
-      {
-        viewProj: mat4Multiply(projectionMatrix(eye, use, aspect()), viewMatrix(eye)),
-        eye: basis.eye,
-        key: mix(-0.5, 0.7, 0.55),
-        fill: mix(0.8, -0.1, 0.45),
-        up: basis.up,
-        background: inks.background,
-        gridInk: inks.grid,
-      },
-      size.pxW,
-      size.pxH,
-    );
+    const view = eyeFrame(eye, use, aspect());
+    renderer.draw({ ...view, background: inks.background, gridInk: inks.grid, edgeInk: null }, drawPlan(mode()), size.pxW, size.pxH);
+    // What stands over the solid follows the same eye, in the same frame.
+    setGizmo(gizmoEnds(eye));
+    setRegions(labels() && solid !== null ? placeRegions(solid.bounds, view.viewProj, size.w, size.h) : NO_REGIONS);
   };
 
   const schedule = (): void => {
@@ -434,21 +223,75 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
     framed = stillFramed;
     remembered = { camera: next, framed };
     setStandard(stillFramed ? standardViewOf(next) : null);
+    setOnEnd(stillFramed ? (axisEndOf(next)?.id ?? null) : null);
     schedule();
+  };
+
+  // ---- a turn to a standard view ----
+
+  let flight = 0;
+  const stopFlight = (): void => {
+    if (flight !== 0) cancelAnimationFrame(flight);
+    flight = 0;
+  };
+
+  /** Motion is turned down, by the system or by the app's own setting (View ▸ Accessibility ▸ Animation Effects). */
+  const stillness = (): boolean =>
+    document.documentElement.getAttribute("data-animations") === "off" || (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+  /** How long a turn takes: the system's slow step, read from the token. */
+  const flightTime = (): number => {
+    const seconds = host === undefined ? NaN : Number.parseFloat(getComputedStyle(host).getPropertyValue("--dur-slow"));
+    return Number.isFinite(seconds) && seconds > 0 && seconds < 2 ? seconds * 1000 : FLIGHT_MS;
+  };
+
+  /** Turn the eye to `to`, framed: eased over a short time, or at once where motion is turned down. */
+  const fly = (to: Camera): void => {
+    stopFlight();
+    const from = camera;
+    if (from === null || stillness()) {
+      look(to, true);
+      return;
+    }
+    const took = flightTime();
+    const began = performance.now();
+    const step = (now: number): void => {
+      const t = (now - began) / took;
+      if (!(t < 1) || disposed) {
+        flight = 0;
+        look(to, true);
+        return;
+      }
+      look(easeCamera(from, to, t), true);
+      flight = requestAnimationFrame(step);
+    };
+    flight = requestAnimationFrame(step);
   };
 
   const fit = (): void => {
     if (scene === null) return;
+    stopFlight();
     look(fitCamera(camera ?? standardCamera("three-quarter", scene, aspect()), scene, aspect()), true);
   };
 
   const showView = (view: StandardView): void => {
-    if (scene !== null) look(standardCamera(view, scene, aspect()), true);
+    if (scene !== null) fly(standardCamera(view, scene, aspect()));
+  };
+
+  /**
+   * Stand the eye on an axis end. The end the eye already stands on covers its opposite in the
+   * gizmo, so a press on it turns the eye to the opposite end: the way round to the back.
+   */
+  const showEnd = (end: AxisEnd): void => {
+    if (scene === null) return;
+    const opposite = AXIS_ENDS.find((other) => other.axis === end.axis && other.id !== end.id);
+    fly(axisCamera(onEnd() === end.id && opposite !== undefined ? opposite : end, scene, aspect()));
   };
 
   /** The camera after the piece or the stage changed size: fitted again if it was, clamped otherwise. */
   const settle = (): void => {
     if (scene === null) return;
+    stopFlight();
     if (camera === null) look(standardCamera("three-quarter", scene, aspect()), true);
     else if (framed) look(fitCamera(camera, scene, aspect()), true);
     else look(clampCamera(camera, scene), false);
@@ -484,8 +327,31 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
       return false;
     }
     renderer = made;
-    renderer.upload(buffers, ground);
+    renderer.upload(buffers, ground, edges);
     return true;
+  };
+
+  // ---- how it is shown ----
+
+  /** The edges of the piece on screen, made the first time a mode draws them. */
+  const wantEdges = (): void => {
+    if (edges !== null || solid === null || !modeHasEdges(mode())) return;
+    edges = featureEdges(solid);
+    renderer?.upload(buffers, ground, edges);
+  };
+
+  const chooseMode = (value: string): void => {
+    if (!isDisplayMode(value)) return;
+    setMode(value);
+    saveView3d({ mode: value, labels: labels() });
+    wantEdges();
+    schedule();
+  };
+
+  const chooseLabels = (on: boolean): void => {
+    setLabels(on);
+    saveView3d({ mode: mode(), labels: on });
+    schedule();
   };
 
   // ---- staying in step with the drawing ----
@@ -508,10 +374,14 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
 
   const clearMesh = (): void => {
     buffers = null;
+    solid = null;
+    edges = null;
+    targets = null;
+    setPointed(null);
     ground = null;
     scene = null;
     setReadout(null);
-    renderer?.upload(null, null);
+    renderer?.upload(null, null, null);
     schedule();
   };
 
@@ -549,10 +419,13 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
       keepGl({ kind: "error", message: reply.error });
       return;
     }
+    solid = reply.mesh;
     buffers = buildBuffers(reply.mesh);
     ground = groundGrid(reply.mesh.extent);
     scene = sceneOf(reply.mesh.extent);
-    renderer?.upload(buffers, ground);
+    edges = modeHasEdges(mode()) ? featureEdges(reply.mesh) : null;
+    targets = null;
+    renderer?.upload(buffers, ground, edges);
     setReadout({ triangles: formatTriangles(reply.mesh.triangles), size: formatSize(reply.mesh.bounds), notes: reply.mesh.notes });
     keepGl({ kind: "ready" });
     settle();
@@ -613,8 +486,34 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, spread: Math.hypot(a.x - b.x, a.y - b.y) };
   };
 
+  // ---- the part under the pointer ----
+
+  let pickFrame = 0;
+  let pickAt: { x: number; y: number } | null = null;
+
+  /** Name the part under the resting pointer: at most once a frame, and never while the solid is being turned. */
+  const pickSoon = (clientX: number, clientY: number): void => {
+    pickAt = ndc(clientX, clientY);
+    if (pickFrame !== 0 || disposed) return;
+    pickFrame = requestAnimationFrame(() => {
+      pickFrame = 0;
+      if (pickAt === null || solid === null || camera === null || pointers.size > 0) return;
+      targets ??= pickTargets(solid);
+      const ray = pickRay(camera, pickAt.x, pickAt.y, aspect());
+      const hit = ray === null ? null : pickPart(targets, ray);
+      setPointed(hit === null ? null : hit.name === "" ? hit.part : hit.name);
+    });
+  };
+
+  const onPointerLeave = (): void => {
+    pickAt = null;
+    setPointed(null);
+  };
+
   const onPointerDown = (e: PointerEvent): void => {
     if (scene === null || canvas === undefined) return;
+    stopFlight();
+    setPointed(null);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try {
       canvas.setPointerCapture(e.pointerId);
@@ -629,6 +528,7 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
 
   const onPointerMove = (e: PointerEvent): void => {
     const was = pointers.get(e.pointerId);
+    if (was === undefined && hovers && e.pointerType === "mouse") pickSoon(e.clientX, e.clientY);
     if (was === undefined || scene === null || camera === null) return;
     const before = pinch();
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -658,6 +558,7 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
   const onWheel = (e: WheelEvent): void => {
     e.preventDefault();
     if (scene === null || camera === null) return;
+    stopFlight();
     const at = ndc(e.clientX, e.clientY);
     look(zoomCamera(camera, scene, wheelZoomFactor(e.deltaY, e.deltaMode, e.ctrlKey), at.x, at.y, aspect()), false);
   };
@@ -665,6 +566,7 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
   /** The stage's keys, only while it has the focus. A key it takes never reaches the shell. */
   const onKeyDown = (e: KeyboardEvent): void => {
     if (e.ctrlKey || e.metaKey || e.altKey || scene === null || camera === null || status().kind !== "ready") return;
+    stopFlight();
     const turn = (yaw: number, pitch: number): void => {
       if (scene !== null && camera !== null) look(orbitCamera(camera, scene, yaw, pitch), framed);
     };
@@ -734,6 +636,7 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
       if (!(pxW > 0) || !(pxH > 0)) return;
       const changed = pxW !== size.pxW || pxH !== size.pxH;
       size = { w: box.width, h: box.height, pxW, pxH };
+      setCompact(box.width < COMPACT_BELOW);
       if (!changed) return;
       surface.width = pxW;
       surface.height = pxH;
@@ -764,9 +667,20 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
     measure();
     schedule();
 
+    // While developing, a script in the page can ask for the mesh on screen (to draw stills of it).
+    if (import.meta.env.DEV) {
+      const scope = window as unknown as { __view3d?: { mesh: () => PieceMesh | null } };
+      scope.__view3d = { mesh: () => solid };
+      onCleanup(() => {
+        delete scope.__view3d;
+      });
+    }
+
     onCleanup(() => {
       disposed = true;
       if (frame !== 0) cancelAnimationFrame(frame);
+      if (pickFrame !== 0) cancelAnimationFrame(pickFrame);
+      stopFlight();
       if (fineTimer !== 0) window.clearTimeout(fineTimer);
       surface.removeEventListener("webglcontextlost", onLost);
       surface.removeEventListener("webglcontextrestored", onRestored);
@@ -809,30 +723,87 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerEnd}
         onPointerCancel={onPointerEnd}
+        onPointerLeave={onPointerLeave}
         onDblClick={fit}
         onContextMenu={(e) => e.preventDefault()}
         onKeyDown={onKeyDown}
       />
       <Show when={status().kind === "ready"}>
+        <Show when={labels()}>
+          <div class="view3d-regions" aria-hidden="true">
+            <Show when={regions().axis}>
+              {(axis) => (
+                <svg class="view3d-axis">
+                  <line x1={axis().x1} y1={axis().y1} x2={axis().x2} y2={axis().y2} />
+                </svg>
+              )}
+            </Show>
+            <For each={regions().labels}>
+              {(label) => (
+                <Show when={label.shown}>
+                  <span
+                    class="view3d-label"
+                    data-region={label.id}
+                    style={{ "--lx": (label.x / Math.max(1, size.w)) * 100, "--ly": (label.y / Math.max(1, size.h)) * 100, "--dx": label.dx, "--dy": label.dy }}
+                  >
+                    {label.label}
+                  </span>
+                </Show>
+              )}
+            </For>
+          </div>
+        </Show>
+        <div class="view3d-gizmo" role="toolbar" aria-label="Orientation" ref={(element) => rovingBand(element, "button")}>
+          <svg class="view3d-gizmo-axes" viewBox="-1 -1 2 2" aria-hidden="true">
+            <For each={AXIS_ENDS}>
+              {(end, index) => (
+                <line class="view3d-gizmo-axis" data-axis={end.axis} data-back={end.id.startsWith("-") ? "" : undefined} x1="0" y1="0" x2={(gizmo()[index()]?.x ?? 0) * GIZMO_REACH} y2={-(gizmo()[index()]?.y ?? 0) * GIZMO_REACH} />
+              )}
+            </For>
+          </svg>
+          <For each={AXIS_ENDS}>
+            {(end, index) => (
+              <span
+                class="view3d-gizmo-end"
+                data-axis={end.axis}
+                data-back={end.id.startsWith("-") ? "" : undefined}
+                style={{ "--gx": (gizmo()[index()]?.x ?? 0) * GIZMO_REACH, "--gy": -(gizmo()[index()]?.y ?? 0) * GIZMO_REACH, "z-index": Math.round(((gizmo()[index()]?.depth ?? 0) + 1) * 10) + 1 }}
+              >
+                <Toggle variant="text" size="sm" ariaLabel={end.name} hint={end.hint} placement="bottom" pressed={onEnd() === end.id} onChange={() => showEnd(end)}>
+                  {end.face}
+                </Toggle>
+              </span>
+            )}
+          </For>
+        </div>
         <div class="view3d-foot">
           <Show when={readout()}>
             {(facts) => (
               <div class="view3d-readout">
                 <span class="view3d-fact">{facts().triangles}</span>
                 <span class="view3d-fact">{facts().size}</span>
+                <Show when={hovers}>
+                  <span class="view3d-pointed" data-empty={pointed() === null ? "" : undefined}>
+                    {pointed() === null ? "Point at a part to name it" : `Under the pointer: ${pointed() ?? ""}`}
+                  </span>
+                </Show>
                 <For each={facts().notes}>{(note) => <span class="view3d-note">{note}</span>}</For>
               </div>
             )}
           </Show>
           <div class="view3d-bar" role="toolbar" aria-label="3D view" ref={(element) => rovingBand(element, "button")}>
             <IconButton icon="zoom.extents" title="Fit the piece" shortcut="F" onClick={fit} />
-            <For each={VIEW_KEYS}>
+            <For each={compact() ? VIEW_KEYS.slice(0, 1) : VIEW_KEYS}>
               {(key) => (
                 <Toggle variant="text" size="sm" ariaLabel={key.label} hint={key.label} placement="top" pressed={standard() === key.view} onChange={() => showView(key.view)}>
                   {key.face}
                 </Toggle>
               )}
             </For>
+            <Select size="sm" ariaLabel="Display mode" title="How the solid is shown" value={mode()} options={MODE_OPTIONS} onChange={chooseMode} />
+            <Toggle variant="text" size="sm" ariaLabel="Region labels" hint="Name the regions of the ring" placement="top" pressed={labels()} onChange={chooseLabels}>
+              Labels
+            </Toggle>
             <Button variant="quiet" size="sm" title="Save the piece as a file for printing" onClick={() => void downloadStl()}>
               Download STL
             </Button>

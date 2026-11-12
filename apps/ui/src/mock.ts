@@ -477,6 +477,8 @@ export class MockFacade implements RawFacade {
       }
       case "piece":
         return this.pieceCommand(params);
+      case "objects":
+        return this.objectsCommand(params);
       case "piecemesh":
         // The piece as a solid, for the 3D view: a mock's stand-in shape, never the engine's ring.
         if (this.piece === null) return envelope(false, { error: "piecemesh: the drawing has no piece" });
@@ -592,6 +594,27 @@ export class MockFacade implements RawFacade {
       checks,
       at: [0, 0],
     };
+  }
+
+  /**
+   * The mock's own entities as the engine's `objects` lists a space: handle (the display handle a
+   * pick answers with), kind, layer and one measurement, capped at `limit` (2000; 5000 at most).
+   * It changes nothing.
+   */
+  private objectsCommand(params: Record<string, unknown>): string {
+    const asked = params["limit"];
+    if (asked !== undefined && asked !== null && (typeof asked !== "number" || !Number.isInteger(asked) || asked < 0)) {
+      return envelope(false, { error: "objects: `limit` must be a whole number from 0 to 5000" });
+    }
+    const limit = Math.min(typeof asked === "number" ? asked : 2000, 5000);
+    const shown = this.entities.filter((e) => this.visible(e));
+    const objects = shown.slice(0, limit).map((e, i) => {
+      const row = { handle: String(i + 1), layer: e.layer };
+      if (e.kind === "circle") return { ...row, kind: "circle", size: (e.r * 2).toFixed(4) };
+      if (e.kind === "line") return { ...row, kind: "line", size: Math.hypot(e.x1 - e.x0, e.y1 - e.y0).toFixed(4) };
+      return { ...row, kind: "lwpolyline" };
+    });
+    return envelope(true, { objects, total: shown.length, truncated: shown.length > objects.length, space: "Model" });
   }
 
   /** The display handle of the first entity containing `(x, y)` — the mock's canned pick. */
@@ -748,6 +771,7 @@ export class MockFacade implements RawFacade {
       { id: "layer.set", label: "Set Layer Properties", menu: [], shortcut: "", aliases: [], params: "{name, on?, frozen?, locked?}", enabled: true },
       { id: "layer.current", label: "Make Current", menu: [], shortcut: "", aliases: [], params: "{name}", enabled: true },
       { id: "piece", label: "Piece", menu: [], shortcut: "", aliases: [], params: "{kind?: band|solitaire|eternity, metal?: gold24|22|18|14|platinum|silver (default gold18), query?, remove?} → {piece}", enabled: true },
+      { id: "objects", label: "Objects", menu: [], shortcut: "", aliases: [], params: "{limit?: n (default 2000, at most 5000)} → {objects: [{handle, kind, layer, size?}], total, truncated, space}", enabled: true },
     ]);
   }
 

@@ -194,6 +194,7 @@ describe("UI_ITEMS", () => {
         "ui.assistant.ask",
         "ui.panel.bench",
         "ui.panel.layers",
+        "ui.panel.objects",
         "ui.panel.piece",
         "ui.panel.properties",
         "ui.toggle.assistant",

@@ -113,3 +113,121 @@
   max-width: 48ch;
   margin: 0;
 }
+
+/* The part under the pointer, by the engine's name for it. The line is always there where a
+   pointer can rest over the stage, so the box does not change height as the pointer crosses the
+   piece; while it names nothing it is the quietest ink. */
+.view3d-pointed[data-empty] {
+  color: var(--text-faint);
+}
+
+/* ---- The orientation gizmo: the engine's three axes as the camera sees them, in the corner the
+   foot never reaches. A round plate of the elevated surface, so its inks are the theme's in
+   either theme (the stage under it is dark in both). The axes' inks are the drawing's own axis
+   tokens; there is no token for a third axis, so Z takes the neutral faint ink. ---- */
+.view3d-gizmo {
+  --gizmo-size: calc(var(--control-h-button) * 4);
+  position: absolute;
+  inset-block-start: var(--gap-12);
+  inset-inline-end: var(--gap-12);
+  width: var(--gizmo-size);
+  height: var(--gizmo-size);
+  background: var(--surface-elevated);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-round);
+  box-shadow: var(--shadow-popover);
+  font-family: var(--font-family);
+}
+
+.view3d-gizmo-axes {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.view3d-gizmo-axis {
+  stroke: var(--text-faint);
+  stroke-width: calc(var(--hairline) * 3);
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.view3d-gizmo-axis[data-axis="x"] {
+  stroke: var(--axis-x);
+}
+
+.view3d-gizmo-axis[data-axis="y"] {
+  stroke: var(--axis-y);
+}
+
+/* The half of an axis that runs to its negative end is a thin line: the positive half leads. */
+.view3d-gizmo-axis[data-back] {
+  stroke-width: var(--hairline);
+}
+
+/* An end is a key on a small plate ringed in its axis's ink. `--gx` and `--gy` are where the
+   camera sees it, in halves of the gizmo; the nearer end is stacked over the farther. */
+.view3d-gizmo-end {
+  position: absolute;
+  left: calc(50% + var(--gx, 0) * 50%);
+  top: calc(50% + var(--gy, 0) * 50%);
+  display: flex;
+  transform: translate(-50%, -50%);
+  border: var(--hairline) solid var(--text-faint);
+  border-radius: var(--radius-round);
+  background: var(--surface-elevated);
+}
+
+.view3d-gizmo-end[data-axis="x"] {
+  border-color: var(--axis-x);
+}
+
+.view3d-gizmo-end[data-axis="y"] {
+  border-color: var(--axis-y);
+}
+
+/* ---- The region names: words hung on places of the ring, over the solid and under the foot.
+   They take no pointer: the solid under them still turns. ---- */
+.view3d-regions {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* `--lx` and `--ly` are the anchor in hundredths of the stage; `--dx` and `--dy` the direction
+   the word stands off in, away from the ring's middle as the eye sees it. */
+.view3d-label {
+  position: absolute;
+  left: calc(var(--lx, 0) * 1%);
+  top: calc(var(--ly, 0) * 1%);
+  transform: translate(calc((var(--dx, 0) - 1) * 50% + var(--dx, 0) * var(--gap-8)), calc((var(--dy, 0) - 1) * 50% + var(--dy, 0) * var(--gap-8)));
+  padding: var(--gap-2) var(--gap-6);
+  background: var(--surface-elevated);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-small);
+  color: var(--text-dim);
+  font-family: var(--font-family);
+  font-size: var(--font-small);
+  line-height: var(--leading-ui);
+  white-space: nowrap;
+}
+
+/* The finger's axis: a faint dashed line through the hole. The stage is dark in both themes, so
+   the line takes the one line ink made for it (the drawing's focus ring), held back. */
+.view3d-axis {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.view3d-axis line {
+  stroke: var(--canvas-focus-ring);
+  stroke-width: var(--hairline);
+  stroke-dasharray: var(--gap-6) var(--gap-4);
+  stroke-opacity: 0.6;
+}

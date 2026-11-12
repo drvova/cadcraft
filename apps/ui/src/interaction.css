@@ -328,3 +328,165 @@
   display: flex;
   padding: var(--gap-4) var(--gap-8) var(--gap-4) calc(var(--rail-text, var(--gap-8)) - var(--gap-6));
 }
+
+/* ---- Objects ---- */
+
+/* The objects section sits under the layers: a search over a tree of what the drawing holds. It
+   is a shorter reading than the palette under it (its groups start folded): two fifths of the
+   rail at most, then its tree scrolls. Open, it keeps its search and three rows however the rail
+   is squeezed, so it is never a heading over nothing. */
+.objects {
+  /* In a rail too short for every open section this one gives way first, and by the most: its
+     tree scrolls and can be searched, where a squeezed piece or bench sheet loses its rows. */
+  flex-shrink: 10;
+  max-height: 40%;
+  max-height: round(down, 40%, 1px);
+}
+
+.objects:not(.is-folded):has(.objects-tree) {
+  min-height: calc(2 * var(--control-h-input) + 3 * var(--control-h-row) + 3 * var(--gap-4));
+}
+
+/* The body is the search, which stays, over the tree, which scrolls. `hidden` takes it out of the
+   page and the Tab order when the section folds. */
+.objects-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.objects-body[hidden] {
+  display: none;
+}
+
+/* The heading's count ends on the counts' edge under it, as the properties' state ends on the
+   values' edge. */
+.objects-state {
+  margin-inline-end: 0;
+}
+
+/* The field fills the rail between the headings' insets: a grid cell stretches the field's own
+   box, which nothing here restyles. */
+.objects-search {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: var(--gap-4) var(--gap-8) var(--gap-2) var(--gap-6);
+}
+
+.objects-tree {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-block: var(--gap-2);
+}
+
+/* A tree item holds its row and, open, its group; the focus is the item's and the ring is drawn
+   on its row, so an open group's ring does not run round every row under it. */
+.objects-item {
+  outline: none;
+}
+
+/* The row is the rail's list row, value for value (the system's row: its height, its type, its
+   fills), flush to both edges as a layer's is. The twist stands under the headings' fold key and
+   a first-level label starts on the rail's text column; each level steps in by one gap. */
+.objects-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-2);
+  height: var(--control-h-row);
+  padding-inline: calc(var(--gap-2) + (var(--objects-level, 1) - 1) * var(--gap-12)) var(--gap-8);
+  color: var(--text-dim);
+  font-size: var(--font-body);
+  line-height: var(--leading-ui);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: background-color var(--dur-fast) var(--ease-standard);
+}
+
+@media (hover: hover) {
+  .objects-item:not([aria-selected="true"]) > .objects-row:hover {
+    background: var(--hover);
+  }
+}
+
+/* Selected on the drawing: the list's selected fill and the full ink (and `aria-selected`). */
+.objects-item[aria-selected="true"] > .objects-row {
+  background: var(--fill-active);
+  color: var(--text);
+}
+
+.objects-item:focus-visible > .objects-row {
+  outline: var(--focus-outline-w) solid var(--focus-ring);
+  outline-offset: var(--focus-outline-offset);
+}
+
+/* The twist is a cell the size of the headings' fold key: a group's chevron points right and
+   turns down when the group is open; an object's cell is empty, so the labels of a level share
+   one column. */
+.objects-twist {
+  flex: 0 0 var(--control-h-chip);
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--icon);
+}
+
+.objects-twist .tool-icon {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.objects-item[aria-expanded="true"] > .objects-row .tool-icon {
+  transform: rotate(90deg);
+}
+
+.objects-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* What a search matched, as the command palette marks it. */
+.objects-hit {
+  background: transparent;
+  color: var(--text-accent);
+  font-weight: 600;
+}
+
+/* How many objects a group holds ("18"), or how many of them are selected ("3/18"). */
+.objects-count {
+  flex: 0 0 auto;
+  margin-inline-start: var(--gap-8);
+  color: var(--text-faint);
+  font-size: var(--font-chip);
+  font-variant-numeric: lining-nums tabular-nums;
+  white-space: nowrap;
+}
+
+/* The row that shows the rest of a long group is an action, in the accent's text ink. */
+.objects-item--more > .objects-row {
+  color: var(--text-accent);
+}
+
+/* A sentence in the place of the tree or under it (nothing drawn, nothing found, a list cut
+   short, no list in this build): it wraps. */
+.objects-note {
+  padding-block: var(--gap-2);
+  line-height: var(--leading-ui);
+}
+
+/* Under a finger a row is a 24px target. */
+@media (pointer: coarse) {
+  .objects-row {
+    height: var(--control-h-input);
+  }
+}

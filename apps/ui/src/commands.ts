@@ -48,6 +48,8 @@ export const UI_ITEMS: readonly UiItem[] = [
   { id: "ui.panel.bench", label: "Bench Sheet", menu: ["Window", "Bench Sheet"] },
   // The web shell's own: the parametric ring's parameters, edited beside the drawing.
   { id: "ui.panel.piece", label: "Piece", menu: ["Window", "Piece"] },
+  // The web shell's own: what the drawing holds, as a searchable tree beside it.
+  { id: "ui.panel.objects", label: "Objects", menu: ["Window", "Objects"] },
   { id: "ui.animations.system", label: "Use System Setting", menu: ["View", "Accessibility", "Animation Effects", "Use System Setting"] },
   { id: "ui.animations.on", label: "On", menu: ["View", "Accessibility", "Animation Effects", "On"] },
   { id: "ui.animations.off", label: "Off", menu: ["View", "Accessibility", "Animation Effects", "Off"] },
@@ -202,7 +204,7 @@ export const MENU_GROUPS: Readonly<Record<string, readonly (readonly string[])[]
   // The parts of the window; the palettes; where the keyboard goes.
   Window: [
     ["ui.toggle.sidebar", "ui.toggle.assistant", "ui.toggle.source", "ui.assistant.ask", "ui.toggle.cmdline", "ui.toggle.toolbar", "ui.toggle.statusbar", "ui.toggle.menubar"],
-    ["ui.panel.piece", "ui.panel.properties", "ui.panel.layers", "ui.panel.bench", "xref"],
+    ["ui.panel.piece", "ui.panel.properties", "ui.panel.layers", "ui.panel.objects", "ui.panel.bench", "xref"],
     ["ui.focus.cmdline", "ui.focus.next", "ui.focus.previous"],
   ],
 };

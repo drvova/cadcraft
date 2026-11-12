@@ -39,6 +39,8 @@ import { PropertiesPanel } from "./components/PropertiesPanel";
 import { SourcePanel } from "./components/SourcePanel";
 import { Viewport3D } from "./components/Viewport3D";
 import { BenchPanel } from "./components/BenchPanel";
+import { ObjectsPanel } from "./components/ObjectsPanel";
+import { OBJECTS_LIMIT, parseObjects, type ObjectList } from "./objects";
 import { PiecePanel } from "./components/PiecePanel";
 import { NO_CHOICES, NO_PIECE, parsePieceReply, readPieceChoices, type PieceChoices, type PieceState } from "./piece";
 import { InlineAsk } from "./components/InlineAsk";
@@ -248,6 +250,13 @@ export function App(props: AppProps): JSX.Element {
   /** The revision the piece was read at; and whether the engine said it has no `piece` (never asked again). */
   let pieceAt: string | null = null;
   let pieceMissing = false;
+  /** The Objects section: what the space on screen holds, as the engine last listed it. */
+  const [showObjects, setShowObjects] = createSignal(true);
+  const [objects, setObjects] = createSignal<ObjectList | null>(null);
+  /** Whether the engine has `objects` at all (an engine without it is asked once and never again). */
+  const [objectsAvailable, setObjectsAvailable] = createSignal(true);
+  /** The revision and space the objects were listed at. */
+  let objectsAt: string | null = null;
   const [theme, setTheme] = createSignal<ThemeChoice>("dark");
   const [animations, setAnimations] = createSignal<AnimChoice>("on");
 
@@ -377,6 +386,7 @@ export function App(props: AppProps): JSX.Element {
     setCommands(props.facade.commands());
     readBench(state);
     readPiece(state);
+    readObjects(state);
     syncDisplay();
   };
 
@@ -424,6 +434,28 @@ export function App(props: AppProps): JSX.Element {
 
   createEffect(() => {
     if (showPiece() && showSidebar()) readPiece(untrack(drawing));
+  });
+
+  /** List the space's objects again when the drawing changed under the section (or it came back). */
+  const readObjects = (state: DrawingState | null): void => {
+    if (!untrack(objectsAvailable) || !showObjects() || !showSidebar()) return;
+    const at = state === null ? "" : `${state.revision}/${state.entityCount}/${state.title}/${state.space}`;
+    if (at === objectsAt) return;
+    objectsAt = at;
+    // An engine that lists its commands without `objects` is not asked: its refusal of an unknown
+    // command would stand on the command line as an error nobody caused. It is never asked again.
+    const listed = props.facade.commands();
+    if (listed.length > 0 && !listed.some((c) => c.id === "objects")) {
+      setObjectsAvailable(false);
+      setObjects(null);
+      return;
+    }
+    const env = props.facade.execute("objects", { limit: OBJECTS_LIMIT });
+    setObjects(env.ok ? parseObjects(env.result) : null);
+  };
+
+  createEffect(() => {
+    if (showObjects() && showSidebar()) readObjects(untrack(drawing));
   });
 
   /**
@@ -929,6 +961,9 @@ export function App(props: AppProps): JSX.Element {
       case "ui.panel.piece":
         setShowPiece((v) => !v);
         return;
+      case "ui.panel.objects":
+        setShowObjects((v) => !v);
+        return;
       case "ui.toggle.assistant":
         setShowAssistant((v) => !v);
         return;
@@ -1257,13 +1292,16 @@ export function App(props: AppProps): JSX.Element {
         <ToolStrip onInvoke={onInvoke} commands={commands()} />
       </Show>
       <div class={showAssistant() ? "workspace has-assistant" : "workspace"}>
-        <Show when={showSidebar() && (showPiece() || showLayers() || showProperties() || showBench())}>
+        <Show when={showSidebar() && (showPiece() || showLayers() || showObjects() || showProperties() || showBench())}>
           <aside class="sidebar" aria-label="Drawing">
             <Show when={showPiece()}>
               <PiecePanel state={piece()} choices={pieceChoices()} onRun={onPieceRun} onNotice={onPropertyNotice} />
             </Show>
             <Show when={showLayers()}>
               <LayersPanel layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} onMenu={(name, at) => openContext({ kind: "layer", name }, at)} />
+            </Show>
+            <Show when={showObjects()}>
+              <ObjectsPanel list={objects()} available={objectsAvailable()} selection={selection()} onSelect={onBenchSelect} />
             </Show>
             <Show when={showProperties()}>
               <PropertiesPanel properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={onPropertyNotice} />
@@ -1324,7 +1362,7 @@ export function App(props: AppProps): JSX.Element {
               ready={assistant()?.ready() ?? false}
               onSend={sendAsk}
               onClose={closeAsk}
-              offer={prompt().running === null}
+              offer={prompt().running === null && !stage3d()}
               onOpen={() => setAskOpen(true)}
               shortcut={shortcutLabel("Cmd+K", isMacPlatform())}
             />

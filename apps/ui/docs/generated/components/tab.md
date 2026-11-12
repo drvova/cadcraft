@@ -49,7 +49,7 @@ import { Tab } from "../../../../src/ui/Tab";
 
 export default function InLayoutTabs() {
   return (
-    <div class="editor-tabs" role="tablist" aria-label="Layouts">
+    <div class="editor-tabs" role="tablist" aria-label="Views">
       <Tab selected title="Switch to model space">Model</Tab>
       <Tab title="Switch to Layout1">Layout1</Tab>
       <Tab title="Switch to Layout2">Layout2</Tab>
@@ -206,7 +206,7 @@ export default function Selected() {
   - Do: `<Tab selected onClick={show}>Model</Tab>`
 - `rule/tab-in-tablist`: When tabs are rendered, place them in 1 container carrying `role="tablist"` and an `aria-label`, because a `tab` role outside a `tablist` is announced without its strip and its position. Evidence: app 2/2 strips, `src/components/StatusBar.tsx:54` and `src/components/AssistantPane.tsx:624`. Check: review `src/components/StatusBar.tsx`.
   - Don't: `<div class="editor-tabs"><Tab selected>Model</Tab></div>`
-  - Do: `<div class="editor-tabs" role="tablist" aria-label="Layouts"><Tab selected>Model</Tab></div>`
+  - Do: `<div class="editor-tabs" role="tablist" aria-label="Views"><Tab selected>Model</Tab></div>`
 - `rule/tab-close-sibling`: When a tab can be closed, pass `onClose` rather than putting a button in the tab's children, because a `<button>` cannot nest a `<button>` and `Tab` renders the close key as a sibling. Evidence: single use `src/components/AssistantPane.tsx:497`, the one closable strip. Check: test `src/ui/Tab.test.tsx`.
   - Don't: `<Tab onClick={show}>hello<IconButton icon="close" title="Close hello" onClick={close} /></Tab>`
   - Do: `<Tab onClick={show} onClose={close} closeLabel="Close hello">hello</Tab>`

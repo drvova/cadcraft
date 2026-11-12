@@ -3,7 +3,7 @@ import { Tab } from "../../../../src/ui/Tab";
 
 export default function InLayoutTabs() {
   return (
-    <div class="editor-tabs" role="tablist" aria-label="Layouts">
+    <div class="editor-tabs" role="tablist" aria-label="Views">
       <Tab selected title="Switch to model space">Model</Tab>
       <Tab title="Switch to Layout1">Layout1</Tab>
       <Tab title="Switch to Layout2">Layout2</Tab>

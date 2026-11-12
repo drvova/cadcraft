@@ -82,7 +82,7 @@ export function LayoutTabs(props: LayoutTabsProps): JSX.Element {
     <div
       class="editor-tabs"
       role="tablist"
-      aria-label="Layouts"
+      aria-label="Views"
       ref={(element) => {
         strip = element;
         mark = scrollBand(element);
