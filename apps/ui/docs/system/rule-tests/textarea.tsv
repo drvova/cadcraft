@@ -8,3 +8,4 @@ rule/textarea-placeholder-example	pass	pass	n/a: two-agent test not run this ses
 rule/textarea-canonical-element	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the composer's editor moves onto the component at integration, and its file is not this worker's	ship	
 rule/textarea-max-rows	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the composer's editor moves onto the component at integration, and its file is not this worker's	ship	
 rule/textarea-one-row-field	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the composer's editor moves onto the component at integration, and its file is not this worker's	ship	
+rule/textarea-combobox-while-listed	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: the composer's slash list moves onto the props at integration; its file is not this worker's	ship	

@@ -320,9 +320,12 @@
   background: var(--hover);
 }
 
-/* ---- Field: <input class="ui-field"> ---- */
+/* ---- Field: <input class="ui-field ui-field--{variant} ui-field--{size} ui-field--{align}"> ---- */
 
+/* A value longer than the box ends in an ellipsis while the field is at rest; the hint shows it
+   in full (`Tooltip.tsx`), and the caret scrolls it while it is edited. */
 .ui-field {
+  min-width: 0;
   height: var(--control-h-input);
   padding: var(--field-pad-y) var(--field-pad-x);
   border: var(--hairline) solid var(--border-soft);
@@ -331,17 +334,55 @@
   color: var(--text);
   font-family: var(--font-family);
   font-size: var(--font-body);
-  transition: border-color var(--dur-fast) var(--ease-standard);
+  text-overflow: ellipsis;
+  transition:
+    border-color var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-fast) var(--ease-standard);
 }
 
 .ui-field::placeholder {
   color: var(--text-faint);
 }
 
+/* sm — the 20px box of a 22px list row, on the row's own 4px inset, as the small select. The
+   browser centres a typed value and rounds the half pixel down the page, a pixel under the row's
+   label; a hairline of padding underneath rounds it back up. */
+.ui-field--sm {
+  height: var(--control-h-chip);
+  padding: 0 var(--gap-4) var(--hairline);
+}
+
+/* end — a column of values: the value ends on the far edge, with figures that line up down it. */
+.ui-field--end {
+  font-variant-numeric: lining-nums tabular-nums;
+  text-align: end;
+}
+
+/* mixed — the objects disagree: the stand-in reads quieter than a real value. */
+.ui-field--mixed {
+  color: var(--text-faint);
+}
+
+/* inline — a value in a list row: text until it is touched, the field under the pointer and the
+   keyboard, as the inline select. The rules after this one (focus, invalid, disabled) win over
+   its hover by their place in the file. */
+.ui-field--inline {
+  border-color: transparent;
+  background: transparent;
+}
+
+@media (hover: hover) {
+  .ui-field--inline:hover {
+    border-color: var(--border-soft);
+    background: var(--control);
+  }
+}
+
 .ui-field:focus {
   border-color: var(--focus-ring);
   outline: var(--focus-outline-w) solid var(--focus-ring);
   outline-offset: var(--focus-outline-offset);
+  background: var(--control);
 }
 
 /* A value the caller refuses: the error hairline, resting and focused alike, until the value is
@@ -349,6 +390,7 @@
    and the focus both show. The caller's error line says why (`describedBy`). */
 .ui-field[aria-invalid="true"] {
   border-color: var(--error);
+  background: var(--control);
 }
 
 .ui-field[aria-invalid="true"]:focus {
@@ -357,6 +399,11 @@
 
 .ui-field:disabled {
   color: var(--text-disabled);
+}
+
+.ui-field--inline:disabled {
+  border-color: transparent;
+  background: transparent;
 }
 
 /* ---- Select: <span class="ui-select ui-select--{variant} ui-select--{size} ui-select--{align}">
@@ -725,6 +772,12 @@
   cursor: default;
 }
 
+/* A blocked button is not the current row to the eye: it drops the fill (`aria-current` stays).
+   A blocked option keeps it, because in a listbox the fill is where the keys are. */
+.ui-row:disabled[aria-current="true"] {
+  background: transparent;
+}
+
 /* ---- Tab: <button role="tab" class="ui-tab ui-tab--{size}">, in a
         <span class="ui-tab-closable ui-tab-closable--{size}"> beside its close key ---- */
 
@@ -936,8 +989,10 @@
     min-width: var(--control-h-input);
   }
 
-  /* The small select grows as the row does; its list row is the caller's to let grow with it. */
-  .ui-select--sm {
+  /* The small select and the small field grow as the row does; their list row is the caller's to
+     let grow with them. */
+  .ui-select--sm,
+  .ui-field--sm {
     height: var(--control-h-input);
   }
 
@@ -954,10 +1009,16 @@
   }
 
   /* Text a finger edits is never under 16px, or the phone zooms the page into the control and
-     leaves it there. The select's own text is not drawn, so only its measure changes. */
+     leaves it there. The select's own text is not drawn, so only its measure changes. A field
+     keeps its height: the 16px value sits in the 24px box on the padding the next rule gives up. */
+  .ui-field,
   .ui-textarea,
   .ui-select-control {
     font-size: max(16px, 1em);
+  }
+
+  .ui-field {
+    padding-block: 0;
   }
 
   .ui-textarea--field {

@@ -12,8 +12,8 @@ Not applicable: hand-rolled — a native `<textarea>` in Field's measured recipe
 ## Examples
 `<TextArea value={notes()} onInput={setNotes} ariaLabel="Notes" />` — a notes field: two lines tall when empty, growing to eight.
 
-Real uses, 0 call sites (`rg -c "<TextArea\b" src/components` finds none): the component is new in this pass.
-- (planned) `src/components/AssistantPane.tsx` — the composer's editor (`class="assistant-input"`, 1 use) moves onto `<TextArea variant="bare">` in the next pass; `decisions.md` ("Canonical picks") has the replacement.
+Real uses, 1 call site (`rg -c "<TextArea" src/components` → `src/components/AssistantPane.tsx:1`):
+- `src/components/AssistantPane.tsx:1011` — the composer's editor: `variant="bare"` inside the card, two rows growing to nine, the combobox of the slash list while that list shows.
 
 ### Example files
 | File | Covers | Caption |
@@ -81,6 +81,11 @@ Real uses, 0 call sites (`rg -c "<TextArea\b" src/components` finds none): the c
 - `onKeyDown`: a key went down outside an input method's composition; the caller may `preventDefault` it.
 - `onPaste`: something was pasted; the caller may take what is not text.
 - `ref`: hands the element to the caller, to focus it or to place the caret.
+- `role`: `combobox`, while the text drives a list of matches and keeps the keyboard (the composer's slash list).
+- `expanded`: a combobox's list is showing (`aria-expanded`).
+- `controls`: the `id` of a combobox's list (`aria-controls`).
+- `activeDescendant`: the `id` of the option the arrow keys are on (`aria-activedescendant`); unset when none is.
+- `autocompleteKind`: what the list does with the typed text (`aria-autocomplete`): `list`, `inline`, `both` or `none`.
 
 ## Usage
 
@@ -97,18 +102,22 @@ Real uses, 0 call sites (`rg -c "<TextArea\b" src/components` finds none): the c
 - `rule/textarea-label-bound`: When a text area is rendered without a visible `<label>`, pass `ariaLabel`, because a placeholder disappears at the first character and leaves 1 unnamed text box. Evidence: single use `src/components/AssistantPane.tsx:976`, the composer's editor, named "Ask the assistant" with a placeholder beside it. Check: test `src/ui/TextArea.test.tsx`.
   - Don't: `<TextArea placeholder="Ask, or / for commands" value={draft()} onInput={setDraft} />`
   - Do: `<TextArea ariaLabel="Ask the assistant" placeholder="Ask, or / for commands" value={draft()} onInput={setDraft} />`
-- `rule/textarea-rows-not-height`: When a text area needs a smallest or a largest size, pass `rows` and `maxRows` rather than a `height`, `min-height` or `max-height` in a stylesheet, because the component sets the height itself from the measured text on every edit and a second height fights it by 1 line or more. Evidence: single use `src/ui/TextArea.tsx:98`, the one place the height is set. Check: test `src/ui/TextArea.test.tsx`.
+- `rule/textarea-rows-not-height`: When a text area needs a smallest or a largest size, pass `rows` and `maxRows` rather than a `height`, `min-height` or `max-height` in a stylesheet, because the component sets the height itself from the measured text on every edit and a second height fights it by 1 line or more. Evidence: single use `src/ui/TextArea.tsx:113`, the one place the height is set. Check: test `src/ui/TextArea.test.tsx`.
   - Don't: `.my-notes .ui-textarea { min-height: 64px; max-height: 240px }`
   - Do: `<TextArea rows={2} maxRows={9} ariaLabel="Notes" value={notes()} onInput={setNotes} />`
-- `rule/textarea-enter-in-keydown`: When Enter sends the text, handle it in `onKeyDown` and call `preventDefault`, leaving Shift+Enter to break the line, because `onKeyDown` hears 0 keys while an input method is composing and a handler on a wrapper would send a half-composed word. Evidence: single use `src/ui/TextArea.tsx:161`, the composition guard. Check: test `src/ui/TextArea.test.tsx`.
+- `rule/textarea-enter-in-keydown`: When Enter sends the text, handle it in `onKeyDown` and call `preventDefault`, leaving Shift+Enter to break the line, because `onKeyDown` hears 0 keys while an input method is composing and a handler on a wrapper would send a half-composed word. Evidence: single use `src/ui/TextArea.tsx:191`, the composition guard. Check: test `src/ui/TextArea.test.tsx`.
   - Don't: `<div onKeyDown={(e) => e.key === "Enter" && send()}><TextArea ariaLabel="Ask" value={draft()} onInput={setDraft} /></div>`
   - Do: `<TextArea ariaLabel="Ask" value={draft()} onInput={setDraft} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />`
-- `rule/textarea-bare-card-focus`: When `variant="bare"` is used, give the card around it the focus cue with `:focus-within`, because the bare editor draws 0 rings of its own and a keyboard user would otherwise see no focus at all. Evidence: single use `src/ui/ui.css:670`, the bare recipe, which drops the ring. Check: review `src/assistant.css`.
+- `rule/textarea-bare-card-focus`: When `variant="bare"` is used, give the card around it the focus cue with `:focus-within`, because the bare editor draws 0 rings of its own and a keyboard user would otherwise see no focus at all. Evidence: single use `src/ui/ui.css:717`, the bare recipe, which drops the ring. Check: review `src/assistant.css`.
   - Don't: `<div class="card"><TextArea variant="bare" ariaLabel="Ask" /></div>` with no `.card:focus-within` rule.
   - Do: `.card:focus-within { border-color: var(--composer-border-active) }` around `<TextArea variant="bare" ariaLabel="Ask" />`
-- `rule/textarea-described-by`: When a line of help, a count or an error sits beside a text area, give the line an `id` and pass it as `describedBy`, and pass `invalid` while the text is refused, because a line that only sits near the control is read 0 times by a screen reader that lands on it by Tab. Evidence: single use `src/ui/TextArea.tsx:142`, the tie `Field` makes the same way (`rule/field-described-by`). Check: test `src/ui/TextArea.test.tsx`.
+- `rule/textarea-described-by`: When a line of help, a count or an error sits beside a text area, give the line an `id` and pass it as `describedBy`, and pass `invalid` while the text is refused, because a line that only sits near the control is read 0 times by a screen reader that lands on it by Tab. Evidence: single use `src/ui/TextArea.tsx:167`, the tie `Field` makes the same way (`rule/field-described-by`). Check: test `src/ui/TextArea.test.tsx`.
   - Don't: `<TextArea ariaLabel="Ask" invalid /><div>120 characters too long to send</div>`
   - Do: `<TextArea ariaLabel="Ask" invalid describedBy="ask-over" /><div id="ask-over">120 characters too long to send</div>`
+
+- `rule/textarea-combobox-while-listed`: When a text area drives a list of matches for part of what is typed, pass `role="combobox"` with `expanded`, `controls` and `activeDescendant` only while the list shows, and drop all 4 when it goes, because a multi-line text box that always says it is a combobox is announced as 1 on every focus, and its arrow keys are then expected to walk a list that is not there. Evidence: app 5/5 combobox props defined together in `src/ui/TextArea.tsx`. Check: test `src/ui/TextArea.test.tsx`.
+  - Don't: `<TextArea ariaLabel="Ask the assistant" role="combobox" expanded={false} value={draft()} onInput={setDraft} />` on a composer with no list open.
+  - Do: `<TextArea ariaLabel="Ask the assistant" role={listed() ? "combobox" : undefined} expanded={listed() ? true : undefined} controls={listed() ? "slash-list" : undefined} activeDescendant={listed() ? activeId() : undefined} value={draft()} onInput={setDraft} />`
 
 ### Content
 - `rule/textarea-placeholder-example`: When a placeholder is written, show in 2 to 6 words what goes here or what the control takes (Ask, or / for commands) and put a rule the user must keep in mind in a line tied by `describedBy`, because the placeholder is gone at the first character. Evidence: single use `src/components/AssistantPane.tsx:976`, the composer's two placeholders. Check: review `src/components/AssistantPane.tsx`.
@@ -139,11 +148,13 @@ Rests on the native `<textarea>` element: typing, selection, IME, undo and `disa
 | Enter | The focused control. | Breaks the line and the box grows by one, unless the caller's `onKeyDown` prevents it (to send). | Stays on the control. | test |
 | Enter (composing) | The focused control, mid-composition. | Confirms the input method's candidate; `onKeyDown` is not called. | Stays on the control. | test |
 | ArrowUp / ArrowDown, PageUp / PageDown | The focused control. | Move the caret; past the cap the text scrolls to keep it in view. | Stays on the control. | by hand |
+| ArrowUp / ArrowDown, Enter (combobox) | The focused control, while its list shows. | The caller's `onKeyDown` moves `activeDescendant` through the list or runs the active option, and prevents the caret's move; the control moves no focus. | Stays on the control. | by hand |
 
 ### ARIA
 | Part | Role | Accessible name from | States and properties | Announced | Checked by |
 |---|---|---|---|---|---|
 | The control | `textbox`, multi-line (native `<textarea>`) | `aria-label`, or the label tied to it | `disabled` when blocked; `aria-invalid="true"` while refused; `aria-describedby` naming the caller's line, then the `title`'s words | "Ask the assistant, edit text, multi-line" / "…, invalid entry, 120 characters too long to send" | test |
+| The control as a combobox | `combobox` (`role`) | `aria-label` | `aria-expanded`, `aria-controls` naming the list, `aria-activedescendant` naming the active option, `aria-autocomplete` | "Ask the assistant, combo box, expanded" then each option as the keys reach it | test |
 
 ## Tokens
 | Part | State | Token |

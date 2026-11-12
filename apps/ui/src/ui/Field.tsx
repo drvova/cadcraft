@@ -13,11 +13,40 @@
  * `describedBy`.
  *
  * `title` is the layer's hint (`./Tooltip.tsx`), never the native attribute: it shows in the hint
- * box and joins `describedBy` as the field's accessible description. It is never the name.
+ * box and joins `describedBy` as the field's accessible description. It is never the name. A value
+ * the box cuts short is the hint's first line in full, whether or not there is a `title` (never a
+ * password's).
+ *
+ * `variant="inline"` is a value in a dense list row: text until the pointer or the keyboard is on
+ * it, as `Select variant="inline"` is, and `size="sm"` is the 20px box that fits a 22px row. Such
+ * a row commits on Enter and on leaving and gives the old value back on Escape, so the field hands
+ * its caller `onKeyDown` (never a key an input method is using), `onFocus`, `onBlur` and the
+ * element (`ref`), and `selectOnFocus` selects the whole value as focus arrives, so typing
+ * replaces it.
+ *
+ * A field that drives a list (the command palette's input) is a combobox: `role`, `expanded`,
+ * `controls`, `activeDescendant` and `autocompleteKind` say so, in the layer's own names.
  */
 
 import type { JSX } from "solid-js";
 import { describeByHint, installHints } from "./Tooltip";
+
+/** `field` is the form control, stroked and filled at rest; `inline` is a value in a dense list
+ *  row, which reads as text until the pointer or the keyboard is on it. */
+export type FieldVariant = "field" | "inline";
+
+/** `md` is the 24px box; `sm` the 20px box that fits a 22px list row. */
+export type FieldSize = "sm" | "md";
+
+/** The side of the box the value sits on: `start` in a form, `end` in a column of values. */
+export type FieldAlign = "start" | "end";
+
+/** The keyboard a phone shows for the value, where `type` alone does not say. */
+export type FieldInputMode = "text" | "decimal" | "numeric" | "tel" | "search" | "email" | "url" | "none";
+
+/** What a combobox's list does with the typed text: `list` offers matches, `inline` completes the
+ *  text in place, `both` does both, `none` offers the same list whatever is typed. */
+export type AutocompleteKind = "list" | "inline" | "both" | "none";
 
 export interface FieldProps {
   /** The current value. The caller holds it and passes the new one back through `onInput`. */
@@ -47,25 +76,93 @@ export interface FieldProps {
   invalid?: boolean;
   /** The `id` of the help line or the error line under the field (several, space-separated): sets `aria-describedby`. */
   describedBy?: string;
+  /** The look. Defaults to `field`. */
+  variant?: FieldVariant;
+  /** The box size. Defaults to `md`. */
+  size?: FieldSize;
+  /** The side the value sits on. Defaults to `start`; `end` also lines its figures up in a column. */
+  align?: FieldAlign;
+  /** The value stands for several things that differ ("*VARIES*"): it reads in the quiet ink. */
+  mixed?: boolean;
+  /** The value can be selected and copied, not changed. It stays a Tab stop, unlike `disabled`. */
+  readOnly?: boolean;
+  /** The most characters the field takes. */
+  maxLength?: number;
+  /** The keyboard a phone shows: `decimal` for a number with a fraction, `numeric` for digits. */
+  inputMode?: FieldInputMode;
+  /** Select the whole value when focus arrives, by key or by click, so typing replaces it. */
+  selectOnFocus?: boolean;
+  /** A key went down in the field, outside an input method's composition. The caller may
+   *  `preventDefault` it (Enter that commits, Escape that gives the old value back). */
+  onKeyDown?: (event: KeyboardEvent) => void;
+  /** Focus arrived. */
+  onFocus?: (event: FocusEvent) => void;
+  /** Focus left: a row that commits on leaving does it here. */
+  onBlur?: (event: FocusEvent) => void;
+  /** Hands the element to the caller, to focus it or to place the caret. */
+  ref?: (el: HTMLInputElement) => void;
+  /** The field drives a list of matches and keeps the keyboard: `combobox`. Pass `expanded`,
+   *  `controls` and `activeDescendant` with it. */
+  role?: "combobox";
+  /** A combobox: whether its list is showing now (`aria-expanded`). */
+  expanded?: boolean;
+  /** A combobox: the `id` of its list (`aria-controls`). */
+  controls?: string;
+  /** A combobox: the `id` of the option the arrow keys are on (`aria-activedescendant`); unset when none is. */
+  activeDescendant?: string;
+  /** A combobox: what its list does with the typed text (`aria-autocomplete`). */
+  autocompleteKind?: AutocompleteKind;
 }
 
 export function Field(props: FieldProps): JSX.Element {
   if (typeof document !== "undefined") installHints();
+  // A press that brings the focus ends in a mouseup, which in WebKit drops the selection the
+  // focus just made: that one mouseup is refused.
+  let pressedIn = false;
   return (
     <input
-      ref={(el: HTMLInputElement) => describeByHint(el, () => props.title, () => props.describedBy)}
-      class="ui-field"
+      ref={(el: HTMLInputElement) => {
+        describeByHint(el, () => props.title, () => props.describedBy);
+        props.ref?.(el);
+      }}
+      class={`ui-field ui-field--${props.variant ?? "field"} ui-field--${props.size ?? "md"} ui-field--${props.align ?? "start"}`}
+      classList={{ "ui-field--mixed": props.mixed === true }}
       type={props.type ?? "text"}
       value={props.value ?? ""}
       placeholder={props.placeholder}
       aria-label={props.ariaLabel}
       disabled={props.disabled}
-      data-hint={props.title}
+      readOnly={props.readOnly}
+      maxLength={props.maxLength}
+      inputMode={props.inputMode}
+      data-hint={props.title ?? ""}
       autofocus={props.autoFocus}
       autocomplete={props.autocomplete}
       spellcheck={props.spellcheck ?? (props.type === "password" ? false : undefined)}
       aria-invalid={props.invalid ? "true" : undefined}
+      role={props.role}
+      aria-expanded={props.expanded === undefined ? undefined : props.expanded}
+      aria-controls={props.controls}
+      aria-activedescendant={props.activeDescendant}
+      aria-autocomplete={props.autocompleteKind}
       onInput={(event) => props.onInput?.(event.currentTarget.value)}
+      onKeyDown={(event) => {
+        // 229 is what a key reports while the input method holds it, in engines that do not set `isComposing` yet.
+        if (event.isComposing || event.keyCode === 229) return;
+        props.onKeyDown?.(event);
+      }}
+      onPointerDown={(event) => {
+        pressedIn = props.selectOnFocus === true && document.activeElement !== event.currentTarget;
+      }}
+      onMouseUp={(event) => {
+        if (pressedIn) event.preventDefault();
+        pressedIn = false;
+      }}
+      onFocus={(event) => {
+        if (props.selectOnFocus === true) event.currentTarget.select();
+        props.onFocus?.(event);
+      }}
+      onBlur={(event) => props.onBlur?.(event)}
     />
   );
 }

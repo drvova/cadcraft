@@ -8,9 +8,10 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { ariaKeyShortcuts, HINT_DELAY_MS, placeHint, splitHint, Tooltip } from "./Tooltip";
+import { ariaKeyShortcuts, HINT_DELAY_MS, hintContent, placeHint, splitHint, Tooltip } from "./Tooltip";
 import { Field } from "./Field";
 import { IconButton } from "./IconButton";
+import { Row } from "./Row";
 import { buttonIn, mount } from "../test-utils";
 
 const VIEW = { width: 1280, height: 800 };
@@ -248,6 +249,45 @@ describe("the hint", () => {
     expect(shown()).toBe(true);
     leave(inside);
     inside.blur();
+  });
+
+  test("a layer component with no title gives way to the hint wrapped around it", () => {
+    const container = mount(() => (
+      <Tooltip text="Layer 0, on, thawed">
+        <Row>Walls</Row>
+      </Tooltip>
+    ));
+    const row = buttonIn(container);
+    expect(row.getAttribute("data-hint")).toBe("");
+    key("Tab");
+    row.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    expect(shown()).toBe(true);
+    expect(box()?.textContent).toBe("Layer 0, on, thawed");
+    row.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    // One with words of its own speaks for itself.
+    const own = buttonIn(
+      mount(() => (
+        <Tooltip text="Layer 0, on, thawed">
+          <Row title="Makes this the current layer">Walls</Row>
+        </Tooltip>
+      )),
+    );
+    key("Tab");
+    own.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    expect(box()?.textContent).toBe("Makes this the current layer");
+    own.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  });
+
+  test("a label drawn in pieces for the eye beside its whole text is read once", () => {
+    const row = document.createElement("button");
+    row.setAttribute("data-hint", "");
+    row.innerHTML = '<span aria-hidden="true">Ground floor</span><span aria-hidden="true">rev C</span><span>Ground floor plan, rev C</span>';
+    document.body.appendChild(row);
+    expect(hintContent(row)).toBeNull();
+    Object.defineProperty(row, "scrollWidth", { value: 300 });
+    Object.defineProperty(row, "clientWidth", { value: 120 });
+    expect(hintContent(row)?.text).toBe("Ground floor plan, rev C");
+    row.remove();
   });
 
   test("typing puts it away", () => {

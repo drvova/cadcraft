@@ -1,7 +1,7 @@
 /**
- * The canvas selection's pure logic: the pick aperture `run_select` uses, the click add/replace
- * rule, and selection equality. No DOM, no facade calls — the shell wires these to
- * `execute("select", …)` and to the canvas's `selection` prop.
+ * The canvas selection's pure logic: the pick aperture `run_select` uses, the rule by which a
+ * pick adds to or removes from the selection, and selection equality. No DOM, no facade calls:
+ * the shell wires these to `execute("select", …)` and to the canvas's `selection` prop.
  */
 
 /** The engine's SYSVAR default (`Session::default`: `pickbox: 3.0`), used when the caller's is degenerate. */
@@ -37,18 +37,30 @@ export function pickAperture(worldPerPixel: number, pickbox: number): number {
   return Math.min(Math.max(aperture, MIN_APERTURE), MAX_APERTURE);
 }
 
+/** How a pick changes the selection: the gesture, Shift, and the engine's `PICKADD`. */
+export interface PickRule {
+  /** A click picks one object (or none); a rectangle picks however many it holds. */
+  gesture: "click" | "rect";
+  shift: boolean;
+  /** The engine's `PICKADD` setting (on by default). */
+  pickadd: boolean;
+}
+
 /**
- * The click semantics of the canvas pick, matching AutoCAD: without `add` the clicked handle
- * replaces the selection, and clicking the only selected handle again is a no-op (a second pick
- * never deselects); with `add` (Shift) the handle's membership is toggled.
+ * The selection after a pick at rest, by the engine's own rules (`Session::idle_click`). With
+ * `PICKADD` on, a pick adds to the selection and Shift removes from it, so the selection grows
+ * until Escape. With it off, a pick replaces the selection and Shift adds (Shift on what is
+ * already selected removes it). A click on nothing changes nothing in either setting. The order
+ * of the handles is kept and none is listed twice.
  */
-export function toggleHandle(current: readonly string[], handle: string, add: boolean): string[] {
-  if (add) {
-    if (current.includes(handle)) return current.filter((h) => h !== handle);
-    return [...current, handle];
-  }
-  if (current.length === 1 && current[0] === handle) return [...current];
-  return [handle];
+export function applyPick(current: readonly string[], picked: readonly string[], rule: PickRule): string[] {
+  const without = (): string[] => current.filter((h) => !picked.includes(h));
+  const union = (): string[] => [...new Set([...current, ...picked])];
+  if (rule.pickadd) return rule.shift ? without() : union();
+  if (rule.gesture === "click" && picked.length === 0) return [...current];
+  if (!rule.shift) return [...new Set(picked)];
+  const allSelected = picked.length > 0 && picked.every((h) => current.includes(h));
+  return rule.gesture === "click" && allSelected ? without() : union();
 }
 
 /** How far (CSS px) a mouse may travel between press and release and still have clicked. */

@@ -108,14 +108,7 @@
   }
 }
 
-/* The option is the listbox's item; the system's Row inside it is what is drawn and clicked. */
-.palette-option {
-  flex: 0 0 auto;
-  display: flex;
-  min-width: 0;
-}
-
-/* The row is the system's Row; these are its three parts. The label keeps its width and the
+/* The row is the system's Row as an option of the list; these are its three parts. The label keeps its width and the
    menu path is what gives way; the trailing column ends as far from the box's edge as the label
    starts from it. */
 .palette-label {
@@ -186,10 +179,10 @@
 }
 
 /* A row that cannot run: the Row's disabled ink carries through its quiet parts too. */
-.palette-option[aria-disabled="true"] .palette-label,
-.palette-option[aria-disabled="true"] .palette-hit,
-.palette-option[aria-disabled="true"] .palette-path,
-.palette-option[aria-disabled="true"] .palette-id {
+.palette-list [aria-disabled="true"] .palette-label,
+.palette-list [aria-disabled="true"] .palette-hit,
+.palette-list [aria-disabled="true"] .palette-path,
+.palette-list [aria-disabled="true"] .palette-id {
   color: inherit;
 }
 

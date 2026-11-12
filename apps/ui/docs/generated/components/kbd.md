@@ -14,9 +14,9 @@ Not applicable: hand-rolled — a native `<kbd>` on one recipe. It replaces two 
 `<Kbd>esc</Kbd>` — the key that stops a running request, beside Stop.
 
 Real uses, 5 call sites (`rg -c "<Kbd" src/components` → `src/components/AssistantPane.tsx:4`, `src/components/CommandPalette.tsx:4`):
-- `src/components/AssistantPane.tsx:842` — the `esc` cap beside the Stop button on the run row over the composer, shown while a request runs.
-- `src/components/CommandPalette.tsx:266` — each command's shortcut at the end of its palette row, written by `shortcutLabel` for the platform; a command with no shortcut draws no cap.
-- `src/components/CommandPalette.tsx:288` — the palette footer's three caps (Enter, Tab, Esc) beside Run, Complete and Close.
+- `src/components/AssistantPane.tsx:872` — the `esc` cap beside the Stop button on the run row over the composer, shown while a request runs.
+- `src/components/CommandPalette.tsx:261` — each command's shortcut at the end of its palette row, written by `shortcutLabel` for the platform; a command with no shortcut draws no cap.
+- `src/components/CommandPalette.tsx:282` — the palette footer's three caps (Enter, Tab, Esc) beside Run, Complete and Close.
 
 ### Example files
 | File | Covers | Caption |
@@ -90,10 +90,10 @@ Not applicable: no motion.
 - The shortcut is a hint that should show only on hover. Use `Tooltip` instead.
 
 ### Rules
-- `rule/kbd-beside-action`: When a cap is rendered, place it directly after the 1 action its key runs (the button, or the row's label), because a cap on its own names a key without saying what the key does. Evidence: app 2/2 caps follow their action, `src/components/AssistantPane.tsx:687` and `src/components/CommandPalette.tsx:144`. Check: review `src/components/AssistantPane.tsx`.
+- `rule/kbd-beside-action`: When a cap is rendered, place it directly after the 1 action its key runs (the button, or the row's label), because a cap on its own names a key without saying what the key does. Evidence: app 2/2 caps follow their action, `src/components/AssistantPane.tsx:691` and `src/components/CommandPalette.tsx:140`. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Kbd>esc</Kbd>` alone on a status row.
   - Do: `<Button variant="ghost" size="sm" onClick={stop}>Stop</Button><Kbd>esc</Kbd>`
-- `rule/kbd-not-a-control`: When the shortcut's action must be clickable, put the handler on the `Button` or `Row` beside the cap rather than on the cap, because a `<kbd>` has no role and no tab stop, so a click handler on it is unreachable by keyboard. Evidence: app 2/2 caps take no handler, `src/components/AssistantPane.tsx:814` and `src/components/CommandPalette.tsx:144`. Check: test `src/ui/Kbd.test.tsx`.
+- `rule/kbd-not-a-control`: When the shortcut's action must be clickable, put the handler on the `Button` or `Row` beside the cap rather than on the cap, because a `<kbd>` has no role and no tab stop, so a click handler on it is unreachable by keyboard. Evidence: app 2/2 caps take no handler, `src/components/AssistantPane.tsx:844` and `src/components/CommandPalette.tsx:144`. Check: test `src/ui/Kbd.test.tsx`.
   - Don't: `<span onClick={stop}><Kbd>esc</Kbd></span>`
   - Do: `<Button variant="ghost" size="sm" onClick={stop}>Stop</Button><Kbd>esc</Kbd>`
 
@@ -103,7 +103,7 @@ Not applicable: no motion.
   - Do: `<Kbd>{shortcutLabel("Cmd+S", mac)}</Kbd>`
 
 ### Anti-slop
-- `rule/kbd-canonical-element`: When a surface shows a key, render `Kbd` rather than a raw `<kbd>` with its own class, because the 2 replaced classes drew the same cap in 2 faces and 2 inks. Evidence: app 2/2 hand-built caps replaced (`.assistant-key` and `.palette-key`), `src/components/AssistantPane.tsx:695` and `src/components/CommandPalette.tsx:144`. Check: review `src/ui/Kbd.tsx`.
+- `rule/kbd-canonical-element`: When a surface shows a key, render `Kbd` rather than a raw `<kbd>` with its own class, because the 2 replaced classes drew the same cap in 2 faces and 2 inks. Evidence: app 2/2 hand-built caps replaced (`.assistant-key` and `.palette-key`), `src/components/AssistantPane.tsx:679` and `src/components/CommandPalette.tsx:144`. Check: review `src/ui/Kbd.tsx`.
   - Don't: `<kbd class="assistant-key">esc</kbd>`
   - Do: `<Kbd>esc</Kbd>`
 

@@ -6,6 +6,13 @@
  * that stayed inside the click slop is a pick (`onPick(worldPoint, shiftKey, worldPerPixel)`);
  * every pointer move reports the world position through `onCursor`, and leaving reports null.
  *
+ * While a command runs, `wants` says what the pointer is for. A command that wants a point takes
+ * it from the left press, where it goes down (`onPoint`), under a crosshair, and the drag that
+ * may follow draws no rectangle. One that wants objects takes a click as a point too (the engine
+ * picks there) and a rectangle through `onSelectRect`, as at rest. One that wants only what is
+ * typed takes nothing from the left button. The middle button and the wheel work throughout, and
+ * a right click is `onContext` (the shell's Enter), with the browser's menu kept off the canvas.
+ *
  * The component owns the pointer state, the device-pixel-ratio sizing and the frame: however many
  * wheel, pointer or resize events arrive between two frames, the shell hears of one view and the
  * display list is drawn once, and nothing is drawn while nothing changes. The drawing lives in
@@ -25,6 +32,7 @@ import { createEffect, createUniqueId, onCleanup, onMount, type Accessor, type J
 import type { DisplayList } from "../display";
 import type { AppFacade } from "../facade";
 import { drawDisplay, paletteFrom, samePalette, type Palette } from "../canvas";
+import type { PointerWants } from "../prompt";
 import { clickSlop, dragKind, pickReach, sameSelection } from "../selection";
 import { fitAspect, panBy, pinchOf, pinchView, resizeView, screenToWorld, wheelZoomFactor, zoomAt, type Point, type Rect, type ScreenBox, type ScreenSize } from "../view";
 import "../canvas.css";
@@ -53,14 +61,23 @@ export interface CanvasViewProps {
    * pass this, a left drag pans, as it always has; passing it turns the left drag into the
    * rectangle (the engine's `select {window, crossing}`) and leaves panning to the middle button.
    */
-  onSelectRect?: (rect: Rect, kind: "window" | "crossing", shift: boolean) => void;
+  onSelectRect?: (rect: Rect, kind: "window" | "crossing", shift: boolean, worldPerPixel: number) => void;
+  /** What the pointer is for while the running command's prompt is up; absent is at rest. */
+  wants?: PointerWants | Accessor<PointerWants>;
+  /**
+   * A point given to the running command: the world point and the world size of one CSS pixel.
+   * Called for a left press while `wants` is "point", and for a click while it is "select".
+   */
+  onPoint?: (point: Point, worldPerPixel: number) => void;
+  /** A right click on the drawing: Enter, as CAD programs read it. */
+  onContext?: () => void;
 }
 
 const FALLBACK_PALETTE: Palette = { canvas: "#181818", gridMinor: "#202020", gridMajor: "#2a2a2a", axisX: "#552633", axisY: "#23412f", selection: "#81a1c1" };
 
 /** What the canvas is and how to work on it without a pointer: its accessible description. */
 export const CANVAS_HELP =
-  "The drawing area. With a pointer: click an object to select it, drag a rectangle to select several (to the right for those inside it, to the left for those it touches), drag with the middle button to pan, turn the wheel to zoom. With the keyboard: type a command, such as LINE, ZOOM or PAN, and it goes to the command line; Enter or Space repeats the last command, or accepts the running command's default; Escape cancels the running command; F6 moves to the next part of the window.";
+  "The drawing area. With a pointer: click an object to add it to the selection, drag a rectangle to add several (to the right for those inside it, to the left for those it touches), hold Shift to remove from the selection instead, drag with the middle button to pan, turn the wheel to zoom. While a command asks for a point, a click gives it that point; while it asks for objects, clicks and rectangles pick them. A right click is Enter. With the keyboard: type a command, such as LINE, ZOOM or PAN, and it goes to the command line; Enter or Space repeats the last command, or accepts the running command's default; Escape cancels the running command; F6 moves to the next part of the window.";
 
 /** Two middle presses this close in time (ms) are a double click: zoom to the extents. */
 const DOUBLE_CLICK_MS = 400;
@@ -125,6 +142,13 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
   let palette: Palette = FALLBACK_PALETTE;
   /** The view the pointer has made since the last frame; the shell hears of it at the frame. */
   let local: Rect | null = null;
+  /**
+   * The view as it was given before it was fitted to the canvas's shape (the first view of a
+   * drawing, a view a command set), while the hand has not moved it since. A canvas that changes
+   * size re-fits that view, so a drawing nobody has panned or zoomed stays whole and centred; once
+   * the pointer moves the view this is null and a size change keeps the drawing where it is.
+   */
+  let fitted: Rect | null = null;
   /** The pending animation frame, or 0. */
   let frame = 0;
   let drawn: Drawn | null = null;
@@ -142,6 +166,8 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
 
   const view = (): Rect => local ?? read(props.view) ?? { x0: 0, y0: 0, x1: 1, y1: 1 };
 
+  const wants = (): PointerWants => read(props.wants) ?? "idle";
+
   const measured = (): boolean => size.w > 0 && size.h > 0;
 
   /** A client point in the canvas's own CSS px, or null when the canvas has no box. */
@@ -155,6 +181,13 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
   const worldAt = (clientX: number, clientY: number): Point | null => {
     const p = localPoint(clientX, clientY);
     return p === null ? null : screenToWorld(view(), size, p);
+  };
+
+  /** The world size of one CSS pixel in the view on screen; 0 when it cannot be said. */
+  const worldPerPixel = (): number => {
+    const rect = view();
+    const perPixel = measured() ? (rect.x1 - rect.x0) / size.w : 0;
+    return Number.isFinite(perPixel) && perPixel > 0 ? perPixel : 0;
   };
 
   const paint = (): void => {
@@ -197,7 +230,10 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
   const flush = (): void => {
     if (frame !== 0) cancelAnimationFrame(frame);
     frame = 0;
-    if (measured() && isStretched(view(), size)) local = fitAspect(view(), size);
+    if (measured() && isStretched(view(), size)) {
+      fitted = view();
+      local = fitAspect(fitted, size);
+    }
     if (local !== null) {
       const next = local;
       local = null;
@@ -214,6 +250,7 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
 
   /** Move the view from the pointer: applied now for the math, shown and reported at the frame. */
   const setLocal = (rect: Rect): void => {
+    fitted = null;
     local = rect;
     schedule();
   };
@@ -262,9 +299,10 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
         if (pixels.w !== pxW || pixels.h !== pxH) pixels = { w: pxW, h: pxH };
         const next: ScreenBox = { left: box.left, top: box.top, w: pxW / scale, h: pxH / scale };
         size = { w: next.w, h: next.h };
-        // The canvas changed size (a panel folded, a window resize): the drawing stays where it
-        // is in the window, at its zoom. A first measure has no box to keep and goes to the fit.
-        if (shown !== null && (shown.w !== next.w || shown.h !== next.h)) local = resizeView(view(), shown, next);
+        // The canvas changed size (a panel folded, a window resize): a view the hand has moved
+        // stays where it is in the window, at its zoom; a view still as it was fitted is fitted
+        // again. A first measure has no box to keep and goes to the fit.
+        if (shown !== null && (shown.w !== next.w || shown.h !== next.h)) local = fitted !== null ? fitAspect(fitted, next) : resizeView(view(), shown, next);
         shown = next;
         flush();
       };
@@ -312,6 +350,14 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
       onCleanup(() => canvas?.removeEventListener("wheel", onWheel));
     }
   });
+
+  /** Give the running command the point under a client position, in the view on screen. */
+  const givePoint = (clientX: number, clientY: number): void => {
+    // The shell and the engine read the view: hand it over before the point made in it.
+    flush();
+    const world = worldAt(clientX, clientY);
+    if (world !== null) props.onPoint?.(world, worldPerPixel());
+  };
 
   /** Name the gesture in hand on the canvas, which is what sets its cursor (canvas.css). */
   const setGesture = (gesture: "pan" | "select" | null): void => {
@@ -391,6 +437,17 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
         return;
       }
     }
+    if (e.button === 0) {
+      const want = wants();
+      // A command that wants a point takes it where the button goes down, as a CAD program does:
+      // there is no release to wait for, and the travel that may follow is not a rectangle.
+      if (want === "point") {
+        givePoint(e.clientX, e.clientY);
+        return;
+      }
+      // One that wants a keyword, a number or text takes nothing from the left button.
+      if (want === "typed") return;
+    }
     // A finger has no second button: its drag pans, and two fingers pan and pinch. A mouse or a pen
     // drags a selection rectangle with the left button and pans with the middle one.
     const mode = e.button === 0 && e.pointerType !== "touch" && props.onSelectRect !== undefined ? "select" : "pan";
@@ -469,11 +526,15 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     if (!up || d.button !== 0 || !measured()) return;
     // The shell picks and selects through the engine's view: hand it the view first.
     flush();
-    const rect = view();
+    const want = wants();
     if (!d.moved) {
-      const world = worldAt(e.clientX, e.clientY);
-      const perPixel = ((rect.x1 - rect.x0) / size.w) * pickReach(d.pointerType);
-      if (world !== null) props.onPick?.(world, e.shiftKey, Number.isFinite(perPixel) && perPixel > 0 ? perPixel : 0);
+      // A finger's tap while a command wants a point, and any click while it wants objects, is
+      // that point; a click at rest picks.
+      if (want === "point" || want === "select") givePoint(e.clientX, e.clientY);
+      else if (want === "idle") {
+        const world = worldAt(e.clientX, e.clientY);
+        if (world !== null) props.onPick?.(world, e.shiftKey, worldPerPixel() * pickReach(d.pointerType));
+      }
       return;
     }
     if (d.mode !== "select") return;
@@ -481,7 +542,18 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     const a = worldAt(d.downX, d.downY);
     const b = worldAt(e.clientX, e.clientY);
     if (kind === "click" || a === null || b === null) return;
-    props.onSelectRect?.({ x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) }, kind, e.shiftKey);
+    props.onSelectRect?.({ x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) }, kind, e.shiftKey, worldPerPixel());
+  };
+
+  /**
+   * The right button's click. The browser's menu never opens over the drawing; the click itself
+   * is the shell's Enter, unless a press is in hand (a rectangle or a pan under way is not ended
+   * by it) or it came from a finger held down, which is not a right click.
+   */
+  const onContextMenu = (e: MouseEvent): void => {
+    e.preventDefault();
+    if (drag !== null || touches.size > 0 || (e instanceof PointerEvent && e.pointerType === "touch")) return;
+    props.onContext?.();
   };
 
   const onPointerLeave = (): void => {
@@ -493,13 +565,14 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
       <canvas
         ref={canvas}
         class="canvas"
+        data-wants={wants() === "point" ? "point" : undefined}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={(e) => endPointer(e, true)}
         onPointerCancel={(e) => endPointer(e, false)}
         onLostPointerCapture={(e) => endPointer(e, false)}
         onPointerLeave={onPointerLeave}
-        onContextMenu={(e) => e.preventDefault()}
+        onContextMenu={onContextMenu}
       />
       <div class="canvas-marquee" ref={marquee} hidden aria-hidden="true" />
       <p id={helpId} hidden>

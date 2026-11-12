@@ -111,92 +111,21 @@
   justify-content: flex-end;
 }
 
-/* A value is text until it is touched: transparent field, hairline on hover, the focus edge when
-   it has the keyboard. The field's box overhangs the column by its own padding and border, so the text inside it ends
-   on the same edge as a read-only value, at rest and while editing. */
-.prop-input,
-.prop-select {
+/* A choice is the layer's Select and a typed value its Field, both overhanging the column by the
+   same padding and border: its arrow ends on the edge the typed and the read-only values end on,
+   and its value ends a gap before the arrow. The figures line up with the typed ones. */
+.prop-choice {
   flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   width: calc(100% + var(--gap-4) + var(--hairline));
   min-width: 0;
-  height: var(--control-h-chip);
   margin-right: calc(-1 * (var(--gap-4) + var(--hairline)));
-  padding: 0 var(--gap-4);
-  border: var(--hairline) solid transparent;
-  border-radius: var(--radius-small);
-  background: transparent;
-  color: var(--text);
-  /* Values are words and numbers, not code: the interface's own face, with figures that line up. */
-  font-family: var(--font-family);
   font-variant-numeric: lining-nums tabular-nums;
-  font-size: var(--font-body);
-  /* The line fills the field inside its hairlines, so the text sits on the read-only values'
-     baseline rather than a half pixel off it. */
+  /* The value's line fills the box inside its hairlines, as a typed field's does: left at the
+     face's own line it is centred half a pixel off the baseline the label and the typed values
+     share. */
   line-height: calc(var(--control-h-chip) - 2 * var(--hairline));
-  text-align: right;
-  text-overflow: ellipsis;
-}
-
-@media (hover: hover) {
-  .prop-input:hover,
-  .prop-select:hover {
-    border-color: var(--border);
-    background: var(--control);
-  }
-}
-
-.prop-input:focus-visible,
-.prop-select:focus-visible {
-  outline: none;
-  border-color: var(--focus-ring);
-  background: var(--control);
-}
-
-/* A value the row refused: the error hairline, over hover and focus alike, until it is corrected
-   or given up (Escape, or leaving the field, brings the old value back). */
-.prop-input[aria-invalid="true"] {
-  border-color: var(--error);
-  background: var(--control);
-}
-
-/* The browser centres a typed value in its field and rounds the half pixel down the page, a pixel
-   under the label and the chosen values; a hairline of padding underneath rounds it back up. */
-.prop-input {
-  padding-bottom: var(--hairline);
-}
-
-/* Objects that disagree: the placeholder reads quieter than a real value. */
-.prop-input.is-varies,
-.prop-select.is-varies {
-  color: var(--text-faint);
-}
-
-/* The open list's choices are real values again. */
-.prop-select.is-varies option {
-  color: var(--text);
-}
-
-/* The chosen option ends on the value edge, the one the typed and the read-only values end on:
-   the platform's arrow is not drawn (it pushed a choice a glyph short of that edge), and the
-   field that shows under the pointer and the keyboard says the value can be changed. */
-.prop-select {
-  appearance: none;
-  text-align-last: right;
-  cursor: pointer;
-}
-
-.prop-check {
-  flex: 0 0 auto;
-  width: calc(var(--icon-size-md) - var(--hairline));
-  height: calc(var(--icon-size-md) - var(--hairline));
-  margin: 0;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
-.prop-check:focus-visible {
-  outline: var(--focus-outline-w) solid var(--focus-ring);
-  outline-offset: var(--hairline);
 }
 
 /* A value that cannot be edited reads a step quieter than one that can. It cannot take the

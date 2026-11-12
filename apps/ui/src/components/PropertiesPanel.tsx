@@ -10,18 +10,25 @@
  * reaching the shell's own Escape; an unchanged value sends nothing; a control keeps its element
  * (and so the focus) across refreshes.
  *
+ * The choice and the tick are the layer's `Select` (inline, small, its value ending on the arrow's
+ * side) and `Checkbox`; each sits in the value column and is named by its row's label.
+ *
  * No native `title` here: text an ellipsis cuts (a label, the head's count) opts in to the
- * system's hint with an empty `data-hint`, a field shows its value while it cuts it
- * (`hintWhenClipped`), and a read-only value wraps and so needs none.
+ * system's hint with an empty `data-hint`, a typed field shows its value while it cuts it
+ * (the `Field` shows its own), a choice shows its own (the `Select` does), and a read-only value wraps and
+ * so needs none.
  *
  * No engine call lives here: the shell owns the facade, shows a notice for a refused set, and
  * refreshes the reply.
  */
 
-import { createEffect, createMemo, createSignal, For, Index, Match, onCleanup, Show, Switch, untrack, type Accessor, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, Index, Match, onCleanup, Show, Switch, untrack, type Accessor, type JSX } from "solid-js";
 import { judgeDraft, VARIES, type PropRow, type PropertiesReply } from "../props";
+import { Checkbox } from "../ui/Checkbox";
+import { Field } from "../ui/Field";
 import { IconButton } from "../ui/IconButton";
 import { SectionLabel } from "../ui/SectionLabel";
+import { Select, type SelectOption } from "../ui/Select";
 import "../interaction.css";
 
 export interface PropertiesPanelProps {
@@ -75,27 +82,9 @@ export function PropertiesPanel(props: PropertiesPanelProps): JSX.Element {
   );
 }
 
-/** Whether a field is too narrow for its value. A text field scrolls, so its own box says; a
- *  choice does not, so its value is measured in the field's font against the room inside it. */
-function cuts(field: HTMLInputElement | HTMLSelectElement): boolean {
-  if (field instanceof HTMLInputElement) return field.scrollWidth > field.clientWidth;
-  const style = getComputedStyle(field);
-  const pen = document.createElement("canvas").getContext("2d");
-  if (pen === null) return true;
-  // Not `style.font`: the shorthand computes to nothing when a longhand it cannot hold is set.
-  pen.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-  return pen.measureText(field.value).width > field.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
-}
-
-/**
- * A field's hint is its whole value, and only while the field cuts it: a field has no text of its
- * own for the layer to measure, so the field is measured here, just before the hint asks (the
- * pointer arriving, the focus arriving). A value that fits raises no hint.
- */
-function hintWhenClipped(field: HTMLInputElement | HTMLSelectElement): void {
-  const mark = (): void => field.setAttribute("data-hint", cuts(field) ? field.value : "");
-  field.addEventListener("pointerover", mark);
-  field.addEventListener("focusin", mark);
+/** A choice row's values as the `Select` takes them: each is its own label. */
+export function choiceOptions(choices: readonly string[] | undefined): SelectOption[] {
+  return (choices ?? []).map((value) => ({ value, label: value }));
 }
 
 interface PropRowViewProps {
@@ -188,7 +177,7 @@ function PropRowView(props: PropRowViewProps): JSX.Element {
   /** Which control the row gets; the control is kept across refreshes, so focus survives one. */
   const mode = createMemo((): "readonly" | PropRow["kind"] => (props.row().editable ? props.row().kind : "readonly"));
   /** A choice row's options, as `parseProperties` set them (the layer row's are the drawing's layers). */
-  const options = createMemo((): readonly string[] => props.row().choices ?? []);
+  const options = createMemo((): SelectOption[] => choiceOptions(props.row().choices));
   /** A tick box over objects that disagree (or a value that is neither) is neither on nor off. */
   const mixed = (): boolean => draft() !== "true" && draft() !== "false";
 
@@ -203,71 +192,57 @@ function PropRowView(props: PropRowViewProps): JSX.Element {
             <span class="prop-readonly">{props.row().value}</span>
           </Match>
           <Match when={mode() === "bool"}>
-            <input
-              class="prop-check"
-              type="checkbox"
+            <Checkbox
+              ariaLabel={props.row().label}
               checked={draft() === "true"}
-              ref={(el) => {
-                createEffect(() => {
-                  el.indeterminate = mixed();
-                });
-              }}
-              aria-label={props.row().label}
-              onChange={(e) => {
-                const value = e.currentTarget.checked ? "true" : "false";
+              mixed={mixed()}
+              onChange={(checked) => {
+                const value = checked ? "true" : "false";
                 setDraft(value);
                 commit(value);
               }}
             />
           </Match>
           <Match when={mode() === "choice"}>
-            <select
-              class="prop-select"
-              classList={{ "is-varies": draft() === VARIES }}
-              data-hint=""
-              ref={hintWhenClipped}
-              aria-label={props.row().label}
-              onChange={(e) => {
-                const value = e.currentTarget.value;
-                setDraft(value);
-                commit(value);
-              }}
-            >
-              <Show when={!options().includes(draft())}>
-                <option value={draft()} selected>
-                  {draft()}
-                </option>
-              </Show>
-              <For each={options()}>
-                {(option) => (
-                  <option value={option} selected={option === draft()}>
-                    {option}
-                  </option>
-                )}
-              </For>
-            </select>
+            <span class="prop-choice">
+              <Select
+                variant="inline"
+                size="sm"
+                align="end"
+                ariaLabel={props.row().label}
+                value={draft()}
+                mixed={draft() === VARIES}
+                placeholder={VARIES}
+                options={options()}
+                onChange={(value) => {
+                  setDraft(value);
+                  commit(value);
+                }}
+              />
+            </span>
           </Match>
           <Match when={mode() === "text" || mode() === "number"}>
-            <input
-              class="prop-input"
-              classList={{ "is-varies": draft() === VARIES }}
-              type="text"
-              inputmode={mode() === "number" ? "decimal" : undefined}
-              spellcheck={false}
-              autocomplete="off"
-              value={draft()}
-              data-hint=""
-              ref={hintWhenClipped}
-              aria-label={props.row().label}
-              aria-invalid={invalid() ? "true" : undefined}
-              onInput={(e) => {
-                setDirty(true);
-                setInvalid(false);
-                setDraft(e.currentTarget.value);
-              }}
-              onKeyDown={onKeyDown}
-              onBlur={() => commitText(true)}
-            />
+            <span class="prop-choice">
+              <Field
+                variant="inline"
+                size="sm"
+                align="end"
+                ariaLabel={props.row().label}
+                value={draft()}
+                mixed={draft() === VARIES}
+                invalid={invalid()}
+                inputMode={mode() === "number" ? "decimal" : undefined}
+                spellcheck={false}
+                autocomplete="off"
+                onInput={(value) => {
+                  setDirty(true);
+                  setInvalid(false);
+                  setDraft(value);
+                }}
+                onKeyDown={onKeyDown}
+                onBlur={() => commitText(true)}
+              />
+            </span>
           </Match>
         </Switch>
       </span>

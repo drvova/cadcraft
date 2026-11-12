@@ -26,6 +26,8 @@ export interface PaletteItem {
   shortcut: string;
   aliases: readonly string[];
   enabled: boolean;
+  /** The other ids that are this same action and show as this one row (`foldTwins`). */
+  twins?: readonly string[];
 }
 
 /** A row that matched, with the label's matched letters. */
@@ -52,7 +54,49 @@ function parentPath(segments: readonly string[]): string {
     .join(" > ");
 }
 
-/** The rows the palette lists: the registry's commands, then the shell's own items, by label. */
+/**
+ * One action, one row. The registry names some actions twice: the command a menu holds and a
+ * second id with the same label, no menu placement, and a longer or shorter spelling of the same
+ * name (`u` and `undo`, `redo` and `mredo`, `open` and the shell's `ui.open`). Such a twin folds
+ * into the row the menu holds, which keeps its own id, path and shortcut: the twin's id and
+ * aliases become aliases of that row, so the name still matches and is the one printed when it
+ * is what was typed (a `ui.*` id is never typed, so it is only remembered in `twins`).
+ *
+ * A shared label alone is not one action. Two commands that each have a menu placement are two
+ * (Modify > Copy, Edit > Copy), and so is an unplaced command whose name is not the placed one's
+ * (`dclinear`, a constraint, beside `dimlinear`, a dimension): they stay two rows, told apart by
+ * their path or their name.
+ */
+function foldTwins(items: readonly PaletteItem[]): PaletteItem[] {
+  const sameName = (a: string, b: string): boolean => a.includes(b) || b.includes(a);
+  const groups = new Map<string, PaletteItem[]>();
+  for (const item of items) {
+    const key = item.label.toLowerCase();
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+  const folded: PaletteItem[] = [];
+  for (const group of groups.values()) {
+    const placed = group.filter((item) => item.path !== "");
+    const canonical = placed[0];
+    // With several placed rows, or none, no one row is the canonical one.
+    const twins = placed.length === 1 && canonical !== undefined ? group.filter((item) => item !== canonical && sameName(item.id.toLowerCase(), canonical.id.toLowerCase())) : [];
+    if (canonical === undefined || twins.length === 0) {
+      folded.push(...group);
+      continue;
+    }
+    folded.push(...group.filter((item) => item !== canonical && !twins.includes(item)));
+    const names = twins.flatMap((twin) => [...(twin.id.startsWith("ui.") ? [] : [twin.id]), ...twin.aliases]);
+    folded.push({
+      ...canonical,
+      shortcut: canonical.shortcut !== "" ? canonical.shortcut : (twins.find((twin) => twin.shortcut !== "")?.shortcut ?? ""),
+      aliases: [...new Set([...canonical.aliases, ...names])].filter((name) => name !== canonical.id),
+      twins: twins.map((twin) => twin.id),
+    });
+  }
+  return folded;
+}
+
+/** The rows the palette lists: the registry's commands, then the shell's own items, by label, each action once. */
 export function paletteItems(commands: readonly CommandInfo[], uiItems: readonly UiItem[]): PaletteItem[] {
   const items: PaletteItem[] = [];
   const seen = new Set<string>();
@@ -66,7 +110,18 @@ export function paletteItems(commands: readonly CommandInfo[], uiItems: readonly
     seen.add(u.id);
     items.push({ id: u.id, label: u.label, path: parentPath(u.menu), shortcut: u.shortcut ?? "", aliases: [], enabled: true });
   }
-  return items.sort((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id));
+  return foldTwins(items).sort((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id));
+}
+
+/**
+ * The recently used commands that are still in the list, newest first, each row once. An id
+ * remembered from before its row folded into another (`twins`) counts as that row.
+ */
+export function recentItems(items: readonly PaletteItem[], recent: readonly string[]): PaletteItem[] {
+  const byId = new Map<string, PaletteItem>();
+  for (const item of items) for (const id of item.twins ?? []) byId.set(id, item);
+  for (const item of items) byId.set(item.id, item);
+  return [...new Set(recent.map((id) => byId.get(id)).filter((item): item is PaletteItem => item !== undefined))];
 }
 
 const isWordStart = (text: string, at: number): boolean => at === 0 || /[^a-z0-9]/.test(text[at - 1] ?? "");
@@ -280,13 +335,13 @@ const DISABLED = 100_000_000;
 export function rankCommands(query: string, items: readonly PaletteItem[], recent: readonly string[], limit: number = PALETTE_LIMIT): PaletteMatch[] {
   const q = query.trim().toLowerCase();
   if (q === "") {
-    const byId = new Map(items.map((item) => [item.id, item]));
-    const first = recent.map((id) => byId.get(id)).filter((item): item is PaletteItem => item !== undefined);
+    const first = recentItems(items, recent);
     const firstIds = new Set(first.map((item) => item.id));
     return [...first, ...items.filter((item) => !firstIds.has(item.id))].slice(0, limit).map((item) => ({ item, score: 0, indices: [] }));
   }
   const words = q.split(/\s+/);
-  const recency = new Map(recent.map((id, i) => [id, recent.length - i]));
+  const used = recentItems(items, recent);
+  const recency = new Map(used.map((item, i) => [item.id, used.length - i]));
   const sure: PaletteMatch[] = [];
   const guesses: PaletteMatch[] = [];
   for (const item of items) {

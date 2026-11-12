@@ -15,9 +15,13 @@
  * key the input method is using: Enter that confirms a candidate is not Enter that sends.
  *
  * `title` is the layer's hint (`./Tooltip.tsx`), never the native attribute, as on `Field`.
+ *
+ * A text area that drives a list (the composer's slash commands) is a combobox while it does:
+ * `role`, `expanded`, `controls`, `activeDescendant` and `autocompleteKind`, as on `Field`.
  */
 
 import { createRenderEffect, onCleanup, onMount, type JSX } from "solid-js";
+import type { AutocompleteKind } from "./Field";
 import { describeByHint, installHints } from "./Tooltip";
 
 /** `field` is the form control; `bare` the editor inside a card that draws its own box and focus. */
@@ -60,6 +64,17 @@ export interface TextAreaProps {
   onPaste?: (event: ClipboardEvent) => void;
   /** Hands the element to the caller, to focus it or to place the caret. */
   ref?: (el: HTMLTextAreaElement) => void;
+  /** The text drives a list of matches and keeps the keyboard: `combobox`. Pass `expanded`,
+   *  `controls` and `activeDescendant` with it, and drop all of them when the list goes. */
+  role?: "combobox";
+  /** A combobox: whether its list is showing now (`aria-expanded`). */
+  expanded?: boolean;
+  /** A combobox: the `id` of its list (`aria-controls`). */
+  controls?: string;
+  /** A combobox: the `id` of the option the arrow keys are on (`aria-activedescendant`); unset when none is. */
+  activeDescendant?: string;
+  /** A combobox: what its list does with the typed text (`aria-autocomplete`). */
+  autocompleteKind?: AutocompleteKind;
 }
 
 export const TEXTAREA_ROWS = 2;
@@ -128,6 +143,16 @@ export function TextArea(props: TextAreaProps): JSX.Element {
     observer.observe(area);
     onCleanup(() => observer.disconnect());
   });
+  onMount(() => {
+    // A line's height changes with no change of width when the face arrives after the first
+    // paint, and when the pointer turns coarse (a tablet's keyboard comes off) and the type
+    // steps up to 16px.
+    void document.fonts?.ready.then(refit);
+    if (typeof matchMedia !== "function") return;
+    const coarse = matchMedia("(pointer: coarse)");
+    coarse.addEventListener("change", refit);
+    onCleanup(() => coarse.removeEventListener("change", refit));
+  });
   return (
     <textarea
       ref={(el: HTMLTextAreaElement) => {
@@ -152,6 +177,11 @@ export function TextArea(props: TextAreaProps): JSX.Element {
       autofocus={props.autoFocus}
       autocomplete={props.autocomplete}
       spellcheck={props.spellcheck}
+      role={props.role}
+      aria-expanded={props.expanded === undefined ? undefined : props.expanded}
+      aria-controls={props.controls}
+      aria-activedescendant={props.activeDescendant}
+      aria-autocomplete={props.autocompleteKind}
       onInput={(event) => {
         props.onInput?.(event.currentTarget.value);
         refit();

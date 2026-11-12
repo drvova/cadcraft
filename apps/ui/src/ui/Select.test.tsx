@@ -8,7 +8,7 @@
 import { describe, expect, test } from "bun:test";
 import { createSignal } from "solid-js";
 import { Select, type SelectOption } from "./Select";
-import { hintContent } from "./Tooltip";
+import { HINT_WARM_MS, hintContent } from "./Tooltip";
 import { mount } from "../test-utils";
 
 const LAYERS: readonly SelectOption[] = [
@@ -149,5 +149,27 @@ describe("Select", () => {
     Object.defineProperty(value, "clientWidth", { value: 80 });
     // The label is the value shown, not every choice the select holds.
     expect(hintContent(host)).toEqual({ text: "Walls", keys: "", note: "New objects go on this layer" });
+  });
+
+  test("the hint a key brought goes away at the key that opens the list, and stays for Tab and a bare modifier", async () => {
+    const select = selectIn(mount(() => <Select value="walls" options={LAYERS} ariaLabel="Layer" title="New objects go on this layer" />));
+    const shown = (): boolean => document.body.querySelector(":scope > .ui-tooltip")?.classList.contains("ui-tooltip--shown") === true;
+    const key = (name: string): boolean => select.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    select.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    expect(shown()).toBe(true);
+    key("Shift");
+    expect(shown()).toBe(true);
+    key(" ");
+    expect(shown()).toBe(false);
+    select.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    select.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    expect(shown()).toBe(true);
+    key("ArrowDown");
+    expect(shown()).toBe(false);
+    select.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    // The next hint in the document arrives without its delay for a moment after one went away.
+    await new Promise((resolve) => setTimeout(resolve, HINT_WARM_MS + 20));
   });
 });

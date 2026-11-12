@@ -14,7 +14,7 @@ is a one-off with no shared API and no states.
 - **Button** — pick `ui/Button.tsx` (native `<button>`). Variants `primary | secondary | ghost | danger`, default `secondary` (Cursor's own default button). Loses: `.button` (TopBar — one call site), `.assistant-send` / `.assistant-save` / `.assistant-ghost` (assistant-only, their own colours), `.assistant-preset` (a suggestion chip wearing a button), `.tool-button` (ToolStrip — a grid cell, no variants), `.menu-row` (a menu item, not a general button).
 - **IconButton** — pick `ui/IconButton.tsx` (native `<button>`, a drawn icon + label). Variants `ghost | soft | inverted`; sizes `md` (24px) and `sm` (20px). Loses: `.assistant-icon` (three uses, fixed 24px, no variant), `.assistant-attachment-x` (one-off), `.layer-toggles` buttons (LayersPanel — a toggle cluster with its own semantics), `.status-toggle` (StatusBar — a drafting toggle with its own short-label face, an `aria-pressed` switch).
 - **Chip** — pick `ui/Chip.tsx` (native `<button>` when interactive, `<span>` when not). Loses: `.chip` (TopBar — a static fact, no interaction), `.keyword-chip` (CommandLine — interactive, no tone/size API), `.cmd-chips` (a container, not a chip).
-- **Field** — pick `ui/Field.tsx` (native `<input>`, single-line). Loses: `.assistant-input`, `.cmd-input`, `.prop-input` (each one surface's own padding and border), `.assistant-field` (a label wrapper, not the control). The composer's auto-growing `<textarea>` and the properties palette's `<select>` were found-not-fixed here until 2026-11-11; `TextArea` and `Select` below are their picks.
+- **Field** — pick `ui/Field.tsx` (native `<input>`, single-line). Variants `field | inline`, sizes `md` (24px) and `sm` (20px), `align` `start | end`, as Select ("A value in a dense row" below). Loses: `.assistant-input`, `.cmd-input`, `.prop-input` (each one surface's own padding and border), `.assistant-field` (a label wrapper, not the control). The composer's auto-growing `<textarea>` and the properties palette's `<select>` were found-not-fixed here until 2026-11-11; `TextArea` and `Select` below are their picks.
 - **Select** — pick `ui/Select.tsx` (a native `<select>` under a drawn face: keyboard, type-ahead, a phone's picker and every system webview's own list are the platform's; no hand-built listbox). Variants `field | inline`, sizes `md` (24px) and `sm` (20px), `align` `start | end`. The value is drawn in a `<span>` over the control, which is what lets it end in an ellipsis before the arrow, end on the arrow's side and read quieter while `mixed` the same way in all three webviews. Loses: `.prop-select` (PropertiesPanel — `appearance: none` with no arrow drawn in its place, a long value cut with no ellipsis, the off-list option and the `*VARIES*` ink done by hand).
 - **Checkbox** — pick `ui/Checkbox.tsx` (a native `<input type="checkbox">` inside its `<label>`, the box and the mark drawn from tokens). No variants; states `checked`, `mixed`, `disabled`. Loses: `.prop-check` (PropertiesPanel — the platform's own box tinted with `accent-color`, a different shape and tick in each webview, 13px with no touch target).
 - **TextArea** — pick `ui/TextArea.tsx` (a native `<textarea>` that measures its own height between `rows` and `maxRows`). Variants `field | bare`. Loses: `.assistant-input` with its `grow` function (AssistantPane — the limits fixed at 64px and 240px beside a type size that can change).
@@ -31,7 +31,7 @@ is a one-off with no shared API and no states.
 - plus `disabled`, `selected`, `title`.
 - IconButton `expanded` and `controls`: a fold key says whether the region it folds is showing (`aria-expanded`) and which region it is (`aria-controls`, the region's `id`). A key is a fold key or a `selected` toggle, never both.
 - IconButton `popup`: `menu | dialog | listbox` (`aria-haspopup`), beside `expanded` and `controls`, on a key that opens something floating over the page. `menu` when what opens is a list of actions (`role="menu"`: the narrow window's Main menu), `listbox` when it is a list of values to pick one from (`role="listbox"`: a model picker), `dialog` when it holds fields or other controls (`role="dialog"`: the provider form). A fold key that shows a region in the page's own flow takes no `popup`.
-- `title` is the layer's hint on every component that takes it, and no component renders a native `title` attribute. What it is to assistive tech depends on whether the control has a visible label: on IconButton (a glyph, no label) it is the name (`aria-label`); on Button, Chip, Tab and Field (a label, or `ariaLabel`) it is the description (`aria-describedby`), never the name. "The hint" below has the reasons.
+- `title` is the layer's hint on every component that takes it, and no component renders a native `title` attribute. What it is to assistive tech depends on whether the control has a visible label: on IconButton (a glyph, no label) it is the name (`aria-label`); on Button, Chip, Tab, Row, Field, Select and TextArea (a label, or `ariaLabel`) it is the description (`aria-describedby`), never the name. "The hint" below has the reasons.
 - Button and IconButton `shortcut`: the shortcut as the user reads it (`Ctrl+Z`), drawn as a key cap in the hint and said through `aria-keyshortcuts`. `data-hint-keys` is the same thing on an element outside the layer.
 - IconButton `description`: the second line of the hint and the key's accessible description (`aria-describedby`): why it is disabled, what it will do. Button needs no such prop: its `title` already is its description.
 - `disabled` on Button and IconButton is `aria-disabled="true"`, never the native attribute ("Disabled controls" below). Field, Select, Checkbox, TextArea and Row keep the native `disabled`; a `Row option` is not a native control and says `aria-disabled="true"`.
@@ -39,14 +39,19 @@ is a one-off with no shared API and no states.
 - Field `invalid` and `describedBy`: a refused value says so (`aria-invalid="true"`, the error stroke), and the help line or the error line under a field is tied to it by `id` (`aria-describedby`). `describedBy` is the layer's name for that tie on any component that grows one, as `ariaLabel` is for the name.
 - Button `ariaLabel` (the name Field already uses for the same job): the accessible name, only where the visible label is a value rather than the action; it starts with the action and holds the visible text.
 - `ariaLabel`, `describedBy`, `invalid` and `title` mean on Select and TextArea what they mean on Field; Checkbox takes `ariaLabel` (when it has no visible label) and `describedBy`.
-- `variant` on the value controls names where the control sits, not how it looks: Select `field | inline` (a form control; a value in a dense list row that reads as text until touched), TextArea `field | bare` (a form control; the editor inside a card that draws the box and shows the focus itself).
-- Select `align`: `start | end`, the side of the box the value sits on (`end` in a column of values).
-- `mixed` (Select, Checkbox): the control stands for several things whose values differ. Select shows its `placeholder`, which is never a choice; Checkbox sets `indeterminate` and `aria-checked="mixed"`.
+- `variant` on the value controls names where the control sits, not how it looks: Select and Field `field | inline` (a form control; a value in a dense list row that reads as text until touched), TextArea `field | bare` (a form control; the editor inside a card that draws the box and shows the focus itself).
+- Select and Field `align`: `start | end`, the side of the box the value sits on (`end` in a column of values; on Field it also sets lining tabular figures, so a column of numbers lines up).
+- `mixed` (Select, Checkbox, Field): the control stands for several things whose values differ. Select shows its `placeholder`, which is never a choice; Checkbox sets `indeterminate` and `aria-checked="mixed"`; Field draws the stand-in the caller passes as its value in the quiet ink.
+- Field `readOnly`, `maxLength`, `inputMode`: the native attributes, passed through. `readOnly` is not `disabled`: the value can be focused, selected and copied.
+- Field `selectOnFocus`: the whole value is selected as focus arrives, by key or by click, so typing replaces it; a second click places the caret.
+- Field `onKeyDown`, `onFocus`, `onBlur`, `ref`: the pass-throughs a value that commits on Enter and on leaving needs. `onKeyDown` never hears a key an input method is using, as on TextArea.
+- `role`, `expanded`, `controls`, `activeDescendant`, `autocompleteKind` (Field, TextArea): a text control that drives a list of matches and keeps the keyboard is a combobox. `role` takes only `combobox`; `expanded` and `controls` mean what they mean on IconButton (`aria-expanded`, `aria-controls`); `activeDescendant` is the `id` of the option the arrow keys are on (`aria-activedescendant`); `autocompleteKind` is `aria-autocomplete` (`list | inline | both | none`), named apart from `autocomplete`, which is the platform's autofill. They are passed together or not at all: on Field for as long as the field exists (the palette's input), on TextArea only while its list shows (the composer's slash list), and `Row option` rows are the list.
 - `onChange(value)` on a control whose value is picked (Select, Checkbox) and `onInput(value)` on one whose value is typed (Field, TextArea): each hands back the value, not the event. The caller owns the value on all four, and Select and Checkbox redraw from their props after every pick, so a change the caller refuses does not stay drawn.
 - Select `options`: the choices as data (`{ value, label, disabled? }[]`), never children; a `value` that is not among them is listed first by the component.
 - TextArea `rows` and `maxRows`: the fewest lines shown and the most before it scrolls; the height between is measured, and no stylesheet sets one.
 - TextArea `onKeyDown`, `onPaste`, `ref`: the pass-throughs a composer needs. `onKeyDown` never hears a key an input method is using.
 - Row `option`, with `id` and `onPointerMove`: the row is one option of a listbox that owns the focus and the highlight.
+- Row `title`: the hint and the row's description in both forms, as on Button; the name stays the row's text.
 - Chip `tone`: `neutral | accent`.
 - No boolean style props (`round`, `big`, `blue`): a prop names a purpose; the token layer picks the look.
 
@@ -215,6 +220,19 @@ and none renders the native attribute. What moved with them:
   popup's own controls do. A fold key is `aria-expanded` too and keeps its hint: its region is in
   the page's flow and covers nothing. A control inside a modal `<dialog>` gets the box as a child
   of that dialog, because the top layer covers `<body>`.
+- **Row, the last native `title`** (2026-11-11, third pass). `Row` rendered the platform's
+  `title` in both forms; it now carries `data-hint` and ties its `title` as the description, with
+  no call-site change. Three things came with it. A component with no `title` carries `data-hint`
+  empty so its clipped label can show, and the layers panel wraps such a `Row` in a `Tooltip`: an
+  empty host now gives way to a host around it that has words. A row's label sits beside trailing
+  text (a shortcut, a path), so the full label a clipped control shows is the part that is cut,
+  not the whole row run together; and a part hidden from assistive tech is skipped, because the
+  layer's name is drawn in two pieces for the eye beside its whole text. A field's label is its
+  value (never a password's), which is what lets `Field` replace the palette's
+  `hintWhenClipped`.
+- **Not over a select's list.** A select's list opens where the box sits. A press already put the
+  box away; so does every key in a `<select>` now, except Tab and a bare modifier (Space, Enter
+  and the arrows open the list or change the value).
 - **Outside the layer.** The delegation never looked at who rendered the element, so
   `data-hint`, `data-hint-keys`, `data-hint-note` and `data-hint-placement` work on any element.
   About ninety native `title`s remain in the surfaces' own markup (the status toggles, the layer
@@ -267,6 +285,73 @@ its option.
   leave a button inside an option, which the option role flattens for assistive tech.
 - **A disabled option still takes the highlight.** The palette lights a command that cannot run
   and says why under the list; the option keeps the fill at the disabled ink and refuses the click.
+- **A disabled current button does not** (decided 2026-11-11, second pass). `row.md` said a
+  disabled selected row drops its fill and the stylesheet kept it. Both were right, each for one
+  form. In a listbox the fill is the cursor: the keys are on that option whether or not it can
+  run, and a list with no fill has lost its place. A button row's fill says "this is the current
+  one, and you can act on it"; blocked, it reads as an active item that ignores the press. So
+  `.ui-row:disabled[aria-current="true"]` is transparent at the disabled ink, `aria-current`
+  stays for assistive tech (the row is still the current one), and
+  `.ui-row[aria-disabled="true"][aria-selected="true"]` keeps `--fill-active`.
+  `src/ui/recipe.test.ts` holds both.
+
+## A value in a dense row
+
+Decided 2026-11-11 (the audit's open gate on the properties palette's typed values). The palette
+drew its own `<input class="prop-input">` because `Field` was only the 24px form control. `Field`
+now carries all of it, in Select's vocabulary, so a typed value and a picked value in the same
+column are one recipe:
+
+- `variant="inline"`: no stroke and no fill until the pointer or the keyboard is on it, then the
+  field (`--border-soft`, `--control`). Focus, a refused value and `disabled` win over the hover.
+- `size="sm"`: the 20px box of a 22px row on the row's 4px inset, 24px under a coarse pointer, with
+  the hairline of bottom padding that puts a typed value on the label's baseline.
+- `align="end"`: the value ends on the far edge, with lining tabular figures.
+- `mixed`: the "*VARIES*" stand-in in the quiet ink.
+- `invalid`: `aria-invalid="true"` and the error stroke, as before.
+- `onKeyDown`, `onBlur`, `ref`: commit on Enter and on leaving, restore on Escape, from the caller.
+- A value the box cuts short ends in an ellipsis and shows in full in the hint, with no
+  `data-hint` bookkeeping in the caller.
+- `selectOnFocus` is new behaviour, not a carry-over: a property editor wants typing to replace
+  the value. Leave it out for a like-for-like move.
+
+Two values differ from the hand-drawn input, both to match the inline Select beside it: the
+corner is `--radius-control` (2px, was `--radius-small`, 3px) and the hover stroke is
+`--border-soft` (was `--border`).
+
+The replacement, in `src/components/PropertiesPanel.tsx` (the `text` / `number` match):
+
+```tsx
+<span class="prop-choice">
+  <Field
+    variant="inline"
+    size="sm"
+    align="end"
+    ariaLabel={props.row().label}
+    value={draft()}
+    mixed={draft() === VARIES}
+    invalid={invalid()}
+    inputMode={mode() === "number" ? "decimal" : undefined}
+    spellcheck={false}
+    autocomplete="off"
+    selectOnFocus
+    onInput={(value) => {
+      setDirty(true);
+      setInvalid(false);
+      setDraft(value);
+    }}
+    onKeyDown={onKeyDown}
+    onBlur={() => commitText(true)}
+  />
+</span>
+```
+
+The wrapper is the one the palette's Select already sits in (a one-column grid with the overhang
+to the column's edge: the field stretches to it). What can then be deleted: every `.prop-input`
+rule in `src/interaction.css` (the base rule, its hover, `:focus-visible`,
+`[aria-invalid="true"]` and `.is-varies`), `hintWhenClipped` and `cuts` in the panel if nothing
+else uses them, and the `.prop-input` line of `src/ui/recipe.test.ts`, which already passes with
+or without the rule.
 
 ## Controls that hold a value
 
@@ -292,10 +377,14 @@ Decided 2026-11-11, with `Select`, `Checkbox` and `TextArea`.
   hairline: 24px), so the two can share a row.
 - **A bare TextArea draws no ring.** It is the only control in the layer without one, and only
   because its card shows the focus; `src/ui/recipe.test.ts` holds `ui.css` to that one exception.
-- **16px under a finger.** Under `pointer: coarse` the text area and the select's native control
-  take `font-size: max(16px, 1em)`, the size below which a phone zooms the page into the control.
-  `Field` does not do this yet (found, not fixed: it changes the provider form on touch screens
-  and wants its own look at the result).
+- **16px under a finger.** Under `pointer: coarse` the field, the text area and the select's
+  native control take `font-size: max(16px, 1em)`, the size below which a phone zooms the page
+  into the control. `Field` joined them on 2026-11-11 (it was left open here until its one form
+  was looked at). It keeps its 24px box: under a coarse pointer it gives up its 4px of block
+  padding, and the 16px value sits centred in the box. Looked at on the assistant's setup sheet
+  at 390 wide with the coarse rules applied: the three fields keep their width, height and
+  position (24px each, the same tops), nothing below them moves, and the only change is the
+  typed value and the placeholder at 16px (`.design-system/review/wE8-setup-390-coarse-*.png`).
 - **Section labels are not tracked.** `typography.md` asked for `0.05em` to `0.06em` on uppercase
   section labels; the measured header (research §2: 11px, weight 700, capitals) has none and the
   layer never drew any. The page moved, as it did for the hover easing.

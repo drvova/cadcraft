@@ -1,6 +1,6 @@
 /**
- * The canvas selection's pure rules: the aperture mirrors `run_select`, the click add/replace
- * rule mirrors AutoCAD's pick, and the equality is an order-insensitive set comparison. Pinned
+ * The canvas selection's pure rules: the aperture mirrors `run_select`, the add and remove rule
+ * mirrors the engine's `idle_click` (PICKADD and Shift), and the equality is an order-insensitive set comparison. Pinned
  * here so the shell's `select` calls cannot drift from the engine's own picking.
  */
 
@@ -17,7 +17,7 @@ import {
   MIN_APERTURE,
   pickAperture,
   sameSelection,
-  toggleHandle,
+  applyPick,
 } from "./selection";
 
 describe("pickAperture", () => {
@@ -51,26 +51,53 @@ describe("pickAperture", () => {
   });
 });
 
-describe("toggleHandle", () => {
-  test("without add, the clicked handle replaces the selection", () => {
-    expect(toggleHandle(["a", "b"], "c", false)).toEqual(["c"]);
-    expect(toggleHandle([], "a", false)).toEqual(["a"]);
+describe("applyPick", () => {
+  const click = (shift: boolean, pickadd = true) => ({ gesture: "click" as const, shift, pickadd });
+  const rect = (shift: boolean, pickadd = true) => ({ gesture: "rect" as const, shift, pickadd });
+
+  test("PICKADD on: a plain click adds, and clicking a selected object again keeps it", () => {
+    expect(applyPick([], ["a"], click(false))).toEqual(["a"]);
+    expect(applyPick(["a"], ["b"], click(false))).toEqual(["a", "b"]);
+    expect(applyPick(["a", "b"], ["a"], click(false))).toEqual(["a", "b"]);
   });
 
-  test("clicking the only selected handle again is a no-op, not a deselect", () => {
-    expect(toggleHandle(["a"], "a", false)).toEqual(["a"]);
+  test("PICKADD on: Shift removes, and Shift on an unselected object changes nothing", () => {
+    expect(applyPick(["a", "b"], ["a"], click(true))).toEqual(["b"]);
+    expect(applyPick(["a"], ["a"], click(true))).toEqual([]);
+    expect(applyPick(["a"], ["b"], click(true))).toEqual(["a"]);
   });
 
-  test("with add, membership toggles", () => {
-    expect(toggleHandle(["a"], "b", true)).toEqual(["a", "b"]);
-    expect(toggleHandle(["a", "b"], "a", true)).toEqual(["b"]);
-    expect(toggleHandle([], "a", true)).toEqual(["a"]);
-    expect(toggleHandle(["a"], "a", true)).toEqual([]);
+  test("PICKADD on: a rectangle adds what it holds and a Shift rectangle removes it", () => {
+    expect(applyPick(["a"], ["b", "c"], rect(false))).toEqual(["a", "b", "c"]);
+    expect(applyPick(["a", "b", "c"], ["b", "c", "d"], rect(true))).toEqual(["a"]);
+    expect(applyPick(["a"], [], rect(false))).toEqual(["a"]);
+    expect(applyPick(["a"], [], rect(true))).toEqual(["a"]);
   });
 
-  test("an empty click clears through the caller passing [] (and [] + add keeps [])", () => {
-    expect(toggleHandle([], "a", false)).toEqual(["a"]);
-    expect(toggleHandle(["a"], "a", true)).toEqual([]);
+  test("a click on nothing never changes the selection (Escape is what clears it)", () => {
+    for (const pickadd of [true, false]) {
+      for (const shift of [true, false]) {
+        expect(applyPick(["a", "b"], [], click(shift, pickadd))).toEqual(["a", "b"]);
+      }
+    }
+  });
+
+  test("PICKADD off: a pick replaces, Shift adds, Shift on a selected object removes it", () => {
+    expect(applyPick(["a", "b"], ["c"], click(false, false))).toEqual(["c"]);
+    expect(applyPick(["a"], ["b"], click(true, false))).toEqual(["a", "b"]);
+    expect(applyPick(["a", "b"], ["a"], click(true, false))).toEqual(["b"]);
+    expect(applyPick(["a"], ["b", "c"], rect(false, false))).toEqual(["b", "c"]);
+    expect(applyPick(["a"], [], rect(false, false))).toEqual([]);
+    expect(applyPick(["a"], ["a", "b"], rect(true, false))).toEqual(["a", "b"]);
+  });
+
+  test("keeps the order, lists no handle twice, and never changes its inputs", () => {
+    const current = ["a", "b"];
+    const picked = ["b", "b", "c"];
+    expect(applyPick(current, picked, rect(false))).toEqual(["a", "b", "c"]);
+    expect(applyPick([], picked, rect(false, false))).toEqual(["b", "c"]);
+    expect(current).toEqual(["a", "b"]);
+    expect(picked).toEqual(["b", "b", "c"]);
   });
 });
 

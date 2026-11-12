@@ -5,8 +5,9 @@
  * radius 12 (docked; a floating card would take 20), no shadow, a 1px border that turns active on focus, an editor at 15px/24px with a
  * 64px min-height and 8px/12px padding, and a 40px toolbar row (padding 8px, `gap: 4px`) that
  * holds 24px circles and the pill model chip; send and stop are the inverted circle. Its controls
- * are the system's own: `ui/IconButton` (attach, remove-attachment, stop, send), `ui/Row` (the
- * preset rows), `ui/Field` (the provider inputs) and `ui/Button` (Cancel, Save). The running dot
+ * are the system's own: `ui/TextArea` (the editor, bare: the card draws its box and its focus),
+ * `ui/IconButton` (attach, remove-attachment, stop, send), `ui/Row` (the preset rows, and the
+ * slash list's options), `ui/Field` (the provider inputs) and `ui/Button` (Cancel, Save). The running dot
  * carries §1.14's `ripple 1.2s` to `scale(1.7)`.
  *
  * The transcript is the agent-panel grammar: a prompt in a quiet inset block, the model's words
@@ -36,6 +37,7 @@ import { Kbd } from "../ui/Kbd";
 import { Row } from "../ui/Row";
 import { SectionLabel } from "../ui/SectionLabel";
 import { Tab } from "../ui/Tab";
+import { TextArea } from "../ui/TextArea";
 import { describeByHint } from "../ui/Tooltip";
 import "../assistant.css";
 
@@ -84,11 +86,14 @@ function readAsDataUrl(file: File): Promise<string> {
   return promise;
 }
 
-/** The textarea grows with its content between the recipe's min and max (64px … 240px). */
-function grow(el: HTMLTextAreaElement): void {
-  el.style.height = "auto";
-  el.style.height = `${Math.min(Math.max(el.scrollHeight, 64), 240)}px`;
-}
+/** The composer's editor is never shorter than two lines, and scrolls past nine (the recipe's
+ *  64px floor with the card's inset; nine whole lines where the old 240px cap cut the tenth). */
+const COMPOSER_ROWS = 2;
+const COMPOSER_MAX_ROWS = 9;
+
+const COMPOSER_ID = "assistant-editor";
+
+const slashOptionId =(index: number): string => `assistant-slash-${index}`;
 
 /**
  * How many of a chat's newest rows the transcript draws when it opens, and how many more each
@@ -234,10 +239,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   const chipHint = (): string => (menuOpen() ? "Close the setup" : s.ready() ? "Change the model" : "Choose a provider and model");
   const chipNote = (): string | undefined => (s.ready() && !menuOpen() ? s.provider().baseUrl : undefined);
 
-  onMount(() => {
-    inputEl?.focus();
-    if (inputEl !== undefined && s.input() !== "") grow(inputEl);
-  });
+  onMount(() => inputEl?.focus());
 
   /** Add files from the picker, a paste or a drop: pictures only, within the caps. */
   const addFiles = async (files: readonly File[]): Promise<void> => {
@@ -288,7 +290,6 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     }
     // A draft that is too long stays as it is: the line over the composer says by how much.
     if (outcome === "empty" || outcome === "too-long") return;
-    if (inputEl !== undefined) inputEl.style.height = "";
     // The reader's own message always comes into view.
     setFollowing(true);
     toEnd();
@@ -311,21 +312,50 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     return query === null ? [] : rankCommands(query, props.commands(), [], SLASH_LIMIT);
   });
   const [slashIndex, setSlashIndex] = createSignal(0);
-  createEffect(on(slash, () => setSlashIndex(0)));
+  /** The lit row follows the keys into view; a row lit by the pointer is already under it. */
+  let slashFollow = true;
+  /** Where the pointer last was over the list, so a row arriving under a still pointer is not a move. */
+  let slashPointer = "";
+  const lightSlash = (index: number): void => {
+    slashFollow = true;
+    setSlashIndex(index);
+  };
+  createEffect(
+    on(slash, (now, before) => {
+      // The list opened: the pointer is found again where it already was before it counts as moving.
+      if (now !== null && (before === null || before === undefined)) slashPointer = "";
+      lightSlash(0);
+    }),
+  );
+  createEffect(
+    on(slashIndex, (index) => {
+      if (slashFollow) document.getElementById(slashOptionId(index))?.scrollIntoView({ block: "nearest" });
+    }),
+  );
+
+  /** The pointer moved over a row of the slash list: the highlight goes there, once it really moved. */
+  const onSlashPointerMove = (e: PointerEvent, index: number): void => {
+    const at = `${e.screenX},${e.screenY}`;
+    if (at === slashPointer) return;
+    const first = slashPointer === "";
+    slashPointer = at;
+    if (first || index === slashIndex()) return;
+    slashFollow = false;
+    setSlashIndex(index);
+  };
 
   const runSlash = (index: number): void => {
     const item = slashMatches()[index]?.item;
     if (item === undefined || !item.enabled) return;
     s.setInput("");
-    if (inputEl !== undefined) inputEl.style.height = "";
     props.onRunCommand(item.id);
   };
 
   const onKeyDown = (e: KeyboardEvent): void => {
     const count = slashMatches().length;
     if (slash() !== null && count > 0) {
-      if (e.key === "ArrowDown") setSlashIndex((i) => (i + 1) % count);
-      else if (e.key === "ArrowUp") setSlashIndex((i) => (i - 1 + count) % count);
+      if (e.key === "ArrowDown") lightSlash((slashIndex() + 1) % count);
+      else if (e.key === "ArrowUp") lightSlash((slashIndex() - 1 + count) % count);
       else if (e.key === "Enter" || e.key === "Tab") runSlash(slashIndex());
       else if (e.key === "Escape") {
         s.setInput("");
@@ -925,17 +955,22 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
           </div>
         </Show>
         <Show when={slash() !== null}>
-          <div class="assistant-stack assistant-slash" role="listbox" aria-label="Commands">
-            <For each={slashMatches()}>
-              {(match, index) => (
-                <Row selected={index() === slashIndex()} disabled={!match.item.enabled} onClick={() => runSlash(index())}>
-                  <span class="assistant-slash-label">
-                    <For each={highlight(match.item.label, match.indices)}>{(part) => (part.hit ? <mark class="assistant-slash-hit">{part.text}</mark> : part.text)}</For>
-                  </span>
-                  <span class="assistant-slash-id">{match.item.id}</span>
-                </Row>
-              )}
-            </For>
+          <div class="assistant-stack assistant-slash">
+            <Show when={slashMatches().length > 0}>
+              {/* A press on the list keeps the keyboard in the editor, which is the list's combobox. */}
+              <div class="assistant-slash-list" id="assistant-slash" role="listbox" aria-label="Commands" onMouseDown={(e) => e.preventDefault()}>
+                <For each={slashMatches()}>
+                  {(match, index) => (
+                    <Row option id={slashOptionId(index())} selected={index() === slashIndex()} disabled={!match.item.enabled} onPointerMove={(e) => onSlashPointerMove(e, index())} onClick={() => runSlash(index())}>
+                      <span class="assistant-slash-label">
+                        <For each={highlight(match.item.label, match.indices)}>{(part) => (part.hit ? <mark class="assistant-slash-hit">{part.text}</mark> : part.text)}</For>
+                      </span>
+                      <span class="assistant-slash-id">{match.via ?? match.item.id}</span>
+                    </Row>
+                  )}
+                </For>
+              </div>
+            </Show>
             <Show when={slashMatches().length === 0}>
               <div class="assistant-stack-row">
                 <span class="assistant-stack-text">No command matches. Keep typing to send it as a message.</span>
@@ -972,24 +1007,35 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               </div>
             </div>
           </Show>
-          <textarea
-            class="assistant-input"
-            ref={inputEl}
-            rows={1}
-            placeholder={s.running() ? "Queue a follow-up" : "Ask, or / for commands"}
-            value={s.input()}
-            onInput={(e) => {
-              s.setInput(e.currentTarget.value);
-              // A notice (a refused attachment, a restore) has been read once typing resumes.
-              if (!s.running() && s.status() !== "") s.setStatus("");
-              grow(e.currentTarget);
-            }}
-            onKeyDown={onKeyDown}
-            onPaste={onPaste}
-            aria-label="Ask the assistant"
-            aria-invalid={over() > 0}
-            aria-describedby={over() > 0 ? "assistant-over" : undefined}
-          />
+          <label class="assistant-input" for={COMPOSER_ID}>
+            <TextArea
+              variant="bare"
+              ref={(el) => {
+                inputEl = el;
+                // The label around the editor names it by id: a press on the card's inset lands in it.
+                el.id = COMPOSER_ID;
+              }}
+              rows={COMPOSER_ROWS}
+              maxRows={COMPOSER_MAX_ROWS}
+              placeholder={s.running() ? "Queue a follow-up" : "Ask, or / for commands"}
+              value={s.input()}
+              onInput={(value) => {
+                s.setInput(value);
+                // A notice (a refused attachment, a restore) has been read once typing resumes.
+                if (!s.running() && s.status() !== "") s.setStatus("");
+              }}
+              onKeyDown={onKeyDown}
+              onPaste={onPaste}
+              ariaLabel="Ask the assistant"
+              invalid={over() > 0}
+              describedBy={over() > 0 ? "assistant-over" : undefined}
+              role={slash() === null ? undefined : "combobox"}
+              expanded={slash() === null ? undefined : slashMatches().length > 0}
+              controls={slashMatches().length > 0 ? "assistant-slash" : undefined}
+              activeDescendant={slashMatches().length > 0 ? slashOptionId(slashIndex()) : undefined}
+              autocompleteKind={slash() === null ? undefined : "list"}
+            />
+          </label>
           <div class="assistant-row">
             <button
               class="assistant-ghost"

@@ -149,11 +149,25 @@
      "email",
      "search",
      "password"
+    ],
+    "variant": [
+     "field",
+     "inline"
+    ],
+    "size": [
+     "sm",
+     "md"
+    ],
+    "align": [
+     "start",
+     "end"
     ]
    },
    "states": [
     "disabled",
-    "invalid"
+    "invalid",
+    "mixed",
+    "read-only"
    ],
    "tokens": [
     "--control-h-input",
@@ -168,7 +182,11 @@
     "--text-faint",
     "--text-disabled",
     "--focus-ring",
-    "--error"
+    "--error",
+    "--control-h-chip",
+    "--gap-4",
+    "--dur-fast",
+    "--ease-standard"
    ],
    "replaces": []
   },

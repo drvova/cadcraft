@@ -18,6 +18,13 @@
   -webkit-touch-callout: none;
 }
 
+/* A command is waiting for a point: the crosshair says the next click places one. It weighs what
+   the rule above does and comes after it, so it holds while a button is down; a pan in hand still
+   shows its own cursor, because its rule comes later again. */
+.canvas-stage .canvas[data-wants="point"] {
+  cursor: crosshair;
+}
+
 .canvas-stage .canvas[data-gesture="pan"] {
   cursor: grabbing;
 }

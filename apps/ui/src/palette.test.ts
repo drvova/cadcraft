@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 import type { CommandInfo } from "./facade";
-import { fuzzy, highlight, paletteItems, rankCommands, rememberCommand, RECENT_LIMIT, rowName, slashQuery, stepActive, type PaletteItem } from "./palette";
+import { fuzzy, highlight, paletteItems, rankCommands, recentItems, rememberCommand, RECENT_LIMIT, rowName, slashQuery, stepActive, type PaletteItem } from "./palette";
 
 const command = (id: string, label: string, menu = "", extra: Partial<CommandInfo> = {}): CommandInfo => ({ id, label, menu, shortcut: "", aliases: [], params: "", enabled: true, ...extra });
 
@@ -27,6 +27,64 @@ describe("paletteItems", () => {
     expect(ITEMS.find((i) => i.id === "zoom.extents")?.path).toBe("View > Zoom");
     expect(ITEMS.find((i) => i.id === "ui.toggle.assistant")?.path).toBe("Window");
     expect(ITEMS.find((i) => i.id === "ui.toggle.assistant")?.shortcut).toBe("Cmd+7");
+  });
+});
+
+describe("one action, one row", () => {
+  const TWINS: PaletteItem[] = paletteItems(
+    [
+      command("u", "Undo", "Edit > Undo", { shortcut: "Cmd+Z" }),
+      command("undo", "Undo", "", { aliases: ["undoit"] }),
+      command("redo", "Redo", "Edit > Redo"),
+      command("mredo", "Redo"),
+      command("open", "Open...", "File > Open..."),
+      command("saveas", "Save As...", "File > Save As..."),
+      command("copy", "Copy", "Modify > Copy", { aliases: ["co"] }),
+      command("copyclip", "Copy", "Edit > Copy", { shortcut: "Cmd+C" }),
+      command("bsave", "Save Block"),
+      command("bsave2", "Save Block"),
+      command("dimlinear", "Linear", "Dimension > Linear"),
+      command("dclinear", "Linear"),
+      command("line", "Line", "Draw > Line"),
+    ],
+    [
+      { id: "ui.open", label: "Open...", menu: [], shortcut: "Cmd+O" },
+      { id: "ui.saveas", label: "Save As...", menu: [] },
+    ],
+  );
+  const twinIds = (query: string, recent: string[] = []): string[] => rankCommands(query, TWINS, recent).map((m) => m.item.id);
+  const row = (id: string): PaletteItem | undefined => TWINS.find((i) => i.id === id);
+
+  test("a same-label, same-name id with no menu placement folds into the row the menu holds", () => {
+    expect(TWINS.map((i) => i.id)).toEqual(["copy", "copyclip", "line", "dclinear", "dimlinear", "open", "redo", "saveas", "bsave", "bsave2", "u"]);
+    expect(row("u")).toMatchObject({ path: "Edit", shortcut: "Cmd+Z", twins: ["undo"] });
+    expect(row("redo")?.twins).toEqual(["mredo"]);
+  });
+  test("the folded name still matches, and is the name the row prints when it is what was typed", () => {
+    expect(row("u")?.aliases).toEqual(["undo", "undoit"]);
+    expect(twinIds("undo")).toEqual(["u"]);
+    const printed = (query: string): string[] => rankCommands(query, TWINS, []).slice(0, 1).map(rowName);
+    expect(printed("undo")).toEqual(["undo"]);
+    expect(printed("mredo")).toEqual(["mredo"]);
+    expect(printed("u")).toEqual(["u"]);
+  });
+  test("the shell's twin of a command folds too: its id is never a typed name, its shortcut fills a gap", () => {
+    expect(row("open")).toMatchObject({ path: "File", shortcut: "Cmd+O", aliases: [], twins: ["ui.open"] });
+    expect(row("saveas")).toMatchObject({ shortcut: "", aliases: [], twins: ["ui.saveas"] });
+    expect(twinIds("save as")).toEqual(["saveas"]);
+    expect(twinIds("open")).toEqual(["open"]);
+  });
+  test("a shared label alone is not one action: two placed commands, another name, or no canonical row", () => {
+    expect(twinIds("linear")).toEqual(["dclinear", "dimlinear"]);
+    expect(row("dimlinear")?.twins).toBeUndefined();
+    expect(twinIds("copy")).toEqual(["copy", "copyclip"]);
+    expect(row("copy")?.twins).toBeUndefined();
+    expect(twinIds("save block")).toEqual(["bsave", "bsave2"]);
+  });
+  test("an id remembered before it folded counts as its row, once", () => {
+    expect(recentItems(TWINS, ["undo", "u", "gone", "ui.open"]).map((i) => i.id)).toEqual(["u", "open"]);
+    expect(twinIds("", ["undo", "u"]).slice(0, 2)).toEqual(["u", "copy"]);
+    expect(twinIds("o", ["ui.open"])[0]).toBe("open");
   });
 });
 
@@ -131,8 +189,8 @@ describe("rankCommands, the queries a CAD hand types", () => {
   test("lay: a label's start, then a word's start", () => {
     expect(cad("lay")).toEqual(["layer", "layfrz"]);
   });
-  test("undo: the id typed whole leads the two commands that share the label", () => {
-    expect(cad("undo")).toEqual(["undo", "u"]);
+  test("undo: the two commands that share the label are one row, the one the Edit menu holds", () => {
+    expect(cad("undo")).toEqual(["u"]);
     expect(cad("u")[0]).toBe("u");
   });
   test("sav: by label, the shorter first; the alias typed whole wins", () => {

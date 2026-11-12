@@ -128,6 +128,21 @@ describe("TextArea", () => {
     expect(areaIn(mount(() => <TextArea ariaLabel="Notes" />)).hasAttribute("aria-describedby")).toBe(false);
   });
 
+  test("a text area that drives a list says it is a combobox, and a plain one says none of it", () => {
+    const area = areaIn(
+      mount(() => <TextArea ariaLabel="Ask" role="combobox" expanded controls="slash-list" activeDescendant="slash-option-1" autocompleteKind="list" />),
+    );
+    expect(area.getAttribute("role")).toBe("combobox");
+    expect(area.getAttribute("aria-expanded")).toBe("true");
+    expect(area.getAttribute("aria-controls")).toBe("slash-list");
+    expect(area.getAttribute("aria-activedescendant")).toBe("slash-option-1");
+    expect(area.getAttribute("aria-autocomplete")).toBe("list");
+    const shut = areaIn(mount(() => <TextArea ariaLabel="Ask" role="combobox" expanded={false} />));
+    expect(shut.getAttribute("aria-expanded")).toBe("false");
+    const plain = areaIn(mount(() => <TextArea ariaLabel="Ask" />));
+    for (const attr of ["role", "aria-expanded", "aria-controls", "aria-activedescendant", "aria-autocomplete"]) expect(plain.hasAttribute(attr)).toBe(false);
+  });
+
   test("passes the autofill hint and the spelling switch through, and leaves both to the platform when unset", () => {
     const off = areaIn(mount(() => <TextArea ariaLabel="Script" autocomplete="off" spellcheck={false} />));
     expect(off.getAttribute("autocomplete")).toBe("off");

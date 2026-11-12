@@ -9,6 +9,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { INFINITE, judgeDraft, NOT_A_NUMBER, parseProperties, VARIES, type PropRow } from "../props";
+import { choiceOptions } from "./PropertiesPanel";
 
 function row(key: string, label: string, value: string, kind: PropRow["kind"]): PropRow {
   return { key, label, value, editable: true, kind };
@@ -142,5 +143,35 @@ describe("judgeDraft", () => {
   test("a 60-character value is sent whole", () => {
     const long = "V".repeat(60);
     expect(judgeDraft(row("linetype", "Linetype", "ByLayer", "text"), long)).toEqual({ kind: "send", patch: { linetype: long } });
+  });
+});
+
+describe("choiceOptions", () => {
+  test("the rows `parseProperties` makes hand the Select their own lists: the drawing's layers, the colours", () => {
+    const reply = parseProperties({ count: 1, objects: [{ layer: "Outline", color: "ByLayer" }] }, ["0", "Outline"]);
+    const layer = reply?.rows.find((r) => r.key === "layer");
+    expect(choiceOptions(layer?.choices).map((option) => option.value)).toEqual(["0", "Outline"]);
+    const color = reply?.rows.find((r) => r.key === "color");
+    expect(choiceOptions(color?.choices).every((option) => option.label === option.value && option.disabled === undefined)).toBe(true);
+    expect(choiceOptions(color?.choices).length).toBeGreaterThan(0);
+  });
+
+  test("*VARIES* is never one of the choices: the Select shows it as its placeholder", () => {
+    const reply = parseProperties({ count: 2, objects: [{ layer: "Outline" }, { layer: "0" }] }, ["0", "Outline"]);
+    const layer = reply?.rows.find((r) => r.key === "layer");
+    expect(layer?.value).toBe(VARIES);
+    expect(choiceOptions(layer?.choices).some((option) => option.value === VARIES)).toBe(false);
+  });
+
+  test("each choice is its own label, in the order given", () => {
+    expect(choiceOptions(["0", "Outline"])).toEqual([
+      { value: "0", label: "0" },
+      { value: "Outline", label: "Outline" },
+    ]);
+  });
+
+  test("a row with no list has no options", () => {
+    expect(choiceOptions(undefined)).toEqual([]);
+    expect(choiceOptions([])).toEqual([]);
   });
 });

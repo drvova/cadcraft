@@ -13,8 +13,8 @@ Not applicable: hand-rolled — a native `<input type="checkbox">` drawn from th
 ## Examples
 `<Checkbox checked={snap()} onChange={setSnap}>Snap to grid</Checkbox>` — a setting with its label; the whole label is the target.
 
-Real uses, 0 call sites (`rg -c "<Checkbox\b" src/components` finds none): the component is new in this pass.
-- (planned) `src/components/PropertiesPanel.tsx` — the palette's yes-or-no rows (`class="prop-check"`, 1 use) move onto `<Checkbox ariaLabel={label} checked mixed>` in the next pass; `decisions.md` ("Canonical picks") has the replacement.
+Real uses, 1 call site (`rg -c "<Checkbox" src/components` → `src/components/PropertiesPanel.tsx:1`):
+- `src/components/PropertiesPanel.tsx:195` — the palette's yes-or-no rows: named by the row's label, `mixed` when the picked objects disagree.
 
 ### Example files
 | File | Covers | Caption |
@@ -168,7 +168,7 @@ export default function Disabled() {
   - Do: `<Checkbox checked={grid()} onChange={setGrid}>Show the grid</Checkbox>`
 
 ### Anti-slop
-- `rule/checkbox-canonical-element`: When a surface needs a tick box, render `Checkbox` rather than a raw `<input type="checkbox">` with `accent-color`, because the platform draws that box in its own shape, size and tick in each of the 3 system webviews the desktop app runs in. Evidence: single use `src/interaction.css:188`, `.prop-check` with `accent-color`. Check: review `src/ui/Checkbox.tsx`.
+- `rule/checkbox-canonical-element`: When a surface needs a tick box, render `Checkbox` rather than a raw `<input type="checkbox">` with `accent-color`, because the platform draws that box in its own shape, size and tick in each of the 3 system webviews the desktop app runs in. Evidence: single use `src/components/PropertiesPanel.tsx:195`, which replaced `.prop-check` with `accent-color`. Check: review `src/ui/Checkbox.tsx`.
   - Don't: `<input class="prop-check" type="checkbox" checked={on} aria-label="Closed" />`
   - Do: `<Checkbox ariaLabel="Closed" checked={on} onChange={setOn} />`
 

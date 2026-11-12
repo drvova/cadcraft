@@ -23,7 +23,7 @@
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor, type JSX } from "solid-js";
 import { isMacPlatform, shortcutLabel } from "../commands";
 import { ToolIcon } from "../icons";
-import { highlight, PALETTE_LIMIT, rankCommands, rowName, stepActive, type PaletteItem, type PaletteMatch } from "../palette";
+import { highlight, PALETTE_LIMIT, rankCommands, recentItems, rowName, stepActive, type PaletteItem, type PaletteMatch } from "../palette";
 import { Kbd } from "../ui/Kbd";
 import { Row } from "../ui/Row";
 import "../palette.css";
@@ -58,11 +58,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
   const rows = createMemo(() => matches().slice(0, shown()));
   const typed = (): boolean => query().trim() !== "";
   /** With nothing typed, how many of the first rows are the recently used ones. */
-  const recentCount = createMemo(() => {
-    if (typed()) return 0;
-    const known = new Set(props.items().map((item) => item.id));
-    return props.recent().filter((id) => known.has(id)).length;
-  });
+  const recentCount = createMemo(() => (typed() ? 0 : recentItems(props.items(), props.recent()).length));
   const current = (): PaletteMatch | undefined => matches()[active()];
 
   /** Light a row from the keyboard: draw it if the list has not reached it yet, and bring it into view. */
@@ -241,33 +237,31 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
         >
           <For each={rows()}>
             {(match, index) => (
-              <div class="palette-option" id={optionId(index())} role="option" aria-selected={index() === active()} aria-disabled={!match.item.enabled} onPointerMove={(e) => onPointerMove(e, index())}>
-                <Row selected={index() === active()} disabled={!match.item.enabled} onClick={() => run(match.item)}>
-                  <span class="palette-label">
-                    <For each={highlight(match.item.label, match.indices)}>{(part) => (part.hit ? <mark class="palette-hit">{part.text}</mark> : part.text)}</For>
-                  </span>
-                  <Show when={match.item.path !== ""}>
-                    <span class="palette-path">{match.item.path}</span>
+              <Row option id={optionId(index())} selected={index() === active()} disabled={!match.item.enabled} onPointerMove={(e) => onPointerMove(e, index())} onClick={() => run(match.item)}>
+                <span class="palette-label">
+                  <For each={highlight(match.item.label, match.indices)}>{(part) => (part.hit ? <mark class="palette-hit">{part.text}</mark> : part.text)}</For>
+                </span>
+                <Show when={match.item.path !== ""}>
+                  <span class="palette-path">{match.item.path}</span>
+                </Show>
+                <span class="palette-trail">
+                  <Show when={recentCount() > 0 && index() === 0}>
+                    <span class="palette-tag">recently used</span>
                   </Show>
-                  <span class="palette-trail">
-                    <Show when={recentCount() > 0 && index() === 0}>
-                      <span class="palette-tag">recently used</span>
-                    </Show>
-                    <Show when={recentCount() > 0 && index() === recentCount()}>
-                      <span class="palette-tag">other commands</span>
-                    </Show>
-                    <Show when={!match.item.enabled}>
-                      <span class="palette-tag">not available</span>
-                    </Show>
-                    <Show when={rowName(match) !== ""}>
-                      <span class="palette-id">{rowName(match)}</span>
-                    </Show>
-                    <Show when={match.item.shortcut !== ""}>
-                      <Kbd>{shortcutLabel(match.item.shortcut, mac)}</Kbd>
-                    </Show>
-                  </span>
-                </Row>
-              </div>
+                  <Show when={recentCount() > 0 && index() === recentCount()}>
+                    <span class="palette-tag">other commands</span>
+                  </Show>
+                  <Show when={!match.item.enabled}>
+                    <span class="palette-tag">not available</span>
+                  </Show>
+                  <Show when={rowName(match) !== ""}>
+                    <span class="palette-id">{rowName(match)}</span>
+                  </Show>
+                  <Show when={match.item.shortcut !== ""}>
+                    <Kbd>{shortcutLabel(match.item.shortcut, mac)}</Kbd>
+                  </Show>
+                </span>
+              </Row>
             )}
           </For>
           <Show when={props.open() && matches().length === 0}>

@@ -14,9 +14,9 @@ import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, type 
 import { AppFacade, type CommandInfo, type DrawingState, type LayerInfo, type SettingsState } from "./facade";
 import type { DisplayList } from "./display";
 import { padView, regionCovers, regionOf, VIEW_PAD, type DisplayRegion } from "./display-cache";
-import { emptyPrompt, type PromptState } from "./prompt";
+import { emptyPrompt, formatPoint, formatSelectBox, pointerWants, type PromptState } from "./prompt";
 import { padRect, UNIT_RECT, type Rect } from "./view";
-import { pickAperture, toggleHandle } from "./selection";
+import { applyPick, pickAperture, type PickRule } from "./selection";
 import { parseProperties, type PropertiesReply } from "./props";
 import { classify, isMacPlatform, shortcutLabel, UI_ITEMS } from "./commands";
 import { paletteItems, rememberCommand } from "./palette";
@@ -186,6 +186,12 @@ export function App(props: AppProps): JSX.Element {
    * never be triggered by one.
    */
   let engineRevision = -1;
+  /**
+   * The view the engine was last told the canvas shows. A pan or a zoom inside the fetched window
+   * fetches nothing and so tells the engine nothing; `tellView` catches it up before a command
+   * reads the view (ZOOM and PAN start from it, and a pick inside a command sizes its aperture by it).
+   */
+  let toldView: Rect | null = null;
 
   /**
    * Fetch the display list for `rect`, asking the engine for a window [`VIEW_PAD`] wider than the
@@ -196,11 +202,36 @@ export function App(props: AppProps): JSX.Element {
   const fetchDisplay = (rect: Rect): void => {
     const env = props.facade.setView(rect);
     if (!env.ok) setNotice(env.error);
+    else toldView = rect;
     const list = props.facade.displayList(VIEW_PAD);
     // The region carries the revision of the list we now hold: a later edit makes the engine's
     // revision differ from it, which is exactly what triggers the next fetch.
     displayRegion = regionOf(padView(rect), list.revision);
     setDisplay(list);
+  };
+
+  /** Tell the engine the view on screen, if it has moved since the engine last heard of it. */
+  const tellView = (): void => {
+    const rect = view();
+    if (toldView !== null && toldView.x0 === rect.x0 && toldView.y0 === rect.y0 && toldView.x1 === rect.x1 && toldView.y1 === rect.y1) return;
+    if (props.facade.setView(rect).ok) toldView = rect;
+  };
+
+  /** Tell the engine the view on screen, and read back the view it holds for it before a command. */
+  const engineView = (): Rect | null => {
+    tellView();
+    return props.facade.viewRect();
+  };
+
+  /**
+   * After a command: the canvas follows the engine's view only when the command moved it (ZOOM,
+   * PAN, a view restore). The engine keeps its own shape of the view it was told, so adopting it
+   * after every command would refit the drawing at each line typed.
+   */
+  const followView = (before: Rect | null): void => {
+    const after = props.facade.viewRect();
+    const moved = before === null || after === null || before.x0 !== after.x0 || before.y0 !== after.y0 || before.x1 !== after.x1 || before.y1 !== after.y1;
+    if (moved) syncView();
   };
 
   /** Fetch only when the cached window no longer answers for the view (or the drawing changed). */
@@ -259,7 +290,12 @@ export function App(props: AppProps): JSX.Element {
    */
   const syncView = (): void => {
     const rect = props.facade.viewRect();
-    if (rect !== null) setView(rect);
+    const now = view();
+    // The engine's view is the canvas's unless a command moved it: the same view is not set again.
+    if (rect !== null && (rect.x0 !== now.x0 || rect.y0 !== now.y0 || rect.x1 !== now.x1 || rect.y1 !== now.y1)) {
+      toldView = rect;
+      setView(rect);
+    }
     syncDisplay();
   };
 
@@ -455,20 +491,28 @@ export function App(props: AppProps): JSX.Element {
     if (!regionCovers(displayRegion, rect, engineRevision)) fetchDisplay(rect);
   };
 
+  /**
+   * A line for the command line: typed, a keyword chip, the drawing's Enter, or a point clicked on
+   * the drawing. The engine hears the view on screen first, and the canvas follows a view the
+   * command moved (ZOOM, PAN, a view restore).
+   */
   const onCommand = (text: string): void => {
     setNotice(null);
+    const before = engineView();
     setPrompt(props.facade.cmdline(text, prompt()));
     refresh();
+    followView(before);
   };
 
   /** Start a command by id, exactly as the desktop menu does; the prompt becomes interactive. */
   const startCommand = (id: string): void => {
     setNotice(null);
+    const before = engineView();
     const state = props.facade.start(id, prompt());
     setPrompt(state);
     if (state.error !== null) setNotice(state.error);
     refresh();
-    syncView();
+    followView(before);
   };
 
   const openDrawing = async (): Promise<void> => {
@@ -605,13 +649,27 @@ export function App(props: AppProps): JSX.Element {
     }
   };
 
-  /** A canvas click: pick through the engine's own `select`, with this canvas's aperture. */
-  const onPick = (point: { x: number; y: number }, add: boolean, worldPerPixel: number): void => {
-    setNotice(null);
-    const aperture = pickAperture(worldPerPixel, settings().pickbox);
-    const env = props.facade.execute("select", { at: [point.x, point.y], aperture, add: false });
+  /** What the pointer is for on the drawing: the running command's prompt decides. */
+  const wants = createMemo(() => pointerWants(prompt()));
+
+  /** The engine's `PICKADD` (picks add and Shift removes); on, its default, when it does not say. */
+  const pickAdd = (): boolean => {
+    const env = props.facade.execute("getvar", { name: "PICKADD" });
+    const value: unknown = env.ok && env.result !== null && typeof env.result === "object" && "value" in env.result ? env.result.value : 1;
+    return value !== 0 && value !== false;
+  };
+
+  /**
+   * A pick at rest. The engine's `select` finds what the query holds (it has no query that leaves
+   * the selection alone, so the find replaces it), then the selection is set to what the engine's
+   * own pick rule makes of it: with `PICKADD` on a pick adds and Shift removes.
+   */
+  const pickAtRest = (query: Record<string, unknown>, gesture: PickRule["gesture"], shift: boolean): void => {
+    const before = selection();
+    const env = props.facade.execute("select", { ...query, add: false });
     if (!env.ok) {
       setNotice(env.error);
+      refresh();
       return;
     }
     // The reply is `{selected, handles}`; read the handles with checked narrowing.
@@ -619,28 +677,42 @@ export function App(props: AppProps): JSX.Element {
       env.result !== null && typeof env.result === "object" && "handles" in env.result && Array.isArray(env.result.handles)
         ? env.result.handles.filter((h): h is string => typeof h === "string")
         : [];
-    if (add) {
-      // Shift-click toggles the picked handle: `select {handles}` sets the whole selection.
-      const first = picked[0];
-      const next = first !== undefined ? toggleHandle(selection(), first, true) : [...selection()];
-      const applied = props.facade.execute("select", { handles: next });
-      if (!applied.ok) setNotice(applied.error);
-    }
+    const next = applyPick(before, picked, { gesture, shift, pickadd: pickAdd() });
+    const applied = props.facade.execute("select", next.length === 0 ? { clear: true } : { handles: next });
+    setNotice(applied.ok ? null : applied.error);
     refresh();
   };
 
-  /** A rectangle dragged on the drawing: the engine's `select` by window or crossing; Shift adds. */
-  const onSelectRect = (rect: Rect, kind: "window" | "crossing", shift: boolean): void => {
-    const env = props.facade.execute("select", {
-      window: [
-        [rect.x0, rect.y0],
-        [rect.x1, rect.y1],
-      ],
-      crossing: kind === "crossing",
-      add: shift,
-    });
-    setNotice(env.ok ? null : env.error);
-    refresh();
+  /** A canvas click at rest: pick with this canvas's aperture. */
+  const onPick = (point: { x: number; y: number }, shift: boolean, worldPerPixel: number): void => {
+    pickAtRest({ at: [point.x, point.y], aperture: pickAperture(worldPerPixel, settings().pickbox) }, "click", shift);
+  };
+
+  /**
+   * A click while a command wants a point or objects: the point goes to the command as typed
+   * input does, so the history shows it and the engine reads it by the same rules.
+   */
+  const onPoint = (point: { x: number; y: number }, worldPerPixel: number): void => {
+    const text = formatPoint(point, worldPerPixel);
+    if (text !== null) onCommand(text);
+  };
+
+  /**
+   * A rectangle dragged on the drawing. At rest it picks by window or crossing; while a command
+   * asks for objects it goes to that command, as the engine's own box selection.
+   */
+  const onSelectRect = (rect: Rect, kind: "window" | "crossing", shift: boolean, worldPerPixel: number): void => {
+    if (wants() === "select") {
+      const text = formatSelectBox(rect, kind, worldPerPixel);
+      if (text !== null) onCommand(text);
+      return;
+    }
+    if (wants() !== "idle") return;
+    const corners = [
+      [rect.x0, rect.y0],
+      [rect.x1, rect.y1],
+    ];
+    pickAtRest({ window: corners, crossing: kind === "crossing" }, "rect", shift);
   };
 
   const onLayerToggle = (name: string, flag: "on" | "frozen" | "locked", value: boolean): void => {
@@ -732,6 +804,9 @@ export function App(props: AppProps): JSX.Element {
               onNotice={setNotice}
               onPick={onPick}
               onSelectRect={onSelectRect}
+              wants={wants}
+              onPoint={onPoint}
+              onContext={() => onCommand("")}
               onCursor={setCursor}
             />
           </main>

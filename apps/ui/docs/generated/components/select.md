@@ -13,8 +13,8 @@ Not applicable: hand-rolled — a native `<select>` under a drawn face in Field'
 ## Examples
 `<Select value={layer} options={layers} ariaLabel="Layer" onChange={setLayer} />` — the layer an object is on, picked from the drawing's layers.
 
-Real uses, 0 call sites (`rg -c "<Select\b" src/components` finds none): the component is new in this pass.
-- (planned) `src/components/PropertiesPanel.tsx` — the palette's choice rows (`class="prop-select"`, 1 use: layer, linetype, colour) move onto `<Select variant="inline" size="sm" align="end">` in the next pass; `decisions.md` ("Canonical picks") has the replacement.
+Real uses, 1 call site (`rg -c "<Select" src/components` → `src/components/PropertiesPanel.tsx:1`):
+- `src/components/PropertiesPanel.tsx:208` — the palette's choice rows (layer, linetype, colour): `variant="inline" size="sm" align="end"`, `mixed` with the `*VARIES*` placeholder when the picked objects disagree.
 
 ### Example files
 | File | Covers | Caption |
@@ -373,7 +373,7 @@ export default function Invalid() {
   - Do: `{ value: "walls", label: "Walls" }`
 
 ### Anti-slop
-- `rule/select-canonical-element`: When a surface needs a choice from a list, render `Select` rather than a raw `<select>` with its own class or a hand-built listbox, because the replaced class removes the arrow and clips a long value with 0 ellipsis, and a hand-built list loses type-ahead and the phone's picker. Evidence: single use `src/interaction.css:182`, `.prop-select { appearance: none }`. Check: review `src/ui/Select.tsx`.
+- `rule/select-canonical-element`: When a surface needs a choice from a list, render `Select` rather than a raw `<select>` with its own class or a hand-built listbox, because the replaced class removes the arrow and clips a long value with 0 ellipsis, and a hand-built list loses type-ahead and the phone's picker. Evidence: single use `src/components/PropertiesPanel.tsx:208`, which replaced `.prop-select` (`appearance: none`, no arrow, a long value cut with no ellipsis). Check: review `src/ui/Select.tsx`.
   - Don't: `<select class="prop-select" onChange={pick}>{options}</select>`
   - Do: `<Select variant="inline" size="sm" align="end" value={value} options={options} ariaLabel={label} onChange={pick} />`
 
@@ -391,7 +391,7 @@ Rests on the native `<select>` element: role, value, the list, type-ahead, the p
 ### Keyboard
 | Key | Where focus is | Effect | Focus after | Checked by |
 |---|---|---|---|---|
-| Tab | The select, in document order. | Moves focus in; the focus stroke and ring draw. A clipped value's hint shows at once. | On the select. | by hand |
+| Tab | The select, in document order. | Moves focus in; the focus stroke and ring draw. A clipped value's hint shows at once, and goes at the next key that opens the list or changes the value (the list opens where the hint sits). | On the select. | test |
 | Tab (disabled) | A disabled select is skipped. | Focus moves past it. | On the next control. | by hand |
 | ArrowDown / ArrowUp | The closed select. | Picks the next or the previous enabled choice (the platform's behaviour; some open the list instead). `onChange` runs. | Stays on the select. | by hand |
 | A letter | The closed select. | Picks the next choice that starts with it (type-ahead). | Stays on the select. | by hand |

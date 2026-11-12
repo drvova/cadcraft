@@ -875,28 +875,17 @@
   }
 }
 
+/* The editor is the system's bare TextArea, which draws no box and sets its own height (two lines
+   to nine, then it scrolls). This label around it is the card's inset and the composer's type,
+   which the editor inherits; a press on the inset lands in the editor, as a press on a label does. */
 .assistant-input {
-  width: 100%;
-  min-height: var(--composer-min-height);
-  max-height: 240px;
+  display: block;
   padding: var(--gap-8) var(--gap-12);
-  border: none;
-  background: transparent;
-  color: var(--text);
   font-family: var(--font-family);
   font-size: var(--composer-font);
   line-height: var(--composer-leading);
-  resize: none;
-  outline: none;
-  overflow-y: auto;
-}
-
-.assistant-input {
   caret-color: var(--accent);
-}
-
-.assistant-input::placeholder {
-  color: var(--text-faint);
+  cursor: text;
 }
 
 .assistant-row {
@@ -983,6 +972,12 @@
    adds none at the sides, so a command's name starts on the text column. */
 .assistant-slash {
   padding: var(--gap-4) 0;
+}
+
+/* The listbox inside it: the options, one under the other, each the system's Row. */
+.assistant-slash-list {
+  display: flex;
+  flex-direction: column;
 }
 
 /* Under another stack (the changes row, a running turn) it is that surface's next band: square

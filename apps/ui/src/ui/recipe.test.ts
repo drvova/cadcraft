@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const strip = (css: string): string => css.replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "");
@@ -192,15 +192,29 @@ describe("the app's own sheets speak the layer's colour vocabulary", () => {
     const styles = sheets[0]?.[1] ?? "";
     expect(rule(styles, ".canvas-stage:focus-visible")).toContain("solid var(--canvas-focus-ring)");
     expect(rule(styles, ".cmd-input:focus")).toContain("border-color: var(--focus-ring)");
-    expect(rule(sheets[1]?.[1] ?? "", ".prop-input:focus-visible, .prop-select:focus-visible")).toContain(
-      "border-color: var(--focus-ring)",
-    );
+    // The properties palette's own field, for as long as it draws one (it is moving onto Field and Select).
+    const propFocus = [...(sheets[1]?.[1] ?? "").matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => (m[1] ?? "").includes(".prop-input:focus-visible"));
+    for (const m of propFocus) expect(m[2]).toContain("border-color: var(--focus-ring)");
   });
 
   test("no text or glyph takes the accent fill as its ink, and no live text takes the disabled ink", () => {
     for (const [file, css] of sheets) {
       expect(`${file}: ${/(?<![\w-])color:\s*var\(--accent\)/.test(css)}`).toBe(`${file}: false`);
       expect(`${file}: ${/(?<![\w-])color:\s*var\(--text-disabled\)/.test(css)}`).toBe(`${file}: false`);
+    }
+  });
+});
+
+describe("the layer's components, from their source", () => {
+  test("no component renders a native title: every hint is the layer's own", () => {
+    const sources = readdirSync(import.meta.dir).filter((file) => file.endsWith(".tsx") && !file.endsWith(".test.tsx"));
+    expect(sources.length).toBeGreaterThan(10);
+    for (const file of sources) {
+      const source = readFileSync(join(import.meta.dir, file), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+      // An attribute on its own line of a native element, or on the line of a lower-case tag. A
+      // layer component's own `title` prop (`<IconButton title=...>`) is the hint, not the attribute.
+      const native = source.split("\n").filter((line) => /^\s*title=/.test(line) || /<[a-z][\w-]*\s[^<>]*\btitle=/.test(line));
+      expect(`${file}: ${native.length}`).toBe(`${file}: 0`);
     }
   });
 });
@@ -266,6 +280,43 @@ describe("the layer's recipe, from the stylesheet", () => {
     expect(rule(uiCss, '.ui-row:disabled, .ui-row[aria-disabled="true"]')).toContain("color: var(--text-disabled)");
   });
 
+  test("a disabled current row drops its fill, and a disabled active option keeps it", () => {
+    expect(rule(uiCss, '.ui-row:disabled[aria-current="true"]')).toContain("background: transparent");
+    // After the selected rule, or the fill would win; and nothing takes the fill from a blocked option.
+    expect(uiCss.indexOf('.ui-row:disabled[aria-current="true"]')).toBeGreaterThan(uiCss.indexOf('.ui-row[aria-selected="true"]'));
+    const row = [...uiCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => (m[1] ?? "").includes(".ui-row") && (m[1] ?? "").includes("aria-disabled"));
+    for (const m of row) expect(m[2]).not.toContain("background");
+  });
+
+  test("an inline field is text until it is touched, and focus, a refused value and disabled win over its hover", () => {
+    const inline = rule(uiCss, ".ui-field--inline");
+    expect(inline).toContain("border-color: transparent");
+    expect(inline).toContain("background: transparent");
+    const hover = uiCss.indexOf(".ui-field--inline:hover");
+    expect(hover).toBeGreaterThan(-1);
+    expect(rule(uiCss, ".ui-field--inline:hover")).toContain("background: var(--control)");
+    // The same weight of selector: the later rule wins, so each of these sits after the hover.
+    for (const later of [".ui-field:focus", '.ui-field[aria-invalid="true"]', ".ui-field--inline:disabled"]) {
+      expect(`${later}: ${uiCss.indexOf(`${later} {`) > hover}`).toBe(`${later}: true`);
+    }
+    expect(rule(uiCss, ".ui-field:focus")).toContain("background: var(--control)");
+    expect(rule(uiCss, '.ui-field[aria-invalid="true"]')).toContain("background: var(--control)");
+    expect(rule(uiCss, ".ui-field--inline:disabled")).toContain("background: transparent");
+  });
+
+  test("the small field is the small select's box, a value on the far side lines its figures up, and a mixed one reads quieter", () => {
+    expect(rule(uiCss, ".ui-field")).toContain("height: var(--control-h-input)");
+    expect(rule(uiCss, ".ui-field")).toContain("text-overflow: ellipsis");
+    const sm = rule(uiCss, ".ui-field--sm");
+    expect(sm).toContain("height: var(--control-h-chip)");
+    expect(sm).toContain("padding: 0 var(--gap-4) var(--hairline)");
+    expect(rule(uiCss, ".ui-select--sm")).toContain("--ui-select-pad: var(--gap-4)");
+    const end = rule(uiCss, ".ui-field--end");
+    expect(end).toContain("text-align: end");
+    expect(end).toContain("tabular-nums");
+    expect(rule(uiCss, ".ui-field--mixed")).toContain("color: var(--text-faint)");
+  });
+
   test("a section label is the measured heading: bold capitals with no added tracking", () => {
     const label = rule(uiCss, ".ui-section-label");
     expect(label).toContain("text-transform: uppercase");
@@ -325,10 +376,12 @@ describe("the layer's recipe, from the stylesheet", () => {
     expect(dark["control-h-input"]).toBe("24px");
     expect(dark["control-h-chip"]).toBe("20px");
     expect(uiCss.slice(0, at)).not.toContain("::after");
-    expect(rule(coarse, ".ui-select--sm")).toContain("height: var(--control-h-input)");
+    expect(rule(coarse, ".ui-select--sm, .ui-field--sm")).toContain("height: var(--control-h-input)");
     const target = rule(coarse, ".ui-checkbox::after");
     expect(target).toContain("width: max(100%, var(--control-h-input))");
     expect(target).toContain("height: var(--control-h-input)");
-    expect(rule(coarse, ".ui-textarea, .ui-select-control")).toContain("font-size: max(16px, 1em)");
+    // Every control a finger types in or picks from: under 16px a phone zooms the page into it.
+    expect(rule(coarse, ".ui-field, .ui-textarea, .ui-select-control")).toContain("font-size: max(16px, 1em)");
+    expect(rule(coarse, ".ui-field")).toContain("padding-block: 0");
   });
 });

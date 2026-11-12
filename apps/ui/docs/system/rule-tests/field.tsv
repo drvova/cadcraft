@@ -6,3 +6,6 @@ rule/field-canonical-element	pass	pass	n/a: two-agent test not run this session 
 rule/field-width-limit	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
 rule/field-described-by	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: the provider form's 3 lines move onto the prop at integration; their file is not this worker's	ship	
 rule/field-secret-not-remembered	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: the API key field moves onto the props at integration; its file is not this worker's	ship	
+rule/field-inline-in-row	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: the palette's value rows move onto the props at integration; their file is not this worker's	ship	
+rule/field-commit-in-caller	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: the palette's value rows move onto the props at integration; their file is not this worker's	ship	
+rule/field-combobox-complete	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: the palette's search field moves onto the props at integration; its file is not this worker's	ship	

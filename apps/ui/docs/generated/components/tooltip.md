@@ -13,7 +13,7 @@ Not applicable: hand-rolled — the hover box is measured from the running Curso
 ## Examples
 `<Tooltip text="Outline, the current layer"><span class="layer-name">Outline</span></Tooltip>` — a hint over a control that is not a layer component.
 
-Real uses, 1 call site (`rg -c "<Tooltip" src/components` → `src/components/LayersPanel.tsx:1`). The box itself is in use on every `IconButton`, `Button`, `Chip`, `Tab` and `Field` that has something to say, without the wrapper.
+Real uses, 1 call site (`rg -c "<Tooltip" src/components` → `src/components/LayersPanel.tsx:1`). The box itself is in use on every `IconButton`, `Button`, `Chip`, `Tab`, `Field`, `Select`, `TextArea` and `Row` that has something to say, without the wrapper. No component of the layer renders a native `title` attribute: `Row`, the last to do so, moved onto the box on 2026-11-11 (`src/ui/recipe.test.ts` holds every component's source to it).
 - `src/components/LayersPanel.tsx` — a layer row's hint.
 - `src/components/StatusBar.tsx` — the drafting toggles, outside the layer, carry `data-hint` and `data-hint-keys` (see "Adopting the hint outside the layer"); no native `title` is left in the shell.
 
@@ -88,14 +88,16 @@ What the box holds comes from three attributes on the element that asks:
 | `data-hint-label` | On one element inside the control: the label the control shows, where the control's own text holds more than that label (`Select` holds every choice and shows one). No value. | Nothing by itself: it is the text a clipped control's hint reads in full, and the text a repeated hint is compared with. |
 | `data-hint-placement` | `top` to prefer the side above. | — |
 
-A control whose label is clipped by its own box (`scrollWidth` past `clientWidth`, on the element or the label directly inside it) gets its full label as the first line by itself, and what `data-hint` adds drops to the second line. A hint that only repeats the label the control shows (compared trimmed, white space collapsed), with no shortcut and no note, is not drawn.
+A control whose label is clipped by its own box (`scrollWidth` past `clientWidth`, on the element or the label directly inside it) gets its full label as the first line by itself, and what `data-hint` adds drops to the second line. The label is the marked one (`data-hint-label`), else the part that is cut (a row's label, without the shortcut beside it), else everything the control shows; a field's label is its value, never a password's; and a part hidden from assistive tech (`aria-hidden="true"`) is skipped, so a name drawn in pieces beside its whole text reads once.
+
+A host that carries `data-hint` empty (a layer component with no `title`, there for its clipped label) gives way to a host around it that has words: a `Tooltip` wrapped around a `Row` still speaks. A hint that only repeats the label the control shows (compared trimmed, white space collapsed), with no shortcut and no note, is not drawn.
 
 ## States
 | State | Trigger | What the user can do | Shown by, besides color | Checked by |
 |---|---|---|---|---|
 | Rest | The pointer is away and keyboard focus is elsewhere, or the control's hint has nothing to add. | Use the control. | The box is `opacity: 0; visibility: hidden` and takes no pointer. | test |
 | Shown | A mouse or a pen rests on the host for 0.4s (at once, and without the fade, when another hint was up within the last 0.3s), or a key moves focus onto the host (Tab, an arrow key, Home, End, Page Up, Page Down, F6). Never a finger, and never focus that arrived by a click or was handed back by a closing dialog. | Read the hint; the control keeps the pointer. | The box fades in over 0.1s beside the host, inside the window's edges. | test |
-| Dismissed | Escape, a press, a click, typing, a scroll, a resize, or the window losing focus, while the box is shown or waiting to show. | Use the control; move the pointer or the focus to another control to see a hint again. | The box is gone at once and stays away while the pointer rests on the same host. | test |
+| Dismissed | Escape, a press, a click, typing, a scroll, a resize, the window losing focus, or any key in a `<select>` but Tab and a bare modifier (its list opens where the box sits), while the box is shown or waiting to show. | Use the control; move the pointer or the focus to another control to see a hint again. | The box is gone at once and stays away while the pointer rests on the same host. | test |
 | Held back | The host has its own menu or dialog open (`aria-haspopup` with `aria-expanded="true"`), or focus is inside a menu or a dialog the host is not part of. | Use the menu or the dialog. | No box. A control inside the open menu or dialog still hints. | test |
 
 ### State precedence
@@ -153,16 +155,16 @@ A fact that is not a control (a `<span>`) takes no keyboard focus, so its hint i
 - The content is rich, interactive or long. Use `Row` rows inside a menu instead.
 
 ### Rules
-- `rule/tooltip-not-a-name`: When a control carries a tooltip, give the control its own `aria-label` or visible text, because the box is `aria-hidden` and a control named only by its hint has 0 names for a screen reader. Evidence: single use `src/ui/Tooltip.tsx:206`, `aria-hidden="true"` on the box. Check: test `src/ui/Tooltip.test.tsx`.
+- `rule/tooltip-not-a-name`: When a control carries a tooltip, give the control its own `aria-label` or visible text, because the box is `aria-hidden` and a control named only by its hint has 0 names for a screen reader. Evidence: single use `src/ui/Tooltip.tsx:243`, `aria-hidden="true"` on the box. Check: test `src/ui/Tooltip.test.tsx`.
   - Don't: `<Tooltip text="Close"><button>✕</button></Tooltip>`
   - Do: `<Tooltip text="Close the panel"><button aria-label="Close the panel">✕</button></Tooltip>`
-- `rule/tooltip-never-blocks`: When the tooltip shows, the box keeps `pointer-events: none`, because it sits beside the control and a hint that takes the click is worse than 0 hints. Evidence: single use `src/ui/ui.css:868`, `pointer-events: none` on the box. Check: test `src/ui/recipe.test.ts`.
+- `rule/tooltip-never-blocks`: When the tooltip shows, the box keeps `pointer-events: none`, because it sits beside the control and a hint that takes the click is worse than 0 hints. Evidence: single use `src/ui/ui.css:921`, `pointer-events: none` on the box. Check: test `src/ui/recipe.test.ts`.
   - Don't: a tooltip box with a hover handler of its own.
   - Do: `pointer-events: none` on `.ui-tooltip`.
-- `rule/tooltip-no-touch`: When the pointer is a finger, show 0 hints, because a finger has no hover and a tap would leave the box up over the control it just pressed. Evidence: single use `src/ui/Tooltip.tsx:290`, the `pointerType === "touch"` guard. Check: test `src/ui/Tooltip.test.tsx`.
+- `rule/tooltip-no-touch`: When the pointer is a finger, show 0 hints, because a finger has no hover and a tap would leave the box up over the control it just pressed. Evidence: single use `src/ui/Tooltip.tsx:327`, the `pointerType === "touch"` guard. Check: test `src/ui/Tooltip.test.tsx`.
   - Don't: a hint that carries an instruction a touch user needs ("Hold to record").
   - Do: the instruction in the control's label or beside it, and the hint only as a repeat.
-- `rule/tooltip-adds`: When a hint is written for a control with a visible label, write what the label leaves out and 0 words that repeat it, because the layer draws no box for a hint equal to the label and a description equal to the name is read twice. Evidence: single use `src/ui/Tooltip.tsx:175`, the `hint === label` comparison. Check: test `src/ui/Tooltip.test.tsx`.
+- `rule/tooltip-adds`: When a hint is written for a control with a visible label, write what the label leaves out and 0 words that repeat it, because the layer draws no box for a hint equal to the label and a description equal to the name is read twice. Evidence: single use `src/ui/Tooltip.tsx:203`, the comparison of the hint with the label the control shows. Check: test `src/ui/Tooltip.test.tsx`.
   - Don't: `<Tooltip text="Check connection"><button type="button">Check connection</button></Tooltip>`
   - Do: `<Tooltip text="Check the address and the key"><button type="button">Check connection</button></Tooltip>`
 - `rule/tooltip-shortcut-cap`: When a hint teaches a shortcut, pass it by itself (`shortcut`, `data-hint-keys`) and keep it out of the text, because the box draws 1 key cap for it and text in brackets is read as part of the sentence. Evidence: app 9/31 icon buttons in the running shell end their title in a bracketed shortcut, which `IconButton` and `Button` still split off for them, measured in the browser 2026-11-11. Check: test `src/ui/Tooltip.test.tsx`.
@@ -180,7 +182,7 @@ A fact that is not a control (a `<span>`) takes no keyboard focus, so its hint i
   - Do: `<Tooltip text="Snap Mode" shortcut="F9"><button aria-label="Snap Mode">Snap</button></Tooltip>`
 
 ### Limits
-- `rule/tooltip-length-limit`: When a hint runs past 64 characters, move the explanation into the control's label or help text, because the box wraps at a 32ch measure (207px at 12px type) and a third line reads as a paragraph over the surface it covers. Evidence: measured 207px by 40px box, 2 lines, for the 46-character "To save, choose a provider or type a base URL." at 1280px and at 390px, `src/ui/ui.css:853`. Check: test `src/ui/recipe.test.ts`.
+- `rule/tooltip-length-limit`: When a hint runs past 64 characters, move the explanation into the control's label or help text, because the box wraps at a 32ch measure (207px at 12px type) and a third line reads as a paragraph over the surface it covers. Evidence: measured 207px by 40px box, 2 lines, for the 46-character "To save, choose a provider or type a base URL." at 1280px and at 390px, `src/ui/ui.css:906`. Check: test `src/ui/recipe.test.ts`.
   - Don't: a 120-character hint over the composer.
   - Do: a 3-word hint and a visible line of help for the rest.
 

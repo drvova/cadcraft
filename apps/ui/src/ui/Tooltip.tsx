@@ -62,6 +62,9 @@ const OPEN_POPUP = '[aria-haspopup][aria-expanded="true"]';
 /** The keys that move focus. Focus that arrives any other way (a click, a dialog closing) raises no hint. */
 const FOCUS_KEYS = new Set(["Tab", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown", "F6"]);
 
+/** The keys that neither open a select's list nor change its value. */
+const SELECT_QUIET_KEYS = new Set(["Tab", "Shift", "Control", "Alt", "Meta"]);
+
 const KEY = "(?:F\\d{1,2}|[A-Za-z0-9]|Esc|Escape|Enter|Return|Tab|Space|Del|Delete|Backspace|Home|End|PageUp|PageDown|Up|Down|Left|Right|[,./;'\\[\\]\\\\`=-])";
 /** A title that ends in its shortcut in brackets: "Undo (Ctrl+Z)", "Snap Mode (F9)", "Redo (⇧⌘Z)". */
 const TRAILING_KEYS = new RegExp(`^(.*\\S)\\s*\\(((?:(?:Ctrl|Control|Shift|Alt|Option|Cmd|Meta|Win)\\+)*${KEY}|[⌃⌥⇧⌘]+${KEY})\\)$`, "u");
@@ -148,9 +151,26 @@ export function placeHint(
 /** Text as a person compares it: trimmed, with every run of white space one space. */
 const plain = (text: string | null | undefined): string => (text ?? "").replace(/\s+/g, " ").trim();
 
-/** Whether the control, or the label directly inside it, is cut short by its own box. */
-function clipped(host: Element): boolean {
-  return [host, ...host.children].some((el) => el.scrollWidth > el.clientWidth);
+/** The control, or the part directly inside it, that its own box cuts short; `null` when all of it fits. */
+function clippedPart(host: Element): Element | null {
+  return [host, ...host.children].find((el) => el.scrollWidth > el.clientWidth) ?? null;
+}
+
+/**
+ * The words an element shows, once: a field's are its value (never a password's), and a part
+ * hidden from assistive tech inside it is skipped, because a label drawn in pieces for the eye
+ * beside its whole text for a screen reader (a name cut in its middle) would be read twice.
+ */
+function shownText(el: Element): string {
+  if (el instanceof HTMLInputElement) return el.type === "password" ? "" : plain(el.value);
+  if (el.querySelector('[aria-hidden="true"]') === null) return plain(el.textContent);
+  const words = (node: Node): string =>
+    node instanceof Element && node !== el && node.getAttribute("aria-hidden") === "true"
+      ? ""
+      : node.childNodes.length === 0
+        ? (node.textContent ?? "")
+        : [...node.childNodes].map(words).join("");
+  return plain(words(el));
 }
 
 export interface HintContent {
@@ -171,12 +191,16 @@ export function hintContent(host: Element): HintContent | null {
   const hint = plain(host.getAttribute(HINT_ATTR));
   const keys = plain(host.getAttribute(HINT_KEYS_ATTR));
   const note = plain(host.getAttribute(HINT_NOTE_ATTR));
-  const label = plain((host.querySelector(`[${HINT_LABEL_ATTR}]`) ?? host).textContent);
-  if (label !== "" && clipped(host)) {
-    const rest = [hint, note].filter((line) => line !== "" && line !== label);
-    return { text: label, keys, note: rest.join(". ") };
+  const marked = host.querySelector(`[${HINT_LABEL_ATTR}]`);
+  const cut = clippedPart(host);
+  // The label in full: the marked one, else the part that is cut (a row's label beside its
+  // shortcut), else everything the control shows.
+  const full = cut === null ? "" : shownText(marked ?? cut);
+  if (full !== "") {
+    const rest = [hint, note].filter((line) => line !== "" && line !== full);
+    return { text: full, keys, note: rest.join(". ") };
   }
-  const repeats = hint === label;
+  const repeats = hint === shownText(marked ?? host);
   if (hint === "" || (repeats && keys === "" && note === "")) return null;
   return { text: hint, keys, note };
 }
@@ -198,8 +222,21 @@ interface HintState {
 
 const states = new WeakMap<Document, HintState>();
 
+/** Whether the host carries words of its own, beyond standing by for a label its box may cut. */
+const says = (host: Element): boolean => [HINT_ATTR, HINT_KEYS_ATTR, HINT_NOTE_ATTR].some((attr) => plain(host.getAttribute(attr)) !== "");
+
+/**
+ * The control a pointer or the focus is on: the nearest element carrying `data-hint`. One that
+ * carries it empty and has nothing cut (a layer component with no `title`, there for its clipped label) gives way to
+ * a host around it that has words, so a `Tooltip` wrapped around a `Row` still speaks.
+ */
 function hintHost(target: EventTarget | null): Element | null {
-  return target instanceof Element ? target.closest(`[${HINT_ATTR}]`) : null;
+  if (!(target instanceof Element)) return null;
+  const nearest = target.closest(`[${HINT_ATTR}]`);
+  for (let host = nearest; host !== null; host = host.parentElement?.closest(`[${HINT_ATTR}]`) ?? null) {
+    if (says(host) || hintContent(host) !== null) return host;
+  }
+  return nearest;
 }
 
 /** The box, as a child of `parent`: the body, or the modal dialog its control is in (the top layer covers the body). */
@@ -317,7 +354,10 @@ export function installHints(doc: Document = document): void {
     "keydown",
     (event) => {
       state.focusKey = FOCUS_KEYS.has(event.key);
-      if (event.key === "Escape") dismiss();
+      // A select's list opens over the place the box sits (Space, Enter, the arrows, a letter):
+      // every key in one but Tab and a bare modifier puts the box away.
+      const inSelect = event.target instanceof HTMLSelectElement && !SELECT_QUIET_KEYS.has(event.key);
+      if (event.key === "Escape" || inSelect) dismiss();
     },
     true,
   );
