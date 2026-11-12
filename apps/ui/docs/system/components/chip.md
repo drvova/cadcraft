@@ -14,7 +14,7 @@ Not applicable: hand-rolled — the pill radius, the 20px height and the accent 
 
 Real uses, 3 call sites (`rg -c "<Chip" src/components` → `src/components/AssistantPane.tsx:4`, `src/components/CommandLine.tsx:1`, `src/components/InlineAsk.tsx:1`):
 - `src/components/InlineAsk.tsx` — the inline ask's selection (`neutral`, static): how many objects on the drawing go with the message ("3 selected"), with a hint that says so. Added 2026-11-12.
-- `src/components/AssistantPane.tsx:703` — the setup sheet's model chips: one per model the connection check listed, click to put it in the Model field; the one in the field takes `tone="accent"`, the rest `neutral`.
+- `src/components/AssistantPane.tsx:757` — the setup sheet's model chips: one per model the connection check listed, click to put it in the Model field; the one in the field takes `tone="accent"`, the rest `neutral`.
 - `src/components/CommandLine.tsx:171` — the command line's keyword row (`tone="accent"`): one chip per keyword the open command offers, click to submit it.
 
 ### Example files

@@ -150,6 +150,15 @@ commands on this page, so its bench sheet reads back: 33 stones, 1.36 ct, a 3.86
   so in the hint on its row. Window ▸ Bench Sheet shows and hides it.
 - **The tool strip** has the four drawing commands after the drafting tools: Ring, Gem, Setting,
   Pavé. Draw ▸ holds the same four.
+- **Ring and Gem open a dialog** from the tool strip, the Draw menu and the palette (typed at the
+  command line they still ask their prompts). Ring takes a size in any system, the wall, the
+  width, the alloy and a position, and shows the size in every system as it is typed. Gem takes a
+  cut, its size (a diameter, or a length and a width for an elongated cut), the stone and a
+  position, and shows the engine's worked example for the cut. OK runs the command; a refusal
+  stays in the dialog beside the field it names. The weight is not shown before OK (the engine
+  weighs only what it draws); it is read on the Bench section afterwards.
+- **On a phone** the sidebar, with the Bench section, takes the workspace when its title-bar key
+  is on, and starts closed.
 - **The assistant** is told these commands and the trade's units at the start of every turn, and
   its first suggestions are a jeweler's sentences. Ctrl+K asks it from the drawing
   ([assistant.md](assistant.md#open-it)).
@@ -174,5 +183,6 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | patch | Ring and Gem dialogs in the interface; the sidebar is reachable at a phone's width |
 | 2026-11-12 | patch | A bench line selects what it counts (`TECHSHEET` groups carry `handles`, bands a `handle`); the sample is dimensioned and its layers recoloured |
 | 2026-11-12 | minor | The interface opens on a solitaire sample (`sample::solitaire`), the sidebar has a live Bench section, the tool strip has Ring, Gem, Setting and Pavé, and the assistant is briefed on the jewelry commands. `TECHSHEET` reports bands. Three faults fixed, each with a test: a stone placed with `stone: "diamond"` got a block name (`GEM-…-DIAMOND`) that did not read back, so `SETTING` refused it and the sheet did not count it (diamond is now the default block whether named or not, and a material that begins with `D` is no longer read as a depth); a halo was laid around the origin instead of around its stone; in an inch drawing prongs, halos and pavé were placed 25.4 times too far out |

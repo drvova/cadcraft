@@ -19,6 +19,11 @@ them.
   last left it.
 - With objects selected and no command running, the top of the drawing offers "Ask about N
   selected objects"; a press opens the same line as Ctrl+K.
+- **`@` in the composer** lists what the message can point at: the selection, the bench sheet's
+  lines and the layers. The text after `@` filters, the arrows move, Enter or Tab picks, Escape
+  closes the list. A pick becomes a chip in the composer card and is sent with that message as
+  quoted lines under the reader's words (a layer's name; a bench line's label, value and the
+  first 200 handles of its objects); the transcript shows what rode along. At most 8 per message.
 - **Ctrl+K** (⌘K), or Window ▸ Ask the Assistant…, opens one line over the top of the drawing.
   It holds the same draft as the panel's composer. Enter sends it and opens the panel, where the
   turn is read; Escape closes the line and gives the keyboard back to the drawing. What is
@@ -253,6 +258,7 @@ a provider's output, the queue and the changes row.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | minor | `@` context in the composer: the selection, bench lines and layers as chips that ride with one message |
 | 2026-11-12 | patch | The panel starts open on a wide window and remembers how it was left; a selection on the drawing offers the inline ask; the empty panel's suggestions are short enough to read whole at the panel's first width |
 | 2026-11-12 | minor | Ctrl+K opens a line over the drawing that shares the composer's draft and sends to the chat in front. The system prompt names the jewelry commands (`ringsizes`, `ring`, `gem`, `gemlist`, `setting`, `pave`, `gemfit`, `techsheet`) and asks for answers in finger sizes, millimetres, carats and grams, in the interface and in `crates/ai`. The empty panel's suggestions are jewelry requests |
 | 2026-11-12 | minor | First run and setup as they are at 43dd130: the composer's "Set up a model" slot is the way in and a message typed before setup is sent after Save; step two is one form with one status line and Cancel, Check connection, Save; the composer rests on one line |

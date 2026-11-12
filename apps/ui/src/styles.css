@@ -124,9 +124,22 @@ body {
   }
 }
 
-/* Narrower still, the assistant takes the workspace: the drawing is behind it, one key away. */
+/* Narrower still, one part has the workspace at a time: the assistant when it is open, else the
+   sidebar when it is open, else the drawing. Each is one key of the title bar away. (The sidebar
+   starts closed in a window this narrow: app.tsx.) */
 @media (max-width: 560px) {
-  .workspace .sidebar {
+  .workspace.has-assistant .sidebar {
+    display: none;
+  }
+
+  .workspace:not(.has-assistant) .sidebar {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    border-right: none;
+  }
+
+  .workspace:not(.has-assistant):has(> .sidebar) .editor {
     display: none;
   }
 

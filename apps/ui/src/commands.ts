@@ -14,7 +14,7 @@
 import type { CommandInfo } from "./facade";
 
 /** What the shell does with an invoked id. */
-export type CommandAction = "engine" | "open" | "save" | "sample" | "visibility" | "theme" | "animations" | "palette" | "ask" | "focus" | "drafting" | "layers" | "none";
+export type CommandAction = "engine" | "open" | "save" | "sample" | "visibility" | "theme" | "animations" | "palette" | "ask" | "focus" | "drafting" | "layers" | "jewelry" | "none";
 
 /** One `ui.*` command the web shell can honour, transcribed from `menus.rs`'s `UI_COMMANDS`. */
 export interface UiItem {
@@ -76,6 +76,8 @@ export function classify(id: string): CommandAction {
   if (id === "dsettings") return "drafting";
   // Layers is the Layer Properties Manager; `-layer` stays the command line's prompt sequence.
   if (id === "layer") return "layers";
+  // Ring and Gem are the interface's dialogs over the commands' JSON forms; typed, they stay the prompts.
+  if (id === "ring" || id === "gem") return "jewelry";
   return "engine";
 }
 

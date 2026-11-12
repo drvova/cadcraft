@@ -15,6 +15,7 @@
 import { batch, createSignal } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import type { AppFacade } from "./facade";
+import { addMention, contextBlock, contextLabels, type Mention } from "./mentions";
 import { activityLine, resultNote, MAX_MESSAGE_CHARS, MAX_REQUEST_CHARS, PROVIDER_LIMITS, providerFault, runTurn, trimToBudget, type AssistantEvent, type Briefing, type ChatImage, type ChatMessage, type ProviderConfig, type TurnOptions } from "./assistant";
 
 export interface ToolEntry {
@@ -29,7 +30,7 @@ export interface ToolEntry {
 }
 
 export type Entry =
-  | { kind: "user"; text: string; pictures: number; at: number }
+  | { kind: "user"; text: string; pictures: number; at: number; /** What the reader pointed at with `@` and the message carried, by label. */ context?: readonly string[] }
   | { kind: "assistant"; text: string; at: number }
   | { kind: "failed"; text: string; at: number }
   | ToolEntry;
@@ -38,6 +39,9 @@ export type Entry =
 export interface QueuedMessage {
   text: string;
   pictures: readonly ChatImage[];
+  /** The `@` context as it was when the message was written: the block the model reads, and its labels. */
+  block?: string;
+  context?: readonly string[];
 }
 
 /** The assistant's changes the reader has neither kept nor undone: the undo depth before the
@@ -196,7 +200,21 @@ export function createAssistantSession(opts: SessionOptions) {
   const [provider, setProviderSignal] = createSignal<ProviderConfig>(loadProvider());
   const [changes, setChanges] = createSignal<Changes | null>(null);
   /** Whether the briefing names the canvas selection; the reader can leave it out. */
-  const [selectionIncluded, setSelectionIncluded] = createSignal(true);
+  const [selectionIncluded, setSelectionIncludedSignal] = createSignal(true);
+  /** What the reader pointed at with `@` for the message being written; sending clears it. */
+  const [mentions, setMentions] = createSignal<readonly Mention[]>([]);
+  /** A selection left out of the message is not pointed at either. */
+  const setSelectionIncluded = (included: boolean): void => {
+    setSelectionIncludedSignal(included);
+    if (!included && mentions().some((m) => m.kind === "selection")) setMentions(mentions().filter((m) => m.kind !== "selection"));
+  };
+  /** Point at one more thing (each once, within `MAX_MENTIONS`); pointing at the selection brings it back into the message. */
+  const mention = (m: Mention): void => {
+    if (m.kind === "selection") setSelectionIncludedSignal(true);
+    setMentions(addMention(mentions(), m));
+  };
+  /** The mentions as they stand now: the selection is read from the drawing, never remembered. */
+  const pointedAt = (): Mention[] => mentions().map((m) => (m.kind === "selection" ? { kind: "selection", handles: opts.facade.selection().handles } : m));
   /** How many of the chat's oldest rows were let go (see `MAX_ENTRIES`). */
   const [dropped, setDropped] = createSignal(0);
   const frame = opts.frame ?? nextFrame;
@@ -225,7 +243,7 @@ export function createAssistantSession(opts: SessionOptions) {
    */
   const used = (): number => {
     const all = conversation();
-    return contextUsed(trimToBudget(running() ? all : [...all, { role: "user", content: "" }], MAX_REQUEST_CHARS));
+    return contextUsed(trimToBudget(running() ? all : [...all, { role: "user", content: contextBlock(pointedAt()) }], MAX_REQUEST_CHARS));
   };
   /** How far the draft is over what one message may hold, or 0. */
   const overBy = (): number => Math.max(0, input().trim().length - MAX_MESSAGE_CHARS);
@@ -376,7 +394,7 @@ export function createAssistantSession(opts: SessionOptions) {
     });
   };
 
-  const begin = (text: string, pictures: readonly ChatImage[]): void => {
+  const begin = (text: string, pictures: readonly ChatImage[], block = "", context: readonly string[] = []): void => {
     // A chat past its bound lets its oldest whole turns go, here and never in the middle of a turn.
     const over = entries.length + 1 - MAX_ENTRIES;
     const cut = over > 0 ? turnStart(entries, over) : 0;
@@ -385,11 +403,14 @@ export function createAssistantSession(opts: SessionOptions) {
       setEntries(
         produce((list) => {
           if (cut > 0) list.splice(0, cut);
-          list.push({ kind: "user", text, pictures: pictures.length, at: Date.now() });
+          list.push(context.length === 0 ? { kind: "user", text, pictures: pictures.length, at: Date.now() } : { kind: "user", text, pictures: pictures.length, at: Date.now(), context: [...context] });
         }),
       );
     });
-    const message: ChatMessage = pictures.length === 0 ? { role: "user", content: text } : { role: "user", content: text, images: pictures };
+    // What was pointed at with `@` rides in the message itself, under the reader's words: it stays
+    // in the conversation for the turns after this one, and the transcript shows the words alone.
+    const content = block === "" ? text : `${text}\n\n${block}`;
+    const message: ChatMessage = pictures.length === 0 ? { role: "user", content } : { role: "user", content, images: pictures };
     const next: ChatMessage[] = [...conversation(), message];
     setConversation(next);
     start(next);
@@ -403,13 +424,18 @@ export function createAssistantSession(opts: SessionOptions) {
     if (!ready()) return "unconfigured";
     if (text.length > MAX_MESSAGE_CHARS) return "too-long";
     const pictures = attached();
+    // The context is written now, from the drawing as it is: a queued message keeps what it pointed at.
+    const pointed = pointedAt();
+    const block = contextBlock(pointed);
+    const context = contextLabels(pointed);
     setInput("");
     setAttached([]);
+    setMentions([]);
     if (running()) {
-      setQueued(produce((list) => void list.push({ text, pictures })));
+      setQueued(produce((list) => void list.push(block === "" ? { text, pictures } : { text, pictures, block, context })));
       return "queued";
     }
-    begin(text, pictures);
+    begin(text, pictures, block, context);
     return "sent";
   };
 
@@ -418,9 +444,9 @@ export function createAssistantSession(opts: SessionOptions) {
     if (running()) return;
     const item = queued[index];
     if (item === undefined) return;
-    const { text, pictures } = item;
+    const { text, pictures, block, context } = item;
     setQueued(produce((list) => void list.splice(index, 1)));
-    begin(text, pictures);
+    begin(text, pictures, block ?? "", context ?? []);
   };
 
   const unqueue = (index: number): void => {
@@ -482,6 +508,7 @@ export function createAssistantSession(opts: SessionOptions) {
     setQueued(produce((list) => void list.splice(0, list.length)));
     setConversation([]);
     setAttached([]);
+    setMentions([]);
     setInput("");
     ranSince = [];
     setChanges(null);
@@ -517,6 +544,9 @@ export function createAssistantSession(opts: SessionOptions) {
     changes,
     selectionIncluded,
     setSelectionIncluded,
+    mentions,
+    setMentions,
+    mention,
     used,
     overBy,
     dropped,

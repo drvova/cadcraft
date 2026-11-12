@@ -41,6 +41,7 @@ import { InlineAsk } from "./components/InlineAsk";
 import { parseBench, type BenchSheet } from "./bench";
 import { CommandLine } from "./components/CommandLine";
 import { createRecovery, RecoveryBar } from "./components/RecoveryBar";
+import { GemDialog, RingDialog } from "./components/JewelryDialog";
 import { LayerManager } from "./components/LayerManager";
 import { opensLayerManager } from "./layer-manager";
 
@@ -218,7 +219,8 @@ export function App(props: AppProps): JSX.Element {
   const [showAssistant, setShowAssistant] = createSignal(loadAssistantOpen());
   createEffect(() => saveAssistantOpen(showAssistant()));
   /** The left sidebar as a whole (its palettes keep their own switches inside it). */
-  const [showSidebar, setShowSidebar] = createSignal(true);
+  // In a window of a phone's width it would take the whole workspace (styles.css), so it starts closed there.
+  const [showSidebar, setShowSidebar] = createSignal(typeof window === "undefined" || window.innerWidth > 560);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   /** The line over the drawing that asks the assistant (Ctrl+K). */
   const [askOpen, setAskOpen] = createSignal(false);
@@ -667,6 +669,17 @@ export function App(props: AppProps): JSX.Element {
   const [drafting, setDrafting] = createSignal<{ open: boolean; tab: DraftingTab }>({ open: false, tab: "snap-grid" });
   /** Whether the Layer Properties Manager shows. */
   const [layerManager, setLayerManager] = createSignal(false);
+  /** Which of the Ring and Gem dialogs shows, if either. */
+  const [jewelry, setJewelry] = createSignal<"ring" | "gem" | null>(null);
+  /**
+   * A ring or a stone was placed from its dialog: show it. Its weight is read on the Bench
+   * section, which counts again here; the line beside the command field is for refusals, in the
+   * error ink, and a placed piece is not one.
+   */
+  const onJewelryPlaced = (_message: string | null): void => {
+    setNotice(null);
+    refresh();
+  };
   const openDrafting = (tab: DraftingTab = "snap-grid"): void => {
     setDrafting({ open: true, tab });
   };
@@ -806,6 +819,9 @@ export function App(props: AppProps): JSX.Element {
         return;
       case "drafting":
         openDrafting();
+        return;
+      case "jewelry":
+        setJewelry(id === "gem" ? "gem" : "ring");
         return;
       case "focus":
         if (id === "ui.focus.cmdline") focusCommandLine();
@@ -1206,6 +1222,8 @@ export function App(props: AppProps): JSX.Element {
             <AssistantPane
               session={chat}
               selection={selection}
+              layers={layers().map((l) => l.name)}
+              bench={bench()}
               commands={palette}
               onRunCommand={onPaletteRun}
               chats={() => chats().map((c) => c.title())}
@@ -1233,6 +1251,8 @@ export function App(props: AppProps): JSX.Element {
         />
       </Show>
       <LayerManager facade={props.facade} open={layerManager()} onClose={() => setLayerManager(false)} onChanged={refresh} />
+      <RingDialog facade={props.facade} open={jewelry() === "ring"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
+      <GemDialog facade={props.facade} open={jewelry() === "gem"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
       <DraftingSettings
         facade={props.facade}
         open={drafting().open}

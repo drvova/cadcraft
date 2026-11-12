@@ -134,6 +134,9 @@ describe("classify", () => {
     expect(classify("ui.open")).toBe("open");
     expect(classify("dsettings")).toBe("drafting");
     expect(classify("layer")).toBe("layers");
+    expect(classify("ring")).toBe("jewelry");
+    expect(classify("gem")).toBe("jewelry");
+    expect(classify("pave")).toBe("engine");
     expect(classify("ui.saveas")).toBe("save");
     expect(classify("ui.sample")).toBe("sample");
     expect(classify("ui.sample.bracket")).toBe("sample");

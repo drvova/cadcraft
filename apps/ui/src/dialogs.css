@@ -553,3 +553,62 @@
     --lm-row-h: var(--control-h-input);
   }
 }
+
+/* ---- Ring and Gem ---- */
+
+/* One column of groups; the rows are the drafting dialog's own label and value pair. */
+.jewelry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-16);
+  min-width: 0;
+}
+
+.jewelry-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-4);
+  min-width: 0;
+}
+
+/* What the engine says of the form, read and not typed: set in from the fields by a soft edge. */
+.jewelry-readout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-6);
+  min-width: 0;
+  padding: var(--gap-8) var(--gap-10);
+  border: var(--hairline) solid var(--border-soft);
+  border-radius: var(--radius-card);
+  background: var(--surface-inset);
+}
+
+.jewelry-facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-2);
+  margin: 0;
+}
+
+/* A name and its figure share the fields' two edges: the name left, the figure right. */
+.jewelry-fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap-12);
+  min-width: 0;
+  line-height: var(--leading-ui);
+}
+
+.jewelry-fact > dt {
+  min-width: 0;
+  color: var(--text-dim);
+}
+
+.jewelry-fact > dd {
+  margin: 0;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  overflow-wrap: anywhere;
+}

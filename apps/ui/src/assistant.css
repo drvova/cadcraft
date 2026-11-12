@@ -1199,6 +1199,33 @@ ol.assistant-list li::before {
   font-size: var(--font-chip);
 }
 
+/* The `@` list is the same list: a row is the thing's glyph, its name, and at the end what it is
+   (a layer) or how much it counts (a bench line's pieces and weight), in the quiet ink. */
+.assistant-mention-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  margin-right: var(--gap-6);
+  color: var(--icon);
+}
+
+.assistant-mention-icon .tool-icon {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+}
+
+.assistant-mention-detail {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  padding: 0 var(--gap-4) 0 var(--gap-12);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-faint);
+  font-size: var(--font-chip);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---- The setup sheet ---- */
 
 /* Setting a model up is a sheet that takes the panel from its title to its foot (the composer is
