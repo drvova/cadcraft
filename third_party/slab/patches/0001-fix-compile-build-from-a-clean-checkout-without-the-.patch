@@ -1,0 +1,326 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: CADCraft <noreply@cadcraft.invalid>
+Date: Thu, 12 Nov 2026 22:33:49 +0000
+Subject: [PATCH 1/4] fix(compile): build from a clean checkout without the web
+ runtime payload
+
+slab-compile embedded gen/web-runtime/slab-runtime.js and
+clients/web/wasm/slab_kernel_bg.wasm with include_str!/include_bytes!. Both
+are untracked products of `just web-runtime`, so `cargo build -p slab-compile`
+failed on a fresh clone, and so did every use of the crate as a Cargo git
+dependency.
+
+- New feature `wc-embed` (default on). The build script embeds the two files
+  when the feature is on and both exist (cfg `slab_wc_payload`); when either
+  is missing it warns and the crate still builds. With the artifacts present
+  nothing changes: `just gen`, `just check`, `just test` and the packaging
+  flow embed exactly what they did.
+- `wc::HAS_PAYLOAD` says which build this is. Without the payload
+  `wc::generate` and `react::generate` return the module, declarations and
+  SLIR without the two sidecars, and `slab gen wc` / `slab gen react` refuse
+  with a sentence naming `just web-runtime` instead of writing an empty
+  runtime.
+- The version hash: the build script takes `SLAB_GIT_HASH` from the
+  environment when set, and otherwise only trusts `git rev-parse` when the
+  enclosing checkout's root is this workspace. A copy of the crate nested in
+  another repository used to report that repository's HEAD; it now reports
+  `unknown`.
+---
+ crates/slab-cli/src/gen_react.rs |  6 +++
+ crates/slab-cli/src/gen_wc.rs    |  6 +++
+ crates/slab-compile/Cargo.toml   |  7 ++++
+ crates/slab-compile/build.rs     | 66 ++++++++++++++++++++++++++---
+ crates/slab-compile/src/react.rs | 17 ++++----
+ crates/slab-compile/src/wc.rs    | 71 +++++++++++++++++++++++++-------
+ 6 files changed, 144 insertions(+), 29 deletions(-)
+
+diff --git a/crates/slab-cli/src/gen_react.rs b/crates/slab-cli/src/gen_react.rs
+index a437a51..f6f8359 100644
+--- a/crates/slab-cli/src/gen_react.rs
++++ b/crates/slab-cli/src/gen_react.rs
+@@ -61,6 +61,12 @@ pub fn cmd_gen_react(args: &[String]) -> ExitCode {
+ 	let (Some(file), Some(out)) = (file, out) else {
+ 		return usage_err("gen react needs FILE and -o DIR");
+ 	};
++	// A build without the embedded payload cannot write the runtime sidecars
++	// this command promises; say so before anything is written.
++	if !slab_compile::wc::HAS_PAYLOAD {
++		eprintln!("error: {}", slab_compile::wc::NO_PAYLOAD);
++		return ExitCode::FAILURE;
++	}
+ 
+ 	let src = match std::fs::read_to_string(&file) {
+ 		Ok(s) => s,
+diff --git a/crates/slab-cli/src/gen_wc.rs b/crates/slab-cli/src/gen_wc.rs
+index 7776a4a..28cbd87 100644
+--- a/crates/slab-cli/src/gen_wc.rs
++++ b/crates/slab-cli/src/gen_wc.rs
+@@ -62,6 +62,12 @@ pub fn cmd_gen_wc(args: &[String]) -> ExitCode {
+ 	let (Some(file), Some(out)) = (file, out) else {
+ 		return usage_err("gen wc needs FILE and -o DIR");
+ 	};
++	// A build without the embedded payload cannot write the runtime sidecars
++	// this command promises; say so before anything is written.
++	if !slab_compile::wc::HAS_PAYLOAD {
++		eprintln!("error: {}", slab_compile::wc::NO_PAYLOAD);
++		return ExitCode::FAILURE;
++	}
+ 
+ 	let src = match std::fs::read_to_string(&file) {
+ 		Ok(s) => s,
+diff --git a/crates/slab-compile/Cargo.toml b/crates/slab-compile/Cargo.toml
+index 14e3688..937bca5 100644
+--- a/crates/slab-compile/Cargo.toml
++++ b/crates/slab-compile/Cargo.toml
+@@ -7,6 +7,13 @@ license.workspace = true
+ [lints]
+ workspace = true
+ 
++[features]
++default = ["wc-embed"]
++# Embed the web runtime and the kernel's wasm (`just web-runtime` builds both)
++# for `gen wc` and `gen react`. Without them, or without this feature, the crate
++# still builds and those generators return no runtime sidecars.
++wc-embed = []
++
+ [dependencies]
+ png.workspace = true
+ minijinja.workspace = true
+diff --git a/crates/slab-compile/build.rs b/crates/slab-compile/build.rs
+index 2f5d23f..0de060d 100644
+--- a/crates/slab-compile/build.rs
++++ b/crates/slab-compile/build.rs
+@@ -1,20 +1,76 @@
+ //! Embeds the git commit hash so every front end (`slab --version`,
+ //! `slab-native --version`, the WASM `compiler_version` export) can pin a
+-//! build. Falls back to `unknown` outside a git checkout.
++//! build, and decides whether the `gen wc` payload can be embedded.
++//!
++//! The hash is `SLAB_GIT_HASH` from the environment when a packager sets it,
++//! else the short `HEAD` of the checkout this crate belongs to, else
++//! `unknown`. A copy of the crate nested inside another repository (vendored,
++//! or fetched into a build directory) reports `unknown` rather than that
++//! repository's hash.
++//!
++//! The payload (the bundled web runtime and the kernel's wasm) is two untracked
++//! build products of `just web-runtime`. With the `wc-embed` feature they are
++//! embedded when both exist (`cfg(slab_wc_payload)`); when either is missing
++//! the crate still builds, with a warning, and `gen wc` says what to run.
+ 
+-use std::process::Command;
++use std::{
++	path::{Path, PathBuf},
++	process::Command,
++};
+ 
+-fn main() {
+-	let hash = Command::new("git")
+-		.args(["rev-parse", "--short=9", "HEAD"])
++fn git(dir: &Path, args: &[&str]) -> Option<String> {
++	Command::new("git")
++		.current_dir(dir)
++		.args(args)
+ 		.output()
+ 		.ok()
+ 		.filter(|out| out.status.success())
+ 		.and_then(|out| String::from_utf8(out.stdout).ok())
+ 		.map(|s| s.trim().to_owned())
+ 		.filter(|s| !s.is_empty())
++}
++
++/// The short hash of the checkout whose root is the workspace this crate sits
++/// in (`crates/slab-compile` two levels below it).
++fn checkout_hash(manifest_dir: &Path) -> Option<String> {
++	let root = manifest_dir.parent()?.parent()?.canonicalize().ok()?;
++	let top = PathBuf::from(git(manifest_dir, &["rev-parse", "--show-toplevel"])?)
++		.canonicalize()
++		.ok()?;
++	(top == root)
++		.then(|| git(manifest_dir, &["rev-parse", "--short=9", "HEAD"]))
++		.flatten()
++}
++
++fn main() {
++	let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default());
++
++	println!("cargo:rerun-if-env-changed=SLAB_GIT_HASH");
++	let hash = std::env::var("SLAB_GIT_HASH")
++		.ok()
++		.map(|s| s.trim().to_owned())
++		.filter(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric()))
++		.or_else(|| checkout_hash(&manifest_dir))
+ 		.unwrap_or_else(|| "unknown".to_owned());
+ 	println!("cargo:rustc-env=SLAB_GIT_HASH={hash}");
+ 	// Re-embed when HEAD moves (best effort; .git may be absent in tarballs).
+ 	println!("cargo:rerun-if-changed=../../.git/HEAD");
++
++	println!("cargo:rustc-check-cfg=cfg(slab_wc_payload)");
++	let payload =
++		["../../gen/web-runtime/slab-runtime.js", "../../clients/web/wasm/slab_kernel_bg.wasm"];
++	for file in payload {
++		println!("cargo:rerun-if-changed={file}");
++	}
++	if std::env::var_os("CARGO_FEATURE_WC_EMBED").is_some() {
++		if payload.iter().all(|file| manifest_dir.join(file).is_file()) {
++			println!("cargo:rustc-cfg=slab_wc_payload");
++		} else {
++			println!(
++				"cargo:warning=slab-compile: the web runtime payload is not built (run `just \
++				 web-runtime`), so this build's `gen wc` cannot write slab-runtime.js or the kernel \
++				 wasm"
++			);
++		}
++	}
+ }
+diff --git a/crates/slab-compile/src/react.rs b/crates/slab-compile/src/react.rs
+index ee72670..fe4c165 100644
+--- a/crates/slab-compile/src/react.rs
++++ b/crates/slab-compile/src/react.rs
+@@ -297,16 +297,17 @@ col#root {
+ 			assert_eq!(a.bytes, b.bytes, "{} differs between runs", a.name);
+ 		}
+ 
+-		for expected in [
+-			"settings.js",
+-			"settings.slir",
+-			"settings.d.ts",
+-			"slab-runtime.js",
+-			"wasm/slab_kernel_bg.wasm",
+-			"settings.tsx",
+-		] {
++		for expected in ["settings.js", "settings.slir", "settings.d.ts", "settings.tsx"] {
+ 			assert!(first.iter().any(|file| file.name == expected), "missing {expected}");
+ 		}
++		// The runtime sidecars ride along exactly when this build embeds them.
++		for sidecar in ["slab-runtime.js", "wasm/slab_kernel_bg.wasm"] {
++			assert_eq!(
++				first.iter().any(|file| file.name == sidecar),
++				crate::wc::HAS_PAYLOAD,
++				"{sidecar} presence must follow the embedded payload"
++			);
++		}
+ 	}
+ 	#[test]
+ 	fn grouped_parameters_use_quoted_dotted_property_keys() {
+diff --git a/crates/slab-compile/src/wc.rs b/crates/slab-compile/src/wc.rs
+index 77b23e1..7e832ab 100644
+--- a/crates/slab-compile/src/wc.rs
++++ b/crates/slab-compile/src/wc.rs
+@@ -687,14 +687,31 @@ fn emit_dts(docs: &[DocSpec]) -> String {
+ 	crate::tmpl::render(DTS_TEMPLATE, &ctx).expect("wc_dts.tmpl render error")
+ }
+ 
++/// Whether this build embeds the web runtime and the kernel's wasm.
++///
++/// Both are untracked build products of `just web-runtime`. The crate's build
++/// script embeds them when the `wc-embed` feature is on and both files exist;
++/// otherwise [`RUNTIME`] and [`KERNEL_WASM`] are empty, [`generate`] returns
++/// the module, declarations and SLIR without the two sidecars, and a front end
++/// that promises a complete set (`slab gen wc`) must refuse.
++pub const HAS_PAYLOAD: bool = cfg!(slab_wc_payload);
++
++/// What a front end says when it needs the payload and [`HAS_PAYLOAD`] is
++/// false.
++pub const NO_PAYLOAD: &str = "this build of slab has no web runtime payload (slab-runtime.js and \
++                              the kernel wasm): build them with `just web-runtime` and rebuild \
++                              with the `wc-embed` feature";
++
+ /// The shared minified web client.
+ ///
+ /// Bundled into `gen/web-runtime/slab-runtime.js` by `just web-runtime`
+-/// (untracked; rebuild it before compiling this crate). `include_str!` keeps
+-/// this a text sidecar and bakes it into the binary so `gen wc` needs no bun on
+-/// PATH.
++/// (untracked). `include_str!` keeps this a text sidecar and bakes it into the
++/// binary so `gen wc` needs no bun on PATH. Empty without [`HAS_PAYLOAD`].
++#[cfg(slab_wc_payload)]
+ pub const RUNTIME: &str =
+ 	include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../gen/web-runtime/slab-runtime.js"));
++#[cfg(not(slab_wc_payload))]
++pub const RUNTIME: &str = "";
+ 
+ /// The single Rust kernel compiled to WASM and loaded by [`RUNTIME`] from its
+ /// published relative URL. These bytes are emitted as a binary sidecar rather
+@@ -702,10 +719,14 @@ pub const RUNTIME: &str =
+ ///
+ /// This embeds the one wasm-bindgen output under `clients/web/wasm/` that the
+ /// `@stencil-hq/wslab` package also ships; `gen wc` never gets a second copy.
++/// Empty without [`HAS_PAYLOAD`].
++#[cfg(slab_wc_payload)]
+ pub const KERNEL_WASM: &[u8] = include_bytes!(concat!(
+ 	env!("CARGO_MANIFEST_DIR"),
+ 	"/../../clients/web/wasm/slab_kernel_bg.wasm"
+ ));
++#[cfg(not(slab_wc_payload))]
++pub const KERNEL_WASM: &[u8] = &[];
+ 
+ /// Collect signals `(name, has_text)` in SLIR order, deduped.
+ fn signals_of(slir: &Slir) -> Vec<(String, bool)> {
+@@ -807,24 +828,27 @@ pub(crate) fn files_of(docs: &[DocSpec], stem: &str) -> Vec<WcFile> {
+ 	}
+ 	files.push(WcFile { name: format!("{stem}.js"), bytes: module.into_bytes(), text: true });
+ 	files.push(WcFile { name: format!("{stem}.d.ts"), bytes: dts.into_bytes(), text: true });
+-	files.push(WcFile {
+-		name:  "slab-runtime.js".to_string(),
+-		bytes: RUNTIME.as_bytes().to_vec(),
+-		text:  true,
+-	});
+-	files.push(WcFile {
+-		name:  "wasm/slab_kernel_bg.wasm".to_string(),
+-		bytes: KERNEL_WASM.to_vec(),
+-		text:  false,
+-	});
++	if HAS_PAYLOAD {
++		files.push(WcFile {
++			name:  "slab-runtime.js".to_string(),
++			bytes: RUNTIME.as_bytes().to_vec(),
++			text:  true,
++		});
++		files.push(WcFile {
++			name:  "wasm/slab_kernel_bg.wasm".to_string(),
++			bytes: KERNEL_WASM.to_vec(),
++			text:  false,
++		});
++	}
+ 	files
+ }
+ 
+ /// Generate the full `gen wc` file set for a `.slab` source.
+ ///
+ /// `stem` is the output basename (the CLI passes the input file stem). Every
+-/// successful set includes each compiled `.slir`, the text runtime, and the
+-/// binary kernel WASM; the file list is `None` on compile failure.
++/// successful set includes each compiled `.slir` and, when this build has the
++/// payload ([`HAS_PAYLOAD`]), the text runtime and the binary kernel WASM; the
++/// file list is `None` on compile failure.
+ pub fn generate(
+ 	src: &str,
+ 	copts: &Options,
+@@ -840,11 +864,26 @@ pub fn generate(
+ 
+ #[cfg(test)]
+ mod tests {
+-	use super::{KERNEL_WASM, WcOptions, generate, item_scene_keys, static_scene_keys};
++	use super::{WcOptions, generate, item_scene_keys, static_scene_keys};
+ 	use crate::Options;
+ 
+ 	#[test]
++	#[cfg(not(slab_wc_payload))]
++	fn generate_without_the_payload_omits_the_runtime_sidecars() {
++		let options = WcOptions { tag: None };
++		let (files, _) = generate("text \"hello\"", &Options::default(), &options, "hello");
++		let names: Vec<String> = files
++			.expect("minimal document should compile")
++			.into_iter()
++			.map(|file| file.name)
++			.collect();
++		assert_eq!(names, ["hello.slir", "hello.js", "hello.d.ts"]);
++	}
++
++	#[test]
++	#[cfg(slab_wc_payload)]
+ 	fn generate_always_emits_external_runtime_sidecars() {
++		use super::KERNEL_WASM;
+ 		let options = WcOptions { tag: None };
+ 		let (files, _) = generate("text \"hello\"", &Options::default(), &options, "hello");
+ 		let files = files.expect("minimal document should compile");

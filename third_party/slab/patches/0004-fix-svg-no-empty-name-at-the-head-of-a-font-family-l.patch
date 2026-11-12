@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: CADCraft <noreply@cadcraft.invalid>
+Date: Thu, 12 Nov 2026 22:47:41 +0000
+Subject: [PATCH 4/4] fix(svg): no empty name at the head of a font-family list
+
+Text with no authored family resolves the default FONT table, whose family is
+the empty string. The exporter wrote it as `font-family=", Helvetica, Arial,
+sans-serif"`: a list that opens with an empty name is not a valid font-family,
+so a viewer drops the attribute and falls back to its default (usually a
+serif). Such text now gets the fallback list alone.
+---
+ crates/slab-compile/src/svg.rs | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/crates/slab-compile/src/svg.rs b/crates/slab-compile/src/svg.rs
+index 3430bb6..2fa6bbe 100644
+--- a/crates/slab-compile/src/svg.rs
++++ b/crates/slab-compile/src/svg.rs
+@@ -976,7 +976,11 @@ impl Emitter<'_> {
+ 							}
+ 						})
+ 						.collect();
+-					let fam = match font_family(self.doc, t.font) {
++					// Text with no authored family resolves the default table,
++					// whose family is the empty string: a list that opened with
++					// it (`, Helvetica, …`) is not a valid font-family, and a
++					// viewer drops the whole attribute.
++					let fam = match font_family(self.doc, t.font).filter(|family| !family.is_empty()) {
+ 						Some(family) => format!("{family}, {FALLBACK}"),
+ 						None => FALLBACK.into(),
+ 					};

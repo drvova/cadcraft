@@ -1,0 +1,1176 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: CADCraft <noreply@cadcraft.invalid>
+Date: Thu, 12 Nov 2026 22:47:41 +0000
+Subject: [PATCH 2/4] feat(fonts): make the bundled fallback faces a feature
+
+slab-fonts compiled Inter and JetBrains Mono (eight files, 2.77 MB, SIL OFL
+1.1) into every binary and wasm module that links the kernel, with no way to
+leave them out. A host that paints with faces of its own (a web page with its
+own font stack, an application that may not redistribute fonts) had to ship
+them anyway.
+
+`bundled-fonts` is a new feature of slab-fonts, on by default and forwarded by
+every crate that links it, so nothing changes for a default build. The
+workspace now inherits its own crates without default features;
+`--no-default-features` on the crate being built gives a build with no font
+bytes in it. slab-cli and slab-wasm forward `wc-embed` the same way.
+
+Without the feature:
+
+- `slab_fonts::asset` returns `None` (it now returns an `Option`) and
+  `FONT_ASSETS` is empty.
+- A family with no compile-time bytes is compiled to FONT tables made from
+  `slab_fonts::default_metrics`: a small designed advance model (a fixed
+  advance for a monospaced class, six width classes for a proportional one),
+  documented in the crate and derived from no font file. The tables carry no
+  data, so the kernel lays their text out unshaped from the table's own
+  advances, the path it already takes for a host-owned runtime face.
+- The kernel reports, once per family, a `font-default` frame diagnostic
+  naming each family whose text was laid out from such a table. A family the
+  host registers (`inst_font_register`, metrics alone or with bytes) resolves
+  to the runtime table and is not reported.
+- The compiler does not check glyph coverage for a family it has no face for.
+- SVG and terminal cells need metrics only and work unchanged; the SVG has no
+  `@font-face` to embed. A raster export (PNG, APNG) of text with no outlines
+  available returns an error naming the family
+  (`slab_compile::render::missing_face`) instead of a picture without the
+  text; it paints once the host registers the face's bytes.
+
+Tests: the suites pass in both configurations. Tests that need a bundled face
+are gated on the feature; `tests/fontless.rs` covers the build without it.
+The conformance goldens are measured with the bundled faces and hold only in
+the default configuration.
+---
+ Cargo.toml                                  |  32 ++--
+ bench/perf/Cargo.toml                       |   5 +
+ crates/slab-abi/Cargo.toml                  |   5 +
+ crates/slab-cli/Cargo.toml                  |   8 +
+ crates/slab-cli/tests/drive.rs              |  20 ++-
+ crates/slab-compile/Cargo.toml              |   4 +-
+ crates/slab-compile/src/emit.rs             |  24 ++-
+ crates/slab-compile/src/fonts.rs            |  10 +-
+ crates/slab-compile/src/raster.rs           |  10 +-
+ crates/slab-compile/src/render.rs           |  77 +++++++---
+ crates/slab-compile/tests/diags.rs          |   4 +
+ crates/slab-compile/tests/exporter_fonts.rs |  12 +-
+ crates/slab-compile/tests/fontless.rs       | 131 ++++++++++++++++
+ crates/slab-compile/tests/para_spans.rs     |   3 +
+ crates/slab-drive/Cargo.toml                |   5 +
+ crates/slab-drive/src/lib.rs                |  15 +-
+ crates/slab-fonts/Cargo.toml                |   7 +
+ crates/slab-fonts/src/lib.rs                | 160 +++++++++++++++++++-
+ crates/slab-kernel-wasm/Cargo.toml          |   5 +
+ crates/slab-kernel/Cargo.toml               |   5 +
+ crates/slab-kernel/src/frame.rs             |  54 +++++++
+ crates/slab-kernel/src/slir.rs              |   6 +-
+ crates/slab-lsp/Cargo.toml                  |   5 +
+ crates/slab-macro/Cargo.toml                |   5 +
+ crates/slab-native/Cargo.toml               |   5 +
+ crates/slab-native/src/renderer.rs          |   4 +-
+ crates/slab-ratatui/Cargo.toml              |   5 +
+ crates/slab-slir/Cargo.toml                 |   5 +
+ crates/slab-tui/Cargo.toml                  |   5 +
+ crates/slab-wasm/Cargo.toml                 |   8 +
+ 30 files changed, 584 insertions(+), 60 deletions(-)
+ create mode 100644 crates/slab-compile/tests/fontless.rs
+
+diff --git a/Cargo.toml b/Cargo.toml
+index e778eaf..4df6341 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -199,21 +199,25 @@ too_many_lines = "allow"     # Arbitrary limits don't account for necessary comp
+ # ──────────────────────────────────────────────────────────────────────────────
+ # Internal Workspace Crates
+ # ──────────────────────────────────────────────────────────────────────────────
+-slab-abi = { path = "crates/slab-abi" }
+-slab-cli = { path = "crates/slab-cli" }
+-slab-compile = { path = "crates/slab-compile" }
+-slab-drive = { path = "crates/slab-drive" }
+-slab-fonts = { path = "crates/slab-fonts" }
+-slab-kernel = { path = "crates/slab-kernel" }
+-slab-kernel-wasm = { path = "crates/slab-kernel-wasm" }
+-slab-lsp = { path = "crates/slab-lsp" }
+-slab-macro = { path = "crates/slab-macro" }
+-slab-native = { path = "crates/slab-native" }
+-slab-ratatui = { path = "crates/slab-ratatui" }
+-slab-slir = { path = "crates/slab-slir" }
++# Inherited without default features: every crate forwards its own
++# `bundled-fonts` feature (default on) to the ones it links, so
++# `--no-default-features` on the crate being built yields a build with no font
++# bytes in it (see crates/slab-fonts).
++slab-abi = { path = "crates/slab-abi", default-features = false }
++slab-cli = { path = "crates/slab-cli", default-features = false }
++slab-compile = { path = "crates/slab-compile", default-features = false }
++slab-drive = { path = "crates/slab-drive", default-features = false }
++slab-fonts = { path = "crates/slab-fonts", default-features = false }
++slab-kernel = { path = "crates/slab-kernel", default-features = false }
++slab-kernel-wasm = { path = "crates/slab-kernel-wasm", default-features = false }
++slab-lsp = { path = "crates/slab-lsp", default-features = false }
++slab-macro = { path = "crates/slab-macro", default-features = false }
++slab-native = { path = "crates/slab-native", default-features = false }
++slab-ratatui = { path = "crates/slab-ratatui", default-features = false }
++slab-slir = { path = "crates/slab-slir", default-features = false }
+ slab-syntax = { path = "crates/slab-syntax" }
+-slab-tui = { path = "crates/slab-tui" }
+-slab-wasm = { path = "crates/slab-wasm" }
++slab-tui = { path = "crates/slab-tui", default-features = false }
++slab-wasm = { path = "crates/slab-wasm", default-features = false }
+ xtask = { path = "crates/xtask" }
+ 
+ # ──────────────────────────────────────────────────────────────────────────────
+diff --git a/bench/perf/Cargo.toml b/bench/perf/Cargo.toml
+index c470242..683ec3d 100644
+--- a/bench/perf/Cargo.toml
++++ b/bench/perf/Cargo.toml
+@@ -7,6 +7,11 @@ publish = false
+ [lints]
+ workspace = true
+ 
++[features]
++default = ["bundled-fonts"]
++# The fallback faces (Inter, JetBrains Mono) compiled into slab-fonts.
++bundled-fonts = ["slab-compile/bundled-fonts", "slab-kernel/bundled-fonts", "slab-slir/bundled-fonts"]
++
+ [dependencies]
+ slab-compile = { workspace = true }
+ slab-kernel = { workspace = true }
+diff --git a/crates/slab-abi/Cargo.toml b/crates/slab-abi/Cargo.toml
+index 836991a..f7f416f 100644
+--- a/crates/slab-abi/Cargo.toml
++++ b/crates/slab-abi/Cargo.toml
+@@ -10,5 +10,10 @@ crate-type = ["cdylib", "rlib"]
+ [lints]
+ workspace = true
+ 
++[features]
++default = ["bundled-fonts"]
++# The fallback faces (Inter, JetBrains Mono) compiled into slab-fonts.
++bundled-fonts = ["slab-drive/bundled-fonts"]
++
+ [dependencies]
+ slab-drive.workspace = true
+diff --git a/crates/slab-cli/Cargo.toml b/crates/slab-cli/Cargo.toml
+index 07cc6cd..2a0d124 100644
+--- a/crates/slab-cli/Cargo.toml
++++ b/crates/slab-cli/Cargo.toml
+@@ -20,6 +20,14 @@ harness = false
+ [lints]
+ workspace = true
+ 
++[features]
++default = ["bundled-fonts", "wc-embed"]
++# `gen wc` and `gen react` write the web runtime and the kernel's wasm that
++# slab-compile embeds.
++wc-embed = ["slab-compile/wc-embed"]
++# The fallback faces (Inter, JetBrains Mono) compiled into slab-fonts.
++bundled-fonts = ["slab-compile/bundled-fonts", "slab-drive/bundled-fonts", "slab-fonts/bundled-fonts", "slab-kernel/bundled-fonts", "slab-lsp/bundled-fonts", "slab-slir/bundled-fonts"]
++
+ [dependencies]
+ serde_json.workspace = true
+ slab-compile.workspace = true
+diff --git a/crates/slab-cli/tests/drive.rs b/crates/slab-cli/tests/drive.rs
+index 268f596..e37c6b6 100644
+--- a/crates/slab-cli/tests/drive.rs
++++ b/crates/slab-cli/tests/drive.rs
+@@ -193,11 +193,21 @@ fn drive_stdio_smoke() {
+ 	assert_eq!(decode_b64(data["data"].as_str().expect("runtime image bytes")), [17, 34, 51, 255]);
+ 	assert_eq!(result(request("img.unregister", json!({"name": "smoke"}))), json!({"ok": true}));
+ 
+-	let png = result(request("render.png", json!({})));
+-	let png_bytes = decode_b64(png["data"].as_str().expect("inline PNG"));
+-	assert!(png_bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
+-	assert_eq!(png["width_px"], json!(800));
+-	assert_eq!(png["height_px"], json!(600));
++	if cfg!(feature = "bundled-fonts") {
++		let png = result(request("render.png", json!({})));
++		let png_bytes = decode_b64(png["data"].as_str().expect("inline PNG"));
++		assert!(png_bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
++		assert_eq!(png["width_px"], json!(800));
++		assert_eq!(png["height_px"], json!(600));
++	} else {
++		// No bundled fonts and no registered face: a raster export is refused
++		// with the family it could not draw, not answered with blank text.
++		let refused = request("render.png", json!({}));
++		let message = refused["error"]["message"]
++			.as_str()
++			.expect("render.png error");
++		assert!(message.contains("no glyph outlines"), "{refused}");
++	}
+ 
+ 	let cells = result(request("render.cells", json!({})));
+ 	assert!(
+diff --git a/crates/slab-compile/Cargo.toml b/crates/slab-compile/Cargo.toml
+index 937bca5..788cb2f 100644
+--- a/crates/slab-compile/Cargo.toml
++++ b/crates/slab-compile/Cargo.toml
+@@ -8,11 +8,13 @@ license.workspace = true
+ workspace = true
+ 
+ [features]
+-default = ["wc-embed"]
++default = ["bundled-fonts", "wc-embed"]
+ # Embed the web runtime and the kernel's wasm (`just web-runtime` builds both)
+ # for `gen wc` and `gen react`. Without them, or without this feature, the crate
+ # still builds and those generators return no runtime sidecars.
+ wc-embed = []
++# The fallback faces (Inter, JetBrains Mono) compiled into slab-fonts.
++bundled-fonts = ["slab-fonts/bundled-fonts", "slab-kernel/bundled-fonts", "slab-slir/bundled-fonts"]
+ 
+ [dependencies]
+ png.workspace = true
+diff --git a/crates/slab-compile/src/emit.rs b/crates/slab-compile/src/emit.rs
+index e4e1c37..9166d52 100644
+--- a/crates/slab-compile/src/emit.rs
++++ b/crates/slab-compile/src/emit.rs
+@@ -320,9 +320,17 @@ fn warn_missing_glyphs(ex: &Expanded, opts: &Options, diags: &mut Diagnostics) {
+ 			.iter()
+ 			.find(|(name, _)| name.eq_ignore_ascii_case(&family))
+ 			.map(|(_, bytes)| bytes.as_slice());
++		// Without a face (a build with no bundled fonts and no compile-time
++		// bytes for this family) coverage is the host's to know: nothing is
++		// reported as missing.
++		if custom.is_none() && !font_assets::BUNDLED {
++			continue;
++		}
+ 		for &weight in &weights {
+-			let bytes = custom.unwrap_or_else(|| font_assets::asset(class, weight).bytes);
+-			let metrics = font_assets::parse_metrics(bytes).expect("registered font parses");
++			let metrics = custom.map_or_else(
++				|| font_assets::fallback_metrics(class, weight),
++				|bytes| font_assets::parse_metrics(bytes).expect("registered font parses"),
++			);
+ 			coverage
+ 				.entry(family.clone())
+ 				.or_default()
+@@ -983,7 +991,11 @@ pub fn emit(ex: &Expanded, opts: &Options, diags: &mut Diagnostics) -> Slir {
+ 	// family with every required snapped weight. The class supplies fallback
+ 	// metrics. Tables backed by a vendored asset stay metrics-only — every
+ 	// kernel resolves the identical bundled face at run time — while
+-	// host-supplied compile-time faces embed their sfnt bytes.
++	// host-supplied compile-time faces embed their sfnt bytes. A build without
++	// bundled fonts has no asset: such a family gets the built-in default
++	// advance table, the host registers the real face's metrics (or bytes) at
++	// run time, and the kernel names any family still laid out with the
++	// default table in a `font-default` frame diagnostic.
+ 	let mut families = BTreeSet::from([String::new()]);
+ 	let mut weights = BTreeSet::from([400u16]);
+ 	families.extend(ex.font_families.iter().cloned());
+@@ -1004,8 +1016,10 @@ pub fn emit(ex: &Expanded, opts: &Options, diags: &mut Diagnostics) -> Slir {
+ 			.find(|(name, _)| name.eq_ignore_ascii_case(&family))
+ 			.map(|(_, bytes)| bytes.as_slice());
+ 		for &weight in &weights {
+-			let bytes = custom.unwrap_or_else(|| font_assets::asset(class, weight).bytes);
+-			let mut table = fonts::build_table(class, weight, bytes);
++			let mut table = match custom {
++				Some(bytes) => fonts::build_table(class, weight, bytes),
++				None => fonts::table_of(class, weight, &font_assets::fallback_metrics(class, weight)),
++			};
+ 			if let Some(custom) = custom {
+ 				table.data = custom.to_vec();
+ 			}
+diff --git a/crates/slab-compile/src/fonts.rs b/crates/slab-compile/src/fonts.rs
+index 12db4be..40616d0 100644
+--- a/crates/slab-compile/src/fonts.rs
++++ b/crates/slab-compile/src/fonts.rs
+@@ -1,6 +1,6 @@
+ //! Complete FONT metric tables from shared runtime-font metrics.
+ 
+-use slab_fonts::parse_metrics;
++use slab_fonts::{RegisteredMetrics, parse_metrics};
+ use slab_slir::FontE;
+ 
+ /// Build the authoritative FONT metric and glyph-coverage table for one face.
+@@ -14,7 +14,13 @@ use slab_slir::FontE;
+ /// through [`slab_kernel::slir::face_data`], and callers embed bytes only for
+ /// host-supplied compile-time faces the kernels cannot resolve themselves.
+ pub fn build_table(class: u8, weight: u16, bytes: &[u8]) -> FontE {
+-	let metrics = parse_metrics(bytes).expect("registered font parses");
++	table_of(class, weight, &parse_metrics(bytes).expect("registered font parses"))
++}
++
++/// Build a FONT table from metrics already in hand: a parsed face's, or the
++/// fallback a family without a face is laid out with
++/// ([`slab_fonts::fallback_metrics`]).
++pub fn table_of(class: u8, weight: u16, metrics: &RegisteredMetrics) -> FontE {
+ 	let mut cmap = Vec::new();
+ 	let mut advances = Vec::new();
+ 	for (&cp, (&gid, &advance)) in metrics
+diff --git a/crates/slab-compile/src/raster.rs b/crates/slab-compile/src/raster.rs
+index e63cc23..accdc6f 100644
+--- a/crates/slab-compile/src/raster.rs
++++ b/crates/slab-compile/src/raster.rs
+@@ -1375,7 +1375,11 @@ impl<'a> Raster<'a> {
+ 	/// Centered label with the vendored Inter regular (placeholder text; not
+ 	/// kernel-measured — matches the research placeholder path).
+ 	fn center_label(surf: &mut Layer, text: &str, cx: f64, cy: f64, size_px: f64, color: Color) {
+-		let a = slab_fonts::asset(slab_fonts::CLASS_SANS, 400);
++		// No bundled face (a build without `bundled-fonts`): the placeholder
++		// keeps its box and loses its caption.
++		let Some(a) = slab_fonts::asset(slab_fonts::CLASS_SANS, 400) else {
++			return;
++		};
+ 		let Ok(face) = ttf_parser::Face::parse(a.bytes, 0) else {
+ 			return;
+ 		};
+@@ -1578,6 +1582,10 @@ impl<'a> Raster<'a> {
+ 
+ 	/// Rasterize a solved Frame at `scale` device px per unit.
+ 	pub fn render(&mut self, frame: &Frame) -> Result<Pixmap, String> {
++		// Text with no outlines to draw is an error, not a picture without it.
++		if let Some(missing) = crate::render::missing_face(self.doc, frame, self.registered_fonts) {
++			return Err(missing);
++		}
+ 		let s = self.scale;
+ 		let w = ((frame.width * s).round() as u32).max(1);
+ 		let h = ((frame.height * s).round() as u32).max(1);
+diff --git a/crates/slab-compile/src/render.rs b/crates/slab-compile/src/render.rs
+index 43eba6e..e6c3dff 100644
+--- a/crates/slab-compile/src/render.rs
++++ b/crates/slab-compile/src/render.rs
+@@ -39,7 +39,9 @@ impl RegisteredFont {
+ /// the kernel shaped those glyph ids against exactly those bytes, so outlines
+ /// from any other face paint mojibake. Metrics-only runtime tables fall back
+ /// to a host-registered face of the same family — nearest weight, later
+-/// registration breaking ties — and finally to the bundled class asset.
++/// registration breaking ties — and finally to the bundled class asset. A
++/// build without bundled fonts has no such asset: the result is then `None`,
++/// and an exporter that needs outlines must refuse (see [`missing_face`]).
+ pub fn face_bytes<'a>(
+ 	doc: &'a Doc,
+ 	font: usize,
+@@ -55,25 +57,60 @@ pub fn face_bytes<'a>(
+ 		.strs
+ 		.get(doc.font_family[font] as usize)
+ 		.map_or("", String::as_str);
+-	Some(
+-		registered
+-			.iter()
+-			.enumerate()
+-			.filter(|(_, candidate)| candidate.name.eq_ignore_ascii_case(family))
+-			.min_by_key(|(index, candidate)| {
+-				(u32::from(candidate.metrics.weight).abs_diff(weight), usize::MAX - *index)
+-			})
+-			.map_or_else(
+-				|| {
+-					slab_fonts::asset(
+-						u8::try_from(class).expect("document font class fits u8"),
+-						u16::try_from(weight).expect("document font weight fits u16"),
+-					)
+-					.bytes
+-				},
+-				|(_, candidate)| candidate.bytes.as_slice(),
+-			),
+-	)
++	registered
++		.iter()
++		.enumerate()
++		.filter(|(_, candidate)| candidate.name.eq_ignore_ascii_case(family))
++		.min_by_key(|(index, candidate)| {
++			(u32::from(candidate.metrics.weight).abs_diff(weight), usize::MAX - *index)
++		})
++		.map(|(_, candidate)| candidate.bytes.as_slice())
++		.or_else(|| {
++			slab_fonts::asset(
++				u8::try_from(class).expect("document font class fits u8"),
++				u16::try_from(weight).expect("document font weight fits u16"),
++			)
++			.map(|asset| asset.bytes)
++		})
++		.filter(|bytes| !bytes.is_empty())
++}
++
++/// Names the first FONT table `frame` sets text in that has no glyph outlines.
++///
++/// Such a table has neither embedded bytes, nor a registered face, nor a
++/// bundled asset: only a build without bundled fonts can have one. An exporter
++/// that draws outlines (PNG, APNG) returns this as its error rather than a
++/// picture with the text missing; exporters that need metrics only (SVG,
++/// terminal cells) never ask.
++pub fn missing_face(
++	doc: &Doc,
++	frame: &slab_kernel::flatten::Frame,
++	registered: &[RegisteredFont],
++) -> Option<String> {
++	let mut seen = std::collections::BTreeSet::new();
++	for glyph in &frame.glyphs {
++		let Ok(font) = usize::try_from(glyph.font) else {
++			continue;
++		};
++		if !seen.insert(font) || face_bytes(doc, font, registered).is_some() {
++			continue;
++		}
++		let (Some(&family), Some(&weight)) = (doc.font_family.get(font), doc.font_weight.get(font))
++		else {
++			continue;
++		};
++		let family = doc.strs.get(family as usize).map_or("", String::as_str);
++		let shown = if family.is_empty() {
++			"the default family".to_owned()
++		} else {
++			format!("family '{family}'")
++		};
++		return Some(format!(
++			"no glyph outlines for {shown} (weight {weight}): this build bundles no fonts, so a \
++			 raster export needs the face's bytes registered with the host; an SVG export needs none"
++		));
++	}
++	None
+ }
+ 
+ /// Borrowed runtime image payload keyed by its unified kernel image index.
+diff --git a/crates/slab-compile/tests/diags.rs b/crates/slab-compile/tests/diags.rs
+index 3e93d14..e09766d 100644
+--- a/crates/slab-compile/tests/diags.rs
++++ b/crates/slab-compile/tests/diags.rs
+@@ -956,7 +956,10 @@ col w=fill { each param.items }
+ 	assert_has(source, "fill-unbounded", Level::Warning, 3);
+ }
+ 
++// Coverage is checked against a face: without bundled fonts the compiler has
++// none for an unbacked family and reports nothing as missing.
+ #[test]
++#[cfg(feature = "bundled-fonts")]
+ fn missing_static_glyph_names_character_codepoint_and_family() {
+ 	let (_, diagnostics) = compile("text \"✕\" family=\"sans\"\n", &Options::default());
+ 	let diagnostic = diagnostics
+@@ -984,6 +987,7 @@ fn variation_selectors_do_not_require_independent_glyphs() {
+ }
+ 
+ #[test]
++#[cfg(feature = "bundled-fonts")]
+ fn known_param_and_item_property_defaults_are_checked_at_their_text_sites() {
+ 	let source = r#"
+ def Item(label="◐") export { text label family="sans" }
+diff --git a/crates/slab-compile/tests/exporter_fonts.rs b/crates/slab-compile/tests/exporter_fonts.rs
+index daf7eb6..c40e2ba 100644
+--- a/crates/slab-compile/tests/exporter_fonts.rs
++++ b/crates/slab-compile/tests/exporter_fonts.rs
+@@ -2,6 +2,10 @@
+ //! compiled SLIR alone: the kernel shapes glyph ids against each FONT table's
+ //! embedded sfnt data, and host registration appends tables the SLIR never
+ //! carried.
++//!
++//! The fixtures are the bundled faces, so this file needs `bundled-fonts`;
++//! `fontless.rs` covers a build without them.
++#![cfg(feature = "bundled-fonts")]
+ 
+ use std::collections::HashMap;
+ 
+@@ -18,11 +22,15 @@ const SOURCE: &str = r#"col w=140 h=48 {
+ }"#;
+ 
+ fn mono_face() -> &'static [u8] {
+-	slab_fonts::asset(slab_fonts::CLASS_MONO, 400).bytes
++	slab_fonts::asset(slab_fonts::CLASS_MONO, 400)
++		.expect("bundled mono face")
++		.bytes
+ }
+ 
+ fn sans_face() -> &'static [u8] {
+-	slab_fonts::asset(slab_fonts::CLASS_SANS, 400).bytes
++	slab_fonts::asset(slab_fonts::CLASS_SANS, 400)
++		.expect("bundled sans face")
++		.bytes
+ }
+ 
+ /// Compiles [`SOURCE`], optionally backing `Test Face` with real bytes, and
+diff --git a/crates/slab-compile/tests/fontless.rs b/crates/slab-compile/tests/fontless.rs
+new file mode 100644
+index 0000000..453db23
+--- /dev/null
++++ b/crates/slab-compile/tests/fontless.rs
+@@ -0,0 +1,131 @@
++//! A build without the `bundled-fonts` feature carries no font bytes: a
++//! family is laid out with the built-in default advances and named in a frame
++//! diagnostic, exporters that need only metrics (SVG) work, and a raster
++//! export refuses until the host registers a face's bytes.
++#![cfg(not(feature = "bundled-fonts"))]
++
++use slab_compile::{Options, compile, raster::Raster, svg::render_svg};
++use slab_kernel::frame;
++use slab_slir::Slir;
++
++const SOURCE: &str = r#"col w=140 h=48 {
++  text "AB" family="Test Face" size=24
++}"#;
++
++fn fixture(client: u32) -> (Slir, frame::Instance) {
++	let (slir, diagnostics) =
++		compile(SOURCE, &Options { embed_assets: false, ..Options::default() });
++	assert!(diagnostics.is_empty(), "a fontless compile is as quiet as any: {:#?}", diagnostics.0);
++	let slir = slir.expect("valid source");
++	let bytes = slab_slir::write(&slir);
++	let (mut instance, _) = slab_slir::instance(&bytes).expect("decode fixture");
++	frame::inst_set_env(&mut instance, 140.0, 48.0, client, false, false);
++	(slir, instance)
++}
++
++fn register(instance: &mut frame::Instance, face: &[u8], data: &[u8]) {
++	let metrics = slab_fonts::parse_metrics(face).expect("the face parses");
++	frame::inst_font_register(
++		instance,
++		"Test Face",
++		u32::from(metrics.weight),
++		u32::from(metrics.upem),
++		i32::from(metrics.ascent),
++		i32::from(metrics.descent),
++		i32::from(metrics.line_gap),
++		i32::from(metrics.underline_position),
++		i32::from(metrics.underline_thickness),
++		u32::from(metrics.default_advance),
++		data,
++		&metrics.cps,
++		&metrics.gids,
++		&metrics.advances,
++	);
++}
++
++/// A face read from disk at run time: nothing of it is compiled in.
++fn face_on_disk() -> Vec<u8> {
++	std::fs::read(concat!(
++		env!("CARGO_MANIFEST_DIR"),
++		"/../../assets/fonts/JetBrainsMono-Regular.ttf"
++	))
++	.expect("the repository's fallback face is on disk")
++}
++
++#[test]
++fn a_family_laid_out_with_default_advances_is_named_once_until_registered() {
++	let (slir, mut instance) = fixture(3);
++	for table in &slir.fonts {
++		assert!(table.data.is_empty(), "a fontless compile embeds no face");
++		assert_eq!(table.upem, slab_fonts::DEFAULT_UPEM);
++		assert_eq!(table.cmap.len(), table.advances.len());
++	}
++	let first = frame::inst_frame(&mut instance, 0.0);
++	let named: Vec<_> = first
++		.diagnostics
++		.iter()
++		.filter(|diagnostic| diagnostic.code == "font-default")
++		.collect();
++	assert_eq!(named.len(), 1, "{:#?}", first.diagnostics);
++	assert!(named[0].msg.contains("family 'Test Face'"), "{named:#?}");
++	assert_eq!(named[0].line, 2);
++	// "AB" at 24 units: two capitals of the default table, 660/1000 em
++	// each: 31.68 units.
++	let width = first
++		.ops
++		.iter()
++		.find_map(|op| match op {
++			slab_kernel::flatten::FrameOp::Text(text) => Some(text.measured_w),
++			_ => None,
++		})
++		.expect("the fixture paints one text op");
++	assert!((width - 31.68).abs() < 1e-6, "{width}");
++
++	// Metrics alone (no bytes) make the host the owner of the face: a fresh
++	// instance that registers them first is never told about the family.
++	let (_, mut registered) = fixture(3);
++	register(&mut registered, &face_on_disk(), &[]);
++	let frame = frame::inst_frame(&mut registered, 0.0);
++	assert!(
++		frame
++			.diagnostics
++			.iter()
++			.all(|diagnostic| diagnostic.code != "font-default"),
++		"{:#?}",
++		frame.diagnostics
++	);
++}
++
++#[test]
++fn svg_needs_only_metrics() {
++	let (slir, mut instance) = fixture(3);
++	let rendered = frame::inst_frame_static(&mut instance);
++	let svg = render_svg(&slir, instance.doc(), &[], &[], &[], &rendered, std::path::Path::new("."));
++	assert!(svg.contains(">AB</text>"), "{svg}");
++	assert!(svg.contains("font-family=\"Test Face, "), "{svg}");
++	assert!(!svg.contains("@font-face"), "no face exists to embed: {svg}");
++}
++
++#[test]
++fn raster_refuses_without_outlines_and_paints_with_a_registered_face() {
++	let (slir, mut instance) = fixture(4);
++	let rendered = frame::inst_frame(&mut instance, 0.0);
++	let Err(error) = Raster::new(&slir, instance.doc(), &[], &[], &[], 1.0).render(&rendered) else {
++		panic!("text with no outlines must be refused");
++	};
++	assert!(error.contains("family 'Test Face'"), "{error}");
++	assert!(error.contains("bundles no fonts"), "{error}");
++
++	let face = face_on_disk();
++	register(&mut instance, &face, &face);
++	let rendered = frame::inst_frame(&mut instance, 0.0);
++	let pixmap = Raster::new(&slir, instance.doc(), &[], &[], &[], 1.0)
++		.render(&rendered)
++		.expect("a registered face has outlines");
++	let ink = pixmap
++		.pixels()
++		.iter()
++		.filter(|pixel| pixel.alpha() > 0)
++		.count();
++	assert!(ink > 0, "the registered face paints glyph ink");
++}
+diff --git a/crates/slab-compile/tests/para_spans.rs b/crates/slab-compile/tests/para_spans.rs
+index 6afe206..3a287b9 100644
+--- a/crates/slab-compile/tests/para_spans.rs
++++ b/crates/slab-compile/tests/para_spans.rs
+@@ -420,7 +420,10 @@ fn svg_emits_strike_only_for_true_runs() {
+ 	assert!(svg.contains(">open</text>"));
+ }
+ 
++// The probe character is one the bundled sans face lacks; the default table
++// of a build without bundled fonts covers it.
+ #[test]
++#[cfg(feature = "bundled-fonts")]
+ fn runtime_glyph_diagnostics_are_once_per_family_and_codepoint() {
+ 	let mut instance = compile_instance(
+ 		r#"
+diff --git a/crates/slab-drive/Cargo.toml b/crates/slab-drive/Cargo.toml
+index 4c5e9f1..acaa9e1 100644
+--- a/crates/slab-drive/Cargo.toml
++++ b/crates/slab-drive/Cargo.toml
+@@ -7,6 +7,11 @@ license.workspace = true
+ [lints]
+ workspace = true
+ 
++[features]
++default = ["bundled-fonts"]
++# The fallback faces (Inter, JetBrains Mono) compiled into slab-fonts.
++bundled-fonts = ["slab-compile/bundled-fonts", "slab-fonts/bundled-fonts", "slab-kernel/bundled-fonts", "slab-slir/bundled-fonts"]
++
+ [dependencies]
+ serde.workspace = true
+ serde_json.workspace = true
+diff --git a/crates/slab-drive/src/lib.rs b/crates/slab-drive/src/lib.rs
+index 1714c50..b1fe1f3 100644
+--- a/crates/slab-drive/src/lib.rs
++++ b/crates/slab-drive/src/lib.rs
+@@ -3195,10 +3195,13 @@ col {
+ 	/// The pump itself registers nothing, so the exporters must read the
+ 	/// document rather than fall back to a bundled asset.
+ 	#[test]
++	#[cfg(feature = "bundled-fonts")]
+ 	fn renders_host_registered_font_tables() {
+ 		let (slir, mut instance, images) =
+ 			compile_live(r#"text "AB" family="Test Face" size=24 w=200 nowrap"#);
+-		let bytes = slab_fonts::asset(slab_fonts::CLASS_MONO, 400).bytes;
++		let bytes = slab_fonts::asset(slab_fonts::CLASS_MONO, 400)
++			.expect("bundled mono face")
++			.bytes;
+ 		let metrics = slab_fonts::parse_metrics(bytes).expect("bundled mono parses");
+ 		let registered = frame::inst_font_register(
+ 			&mut instance,
+@@ -3610,7 +3613,15 @@ col {
+ 		let (slir, mut instance, images) = live_document();
+ 		let mut pump = RequestPump::new("test.slab", slir, images);
+ 		let clean = pump.request(&mut instance, r#"{"method":"doc.diags","params":{}}"#);
+-		assert_eq!(result(&clean), &json!({"diags": []}));
++		// Without bundled fonts the kernel names the family it laid out with
++		// the default advances; nothing else is reported either way.
++		let diags = result(&clean)["diags"].as_array().expect("diags array");
++		assert!(
++			diags
++				.iter()
++				.all(|diag| !cfg!(feature = "bundled-fonts") && diag["code"] == json!("font-default")),
++			"{diags:?}"
++		);
+ 	}
+ 	#[test]
+ 	fn sdp_copy_preserves_paragraph_boundary_whitespace() {
+diff --git a/crates/slab-fonts/Cargo.toml b/crates/slab-fonts/Cargo.toml
+index 894e4d6..cfe4bcd 100644
+--- a/crates/slab-fonts/Cargo.toml
++++ b/crates/slab-fonts/Cargo.toml
+@@ -7,5 +7,12 @@ license.workspace = true
+ [lints]
+ workspace = true
+ 
++[features]
++default = ["bundled-fonts"]
++# Compile the fallback faces (Inter and JetBrains Mono, SIL OFL 1.1) into the
++# crate. Without it no font bytes are built in: layout uses the built-in
++# default advance table until a host registers a face's metrics or bytes.
++bundled-fonts = []
++
+ [dependencies]
+ ttf-parser.workspace = true
+diff --git a/crates/slab-fonts/src/lib.rs b/crates/slab-fonts/src/lib.rs
+index 753fa79..8927aa5 100644
+--- a/crates/slab-fonts/src/lib.rs
++++ b/crates/slab-fonts/src/lib.rs
+@@ -1,5 +1,11 @@
+ //! Vendored fallback fonts and authoritative coverage/metrics extracted from
+ //! registered files.
++//!
++//! The faces are compiled in by the `bundled-fonts` feature (default on). A
++//! build without it carries no font bytes at all: [`asset`] returns `None`,
++//! and layout falls back to [`default_metrics`], a small designed advance
++//! table that is not derived from any font. Hosts of such a build register the
++//! metrics (or the bytes) of the faces they really paint with.
+ 
+ use std::collections::BTreeMap;
+ 
+@@ -9,6 +15,9 @@ pub const CLASS_SANS: u8 = 0;
+ /// Fallback class for monospaced faces.
+ pub const CLASS_MONO: u8 = 1;
+ 
++/// Whether this build compiles the fallback faces in (`bundled-fonts`).
++pub const BUNDLED: bool = cfg!(feature = "bundled-fonts");
++
+ /// A bundled fallback face used when a runtime family is unavailable.
+ pub struct FontAsset {
+ 	/// Fallback class used for layout metrics.
+@@ -21,6 +30,7 @@ pub struct FontAsset {
+ 	pub bytes:  &'static [u8],
+ }
+ 
++#[cfg(feature = "bundled-fonts")]
+ macro_rules! font {
+ 	($class:expr, $weight:expr, $family:literal, $file:literal) => {
+ 		FontAsset {
+@@ -32,7 +42,9 @@ macro_rules! font {
+ 	};
+ }
+ 
+-/// Built-in fallback faces shipped by native and compiler exports.
++/// Built-in fallback faces shipped by native and compiler exports. Empty
++/// without the `bundled-fonts` feature.
++#[cfg(feature = "bundled-fonts")]
+ pub static FONT_ASSETS: [FontAsset; 8] = [
+ 	font!(CLASS_SANS, 400, "Inter", "Inter-Regular.ttf"),
+ 	font!(CLASS_SANS, 500, "Inter", "Inter-Medium.ttf"),
+@@ -44,6 +56,10 @@ pub static FONT_ASSETS: [FontAsset; 8] = [
+ 	font!(CLASS_MONO, 700, "JetBrains Mono", "JetBrainsMono-Bold.ttf"),
+ ];
+ 
++/// Built-in fallback faces: none in a build without `bundled-fonts`.
++#[cfg(not(feature = "bundled-fonts"))]
++pub static FONT_ASSETS: [FontAsset; 0] = [];
++
+ /// `mono` (or any family whose name contains "mono") selects mono fallback
+ /// metrics; all other names use sans fallback metrics.
+ pub fn classify_family(family: &str) -> u8 {
+@@ -63,13 +79,103 @@ pub const fn normalize_weight(weight: f64) -> u16 {
+ 	weight.round().clamp(1.0, 1000.0) as u16
+ }
+ 
+-/// Finds the nearest bundled fallback face for a class and free numeric weight.
+-pub fn asset(class: u8, weight: u16) -> &'static FontAsset {
++/// Finds the nearest bundled fallback face for a class and free numeric
++/// weight. `None` in a build without `bundled-fonts`.
++pub fn asset(class: u8, weight: u16) -> Option<&'static FontAsset> {
+ 	FONT_ASSETS
+ 		.iter()
+ 		.filter(|asset| asset.class == class)
+ 		.min_by_key(|asset| (asset.weight.abs_diff(weight), std::cmp::Reverse(asset.weight)))
+-		.expect("every fallback font class has a bundled face")
++}
++
++/// The metrics a family with no face of its own is laid out with: the bundled
++/// class face's when this build has one, else [`default_metrics`].
++pub fn fallback_metrics(class: u8, weight: u16) -> RegisteredMetrics {
++	asset(class, weight)
++		.and_then(|asset| parse_metrics(asset.bytes))
++		.unwrap_or_else(|| default_metrics(class, weight))
++}
++
++/// Units per em of [`default_metrics`].
++pub const DEFAULT_UPEM: u16 = 1000;
++
++/// Codepoint ranges [`default_metrics`] covers (inclusive).
++///
++/// Latin through Extended-B, Greek, Cyrillic, punctuation, currency,
++/// letterlike, number forms, arrows, operators, technical, box drawing, shapes
++/// and dingbats.
++pub const DEFAULT_COVERAGE: [(u32, u32); 9] = [
++	(0x0020, 0x007e),
++	(0x00a0, 0x024f),
++	(0x0370, 0x03ff),
++	(0x0400, 0x04ff),
++	(0x2000, 0x206f),
++	(0x20a0, 0x20bf),
++	(0x2100, 0x23ff),
++	(0x2500, 0x25ff),
++	(0x2600, 0x27bf),
++];
++
++/// The advance [`default_metrics`] gives one codepoint, in 1/1000 em.
++///
++/// This is a designed model, not a measurement: no font file was read to
++/// make it. A monospaced class advances every character 600. A proportional
++/// class sorts characters into six widths by shape: spaces and the thin
++/// strokes (`i l j I . , : ; ! | '`) 280, the narrow letters and brackets
++/// (`f t r ( ) [ ] { } / \ - " *`) 360, lowercase 540, numerals and anything
++/// unclassed 600, capitals 660, the wide letters and signs (`m w M W @ % &`,
++/// the em dash, the ellipsis) 860. Text measured with it wraps and aligns
++/// sensibly in any ordinary sans-serif; it is exact for none.
++pub const fn default_advance(class: u8, codepoint: u32) -> u16 {
++	if class == CLASS_MONO {
++		return 600;
++	}
++	let Some(ch) = char::from_u32(codepoint) else {
++		return 600;
++	};
++	match ch {
++		' ' | '\u{a0}' | '\u{2000}'..='\u{200a}' | '\u{202f}' => 280,
++		'i' | 'l' | 'j' | 'I' | '.' | ',' | ':' | ';' | '!' | '|' | '\'' | '`' => 280,
++		'\u{b7}' | '\u{2018}' | '\u{2019}' => 280,
++		'f' | 't' | 'r' | '(' | ')' | '[' | ']' | '{' | '}' | '/' | '\\' | '-' | '"' | '*' => 360,
++		'\u{b0}' | '\u{201c}' | '\u{201d}' => 360,
++		'm' | 'w' | 'M' | 'W' | '@' | '%' | '&' | '\u{2014}' | '\u{2026}' | '\u{2030}' => 860,
++		'0'..='9' => 600,
++		_ if ch.is_lowercase() => 540,
++		_ if ch.is_uppercase() => 660,
++		_ => 600,
++	}
++}
++
++/// A complete metrics table that needs no font.
++///
++/// [`DEFAULT_COVERAGE`] mapped to [`default_advance`], glyph ids counted from
++/// 1 in codepoint order, ascent 960 and descent -240 on a 1000-unit em. The
++/// weight is recorded and does not change an advance.
++pub fn default_metrics(class: u8, weight: u16) -> RegisteredMetrics {
++	let mut cps = Vec::new();
++	let mut gids = Vec::new();
++	let mut advances = Vec::new();
++	for &(first, last) in &DEFAULT_COVERAGE {
++		for cp in first..=last {
++			cps.push(cp);
++			gids.push(u32::try_from(cps.len()).unwrap_or(u32::MAX));
++			advances.push(u32::from(default_advance(class, cp)));
++		}
++	}
++	RegisteredMetrics {
++		weight,
++		upem: DEFAULT_UPEM,
++		ascent: 960,
++		descent: -240,
++		line_gap: 0,
++		default_advance: 600,
++		underline_position: -100,
++		underline_thickness: 50,
++		cps,
++		gids,
++		advances,
++	}
+ }
+ 
+ /// Metrics and complete Unicode cmap extracted from a font file.
+@@ -161,8 +267,52 @@ mod tests {
+ 	use super::*;
+ 
+ 	#[test]
++	fn default_metrics_are_complete_sorted_and_fontless() {
++		for class in [CLASS_SANS, CLASS_MONO] {
++			let metrics = default_metrics(class, 600);
++			assert_eq!(metrics.weight, 600);
++			assert_eq!(metrics.cps.len(), metrics.gids.len());
++			assert_eq!(metrics.cps.len(), metrics.advances.len());
++			assert!(metrics.cps.windows(2).all(|pair| pair[0] < pair[1]));
++			assert!(
++				metrics
++					.gids
++					.iter()
++					.all(|&gid| gid != 0 && u16::try_from(gid).is_ok())
++			);
++			assert!(metrics.cps.binary_search(&u32::from('A')).is_ok());
++			assert!(metrics.cps.binary_search(&0x20ac).is_ok());
++			assert!(
++				metrics
++					.advances
++					.iter()
++					.all(|&advance| (200..=1000).contains(&advance))
++			);
++		}
++		let mono = default_metrics(CLASS_MONO, 400);
++		assert!(mono.advances.iter().all(|&advance| advance == 600));
++		assert!(
++			default_advance(CLASS_SANS, u32::from('i')) < default_advance(CLASS_SANS, u32::from('m'))
++		);
++	}
++
++	#[test]
++	#[cfg(not(feature = "bundled-fonts"))]
++	fn a_build_without_bundled_fonts_has_no_faces() {
++		assert!(FONT_ASSETS.is_empty());
++		assert!(asset(CLASS_SANS, 400).is_none());
++		assert_eq!(fallback_metrics(CLASS_SANS, 400), default_metrics(CLASS_SANS, 400));
++	}
++
++	#[test]
++	#[cfg(feature = "bundled-fonts")]
+ 	fn registered_metrics_cover_the_vendored_cmap() {
+-		let metrics = parse_metrics(asset(CLASS_SANS, 400).bytes).expect("Inter parses");
++		let face = asset(CLASS_SANS, 400).expect("the sans class has a bundled face");
++		assert_eq!(
++			fallback_metrics(CLASS_SANS, 400),
++			parse_metrics(face.bytes).expect("Inter parses")
++		);
++		let metrics = parse_metrics(face.bytes).expect("Inter parses");
+ 		assert_eq!(metrics.weight, 400);
+ 		assert_eq!(metrics.cps.len(), metrics.gids.len());
+ 		assert_eq!(metrics.cps.len(), metrics.advances.len());
+diff --git a/crates/slab-kernel-wasm/Cargo.toml b/crates/slab-kernel-wasm/Cargo.toml
+index ed9eb19..89843ce 100644
+--- a/crates/slab-kernel-wasm/Cargo.toml
++++ b/crates/slab-kernel-wasm/Cargo.toml
+@@ -10,6 +10,11 @@ crate-type = ["cdylib", "rlib"]
+ [lints]
+ workspace = true
+ 
++[features]
++default = ["bundled-fonts"]
++# The fallback faces (Inter, JetBrains Mono) compiled into slab-fonts.
++bundled-fonts = ["slab-kernel/bundled-fonts", "slab-slir/bundled-fonts"]
++
+ [dependencies]
+ serde.workspace = true
+ serde_json.workspace = true
+diff --git a/crates/slab-kernel/Cargo.toml b/crates/slab-kernel/Cargo.toml
+index 4dfc242..04b022d 100644
+--- a/crates/slab-kernel/Cargo.toml
++++ b/crates/slab-kernel/Cargo.toml
+@@ -7,6 +7,11 @@ license.workspace = true
+ [lints]
+ workspace = true
+ 
++[features]
++default = ["bundled-fonts"]
++# The fallback faces (Inter, JetBrains Mono) compiled into slab-fonts.
++bundled-fonts = ["slab-fonts/bundled-fonts"]
++
+ [dependencies]
+ png.workspace = true
+ libm.workspace = true
+diff --git a/crates/slab-kernel/src/frame.rs b/crates/slab-kernel/src/frame.rs
+index 6d6bddd..66f13e6 100644
+--- a/crates/slab-kernel/src/frame.rs
++++ b/crates/slab-kernel/src/frame.rs
+@@ -300,6 +300,9 @@ fn finish_frame_diagnostics(i: &mut Instance, frame: &mut Frame) {
+ 
+ 	if !i.doc.font_family.is_empty() {
+ 		scan_glyph_coverage(i, frame);
++		if !slab_fonts::BUNDLED {
++			scan_default_fonts(i, frame);
++		}
+ 	}
+ 
+ 	for diagnostic in &frame.diagnostics {
+@@ -309,6 +312,57 @@ fn finish_frame_diagnostics(i: &mut Instance, frame: &mut Frame) {
+ 	}
+ }
+ 
++/// A build without bundled fonts: names, once, each family whose text this
++/// frame laid out from a compiled table with no face behind it. Such a table
++/// holds the compiler's built-in default advances, so the layout is an
++/// approximation until the host registers the family's metrics or bytes
++/// ([`inst_font_register`]), after which the family resolves to the runtime
++/// table and is no longer reported.
++fn scan_default_fonts(i: &mut Instance, frame: &mut Frame) {
++	for op in &frame.ops {
++		let FrameOp::Text(text) = op else {
++			continue;
++		};
++		let Ok(font) = usize::try_from(text.font) else {
++			continue;
++		};
++		if font >= i.doc.compiled_fonts || !slir::font_data(&i.doc, text.font).is_empty() {
++			continue;
++		}
++		let Some(&family_ref) = i.doc.font_family.get(font) else {
++			continue;
++		};
++		// The glyph set's codepoints are real characters: this key cannot clash.
++		if !i.glyph_warned.insert((family_ref, u32::MAX)) {
++			continue;
++		}
++		let family = i
++			.doc
++			.strs
++			.get(family_ref as usize)
++			.map_or("", String::as_str);
++		let shown = if family.is_empty() {
++			"the default family".to_owned()
++		} else {
++			format!("family '{family}'")
++		};
++		let line = i
++			.doc
++			.node_line
++			.get(text.node as usize)
++			.copied()
++			.unwrap_or(0);
++		frame.diagnostics.push(FrameDiagnostic {
++			code: "font-default".to_owned(),
++			line,
++			msg: format!(
++				"{shown} has no registered face and this build bundles no fonts: its text is laid out \
++				 with the built-in default advances"
++			),
++		});
++	}
++}
++
+ fn scan_glyph_coverage(i: &mut Instance, frame: &mut Frame) {
+ 	for op in &frame.ops {
+ 		let FrameOp::Text(text) = op else {
+diff --git a/crates/slab-kernel/src/slir.rs b/crates/slab-kernel/src/slir.rs
+index 39c47f3..a45a6d6 100644
+--- a/crates/slab-kernel/src/slir.rs
++++ b/crates/slab-kernel/src/slir.rs
+@@ -655,7 +655,9 @@ pub fn font_data(d: &Doc, font: i32) -> &[u8] {
+ /// class asset — the compiler stopped embedding bundled faces, so every host
+ /// resolves the identical vendored bytes instead. Runtime-registered tables
+ /// without data return empty: the host owns that face and the table's
+-/// cmap/advances drive layout.
++/// cmap/advances drive layout. So does every data-less table in a build
++/// without the `bundled-fonts` feature: there is no vendored asset, and text
++/// is laid out unshaped from the table's own advances.
+ pub fn face_data(d: &Doc, font: i32) -> &[u8] {
+ 	let embedded = font_data(d, font);
+ 	if !embedded.is_empty() {
+@@ -676,7 +678,7 @@ pub fn face_data(d: &Doc, font: i32) -> &[u8] {
+ 		slab_fonts::CLASS_SANS
+ 	};
+ 	let weight = u16::try_from(weight).unwrap_or(400);
+-	slab_fonts::asset(class, weight).bytes
++	slab_fonts::asset(class, weight).map_or(&[], |asset| asset.bytes)
+ }
+ 
+ /// Folds an ASCII uppercase codepoint to lowercase, leaving all others intact.
+diff --git a/crates/slab-lsp/Cargo.toml b/crates/slab-lsp/Cargo.toml
+index b576d08..5637977 100644
+--- a/crates/slab-lsp/Cargo.toml
++++ b/crates/slab-lsp/Cargo.toml
+@@ -7,6 +7,11 @@ license.workspace = true
+ [lints]
+ workspace = true
+ 
++[features]
++default = ["bundled-fonts"]
++# The fallback faces (Inter, JetBrains Mono) compiled into slab-fonts.
++bundled-fonts = ["slab-compile/bundled-fonts", "slab-kernel/bundled-fonts", "slab-slir/bundled-fonts"]
++
+ [dependencies]
+ serde_json.workspace = true
+ slab-compile.workspace = true
+diff --git a/crates/slab-macro/Cargo.toml b/crates/slab-macro/Cargo.toml
+index e0d8976..729770b 100644
+--- a/crates/slab-macro/Cargo.toml
++++ b/crates/slab-macro/Cargo.toml
+@@ -10,6 +10,11 @@ proc-macro = true
+ [lints]
+ workspace = true
+ 
++[features]
++default = ["bundled-fonts"]
++# The fallback faces (Inter, JetBrains Mono) compiled into slab-fonts.
++bundled-fonts = ["slab-compile/bundled-fonts"]
++
+ [dependencies]
+ slab-compile.workspace = true
+ 
+diff --git a/crates/slab-native/Cargo.toml b/crates/slab-native/Cargo.toml
+index f083b89..e5903ba 100644
+--- a/crates/slab-native/Cargo.toml
++++ b/crates/slab-native/Cargo.toml
+@@ -15,6 +15,11 @@ path = "src/main.rs"
+ [lints]
+ workspace = true
+ 
++[features]
++default = ["bundled-fonts"]
++# The fallback faces (Inter, JetBrains Mono) compiled into slab-fonts.
++bundled-fonts = ["slab-compile/bundled-fonts", "slab-drive/bundled-fonts", "slab-fonts/bundled-fonts", "slab-kernel/bundled-fonts", "slab-slir/bundled-fonts"]
++
+ [dependencies]
+ etagere.workspace = true
+ accesskit.workspace = true
+diff --git a/crates/slab-native/src/renderer.rs b/crates/slab-native/src/renderer.rs
+index ea373cc..56741d1 100644
+--- a/crates/slab-native/src/renderer.rs
++++ b/crates/slab-native/src/renderer.rs
+@@ -180,11 +180,13 @@ fn face_bytes<'a>(doc: &'a Doc, font: usize, registered: &'a [RegisteredFont]) -
+ 		.min_by_key(|(index, face)| (face.weight.abs_diff(weight), std::cmp::Reverse(*index)))
+ 		.map_or_else(
+ 			|| {
++				// No bundled face (a build without `bundled-fonts`): empty bytes
++				// take the existing "no usable native face" path.
+ 				slab_fonts::asset(
+ 					u8::try_from(doc.font_class[font]).expect("SLIR font class fits u8"),
+ 					u16::try_from(weight).expect("SLIR font weight fits u16"),
+ 				)
+-				.bytes
++				.map_or(&[][..], |asset| asset.bytes)
+ 			},
+ 			|(_, face)| face.bytes.as_slice(),
+ 		)
+diff --git a/crates/slab-ratatui/Cargo.toml b/crates/slab-ratatui/Cargo.toml
+index a8d4f6f..1157b61 100644
+--- a/crates/slab-ratatui/Cargo.toml
++++ b/crates/slab-ratatui/Cargo.toml
+@@ -7,6 +7,11 @@ license.workspace = true
+ [lints]
+ workspace = true
+ 
++[features]
++default = ["bundled-fonts"]
++# The fallback faces (Inter, JetBrains Mono) compiled into slab-fonts.
++bundled-fonts = ["slab-compile/bundled-fonts", "slab-kernel/bundled-fonts", "slab-slir/bundled-fonts", "slab-tui/bundled-fonts"]
++
+ [dependencies]
+ ratatui.workspace = true
+ slab-compile.workspace = true
+diff --git a/crates/slab-slir/Cargo.toml b/crates/slab-slir/Cargo.toml
+index 1082d6a..236d21a 100644
+--- a/crates/slab-slir/Cargo.toml
++++ b/crates/slab-slir/Cargo.toml
+@@ -7,6 +7,11 @@ license.workspace = true
+ [lints]
+ workspace = true
+ 
++[features]
++default = ["bundled-fonts"]
++# The fallback faces (Inter, JetBrains Mono) compiled into slab-fonts.
++bundled-fonts = ["slab-kernel/bundled-fonts"]
++
+ [dependencies]
+ prost.workspace = true
+ snap.workspace = true
+diff --git a/crates/slab-tui/Cargo.toml b/crates/slab-tui/Cargo.toml
+index de75c28..ab770fc 100644
+--- a/crates/slab-tui/Cargo.toml
++++ b/crates/slab-tui/Cargo.toml
+@@ -14,6 +14,11 @@ path = "src/main.rs"
+ [lints]
+ workspace = true
+ 
++[features]
++default = ["bundled-fonts"]
++# The fallback faces (Inter, JetBrains Mono) compiled into slab-fonts.
++bundled-fonts = ["slab-compile/bundled-fonts", "slab-kernel/bundled-fonts", "slab-slir/bundled-fonts"]
++
+ [dependencies]
+ crossterm.workspace = true
+ slab-compile.workspace = true
+diff --git a/crates/slab-wasm/Cargo.toml b/crates/slab-wasm/Cargo.toml
+index 900b0fe..1d86b86 100644
+--- a/crates/slab-wasm/Cargo.toml
++++ b/crates/slab-wasm/Cargo.toml
+@@ -10,6 +10,14 @@ crate-type = ["cdylib", "rlib"]
+ [lints]
+ workspace = true
+ 
++[features]
++default = ["bundled-fonts", "wc-embed"]
++# `gen wc` and `gen react` write the web runtime and the kernel's wasm that
++# slab-compile embeds.
++wc-embed = ["slab-compile/wc-embed"]
++# The fallback faces (Inter, JetBrains Mono) compiled into slab-fonts.
++bundled-fonts = ["slab-compile/bundled-fonts", "slab-kernel/bundled-fonts", "slab-slir/bundled-fonts"]
++
+ [dependencies]
+ serde.workspace = true
+ serde_json.workspace = true
