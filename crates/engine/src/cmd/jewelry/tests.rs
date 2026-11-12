@@ -674,6 +674,17 @@ fn the_solitaire_sample_reads_back_on_the_bench_sheet() {
     assert_eq!(bands[0]["size"].as_str(), Some("US 6"));
     assert!((bands[0]["grams"].as_f64().unwrap() - 3.86).abs() < 0.01, "the band's weight: {sheet}");
     assert!(sheet["message"].as_str().unwrap().contains("band US 6"), "{sheet}");
+    // Each line of the sheet names its own stones, and the band its insert, so a reader can
+    // find the line on the drawing.
+    for g in groups {
+        let handles = g["handles"].as_array().unwrap();
+        assert_eq!(handles.len() as u64, g["count"].as_u64().unwrap(), "{g}");
+        for h in handles {
+            let h = Handle::parse_hex(h.as_str().unwrap()).unwrap();
+            assert!(matches!(s.doc().unwrap().entity(h).unwrap().kind, EntityKind::Insert(_)));
+        }
+    }
+    assert!(bands[0]["handle"].as_str().is_some_and(|h| Handle::parse_hex(h).is_some()), "{sheet}");
     assert_eq!(s.doc().unwrap().header.i64("INSUNITS", 0), 4);
 }
 #[test]

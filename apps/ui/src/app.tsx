@@ -32,6 +32,7 @@ import { draftingTabFor, opensDraftingSettings, type DraftingTab } from "./draft
 import { ContextMenu, isMenuKey, type MenuPoint, type OpenContextMenu } from "./components/ContextMenu";
 import { AssistantPane } from "./components/AssistantPane";
 import { createAssistantSession, type AssistantSession } from "./assistant-session";
+import { assistantStartsOpen } from "./assistant";
 import { CanvasView } from "./components/CanvasView";
 import { LayersPanel } from "./components/LayersPanel";
 import { PropertiesPanel } from "./components/PropertiesPanel";
@@ -146,6 +147,27 @@ function saveRecent(ids: readonly string[]): void {
   }
 }
 
+const ASSISTANT_OPEN_KEY = "cadcraft.assistant.open";
+
+function loadAssistantOpen(): boolean {
+  if (typeof window === "undefined") return false;
+  let stored: string | null = null;
+  try {
+    stored = localStorage.getItem(ASSISTANT_OPEN_KEY);
+  } catch {
+    // a blocked storage leaves the width to decide
+  }
+  return assistantStartsOpen(stored, window.innerWidth);
+}
+
+function saveAssistantOpen(open: boolean): void {
+  try {
+    localStorage.setItem(ASSISTANT_OPEN_KEY, open ? "1" : "0");
+  } catch {
+    // a full or blocked storage is not worth failing a toggle over
+  }
+}
+
 export function App(props: AppProps): JSX.Element {
   const [drawing, setDrawing] = createSignal<DrawingState | null>(null);
   const [prompt, setPrompt] = createSignal<PromptState>(emptyPrompt());
@@ -191,7 +213,10 @@ export function App(props: AppProps): JSX.Element {
   const [showStatusbar, setShowStatusbar] = createSignal(true);
   const [showCmdline, setShowCmdline] = createSignal(true);
   const [showLayers, setShowLayers] = createSignal(true);
-  const [showAssistant, setShowAssistant] = createSignal(false);
+  // The assistant is part of the window, as the editor's agent panel is: it starts open where
+  // the window has the room for it beside the drawing, and stays as this browser last left it.
+  const [showAssistant, setShowAssistant] = createSignal(loadAssistantOpen());
+  createEffect(() => saveAssistantOpen(showAssistant()));
   /** The left sidebar as a whole (its palettes keep their own switches inside it). */
   const [showSidebar, setShowSidebar] = createSignal(true);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
@@ -909,6 +934,13 @@ export function App(props: AppProps): JSX.Element {
     pickAtRest({ window: corners, crossing: kind === "crossing" }, "rect", shift);
   };
 
+  /** A bench line was pressed: what it counts becomes the selection (none: the selection goes). */
+  const onBenchSelect = (handles: readonly string[]): void => {
+    const env = props.facade.execute("select", handles.length === 0 ? { clear: true } : { handles: [...handles] });
+    setNotice(env.ok ? null : env.error);
+    refresh();
+  };
+
   const onLayerToggle = (name: string, flag: "on" | "frozen" | "locked", value: boolean): void => {
     const env = props.facade.setLayerFlag(name, flag, value);
     setNotice(env.ok ? null : env.error);
@@ -1123,7 +1155,7 @@ export function App(props: AppProps): JSX.Element {
               <PropertiesPanel properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={onPropertyNotice} />
             </Show>
             <Show when={showBench()}>
-              <BenchPanel sheet={bench()} />
+              <BenchPanel sheet={bench()} selection={selection()} onSelect={onBenchSelect} />
             </Show>
           </aside>
         </Show>
@@ -1160,6 +1192,9 @@ export function App(props: AppProps): JSX.Element {
               ready={assistant()?.ready() ?? false}
               onSend={sendAsk}
               onClose={closeAsk}
+              offer={prompt().running === null}
+              onOpen={() => setAskOpen(true)}
+              shortcut={shortcutLabel("Cmd+K", isMacPlatform())}
             />
           </main>
           <Show when={showCmdline()}>

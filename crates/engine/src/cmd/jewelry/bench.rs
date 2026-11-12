@@ -24,7 +24,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("techsheet", "Tech Sheet", run_techsheet)
             .menu(&["Inquiry", "Tech Sheet"])
             .alias(&["bom", "stonesheet"])
-            .params("{handles?: [objects to count; default: the whole drawing], metal?: gold24|22|18|14|10|9|platinum|palladium|silver|steel|titanium|brass|copper|wax (default gold18), section?: a closed polyline cross-section (x = distance from the finger's surface, outward; y = along the finger), size?: ring size (with `system`), radius?: mm (inner radius instead of a size), system?: us|uk|eu|jp|cn, table?: bool (default false; draws the sheet as a table at `at`), at?: [x,y] (the table's position, default 0,0), layer?} → {stones: {groups, count, carat}, bands: [{block, size, mm, metal, grams, width, wall}], metal?, message, table?}")
+            .params("{handles?: [objects to count; default: the whole drawing], metal?: gold24|22|18|14|10|9|platinum|palladium|silver|steel|titanium|brass|copper|wax (default gold18), section?: a closed polyline cross-section (x = distance from the finger's surface, outward; y = along the finger), size?: ring size (with `system`), radius?: mm (inner radius instead of a size), system?: us|uk|eu|jp|cn, table?: bool (default false; draws the sheet as a table at `at`), at?: [x,y] (the table's position, default 0,0), layer?} → {stones: {groups, count, carat}, bands: [{block, handle, size, mm, metal, grams, width, wall}] (each stone group carries its `handles`), metal?, message, table?}")
             .noundo(),
     ]
 }
@@ -40,6 +40,9 @@ struct Group {
     count: usize,
     /// How the depth and gravity were read: `name`, `block` or `default`.
     source: &'static str,
+    /// The stones themselves, so a sheet's line can be found on the drawing (the first
+    /// [`MAX_STONES`] of them).
+    handles: Vec<String>,
 }
 
 /// What a set of objects holds in stones, and what the drawing's bands weigh.
@@ -47,7 +50,10 @@ pub(crate) struct JewelryFacts {
     pub groups: Vec<Value>,
     pub stones: usize,
     pub carat: f64,
-    /// Bands whose block carries its own size, metal and weight (`RING-…`).
+    /// The inserts behind each group, in the groups' order.
+    pub group_handles: Vec<Vec<String>>,
+    /// Bands whose block carries its own size, metal and weight (`RING-…`), each with its
+    /// insert's `handle`.
     pub bands: Vec<Value>,
     /// Stones whose block description disagrees with its name, or that are not calibrated.
     pub warnings: Vec<String>,
@@ -99,7 +105,10 @@ pub(crate) fn jewelry_facts(d: &cadcraft_doc::Drawing, entities: &[&std::sync::A
     let mut bands: Vec<Value> = Vec::new();
     for e in entities {
         let EntityKind::Insert(ins) = &e.kind else { continue };
-        if let Some(band) = parse_band(&ins.block, d.block(&ins.block).map(|b| b.description.as_str()).unwrap_or("")) {
+        if let Some(mut band) = parse_band(&ins.block, d.block(&ins.block).map(|b| b.description.as_str()).unwrap_or("")) {
+            if let Some(fields) = band.as_object_mut() {
+                fields.insert("handle".into(), json!(e.handle.hex()));
+            }
             bands.push(band);
             continue;
         }
@@ -142,8 +151,23 @@ pub(crate) fn jewelry_facts(d: &cadcraft_doc::Drawing, entities: &[&std::sync::A
             .iter_mut()
             .find(|g| g.cut == cut.name && (g.width - name.width).abs() < 1e-6 && (g.length - name.length).abs() < 1e-6 && (g.sg - sg).abs() < 1e-6)
         {
-            Some(g) => g.count += 1,
-            None => groups.push(Group { cut: cut.name.to_string(), width: name.width, length: name.length, depth, sg, carat_each, count: 1, source }),
+            Some(g) => {
+                g.count += 1;
+                if g.handles.len() < MAX_STONES {
+                    g.handles.push(e.handle.hex());
+                }
+            }
+            None => groups.push(Group {
+                cut: cut.name.to_string(),
+                width: name.width,
+                length: name.length,
+                depth,
+                sg,
+                carat_each,
+                count: 1,
+                source,
+                handles: vec![e.handle.hex()],
+            }),
         }
     }
     groups.sort_by(|a, b| b.carat_each.total_cmp(&a.carat_each).then_with(|| a.cut.cmp(&b.cut)));
@@ -166,7 +190,8 @@ pub(crate) fn jewelry_facts(d: &cadcraft_doc::Drawing, entities: &[&std::sync::A
             })
         })
         .collect();
-    JewelryFacts { groups: group_json, stones, carat: (carat * 1000.0).round() / 1000.0, bands, warnings }
+    let group_handles = groups.iter().map(|g| g.handles.clone()).collect();
+    JewelryFacts { groups: group_json, group_handles, stones, carat: (carat * 1000.0).round() / 1000.0, bands, warnings }
 }
 
 /// A band's own record, as `RING` wrote it into its block description:
@@ -324,6 +349,18 @@ fn run_techsheet(s: &mut Session, p: &Value) -> Result<Value> {
         on_layer(s, h, str_param(p, "layer"))?;
         table_handle = Some(h.hex());
     }
+    // The sheet's own lines carry their stones, so a reader can find a line on the drawing.
+    let groups: Vec<Value> = groups
+        .iter()
+        .zip(&facts.group_handles)
+        .map(|(g, handles)| {
+            let mut g = g.clone();
+            if let Some(fields) = g.as_object_mut() {
+                fields.insert("handles".into(), json!(handles));
+            }
+            g
+        })
+        .collect();
     Ok(json!({
         "stones": { "groups": groups, "count": total_stones, "carat": total_carat },
         "bands": facts.bands,

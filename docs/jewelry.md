@@ -144,16 +144,23 @@ commands on this page, so its bench sheet reads back: 33 stones, 1.36 ct, a 3.86
 
 - **The Bench section of the sidebar** is the bench sheet, live: every stone by cut and size with
   its count and carats, every band `RING` drew with its size, alloy and grams, and the totals in
-  the heading. The engine counts it again when the drawing changes. A stone off the calibrated
-  melee list says so in the hint on its row. Window ▸ Bench Sheet shows and hides it.
+  the heading. The engine counts it again when the drawing changes. A press on a line selects
+  what it counts on the drawing (every 1.3 mm round, the band) and a second press lets it go;
+  the line whose objects are all selected is marked. A stone off the calibrated melee list says
+  so in the hint on its row. Window ▸ Bench Sheet shows and hides it.
 - **The tool strip** has the four drawing commands after the drafting tools: Ring, Gem, Setting,
   Pavé. Draw ▸ holds the same four.
 - **The assistant** is told these commands and the trade's units at the start of every turn, and
   its first suggestions are a jeweler's sentences. Ctrl+K asks it from the drawing
   ([assistant.md](assistant.md#open-it)).
 
-`TECHSHEET` replies with the bands as well as the stones (`bands: [{block, size, mm, metal, grams,
-width, wall}]`), and its message carries a line for each.
+`TECHSHEET` replies with the bands as well as the stones (`bands: [{block, handle, size, mm,
+metal, grams, width, wall}]`), its message carries a line for each, and each stone group carries
+the `handles` of its stones (the first 5,000).
+
+The sample is drawn to be read: gold for the metal, pale blue for the stones, greys for
+dimensions and notes, with the finger, the section, the stone and the strip dimensioned at 1 mm
+text.
 
 ## Where the numbers come from
 
@@ -167,4 +174,5 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | patch | A bench line selects what it counts (`TECHSHEET` groups carry `handles`, bands a `handle`); the sample is dimensioned and its layers recoloured |
 | 2026-11-12 | minor | The interface opens on a solitaire sample (`sample::solitaire`), the sidebar has a live Bench section, the tool strip has Ring, Gem, Setting and Pavé, and the assistant is briefed on the jewelry commands. `TECHSHEET` reports bands. Three faults fixed, each with a test: a stone placed with `stone: "diamond"` got a block name (`GEM-…-DIAMOND`) that did not read back, so `SETTING` refused it and the sheet did not count it (diamond is now the default block whether named or not, and a material that begins with `D` is no longer read as a depth); a halo was laid around the origin instead of around its stone; in an inch drawing prongs, halos and pavé were placed 25.4 times too far out |

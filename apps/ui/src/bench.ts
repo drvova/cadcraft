@@ -14,6 +14,9 @@ export interface BenchLine {
   value: string;
   /** A stone off the calibrated melee list (a bench cannot buy it from stock). */
   note: string | null;
+  /** The objects the line counts, by handle: what a press on the line selects. Empty when the
+   *  engine named none. */
+  handles: string[];
 }
 
 export interface BenchSheet {
@@ -34,6 +37,27 @@ const MAX_BENCH_READ = 5_000;
 
 /** Diamond's specific gravity: the stone a sheet does not need to name. */
 const DIAMOND_SG = 3.52;
+
+/** The most handles one line keeps (the engine's own cap on the stones of one command). */
+export const MAX_LINE_HANDLES = 5_000;
+
+/** An object handle as the engine writes it: hexadecimal, at most sixteen digits. */
+const HANDLE_RE = /^[0-9A-Fa-f]{1,16}$/;
+
+/** The handles in a reply's list, each checked, capped. */
+function handlesOf(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const item of value.slice(0, MAX_LINE_HANDLES)) {
+    if (typeof item === "string" && HANDLE_RE.test(item)) out.push(item);
+  }
+  return out;
+}
+
+/** Whether every object of a line is in the selection (and the line has any). */
+export function lineSelected(line: BenchLine, selection: ReadonlySet<string>): boolean {
+  return line.handles.length > 0 && line.handles.every((handle) => selection.has(handle));
+}
 
 const finite = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
@@ -73,6 +97,7 @@ function stoneLine(group: unknown): BenchLine | null {
     // "14 pc · 0.18 ct": the count and the group's whole weight, as the trade's sheet writes them.
     value: `${Math.round(count).toLocaleString("en-US")} pc · ${caratText(carat)}`,
     note: group["calibrated"] === false && width <= 3 ? "Not a calibrated melee size" : null,
+    handles: handlesOf(group["handles"]),
   };
 }
 
@@ -82,7 +107,7 @@ function bandLine(band: unknown): { line: BenchLine; grams: number } | null {
   if (grams === null || grams < 0) return null;
   const size = typeof band["size"] === "string" && band["size"] !== "?" ? `${band["size"].slice(0, 16)} · ` : "";
   const metal = metalText(typeof band["metal"] === "string" ? band["metal"].slice(0, 24) : "");
-  return { line: { label: `${capital(metal)} band`, value: `${size}${trim(grams, 2)} g`, note: null }, grams };
+  return { line: { label: `${capital(metal)} band`, value: `${size}${trim(grams, 2)} g`, note: null, handles: handlesOf([band["handle"]]) }, grams };
 }
 
 /** Read a `techsheet` reply; null when it is not one. */

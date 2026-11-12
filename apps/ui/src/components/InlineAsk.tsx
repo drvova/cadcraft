@@ -8,13 +8,18 @@
  * keyboard back to the drawing. What is selected on the drawing rides along, and the line says
  * how many objects that is. Nothing here calls the engine or a model: the shell owns both.
  *
- * Its controls are the system's own: a bare `Field` in the box this surface draws (the palette's
+ * While the line is closed and something is selected on a drawing at rest, the same place holds
+ * the offer: one quiet button that says what a press asks about and shows the key, so the line is
+ * found by the pointer and learnt by the keyboard. It opens the line and does nothing else.
+ *
+ * Its controls are the system's own: a `Button` for the offer, a bare `Field` in the box this surface draws (the palette's
  * box: the elevated surface, the popover's stroke and shadow), a `Chip` for the selection, and the
  * composer's inverted `IconButton` to send.
  */
 
 import { createEffect, Show, type JSX } from "solid-js";
 import { ToolIcon } from "../icons";
+import { Button } from "../ui/Button";
 import { Chip } from "../ui/Chip";
 import { Field } from "../ui/Field";
 import { IconButton } from "../ui/IconButton";
@@ -32,6 +37,12 @@ export interface InlineAskProps {
   /** Send the draft (the shell opens the panel and starts the turn). */
   onSend: () => void;
   onClose: () => void;
+  /** Whether the closed line offers itself over a selection (the drawing is at rest). */
+  offer: boolean;
+  /** Open the line (the offer was pressed). */
+  onOpen: () => void;
+  /** The key that opens the line, as the reader's platform writes it ("Ctrl+K"). */
+  shortcut: string;
 }
 
 /** The most one line takes; a longer message is the panel's composer's to write. */
@@ -40,6 +51,11 @@ export const INLINE_ASK_MAX = 2_000;
 /** What the field suggests: a jeweler's sentence about what is selected, or about the piece. */
 export function inlineAskExample(selected: number): string {
   return selected > 0 ? "Set these in four prongs" : "Draw a size 6 band, 2 mm wide";
+}
+
+/** The offer's label: what a press asks about. */
+export function offerLabel(selected: number): string {
+  return selected === 1 ? "Ask about 1 selected object" : `Ask about ${selected.toLocaleString("en-US")} selected objects`;
 }
 
 /** The selection's chip: how many objects the message is about. */
@@ -67,7 +83,24 @@ export function InlineAsk(props: InlineAskProps): JSX.Element {
   };
 
   return (
-    <Show when={props.open}>
+    <Show
+      when={props.open}
+      fallback={
+        <Show when={props.offer && props.selected > 0}>
+          <div class="inline-ask">
+            {/* The surface is this box's, not the button's: the button keeps the system's recipe. */}
+            <span class="inline-ask-offer">
+              <Button variant="quiet" size="sm" shortcut={props.shortcut} onClick={props.onOpen}>
+                <span class="inline-ask-offer-icon">
+                  <ToolIcon id="assistant" />
+                </span>
+                {offerLabel(props.selected)}
+              </Button>
+            </span>
+          </div>
+        </Show>
+      }
+    >
       <div class="inline-ask" role="group" aria-label="Ask the assistant">
         <div class="inline-ask-box">
           <Field

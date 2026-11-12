@@ -1950,3 +1950,15 @@ function asRecord(v: unknown): Record<string, unknown> {
 function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
+
+// ---- Whether the panel starts open ----------------------------------------------------------
+
+/** The narrowest window the assistant opens in by itself: the sidebar, a drawing and the panel side by side. */
+export const ASSISTANT_AUTO_WIDTH = 1200;
+
+/** Whether the assistant starts open: as this browser last left it, else by the window's width. */
+export function assistantStartsOpen(stored: string | null, windowWidth: number): boolean {
+  if (stored === "1") return true;
+  if (stored === "0") return false;
+  return windowWidth >= ASSISTANT_AUTO_WIDTH;
+}

@@ -80,9 +80,9 @@ const EMPTY_LINE = "Ask it to design, measure or change this piece.";
 /** The empty state's suggestions, once a model is set up: one click fills the composer and sends
  *  nothing (each is one of the system's list rows). Each is a jeweler's sentence for any drawing. */
 const EXAMPLES: readonly { icon: string; text: string }[] = [
-  { icon: "ring", text: "Draw a size 7 band, 2.5 mm wide, in platinum" },
-  { icon: "gem", text: "Set a 6 mm oval sapphire in four prongs with a halo" },
-  { icon: "dist", text: "Write up the bench sheet: stones, carats and grams" },
+  { icon: "ring", text: "Draw a size 7 platinum band, 2.5 mm wide" },
+  { icon: "gem", text: "Set a 6 mm oval sapphire with a halo" },
+  { icon: "dist", text: "Total the stones, carats and grams" },
 ];
 
 /** How many pictures one message may carry, and how large each may be. */

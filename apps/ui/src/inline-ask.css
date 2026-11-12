@@ -42,6 +42,29 @@
   border-color: var(--focus-ring);
 }
 
+/* The offer: the system's quiet button in a small box of the elevated surface, so it reads over
+   any drawing. The box takes the pointer; the band around it does not. */
+.inline-ask-offer {
+  pointer-events: auto;
+  display: inline-flex;
+  padding: var(--gap-2);
+  background: var(--surface-elevated);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-block);
+  box-shadow: var(--shadow-popover);
+}
+
+.inline-ask-offer-icon {
+  display: inline-flex;
+  margin-inline-end: var(--gap-6);
+  color: var(--icon);
+}
+
+.inline-ask-offer-icon .tool-icon {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+}
+
 /* The assistant's mark is the field's leading adornment: its box carries the gap to the text. */
 .inline-ask-icon {
   display: inline-flex;

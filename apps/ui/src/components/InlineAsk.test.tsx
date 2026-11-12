@@ -5,10 +5,10 @@
 
 import { describe, expect, test } from "bun:test";
 import { createSignal } from "solid-js";
-import { InlineAsk, inlineAskExample, selectedLabel } from "./InlineAsk";
+import { InlineAsk, inlineAskExample, offerLabel, selectedLabel } from "./InlineAsk";
 import { inputIn, mount, type } from "../test-utils";
 
-function harness(initial: { open?: boolean; selected?: number; ready?: boolean; draft?: string } = {}) {
+function harness(initial: { open?: boolean; selected?: number; ready?: boolean; draft?: string; offer?: boolean } = {}) {
   const [draft, setDraft] = createSignal(initial.draft ?? "");
   const log: string[] = [];
   const container = mount(() => (
@@ -21,6 +21,9 @@ function harness(initial: { open?: boolean; selected?: number; ready?: boolean; 
       ready={initial.ready ?? true}
       onSend={() => log.push(`send:${draft()}`)}
       onClose={() => log.push("close")}
+      offer={initial.offer ?? true}
+      onOpen={() => log.push("open")}
+      shortcut="Ctrl+K"
     />
   ));
   return { container, draft, log };
@@ -33,9 +36,24 @@ const key = (el: Element, name: string): KeyboardEvent => {
 };
 
 describe("InlineAsk", () => {
-  test("closed, it renders nothing", () => {
+  test("closed with nothing selected, it renders nothing", () => {
     const { container } = harness({ open: false });
     expect(container.querySelector(".inline-ask")).toBeNull();
+  });
+
+  test("closed over a selection, it offers itself: one button that opens the line", () => {
+    const { container, log } = harness({ open: false, selected: 3 });
+    const offer = container.querySelector("button");
+    expect(offer?.textContent).toContain("Ask about 3 selected objects");
+    expect(container.querySelector("input")).toBeNull();
+    offer?.click();
+    expect(log).toEqual(["open"]);
+    expect(offerLabel(1)).toBe("Ask about 1 selected object");
+  });
+
+  test("the offer stands down while a command runs", () => {
+    const { container } = harness({ open: false, selected: 3, offer: false });
+    expect(container.querySelector("button")).toBeNull();
   });
 
   test("open, it is a named group holding one named field", () => {

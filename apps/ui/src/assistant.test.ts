@@ -44,6 +44,8 @@ import {
   runTurn,
   StreamAssembler,
   systemPrompt,
+  assistantStartsOpen,
+  ASSISTANT_AUTO_WIDTH,
   trimToBudget,
   wireMessages,
   focusIsOurs,
@@ -1509,5 +1511,21 @@ describe("a hostile provider", () => {
     expect(failure(events).length).toBeLessThan(600);
     const raw = await turn(new Response("e".repeat(3_000_000), { status: 500 }));
     expect(failure(raw.events).length).toBeLessThan(600);
+  });
+});
+
+describe("whether the panel starts open", () => {
+  test("a browser that has not chosen gets it where the window has the room", () => {
+    expect(assistantStartsOpen(null, ASSISTANT_AUTO_WIDTH)).toBe(true);
+    expect(assistantStartsOpen(null, 1440)).toBe(true);
+    expect(assistantStartsOpen(null, ASSISTANT_AUTO_WIDTH - 1)).toBe(false);
+    expect(assistantStartsOpen(null, 390)).toBe(false);
+  });
+
+  test("the last choice in this browser wins over the width, and anything else stored is no choice", () => {
+    expect(assistantStartsOpen("0", 1920)).toBe(false);
+    expect(assistantStartsOpen("1", 390)).toBe(true);
+    expect(assistantStartsOpen("yes", 390)).toBe(false);
+    expect(assistantStartsOpen("", 1920)).toBe(true);
   });
 });

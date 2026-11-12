@@ -283,12 +283,21 @@ pub fn solitaire() -> Drawing {
     let mut d = Drawing::new_metric();
     d.linetypes.extend(cadcraft_doc::library::standard_linetypes());
     d.layers.extend([
-        layer("Metal", 2, "Continuous", 35),
-        layer("Stones", 4, "Continuous", 25),
-        layer("Settings", 7, "Continuous", 25),
-        layer("Notes", 3, "Continuous", 18),
-        layer("Construction", 8, "Continuous", 13),
+        // Gold for the metal, a pale blue for the stones, and greys for everything that is
+        // said about them, so the piece is what the eye finds first.
+        layer("Metal", 40, "Continuous", 35),
+        layer("Stones", 151, "Continuous", 25),
+        layer("Settings", 9, "Continuous", 25),
+        layer("Dimensions", 252, "Continuous", 13),
+        layer("Notes", 253, "Continuous", 18),
+        layer("Construction", 251, "Continuous", 13),
     ]);
+    // Dimensions sized for a piece a few millimetres across: 1 mm text.
+    for style in &mut d.dim_styles {
+        style.scale = 0.4;
+    }
+    // The drawing's own style (the metric one), not the first in the table.
+    let dim_style = d.header.str("DIMSTYLE", "Standard");
     d.header.set_i64("INSUNITS", 4);
     d.header.set_i64("LUPREC", 2);
     d.header.set_str("CLAYER", "Metal");
@@ -331,11 +340,30 @@ pub fn solitaire() -> Drawing {
     add(dashed("Construction"), line(Vec2::new(0.0, -13.0), Vec2::new(0.0, 13.0)));
     add(dashed("Construction"), line(Vec2::new(centre[0] - 7.0, 0.0), Vec2::new(centre[0] + 7.0, 0.0)));
     add(dashed("Construction"), line(Vec2::new(centre[0], -7.0), Vec2::new(centre[0], 7.0)));
-    // What each view is.
-    add(on("Notes"), text(Vec2::new(-6.2, -24.0), 1.1, "BAND - FRONT, SECTION"));
-    add(on("Notes"), text(Vec2::new(centre[0] - 5.6, -24.0), 1.1, "CENTRE STONE - PLAN"));
-    add(on("Notes"), text(Vec2::new(x0 + 5.4, -24.0), 1.1, "SHANK PAVE - PLAN"));
-    add(on("Notes"), text(Vec2::new(-12.0, 17.0), 1.6, "SOLITAIRE  US 6  18K YELLOW GOLD"));
+    // The sizes a bench reads first: the finger, the band's section, the stone, the strip.
+    let mut measure = |from: Vec2, to: Vec2, at: Vec2, rotation: f64| {
+        if let EntityKind::Dimension(mut dimension) = dim(DimKind::Linear { rotation }, from, to, at) {
+            dimension.style = dim_style.clone();
+            add(on("Dimensions"), EntityKind::Dimension(dimension));
+        }
+    };
+    let (inner, outer, wall) = (8.2735, 10.0735, 1.8);
+    let section_top = -(outer + 6.0);
+    let upright = std::f64::consts::FRAC_PI_2;
+    measure(Vec2::new(-inner, 0.0), Vec2::new(inner, 0.0), Vec2::new(0.0, outer + 3.0), 0.0);
+    measure(Vec2::new(-half, section_top - wall), Vec2::new(half, section_top - wall), Vec2::new(0.0, section_top - wall - 2.5), 0.0);
+    // The wall is read on the section's other side, so its figure and the width's never meet.
+    measure(Vec2::new(-half, section_top), Vec2::new(-half, section_top - wall), Vec2::new(-half - 3.0, section_top - wall / 2.0), upright);
+    measure(Vec2::new(centre[0] - 3.25, 0.0), Vec2::new(centre[0] + 3.25, 0.0), Vec2::new(centre[0], outer + 3.0), 0.0);
+    measure(Vec2::new(x0, half), Vec2::new(x1, half), Vec2::new((x0 + x1) / 2.0, outer + 3.0), 0.0);
+    measure(Vec2::new(x1, -half), Vec2::new(x1, half), Vec2::new(x1 + 3.0, 0.0), upright);
+    // What the sheet is, and what each view is: one line each, on one baseline.
+    add(on("Notes"), text(Vec2::new(-outer, outer + 10.0), 2.0, "SOLITAIRE"));
+    add(on("Notes"), text(Vec2::new(-outer, outer + 7.6), 1.0, "US 6, 18K YELLOW GOLD, 6.5 MM ROUND BRILLIANT"));
+    let captions = section_top - wall - 6.5;
+    add(on("Notes"), text(Vec2::new(-outer, captions), 1.0, "BAND, FRONT AND SECTION"));
+    add(on("Notes"), text(Vec2::new(centre[0] - 4.75, captions), 1.0, "CENTRE STONE, PLAN"));
+    add(on("Notes"), text(Vec2::new(x0, captions), 1.0, "SHANK PAVE, PLAN"));
     d
 }
 

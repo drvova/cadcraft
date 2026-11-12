@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { benchSummary, caratText, MAX_BENCH_LINES, metalText, parseBench, trim } from "./bench";
+import { benchSummary, caratText, lineSelected, MAX_BENCH_LINES, MAX_LINE_HANDLES, metalText, parseBench, trim } from "./bench";
 
 /** The solitaire sample's sheet, as the engine replies. */
 const SOLITAIRE = {
@@ -23,10 +23,10 @@ describe("the bench sheet", () => {
   test("reads the stones by cut and size, then the bands", () => {
     const sheet = parseBench(SOLITAIRE);
     expect(sheet?.lines).toEqual([
-      { label: "Round 6.5 mm", value: "1 pc · 1.03 ct", note: null },
-      { label: "Round 1.5 mm", value: "14 pc · 0.18 ct", note: null },
-      { label: "Round 1.3 mm", value: "18 pc · 0.15 ct", note: null },
-      { label: "18k gold band", value: "US 6 · 3.86 g", note: null },
+      { label: "Round 6.5 mm", value: "1 pc · 1.03 ct", note: null, handles: [] },
+      { label: "Round 1.5 mm", value: "14 pc · 0.18 ct", note: null, handles: [] },
+      { label: "Round 1.3 mm", value: "18 pc · 0.15 ct", note: null, handles: [] },
+      { label: "18k gold band", value: "US 6 · 3.86 g", note: null, handles: [] },
     ]);
     expect(benchSummary(sheet)).toBe("33 stones, 1.36 ct · 3.86 g");
   });
@@ -42,8 +42,8 @@ describe("the bench sheet", () => {
         ],
       },
     });
-    expect(sheet?.lines[0]).toEqual({ label: "Emerald 7×5 mm, SG 2.72", value: "1 pc · 0.90 ct", note: null });
-    expect(sheet?.lines[1]).toEqual({ label: "Round 1.25 mm", value: "2 pc · 0.015 ct", note: "Not a calibrated melee size" });
+    expect(sheet?.lines[0]).toEqual({ label: "Emerald 7×5 mm, SG 2.72", value: "1 pc · 0.90 ct", note: null, handles: [] });
+    expect(sheet?.lines[1]).toEqual({ label: "Round 1.25 mm", value: "2 pc · 0.015 ct", note: "Not a calibrated melee size", handles: [] });
   });
 
   test("a drawing with no jewelry is an empty sheet with nothing to say", () => {
@@ -64,7 +64,7 @@ describe("the bench sheet", () => {
     });
     expect(sheet?.stones).toBe(0);
     expect(sheet?.carat).toBe(0);
-    expect(sheet?.lines).toEqual([{ label: "Metal band", value: "2 g", note: null }]);
+    expect(sheet?.lines).toEqual([{ label: "Metal band", value: "2 g", note: null, handles: [] }]);
     expect(sheet?.warnings).toEqual(["the block GEM-X disagrees with its description"]);
   });
 
@@ -74,6 +74,23 @@ describe("the bench sheet", () => {
     expect(sheet?.lines.length).toBe(MAX_BENCH_LINES);
     expect(sheet?.grams).toBe(3);
     expect(sheet?.warnings).toEqual(["6 more lines are on the full sheet (TECHSHEET)."]);
+  });
+
+  test("a line carries the handles of what it counts, checked and capped", () => {
+    const sheet = parseBench({
+      stones: { count: 3, carat: 0.03, groups: [{ cut: "round", width: 1.3, count: 3, carat: 0.03, handles: ["1A", "2b", 7, "not hex", "", "1".repeat(40), "3C"] }] },
+      bands: [{ grams: 3, metal: "gold14", size: "US 5", handle: "9F" }, { grams: 1, handle: { toString: 1 } }],
+    });
+    expect(sheet?.lines.map((line) => line.handles)).toEqual([["1A", "2b", "3C"], ["9F"], []]);
+    const flood = parseBench({ stones: { count: 1, carat: 1, groups: [{ cut: "round", width: 1, count: 9000, carat: 1, handles: Array.from({ length: 9000 }, (_, i) => i.toString(16)) }] } });
+    expect(flood?.lines[0]?.handles.length).toBe(MAX_LINE_HANDLES);
+  });
+
+  test("a line is selected when all it counts is selected, and a line that names nothing never is", () => {
+    const line = { label: "Round 1.3 mm", value: "2 pc · 0.02 ct", note: null, handles: ["1A", "2B"] };
+    expect(lineSelected(line, new Set(["1A", "2B", "3C"]))).toBe(true);
+    expect(lineSelected(line, new Set(["1A"]))).toBe(false);
+    expect(lineSelected({ ...line, handles: [] }, new Set(["1A"]))).toBe(false);
   });
 
   test("the trade's figures", () => {
