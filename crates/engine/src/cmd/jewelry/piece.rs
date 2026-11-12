@@ -1,7 +1,1084 @@
-//! `PIECE`: a parametric ring drawn as a sheet from [`PieceParams`]. (To be written.)
+//! `PIECE`: a parametric ring drawn as a sheet from [`PieceParams`], and rebuilt when a number
+//! changes.
+//!
+//! One piece lives in a drawing. `PIECE {kind, …}` draws it, `PIECE {size: 7}` merges that one
+//! number over the stored parameters, erases the old sheet and draws the new one in a single undo
+//! step, `PIECE {query: true}` reads it back without touching anything, and `PIECE {remove: true}`
+//! takes it away. A request that cannot be built is refused and leaves the drawing as it was.
+//!
+//! # The sheet
+//!
+//! Everything is millimetres, placed through `INSUNITS` like every jewelry command, around `at`
+//! (the centre of the front view). The views are laid out as a bench drawing is read:
+//!
+//! - **Front view** (looking along the finger): the finger circle and the outside circle, as one
+//!   insert of the block `RING-PIECE`, whose description is the `ring:` record `RING` writes — so
+//!   `TECHSHEET` and `DESCRIBE` read the band's size, metal and weight with no special case, and
+//!   `RINGSIZES {handle}` measures it. A solitaire's stone stands on top at 12 o'clock as its
+//!   side profile (table, crown, girdle, pavilion, culet) with the culet 0.5 mm clear of the band
+//!   and the two prongs the view shows drawn as lines from the band to just over the girdle. An
+//!   eternity band's stones are drawn as their side profiles at their angles, tables level with
+//!   the band's outside.
+//! - **Section** (to the right): the band's cross-section, `width` across by `wall` high, the
+//!   finger side down. A dome is a half-round: a circular arc over the full width whose rise is
+//!   the wall, and when the wall is more than half the width, straight sides under a semicircle.
+//!   An eternity band's section carries the stone's profile in its seat.
+//! - **Plan** (under the front view, seen from above): the band as a rectangle `outer` long by
+//!   `width` wide. A solitaire's stone is here as a real `GEM` insert (its true girdle, its length
+//!   along the finger), with its prongs as circles on the girdle where `SETTING` would put them
+//!   and the halo's melee around it. An eternity band's visible half is drawn foreshortened: the
+//!   stone at angle φ from the top sits at `R·sin φ` and is `cos φ` as wide.
+//! - **Layout** (eternity only, under the plan): the band unrolled at the stones' girdle circle,
+//!   `2π·R` long, with every stone as a real `GEM` insert on its pitch. This is the view the
+//!   stones are counted from; the front view and the plan draw the same stones as plain outlines
+//!   so nothing is counted twice.
+//!
+//! Metal goes on the layer `Metal`, stones on `Stones`, prongs on `Settings`; a layer that is
+//! missing is made, one that exists is left as it is.
+//!
+//! # The numbers
+//!
+//! - A stone's side profile splits its depth (the cut's usual proportion of its width) into a
+//!   crown of 26 %, a girdle of 4 % and a pavilion of 70 %, under a table of 57 % of the width
+//!   (a round) or 60 % (the other cuts): a round brilliant's usual proportions. A cabochon is a
+//!   dome on a flat base.
+//! - An eternity band's stones are as long as they are wide (`melee`), seated with their tables
+//!   level with the band's outside, so their girdles lie on a circle of radius
+//!   `R = outer/2 − 0.28 × depth`. The metal between two neighbours is measured there, between
+//!   the girdles' nearest edges: `2·√(R² + (melee/2)²)·sin(π/n − atan(melee/2R))`. The most that
+//!   fit is the largest `n` that leaves `gap`; a `count` above it is refused with that number.
+//! - A halo's melee (round diamonds of the `halo` width) lie on the centre stone's girdle offset
+//!   outward by half the prong wire, `gap`, and half a melee, so they clear the prongs; as many
+//!   as keep `gap` of metal between them. The prong wire is 15 % of the stone's width, kept
+//!   between 0.8 and 1.2 mm.
+//! - **Metal weight** is the band alone: its section's area swept around the finger at the
+//!   section's centroid (Pappus), at the alloy's density — for a flat band exactly the annulus
+//!   `RING` weighs. The prongs and the head are not weighed, and the seats cut for the stones
+//!   are not taken off; a bench should read the figure as the band before setting.
+//!
+//! # Where the piece is kept
+//!
+//! The piece is a group named `JEWELRY_PIECE`: its members are the sheet's objects and its
+//! description is the parameters and the sheet's position as one line of JSON. A group is part
+//! of the drawing, so undo and redo restore the geometry and the parameters together, and a DXF
+//! save and open keeps both. A rebuild puts the sheet where the band's front view is now (so a
+//! piece that was moved rebuilds where it was moved to), unless `at` is given.
 
+use cadcraft_doc::{Entity, EntityKind, Group, Handle, Layer};
+use cadcraft_geom::{PolyVertex, Vec2, Vec3};
+use serde_json::{Map, Value, json};
+
+use super::super::*;
+use super::piece_params::{MAX_PIECE_STONES, MIN_CAST_WALL, PieceKind, PieceParams, Profile};
+use super::sizes::RingSize;
 use super::*;
+use crate::{Accept, Input, Interactive, Prompt, Step};
+
+const CMD: &str = "piece";
+/// The group a piece is kept as.
+const GROUP: &str = "JEWELRY_PIECE";
+/// The block the band's front view is inserted as.
+const RING_BLOCK: &str = "RING-PIECE";
+/// Most handles a reply lists.
+const MAX_HANDLES: usize = 5_000;
+/// The space between two views of the sheet (mm).
+const VIEW_GAP: f64 = 8.0;
+/// The least metal either side of a stone set into a band (mm).
+const MIN_EDGE: f64 = 0.3;
+/// How far a solitaire's culet stands clear of the band (mm).
+const CULET_CLEAR: f64 = 0.5;
+/// A stone's crown and girdle as fractions of its depth; the rest is pavilion.
+const CROWN: f64 = 0.26;
+const GIRDLE: f64 = 0.04;
+/// Furthest a sheet may be placed from the origin, in drawing units.
+const MAX_AT: f64 = 1.0e9;
+/// The layers a piece is drawn on, with the colour each is made in when it is missing.
+const LAYERS: [(&str, u8); 3] = [("Metal", 40), ("Stones", 4), ("Settings", 8)];
 
 pub fn specs() -> Vec<CommandSpec> {
-    Vec::new()
+    vec![
+        CommandSpec::new("piece", "Piece", run_piece)
+            .menu(&["Draw", "Piece"])
+            .alias(&["ringpiece"])
+            .params("One parametric ring per drawing, drawn as a sheet (front view, section, plan; an eternity band also its stone layout) in millimetres through INSUNITS, and rebuilt when a number changes. {query: true} → {piece: null | P}, changes nothing. {remove: true} → {piece: null, removed: n objects}. Anything else builds or rebuilds in one undo step: the keys given are merged over the stored piece (or over the defaults, and then `kind` is required): {kind: band|solitaire|eternity, at?: [x,y] (the front view's centre; default 0,0 for a new piece, where the band is now for a rebuild), system?: us|uk|eu|jp|cn (default us), size?: number|string in that system (default US 6), wall?: mm 0.3–10 (default 1.8, radial thickness), width?: mm 0.5–30 (default 2.2, along the finger), profile?: flat|dome (default flat), metal?: gold24|22|18|14|10|9|platinum|palladium|silver|steel|titanium|brass|copper|wax (default gold18), cut?: a GEMLIST cut (default round; the solitaire's centre stone, or every eternity stone), stone?: a GEMLIST stone (default diamond), stoneWidth?: mm 0.5–30 (default 6.5), stoneLength?: mm (default stoneWidth; along the finger), prongs?: 3–8 (default 6), halo?: false|true (1.3)|melee mm 0.8–3 (solitaire: round diamonds around the centre stone), melee?: mm 0.8–6 (default 1.8, the eternity stones' diameter), count?: 1–400 or null (eternity; null = as many as fit at `gap`), gap?: mm 0–5 (default 0.2, least metal between two stones)} → {piece: P, message}, P = {params: {kind, system: \"us\", size, sizeText, sizeSystem, wall, width, profile, metal, cut, stoneLength, stoneWidth, stone, prongs, halo, melee, count, gap}, handles: [every object of the piece, at most 5000], size: {mm, diameter, circumference, us, usText, uk, eu, jp, cn}, metal: {name, density, grams (the band alone: prongs, head and stone seats are not weighed)}, stones: {count, carat, fits? (eternity: the most that fit at `gap`)}, checks: [{id: wall|stone-seat|spacing|calibrated|size, ok, message}], at: [x,y]}. A failed check is information; a bad parameter, or an eternity `count` that cannot fit at `gap`, is refused and nothing changes")
+            .interactive(|_| Ok(Box::new(PieceM::default()))),
+    ]
+}
+
+// ---------------------------------------------------------------------------------------------
+// The design: everything a piece is, worked out from its parameters before anything is drawn
+// ---------------------------------------------------------------------------------------------
+
+/// The layer a shape goes on.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum On {
+    Metal,
+    Stones,
+    Settings,
+}
+
+impl On {
+    fn layer(self) -> &'static str {
+        match self {
+            On::Metal => "Metal",
+            On::Stones => "Stones",
+            On::Settings => "Settings",
+        }
+    }
+}
+
+/// A shape of the sheet, in millimetres from the front view's centre.
+#[derive(Clone, Debug)]
+enum Shape {
+    Circle {
+        c: Vec2,
+        r: f64,
+    },
+    /// Vertices with the bulge of the segment that follows each.
+    Poly {
+        v: Vec<(Vec2, f64)>,
+        closed: bool,
+    },
+    /// A full ellipse: its centre, its major semi-axis and the minor's ratio to it.
+    Ellipse {
+        c: Vec2,
+        major: Vec2,
+        ratio: f64,
+    },
+}
+
+/// A stone placed as a `GEM` insert, in millimetres from the front view's centre.
+struct Placed {
+    /// One of the melee (the halo, the eternity row) rather than the centre stone.
+    melee: bool,
+    at: Vec2,
+}
+
+/// A piece worked out: what to draw, what it weighs and what a bench should know about it.
+struct Design {
+    params: PieceParams,
+    centre: Option<gem::Stone>,
+    melee: Option<gem::Stone>,
+    shapes: Vec<(On, Shape)>,
+    placed: Vec<Placed>,
+    /// The band's weight in grams.
+    grams: f64,
+    carat: f64,
+    /// Eternity: the most stones that fit at the gap.
+    fits: Option<u32>,
+    checks: Vec<Value>,
+}
+
+/// A closed outline of straight edges.
+fn closed(points: &[Vec2]) -> Shape {
+    Shape::Poly { v: points.iter().map(|p| (*p, 0.0)).collect(), closed: true }
+}
+
+/// A rectangle centred on `c`, `w` across by `h` high.
+fn rect(c: Vec2, w: f64, h: f64) -> Shape {
+    let (a, b) = (w / 2.0, h / 2.0);
+    closed(&[c + Vec2::new(-a, -b), c + Vec2::new(a, -b), c + Vec2::new(a, b), c + Vec2::new(-a, b)])
+}
+
+/// A flat-based shape `w` across and `h` high with its base centred on the origin: a rectangle,
+/// or (domed) an arc over the full width whose rise is `h`, on straight sides when `h` is more
+/// than half of `w`. Counter-clockwise, bulges exact.
+fn section(w: f64, h: f64, domed: bool) -> Vec<(Vec2, f64)> {
+    let a = w / 2.0;
+    if !domed {
+        return vec![(Vec2::new(-a, 0.0), 0.0), (Vec2::new(a, 0.0), 0.0), (Vec2::new(a, h), 0.0), (Vec2::new(-a, h), 0.0)];
+    }
+    // A bulge is the arc's rise over half its chord.
+    let rise = h.min(a);
+    let side = h - rise;
+    let bulge = if a > 0.0 { rise / a } else { 0.0 };
+    if side <= 1e-9 {
+        vec![(Vec2::new(-a, 0.0), 0.0), (Vec2::new(a, 0.0), bulge)]
+    } else {
+        vec![(Vec2::new(-a, 0.0), 0.0), (Vec2::new(a, 0.0), 0.0), (Vec2::new(a, side), bulge), (Vec2::new(-a, side), 0.0)]
+    }
+}
+
+/// The area of a [`section`] and the height of its centroid above its base.
+fn section_area(v: &[(Vec2, f64)]) -> Option<(f64, f64)> {
+    let poly = cadcraft_geom::Polyline { vertices: v.iter().map(|(p, b)| PolyVertex::with_bulge(*p, *b)).collect(), closed: true };
+    let area = poly.area().abs();
+    let centroid = poly.centroid()?;
+    (area.is_finite() && area > 0.0 && centroid.is_finite()).then_some((area, centroid.y))
+}
+
+/// The band's weight in grams: its section swept around the finger at the section's centroid.
+fn band_grams(p: &PieceParams) -> Result<f64> {
+    let (area, rise) =
+        section_area(&section(p.width, p.wall, p.profile == Profile::Dome)).ok_or_else(|| bad(CMD, "the band's section has no area"))?;
+    let volume = cadcraft_geom::TAU * (p.inner() / 2.0 + rise) * area;
+    Ok(volume / 1000.0 * p.density)
+}
+
+/// A stone's side profile, `w` across and `depth` high, with its culet (or a cabochon's base) on
+/// the origin and its table up.
+fn profile(cut: &gem::Cut, w: f64, depth: f64) -> Vec<(Vec2, f64)> {
+    if cut.name == "cabochon" {
+        return section(w, depth, true);
+    }
+    let a = w / 2.0;
+    let table = a * if cut.name == "round" { 0.57 } else { 0.60 };
+    let girdle_top = depth * (1.0 - CROWN);
+    let girdle_bottom = depth * (1.0 - CROWN - GIRDLE);
+    [
+        Vec2::new(-table, depth),
+        Vec2::new(-a, girdle_top),
+        Vec2::new(-a, girdle_bottom),
+        Vec2::new(0.0, 0.0),
+        Vec2::new(a, girdle_bottom),
+        Vec2::new(a, girdle_top),
+        Vec2::new(table, depth),
+    ]
+    .into_iter()
+    .map(|p| (p, 0.0))
+    .collect()
+}
+
+/// How far below its table a stone's girdle lies (the middle of the girdle).
+fn girdle_drop(depth: f64) -> f64 {
+    depth * (CROWN + GIRDLE / 2.0)
+}
+
+/// A profile moved so its origin is at `at`, its across direction is `across` and its up
+/// direction is `up` (unit vectors at right angles).
+fn place_profile(v: &[(Vec2, f64)], at: Vec2, across: Vec2, up: Vec2) -> Shape {
+    Shape::Poly { v: v.iter().map(|(p, b)| (at + across * p.x + up * p.y, *b)).collect(), closed: true }
+}
+
+/// The stone a piece holds, as `GEM` reads one.
+fn stone_of(cut: &str, length: f64, width: f64, material: &str) -> Result<gem::Stone> {
+    let mut p = Map::new();
+    p.insert("cut".into(), json!(cut));
+    p.insert("length".into(), json!(length));
+    p.insert("width".into(), json!(width));
+    // Diamond is the stone a bare `GEM` places, so a piece's diamonds share its blocks.
+    if material != "diamond" {
+        p.insert("stone".into(), json!(material));
+    }
+    gem::stone_params(CMD, &Value::Object(p))
+}
+
+fn carat_of(s: &gem::Stone) -> f64 {
+    gem::carat(s.cut, s.length, s.width, s.depth, s.sg)
+}
+
+/// A stone's girdle sampled in millimetres, centred on the stone.
+fn girdle(s: &gem::Stone) -> Result<Vec<Vec2>> {
+    let e = Entity::new(Handle(0), gem::outline(s.cut, s.length, s.width));
+    let (pts, _) = entity_loop(&e, 1.0).ok_or_else(|| bad(CMD, "the stone has no outline"))?;
+    if pts.len() < 3 || pts.iter().any(|p| !p.is_finite()) {
+        return Err(bad(CMD, "the stone has no outline"));
+    }
+    Ok(pts)
+}
+
+/// `n` points evenly spaced by length around a closed loop.
+fn around(loop_pts: &[Vec2], n: usize) -> Vec<Vec2> {
+    let count = loop_pts.len();
+    let edges: Vec<(Vec2, Vec2, f64)> = loop_pts.iter().zip(loop_pts.iter().cycle().skip(1)).take(count).map(|(a, b)| (*a, *b, a.dist(*b))).collect();
+    let total: f64 = edges.iter().map(|e| e.2).sum();
+    let mut out = Vec::with_capacity(n);
+    if !(total.is_finite() && total > 1e-9) || n == 0 {
+        return out;
+    }
+    let step = total / n as f64;
+    let (mut walked, mut edge) = (0.0, 0usize);
+    for i in 0..n {
+        let want = (i as f64 + 0.5) * step;
+        while let Some((a, b, len)) = edges.get(edge) {
+            if walked + len >= want || edge + 1 == edges.len() {
+                let t = if *len > 1e-12 { ((want - walked) / len).clamp(0.0, 1.0) } else { 0.0 };
+                out.push(*a + (*b - *a) * t);
+                break;
+            }
+            walked += len;
+            edge += 1;
+        }
+    }
+    out
+}
+
+/// The least distance between any two of `pts`.
+fn least_spacing(pts: &[Vec2]) -> f64 {
+    let mut least = f64::INFINITY;
+    for (i, a) in pts.iter().enumerate() {
+        for b in pts.iter().skip(i + 1) {
+            least = least.min(a.dist(*b));
+        }
+    }
+    least
+}
+
+/// A check for the reply, in a jeweler's words.
+fn check(id: &str, ok: bool, message: String) -> Value {
+    json!({ "id": id, "ok": ok, "message": message })
+}
+
+/// Whether a ring size is a standard one in the system it was given in, and how far off if not.
+fn size_check(p: &PieceParams) -> Value {
+    let size = &p.size;
+    let (system, nearest) = match p.system.as_str() {
+        "eu" => ("EU", RingSize::from_eu(f64::from(size.eu)).map(|r| (r, r.eu.to_string()))),
+        "jp" => ("JP", RingSize::from_jp(f64::from(size.jp)).map(|r| (r, r.jp.to_string()))),
+        "cn" => ("CN", RingSize::from_cn(f64::from(size.cn)).map(|r| (r, r.cn.to_string()))),
+        "uk" => ("UK", RingSize::from_us((size.us * 4.0).round() / 4.0).map(|r| (r, r.uk()))),
+        _ => ("US", RingSize::from_us((size.us * 4.0).round() / 4.0).map(|r| (r, r.us_text()))),
+    };
+    let step = match system {
+        "US" => "quarter size",
+        "UK" => "half letter",
+        _ => "whole size",
+    };
+    match nearest {
+        Some((r, label)) => {
+            let off = size.diameter - r.diameter;
+            if off.abs() < 0.005 {
+                check("size", true, format!("{system} {label} is a standard size: {} mm inside", fmt_mm(size.diameter)))
+            } else {
+                check(
+                    "size",
+                    false,
+                    format!(
+                        "{} mm inside is not a standard {system} size: {} mm {} {system} {label}, the nearest {step}",
+                        fmt_mm(size.diameter),
+                        fmt_mm(off.abs()),
+                        if off > 0.0 { "over" } else { "under" }
+                    ),
+                )
+            }
+        }
+        None => check("size", false, format!("{} mm inside is past the last standard {system} size", fmt_mm(size.diameter))),
+    }
+}
+
+/// Whether a melee size is one a bench buys.
+fn calibrated_check(what: &str, mm: Option<f64>) -> Value {
+    match mm {
+        None => check("calibrated", true, "No melee in this piece".to_string()),
+        Some(mm) if calibrated(mm).is_some() => check("calibrated", true, format!("The {what} melee is {} mm, a calibrated size", fmt_mm(mm))),
+        Some(mm) => check("calibrated", false, format!("The {what} melee is {} mm, not a calibrated size (0.8–3.0 mm in 0.1 steps)", fmt_mm(mm))),
+    }
+}
+
+/// Work a piece out from its parameters. Nothing is drawn; a piece that cannot be made is
+/// refused here, before the drawing is touched.
+fn design(p: &PieceParams) -> Result<Design> {
+    let (ri, ro) = (p.inner() / 2.0, p.outer() / 2.0);
+    if !(ri.is_finite() && ro.is_finite() && ri > 0.0 && ro > ri) {
+        return Err(bad(CMD, "the band has no size"));
+    }
+    let grams = band_grams(p)?;
+    let domed = p.profile == Profile::Dome;
+    let mut shapes: Vec<(On, Shape)> = Vec::new();
+    let mut placed: Vec<Placed> = Vec::new();
+    let mut checks = vec![if p.wall + 1e-9 >= MIN_CAST_WALL {
+        check("wall", true, format!("The wall is {} mm, at or over the {MIN_CAST_WALL} mm a bench casts", fmt_mm(p.wall)))
+    } else {
+        check("wall", false, format!("The wall is {} mm, under the {MIN_CAST_WALL} mm a bench casts without it failing", fmt_mm(p.wall)))
+    }];
+    let (mut centre, mut melee, mut carat, mut fits) = (None, None, 0.0, None);
+    // How far the front view reaches to the right, and the plan view above and below its middle.
+    let mut front_reach = ro;
+    let mut plan_reach = p.width / 2.0;
+    // The stone drawn in the section's seat (an eternity band's).
+    let mut seated: Option<Vec<(Vec2, f64)>> = None;
+    // What is laid out under the plan: the unrolled band's length.
+    let mut unrolled: Option<f64> = None;
+    // Shapes of the plan view, relative to its centre, placed once the views' reach is known.
+    let mut plan: Vec<(On, Shape)> = vec![(On::Metal, rect(Vec2::ZERO, 2.0 * ro, p.width))];
+    let mut plan_stones: Vec<Placed> = Vec::new();
+    // Stones of the layout, by their distance along it.
+    let mut row: Vec<f64> = Vec::new();
+
+    match p.kind {
+        PieceKind::Band => {
+            checks.push(check("stone-seat", true, "A plain band: no stone to seat".to_string()));
+            checks.push(check("spacing", true, "A plain band: no stones to space".to_string()));
+            checks.push(calibrated_check("", None));
+        }
+        PieceKind::Solitaire => {
+            let stone = stone_of(&p.cut, p.stone_length, p.stone_width, &p.stone)?;
+            let outline = girdle(&stone)?;
+            let prong = (0.15 * stone.width).clamp(0.8, 1.2);
+            // Front view: the stone's side profile over the band, and the two prongs the view shows.
+            let side = profile(stone.cut, stone.width, stone.depth);
+            let culet = Vec2::new(0.0, ro + CULET_CLEAR);
+            shapes.push((On::Stones, place_profile(&side, culet, Vec2::new(1.0, 0.0), Vec2::new(0.0, 1.0))));
+            let half = stone.width / 2.0;
+            let foot = (0.45 * half).min(0.9 * ro);
+            let foot_y = (ro * ro - foot * foot).max(0.0).sqrt();
+            let (girdle_bottom, girdle_top) = (culet.y + stone.depth * (1.0 - CROWN - GIRDLE), culet.y + stone.depth * (1.0 - CROWN));
+            for sign in [-1.0, 1.0] {
+                shapes.push((
+                    On::Settings,
+                    Shape::Poly {
+                        v: vec![
+                            (Vec2::new(sign * foot, foot_y), 0.0),
+                            (Vec2::new(sign * half, girdle_bottom), 0.0),
+                            (Vec2::new(sign * half, girdle_top + prong / 2.0), 0.0),
+                        ],
+                        closed: false,
+                    },
+                ));
+            }
+            front_reach = front_reach.max(half);
+            // Plan: the stone itself, its prongs on the girdle, and the halo around it.
+            plan_stones.push(Placed { melee: false, at: Vec2::ZERO });
+            let target =
+                setting::Target { outline: outline.clone(), at: Vec2::ZERO, rotation: 0.0, scale: 1.0, cut: Some(stone.cut.name.to_string()) };
+            for site in setting::prong_sites(&target, Some(p.prongs as usize))? {
+                plan.push((On::Settings, Shape::Circle { c: site, r: prong / 2.0 }));
+            }
+            let mut head = stone.length.max(stone.width) / 2.0 + prong / 2.0;
+            carat = carat_of(&stone);
+            let over = (stone.length - p.width).max(0.0) / 2.0;
+            let seat_ok = p.width + 1e-9 >= 0.25 * stone.length && 2.0 * ro + 1e-9 >= stone.width + prong;
+            checks.push(check(
+                "stone-seat",
+                seat_ok,
+                if seat_ok {
+                    format!(
+                        "A {} mm band carries the head of a {}×{} mm stone, which overhangs it {} mm each side",
+                        fmt_mm(p.width),
+                        fmt_mm(stone.length),
+                        fmt_mm(stone.width),
+                        fmt_mm(over)
+                    )
+                } else {
+                    format!(
+                        "A {} mm band is slight for the head of a {}×{} mm stone: as a rule of thumb give it at least a quarter of the stone's length ({} mm), and a ring wider outside than the stone",
+                        fmt_mm(p.width),
+                        fmt_mm(stone.length),
+                        fmt_mm(stone.width),
+                        fmt_mm(0.25 * stone.length)
+                    )
+                },
+            ));
+            match p.halo {
+                None => {
+                    checks.push(check("spacing", true, "One stone: nothing to space".to_string()));
+                    checks.push(calibrated_check("halo", None));
+                }
+                Some(h) => {
+                    let small = stone_of("round", h, h, "diamond")?;
+                    let off = prong / 2.0 + p.gap + h / 2.0;
+                    let pitch = h + p.gap;
+                    let sites = if stone.cut.is_circle(stone.length, stone.width) {
+                        // A round centre: the melee lie on a circle, spaced by their chord.
+                        let r = stone.width / 2.0 + off;
+                        let n = (cadcraft_geom::PI / (pitch / (2.0 * r)).clamp(0.0, 1.0).asin() + 1e-9).floor();
+                        let n = if n.is_finite() { (n as usize).min(MAX_PIECE_STONES as usize) } else { 0 };
+                        (0..n)
+                            .map(|i| {
+                                let a = cadcraft_geom::PI / 2.0 - cadcraft_geom::TAU * i as f64 / n as f64;
+                                Vec2::new(a.cos(), a.sin()) * r
+                            })
+                            .collect::<Vec<_>>()
+                    } else {
+                        // Any other cut: along the girdle's offset, fewer until they keep the gap.
+                        let ring = setting::offset_loop(&outline, off)?;
+                        let length: f64 = ring.iter().zip(ring.iter().cycle().skip(1)).take(ring.len()).map(|(a, b)| a.dist(*b)).sum();
+                        let first = if length.is_finite() { ((length / pitch).floor() as usize).min(MAX_PIECE_STONES as usize) } else { 0 };
+                        let mut sites = around(&ring, first);
+                        for n in (3..first).rev().take(64) {
+                            if least_spacing(&sites) + 1e-9 >= pitch {
+                                break;
+                            }
+                            sites = around(&ring, n);
+                        }
+                        sites
+                    };
+                    if sites.len() < 3 {
+                        return Err(bad(
+                            CMD,
+                            format!("a halo of {} mm melee does not fit around this stone at a {} mm gap", fmt_mm(h), fmt_mm(p.gap)),
+                        ));
+                    }
+                    let between = least_spacing(&sites) - h;
+                    checks.push(check(
+                        "spacing",
+                        between + 1e-9 >= p.gap,
+                        format!(
+                            "{} halo stones of {} mm with {} mm of metal between them (the least asked for is {} mm)",
+                            sites.len(),
+                            fmt_mm(h),
+                            fmt_mm(between.max(0.0)),
+                            fmt_mm(p.gap)
+                        ),
+                    ));
+                    checks.push(calibrated_check("halo", Some(h)));
+                    carat += carat_of(&small) * sites.len() as f64;
+                    head = stone.length.max(stone.width) / 2.0 + off + h / 2.0;
+                    plan_stones.extend(sites.into_iter().map(|at| Placed { melee: true, at }));
+                    melee = Some(small);
+                }
+            }
+            plan_reach = plan_reach.max(head);
+            centre = Some(stone);
+        }
+        PieceKind::Eternity => {
+            let m = p.melee;
+            let stone = stone_of(&p.cut, m, m, &p.stone)?;
+            let depth = stone.depth;
+            // The girdles' circle: the tables are level with the band's outside.
+            let rg = ro - girdle_drop(depth);
+            if !(rg.is_finite() && rg > m / 2.0) {
+                return Err(bad(CMD, format!("{} mm stones are too large to go around this band", fmt_mm(m))));
+            }
+            // The metal between two neighbours' girdles, for `n` stones.
+            let reach = rg.hypot(m / 2.0);
+            let lean = (m / (2.0 * rg)).atan();
+            let between = |n: u32| 2.0 * reach * (cadcraft_geom::PI / f64::from(n) - lean).sin();
+            let most = (cadcraft_geom::PI / (lean + (p.gap / (2.0 * reach)).clamp(0.0, 1.0).asin()) + 1e-9).floor();
+            let most = if most.is_finite() && most >= 1.0 { (most as u32).min(MAX_PIECE_STONES) } else { 0 };
+            if most == 0 {
+                return Err(bad(CMD, format!("no {} mm stone fits around this band at a {} mm gap", fmt_mm(m), fmt_mm(p.gap))));
+            }
+            let n = match p.count {
+                Some(n) if n > most => {
+                    return Err(bad(
+                        CMD,
+                        format!(
+                            "{n} stones of {} mm do not fit around a size {} band at a {} mm gap: {most} fit",
+                            fmt_mm(m),
+                            p.size.us_text(),
+                            fmt_mm(p.gap)
+                        ),
+                    ));
+                }
+                Some(n) => n,
+                None => most,
+            };
+            fits = Some(most);
+            let side = profile(stone.cut, m, depth);
+            let outline = if stone.cut.is_circle(m, m) { None } else { Some(girdle(&stone)?) };
+            let length = cadcraft_geom::TAU * rg;
+            for i in 0..n {
+                // The angle from 12 o'clock, clockwise.
+                let phi = cadcraft_geom::TAU * f64::from(i) / f64::from(n);
+                let (out, along) = (Vec2::new(phi.sin(), phi.cos()), Vec2::new(-phi.cos(), phi.sin()));
+                // Front view: the stone's side, its table on the band's outside.
+                shapes.push((On::Stones, place_profile(&side, out * (ro - depth), along, out)));
+                // Plan: the upper half, each stone as wide as the cosine of its angle leaves it.
+                let squeeze = phi.cos();
+                if squeeze > 0.05 {
+                    let c = Vec2::new(rg * phi.sin(), 0.0);
+                    plan.push((
+                        On::Stones,
+                        match &outline {
+                            None => Shape::Ellipse { c, major: Vec2::new(0.0, m / 2.0), ratio: squeeze },
+                            Some(pts) => closed(&pts.iter().map(|q| c + Vec2::new(q.x * squeeze, q.y)).collect::<Vec<_>>()),
+                        },
+                    ));
+                }
+                row.push((f64::from(i) + 0.5) * length / f64::from(n));
+            }
+            seated = Some(side);
+            unrolled = Some(length);
+            let metal = between(n);
+            let edge = (p.width - m) / 2.0;
+            let under = p.wall - depth;
+            let seat_ok = edge + 1e-9 >= MIN_EDGE && under >= -1e-9;
+            checks.push(check(
+                "stone-seat",
+                seat_ok,
+                if seat_ok {
+                    format!(
+                        "A {} mm stone in a {} mm band leaves {} mm of metal each side, and its {} mm depth leaves {} mm of the wall under the culet",
+                        fmt_mm(m),
+                        fmt_mm(p.width),
+                        fmt_mm(edge),
+                        fmt_mm(depth),
+                        fmt_mm(under)
+                    )
+                } else if edge + 1e-9 < MIN_EDGE {
+                    format!(
+                        "A {} mm stone needs a band at least {} mm wide ({MIN_EDGE} mm of metal each side); this one is {} mm",
+                        fmt_mm(m),
+                        fmt_mm(m + 2.0 * MIN_EDGE),
+                        fmt_mm(p.width)
+                    )
+                } else {
+                    format!(
+                        "A {} mm stone is {} mm deep and the wall is {} mm: the culet comes through to the finger",
+                        fmt_mm(m),
+                        fmt_mm(depth),
+                        fmt_mm(p.wall)
+                    )
+                },
+            ));
+            checks.push(check(
+                "spacing",
+                metal + 1e-9 >= p.gap,
+                format!(
+                    "{n} stones of {} mm around the band with {} mm of metal between girdles (the least asked for is {} mm; {most} fit)",
+                    fmt_mm(m),
+                    fmt_mm(metal.max(0.0)),
+                    fmt_mm(p.gap)
+                ),
+            ));
+            checks.push(calibrated_check("eternity", Some(m)));
+            carat = carat_of(&stone) * f64::from(n);
+            melee = Some(stone);
+        }
+    }
+    checks.push(size_check(p));
+
+    // The section, to the right of the front view, its base (the finger side) down.
+    let section_at = Vec2::new(front_reach + VIEW_GAP + p.width / 2.0, -p.wall / 2.0);
+    shapes
+        .push((On::Metal, Shape::Poly { v: section(p.width, p.wall, domed).into_iter().map(|(q, b)| (section_at + q, b)).collect(), closed: true }));
+    if let (Some(side), Some(stone)) = (&seated, &melee) {
+        let seat = section_at + Vec2::new(0.0, p.wall - stone.depth);
+        shapes.push((On::Stones, place_profile(side, seat, Vec2::new(1.0, 0.0), Vec2::new(0.0, 1.0))));
+    }
+    // The plan, under the front view.
+    let plan_at = Vec2::new(0.0, -(ro + VIEW_GAP + plan_reach));
+    for (on, shape) in plan {
+        shapes.push((on, moved(shape, plan_at)));
+    }
+    placed.extend(plan_stones.into_iter().map(|s| Placed { melee: s.melee, at: plan_at + s.at }));
+    // The layout, under the plan: the band unrolled at the girdles' circle.
+    if let Some(length) = unrolled {
+        let layout_at = plan_at + Vec2::new(0.0, -(plan_reach + VIEW_GAP + p.width / 2.0));
+        shapes.push((On::Metal, rect(layout_at, length, p.width)));
+        placed.extend(row.into_iter().map(|d| Placed { melee: true, at: layout_at + Vec2::new(d - length / 2.0, 0.0) }));
+    }
+    if !(grams.is_finite() && carat.is_finite()) {
+        return Err(bad(CMD, "the piece has no weight"));
+    }
+    Ok(Design { params: p.clone(), centre, melee, shapes, placed, grams, carat, fits, checks })
+}
+
+/// A shape moved by `by`.
+fn moved(shape: Shape, by: Vec2) -> Shape {
+    match shape {
+        Shape::Circle { c, r } => Shape::Circle { c: c + by, r },
+        Shape::Poly { v, closed } => Shape::Poly { v: v.into_iter().map(|(p, b)| (p + by, b)).collect(), closed },
+        Shape::Ellipse { c, major, ratio } => Shape::Ellipse { c: c + by, major, ratio },
+    }
+}
+
+impl Design {
+    /// The band's `ring:` record, as `RING` writes one, so a bench sheet reads the band.
+    fn ring_record(&self) -> String {
+        let (p, size) = (&self.params, &self.params.size);
+        format!(
+            "ring: us={} uk={} eu={} jp={} cn={}, mm={}, wall={}, width={}, metal={}, grams={:.2}, profile={}, piece={}",
+            size.us_text(),
+            size.uk(),
+            size.eu,
+            size.jp,
+            size.cn,
+            fmt_mm(size.diameter),
+            fmt_mm(p.wall),
+            fmt_mm(p.width),
+            p.metal,
+            self.grams,
+            p.profile.name(),
+            p.kind.name()
+        )
+    }
+
+    /// The piece as a reply: `P` of the command's contract.
+    fn json(&self, handles: &[Handle], at: Vec2) -> Value {
+        let p = &self.params;
+        let mut stones = json!({ "count": self.placed.len(), "carat": (self.carat * 1000.0).round() / 1000.0 });
+        if let (Some(fits), Some(o)) = (self.fits, stones.as_object_mut()) {
+            o.insert("fits".into(), json!(fits));
+        }
+        json!({
+            "params": params_json(p),
+            "handles": handles.iter().take(MAX_HANDLES).map(|h| h.hex()).collect::<Vec<_>>(),
+            "size": p.size.json(),
+            "metal": { "name": p.metal, "density": p.density, "grams": (self.grams * 1000.0).round() / 1000.0 },
+            "stones": stones,
+            "checks": self.checks,
+            "at": [at.x, at.y],
+        })
+    }
+
+    /// One line a jeweler reads.
+    fn line(&self) -> String {
+        let p = &self.params;
+        let mut out = format!(
+            "{} — size {} ({} mm inside), {} × {} mm {} band in {}, about {:.2} g",
+            match p.kind {
+                PieceKind::Band => "Band",
+                PieceKind::Solitaire => "Solitaire",
+                PieceKind::Eternity => "Eternity band",
+            },
+            p.size.us_text(),
+            fmt_mm(p.size.diameter),
+            fmt_mm(p.width),
+            fmt_mm(p.wall),
+            p.profile.name(),
+            p.metal,
+            self.grams
+        );
+        if let Some(c) = &self.centre {
+            let size = if (c.length - c.width).abs() < 1e-6 {
+                format!("{} mm", fmt_mm(c.width))
+            } else {
+                format!("{}×{} mm", fmt_mm(c.length), fmt_mm(c.width))
+            };
+            out.push_str(&format!("; {} {size} {} of {:.2} ct in {} prongs", c.cut.name, p.stone, carat_of(c), p.prongs));
+        }
+        let small = self.placed.iter().filter(|s| s.melee).count();
+        if let (Some(m), true) = (&self.melee, small > 0) {
+            out.push_str(&format!(
+                "; {small} × {} mm {}{}, {:.3} ct",
+                fmt_mm(m.width),
+                m.cut.name,
+                if self.centre.is_some() { " in the halo" } else { "" },
+                carat_of(m) * small as f64
+            ));
+        }
+        let failed: Vec<&str> = self.checks.iter().filter(|c| c["ok"] == json!(false)).filter_map(|c| c["message"].as_str()).collect();
+        for message in failed {
+            out.push_str("\nCheck: ");
+            out.push_str(message);
+        }
+        out
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The piece as the drawing keeps it
+// ---------------------------------------------------------------------------------------------
+
+/// What the drawing holds under the piece's name.
+enum Kept {
+    /// No piece.
+    Nothing,
+    /// A piece: its parameters, where its sheet was put, and its objects that still exist.
+    Piece { params: Box<PieceParams>, at: Vec2, members: Vec<Handle> },
+    /// A piece's record that can no longer be read (its objects are still known).
+    Unreadable { members: Vec<Handle>, why: String },
+    /// A group of that name that is not a piece.
+    Foreign,
+}
+
+/// A ring-size system's name, or `us` for anything else.
+fn system_name(s: &str) -> String {
+    let s = s.trim().to_ascii_lowercase();
+    if matches!(s.as_str(), "us" | "uk" | "eu" | "jp" | "cn") { s } else { "us".to_string() }
+}
+
+/// A sheet position: two finite numbers within reach.
+fn at_value(v: &Value) -> Option<Vec2> {
+    let a = v.as_array().filter(|a| a.len() == 2)?;
+    let (x, y) = (a.first()?.as_f64()?, a.get(1)?.as_f64()?);
+    (x.is_finite() && y.is_finite() && x.abs() <= MAX_AT && y.abs() <= MAX_AT).then_some(Vec2::new(x, y))
+}
+
+/// Parameters as their stored JSON reads: the size system the piece was given in is carried
+/// across (the JSON keeps the size itself as a US number).
+fn read_params(stored: &Value, system: &str) -> Result<PieceParams> {
+    let mut out = PieceParams::parse(CMD, stored)?;
+    out.system = system_name(system);
+    Ok(out)
+}
+
+/// A piece's parameters as the command reports and stores them: [`PieceParams::json`], with the
+/// US size freed of the float noise its formula leaves (`5.999999999999997` reads `6`).
+fn params_json(p: &PieceParams) -> Value {
+    let mut v = p.json();
+    if let Some(o) = v.as_object_mut() {
+        o.insert("size".into(), json!((p.size.us * 1e9).round() / 1e9));
+    }
+    v
+}
+
+/// Parameters read through their own JSON, so what is drawn, stored and read back are one piece.
+fn settled(p: &PieceParams) -> Result<PieceParams> {
+    read_params(&params_json(p), &p.system)
+        .map_err(|_| bad(CMD, "that size is at the very edge of the ring sizes; give one a little inside the range"))
+}
+
+/// Read the stored piece.
+fn kept(d: &cadcraft_doc::Drawing) -> Kept {
+    let Some(g) = d.groups.iter().find(|g| g.name.eq_ignore_ascii_case(GROUP)) else { return Kept::Nothing };
+    let members: Vec<Handle> = g.members.iter().copied().filter(|h| d.entity(*h).is_some()).take(MAX_STONES * 2).collect();
+    let Ok(record) = serde_json::from_str::<Value>(&g.description) else { return Kept::Foreign };
+    let Some(stored) = record.get("params").filter(|v| v.is_object()) else { return Kept::Foreign };
+    let system = str_param(stored, "sizeSystem").unwrap_or("us");
+    match read_params(stored, system) {
+        Ok(params) => Kept::Piece { params: Box::new(params), at: record.get("at").and_then(at_value).unwrap_or(Vec2::ZERO), members },
+        Err(e) => Kept::Unreadable { members, why: e.to_string() },
+    }
+}
+
+/// The one line a piece is stored as.
+fn record(p: &PieceParams, at: Vec2) -> String {
+    json!({ "at": [at.x, at.y], "params": params_json(p) }).to_string()
+}
+
+/// A `true`/`false` switch that is refused when it is anything else.
+fn switch(p: &Value, key: &str) -> Result<bool> {
+    match p.get(key) {
+        None | Some(Value::Null) => Ok(false),
+        Some(Value::Bool(b)) => Ok(*b),
+        Some(_) => Err(bad(CMD, format!("`{key}` must be true or false"))),
+    }
+}
+
+fn run_piece(s: &mut Session, p: &Value) -> Result<Value> {
+    let (query, remove) = (switch(p, "query")?, switch(p, "remove")?);
+    if query && remove {
+        return Err(bad(CMD, "give `query` or `remove`, not both"));
+    }
+    if query {
+        return run_query(s);
+    }
+    // A refusal part-way leaves the drawing exactly as it was.
+    let (doc, selection) = {
+        let st = s.state()?;
+        (st.doc.clone(), st.selection.clone())
+    };
+    let result = if remove { run_remove(s) } else { run_build(s, p) };
+    if result.is_err()
+        && let Ok(st) = s.state_mut()
+    {
+        st.doc = doc;
+        st.selection = selection;
+    }
+    result
+}
+
+/// `PIECE {query}`: the stored piece, read and worked out again; nothing changes.
+fn run_query(s: &mut Session) -> Result<Value> {
+    match kept(s.doc()?) {
+        Kept::Nothing | Kept::Foreign => Ok(json!({ "piece": Value::Null })),
+        Kept::Unreadable { why, .. } => Ok(json!({ "piece": Value::Null, "message": format!("The stored piece cannot be read: {why}") })),
+        Kept::Piece { params, at, members } => match design(&params) {
+            Ok(d) => Ok(json!({ "piece": d.json(&members, at) })),
+            Err(e) => Ok(json!({ "piece": Value::Null, "message": format!("The stored piece cannot be built: {e}") })),
+        },
+    }
+}
+
+/// Erase a piece's objects. A piece with an object on a locked layer is not touched.
+fn erase_members(s: &mut Session, members: &[Handle]) -> Result<usize> {
+    let d = s.doc()?;
+    if let Some(layer) = members.iter().filter_map(|h| d.entity(*h)).filter_map(|e| d.layer(&e.common.layer)).find(|l| l.locked) {
+        return Err(bad(CMD, format!("the layer `{}` is locked; unlock it to change the piece", layer.name)));
+    }
+    let d = s.doc_mut()?;
+    let mut n = 0;
+    for h in members {
+        if d.remove_entity(*h).is_some() {
+            n += 1;
+        }
+    }
+    d.groups.retain(|g| !g.name.eq_ignore_ascii_case(GROUP));
+    let gone: std::collections::HashSet<Handle> = members.iter().copied().collect();
+    let selection: Vec<Handle> = s.selection().into_iter().filter(|h| !gone.contains(h)).collect();
+    s.set_selection(selection);
+    Ok(n)
+}
+
+/// `PIECE {remove}`: the piece's objects and its record go.
+fn run_remove(s: &mut Session) -> Result<Value> {
+    let removed = match kept(s.doc()?) {
+        Kept::Nothing | Kept::Foreign => 0,
+        Kept::Piece { members, .. } | Kept::Unreadable { members, .. } => erase_members(s, &members)?,
+    };
+    Ok(
+        json!({ "piece": Value::Null, "removed": removed, "message": if removed > 0 { format!("Piece removed ({removed} objects)") } else { "No piece to remove".to_string() } }),
+    )
+}
+
+/// Build the piece, or rebuild it with the given keys merged over what is stored.
+fn run_build(s: &mut Session, p: &Value) -> Result<Value> {
+    if s.space().is_paper() {
+        return Err(bad(CMD, "a piece is drawn in model space; switch to the Model tab"));
+    }
+    let given = match p {
+        Value::Object(o) => o.clone(),
+        Value::Null => Map::new(),
+        _ => return Err(bad(CMD, "the parameters must be an object")),
+    };
+    let at_given = match given.get("at").filter(|v| !v.is_null()) {
+        None => None,
+        Some(v) => Some(at_value(v).ok_or_else(|| bad(CMD, "`at` must be [x, y]: two finite numbers"))?),
+    };
+    let (base, old_at, members) = match kept(s.doc()?) {
+        Kept::Foreign => return Err(bad(CMD, format!("a group named {GROUP} that is not a piece is in the way; rename it"))),
+        Kept::Nothing => (None, None, Vec::new()),
+        Kept::Unreadable { members, .. } => (None, None, members),
+        Kept::Piece { params, at, members } => (Some(*params), Some(at), members),
+    };
+    // The given keys over the stored piece. The stored size is kept as a US number, so a new
+    // `size` without a `system` is read in the system the piece was given in, and a new `system`
+    // without a `size` renames the size without changing the finger.
+    let has = |key: &str| given.get(key).is_some_and(|v| !v.is_null());
+    let (new_size, new_system) = (has("size"), has("system"));
+    let mut merged = base.as_ref().map(params_json).and_then(|v| v.as_object().cloned()).unwrap_or_default();
+    for (key, value) in &given {
+        if !matches!(key.as_str(), "query" | "remove" | "at") {
+            merged.insert(key.clone(), value.clone());
+        }
+    }
+    let was = base.as_ref().map(|b| b.system.clone());
+    let asked = given.get("system").and_then(Value::as_str).map(system_name);
+    let system = match (new_size, new_system) {
+        (true, false) => {
+            let system = was.unwrap_or_else(|| "us".to_string());
+            merged.insert("system".into(), json!(system));
+            system
+        }
+        (false, _) => {
+            // The finger stays: the stored size, in the system it is stored in.
+            match &base {
+                Some(b) => {
+                    merged.insert("system".into(), json!("us"));
+                    merged.insert("size".into(), json!((b.size.us * 1e9).round() / 1e9));
+                }
+                None => {
+                    merged.remove("size");
+                }
+            }
+            asked.or(was).unwrap_or_else(|| "us".to_string())
+        }
+        (true, true) => asked.unwrap_or_else(|| "us".to_string()),
+    };
+    // What is stored is read back before it is drawn, so a later `query` is this same piece.
+    let mut asked_for = PieceParams::parse(CMD, &Value::Object(merged))?;
+    asked_for.system = system;
+    let stored = settled(&asked_for)?;
+    let params = settled(&stored)?;
+    let plan = design(&params)?;
+    // Where the sheet goes: where it was asked for, else where the band is now, else where it was.
+    let at = at_given
+        .or_else(|| {
+            let d = s.doc().ok()?;
+            members.iter().filter_map(|h| d.entity(*h)).find_map(|e| match &e.kind {
+                EntityKind::Insert(ins) if ins.block.eq_ignore_ascii_case(RING_BLOCK) => Some(ins.insert.xy()),
+                _ => None,
+            })
+        })
+        .or(old_at)
+        .filter(|at| at.is_finite() && at.x.abs() <= MAX_AT && at.y.abs() <= MAX_AT)
+        .unwrap_or(Vec2::ZERO);
+    let replaced = erase_members(s, &members)?;
+    let handles = draw(s, &plan, at)?;
+    let d = s.doc_mut()?;
+    d.groups.retain(|g| !g.name.eq_ignore_ascii_case(GROUP));
+    d.groups.push(Group { name: GROUP.to_string(), description: record(&stored, at), selectable: true, members: handles.clone() });
+    let mut message = plan.line();
+    if replaced > 0 {
+        message.push_str(&format!("\nRebuilt: {replaced} objects replaced by {}", handles.len()));
+    }
+    Ok(json!({ "piece": plan.json(&handles, at), "message": message }))
+}
+
+/// Draw a design's sheet with its front view centred on `at` (drawing units).
+fn draw(s: &mut Session, plan: &Design, at: Vec2) -> Result<Vec<Handle>> {
+    // Drawing units in one millimetre.
+    let u = 1.0 / mm_per_unit(s);
+    if !(u.is_finite() && u > 0.0) {
+        return Err(bad(CMD, "the drawing's units cannot be read"));
+    }
+    let d = s.doc_mut()?;
+    for (name, colour) in LAYERS {
+        if d.layer(name).is_none() {
+            d.layers.push(Layer { color: cadcraft_color::Color::Index(colour), ..Layer::new(name) });
+        }
+    }
+    let p = &plan.params;
+    let mut handles = Vec::with_capacity(plan.shapes.len() + plan.placed.len() + 1);
+    // The band's front view: the finger circle and the outside circle, as RING's own block.
+    let circles = vec![
+        EntityKind::Circle(cadcraft_doc::Circle { center: Vec3::ZERO, radius: p.inner() / 2.0 }),
+        EntityKind::Circle(cadcraft_doc::Circle { center: Vec3::ZERO, radius: p.outer() / 2.0 }),
+    ];
+    let ring = sizes::define_block_and_insert(s, RING_BLOCK, circles, &plan.ring_record(), at, u)?;
+    on_layer(s, ring, Some(On::Metal.layer()))?;
+    handles.push(ring);
+    let pt = |q: Vec2| at + q * u;
+    for (on, shape) in &plan.shapes {
+        let kind = match shape {
+            Shape::Circle { c, r } => helpers::circle(pt(*c), r * u),
+            Shape::Poly { v, closed } => helpers::lwpoly(v.iter().map(|(q, b)| PolyVertex::with_bulge(pt(*q), *b)).collect(), *closed),
+            Shape::Ellipse { c, major, ratio } => EntityKind::Ellipse(cadcraft_doc::Ellipse {
+                center: helpers::v3(pt(*c)),
+                major: helpers::v3(*major * u),
+                ratio: *ratio,
+                start: 0.0,
+                end: cadcraft_geom::TAU,
+            }),
+        };
+        let h = s.add_entity(kind)?;
+        on_layer(s, h, Some(on.layer()))?;
+        handles.push(h);
+    }
+    for stone in &plan.placed {
+        let which = if stone.melee { &plan.melee } else { &plan.centre };
+        let Some(which) = which else { continue };
+        handles.push(gem::place_stone(s, which, pt(stone.at), 0.0, Some(On::Stones.layer()))?);
+    }
+    Ok(handles)
+}
+
+// ---------------------------------------------------------------------------------------------
+// From the menu: a kind, then where the sheet goes
+// ---------------------------------------------------------------------------------------------
+
+/// Interactive PIECE: the kind of piece, then the front view's centre.
+#[derive(Default)]
+pub(super) struct PieceM {
+    kind: Option<&'static str>,
+}
+
+impl PieceM {
+    fn choose(&mut self, s: &mut Session, text: &str) -> Step {
+        self.kind = match text.trim().to_ascii_lowercase().as_str() {
+            "b" | "band" => Some("band"),
+            "s" | "solitaire" => Some("solitaire"),
+            "e" | "eternity" => Some("eternity"),
+            _ => {
+                s.echo("The piece must be Band, Solitaire or Eternity.");
+                None
+            }
+        };
+        Step::Continue
+    }
+}
+
+impl Interactive for PieceM {
+    fn name(&self) -> &'static str {
+        "PIECE"
+    }
+    fn prompt(&self, _s: &Session) -> Prompt {
+        if self.kind.is_none() {
+            Prompt::new("Kind of piece", Accept::TEXT).kw(&["Band", "Solitaire", "Eternity"]).default("Band")
+        } else {
+            Prompt::new("Specify the centre of the front view", Accept::POINT)
+        }
+    }
+    fn input(&mut self, s: &mut Session, i: Input) -> Result<Step> {
+        match i {
+            Input::Cancel => Ok(Step::Cancel),
+            Input::Enter if self.kind.is_none() => {
+                self.kind = Some("band");
+                Ok(Step::Continue)
+            }
+            Input::Text(t) | Input::Keyword(t) if self.kind.is_none() => Ok(self.choose(s, &t)),
+            Input::Point(at) => {
+                let Some(kind) = self.kind else { return Ok(Step::Continue) };
+                let r = run_piece(s, &json!({ "kind": kind, "at": [at.x, at.y] }))?;
+                if let Some(m) = r.get("message").and_then(Value::as_str) {
+                    s.echo(m.to_string());
+                }
+                Ok(Step::Done)
+            }
+            _ => Ok(Step::Continue),
+        }
+    }
 }

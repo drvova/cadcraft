@@ -18,6 +18,9 @@ mod mesh;
 mod pave;
 mod piece;
 mod piece_params;
+#[cfg(test)]
+#[path = "jewelry/piece_tests.rs"]
+mod piece_tests;
 mod setting;
 mod sizes;
 #[cfg(test)]
