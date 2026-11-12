@@ -5,6 +5,11 @@
  *
  * Each state key is named for its layer and its flag ("Outline frozen") and says whether the flag
  * is set through `aria-pressed`; its tooltip keeps the sentence a pointer user reads.
+ *
+ * A name too long for its track keeps both ends (`splitName`): layer names tell each other apart
+ * at the end ("…-PHASE-1", "…-PHASE-2") as often as at the start. The two halves are for the eye
+ * only; the row's name for assistive tech is the whole name, once, and the system's hint shows it
+ * whole under the pointer and on keyboard focus.
  */
 
 import { createSignal, Index, Show, type Accessor, type JSX } from "solid-js";
@@ -13,6 +18,7 @@ import { ToolIcon } from "../icons";
 import { IconButton } from "../ui/IconButton";
 import { Row } from "../ui/Row";
 import { SectionLabel } from "../ui/SectionLabel";
+import { Tooltip } from "../ui/Tooltip";
 
 export interface LayersPanelProps {
   layers: Accessor<LayerInfo[]>;
@@ -25,10 +31,42 @@ function rgb(c: readonly [number, number, number]): string {
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 
-/** The name's hover text: the full name (a long one is clipped in the row), what a click does,
- *  and the layer's description when it has one. */
+/** How many characters of a long name stay visible after the ellipsis: room for a phase, a
+ *  revision or a level suffix ("PHASE-1", "-REV-12") beside a readable start in the name track. */
+const NAME_TAIL = 7;
+
+/** Right-to-left letters and explicit direction marks. A name holding any is never split: its
+ *  halves would each be laid out alone, and the pieces of one right-to-left run would swap. */
+const RTL_TEXT = /[֐-ࣿ‏‪-‮⁦-⁩יִ-﷿ﹰ-﻿\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
+
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/**
+ * A layer name as the row draws it: a head that gives way with an ellipsis, and a tail that never
+ * does. Cut between whole characters (an accent or a paired symbol stays in one piece). A short
+ * name, or one with right-to-left text, is all head: it clips at its own end. A space at the cut
+ * becomes a no-break space, which the edge of a box does not swallow.
+ */
+export function splitName(name: string): { head: string; tail: string } {
+  if (RTL_TEXT.test(name)) return { head: name, tail: "" };
+  const parts = Array.from(graphemes.segment(name), (part) => part.segment);
+  if (parts.length <= NAME_TAIL) return { head: name, tail: "" };
+  return {
+    head: parts.slice(0, -NAME_TAIL).join("").replace(/ $/, " "),
+    tail: parts.slice(-NAME_TAIL).join("").replace(/^ /, " "),
+  };
+}
+
+/** A name inside a sentence: in quotation marks, and isolated (U+2068, U+2069) so a
+ *  right-to-left name does not reorder the words around it. */
+function quoted(name: string): string {
+  return `“⁨${name}⁩”`;
+}
+
+/** The name's hint: the full name (a long one is clipped in the row), what a click does, and the
+ *  layer's description when it has one. */
 function layerHint(layer: LayerInfo): string {
-  const action = layer.current ? `${layer.name} is the current layer` : `Make ${layer.name} current`;
+  const action = layer.current ? `${quoted(layer.name)} is the current layer` : `Make ${quoted(layer.name)} current`;
   return layer.description !== "" ? `${action}: ${layer.description}` : action;
 }
 
@@ -48,14 +86,30 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
       <div class="layers-list" id="layers-list" role="list" aria-label="Layers" hidden={!open()}>
         <Index each={props.layers()}>
           {(layer) => (
-            <div class={layer().current ? "layer-row is-current" : "layer-row"} role="listitem" aria-current={layer().current ? "true" : undefined}>
-              <span class="layer-swatch" role="img" aria-label={`Color ${layer().colorName}`} style={{ background: rgb(layer().colorRgb) }} title={`${layer().colorName} ${layer().colorRgb.join(",")}`} />
-              <Row
-                title={layerHint(layer())}
-                onClick={() => props.onMakeCurrent(layer().name)}
-              >
-                <span class="layer-name-text">{layer().name}</span>
-              </Row>
+            <div
+              class={layer().current ? "layer-row is-current" : "layer-row"}
+              role="listitem"
+              aria-current={layer().current ? "true" : undefined}
+              aria-description={layer().description !== "" ? layer().description : undefined}
+            >
+              <span class="layer-swatch" role="img" aria-label={`Color ${layer().colorName}`} style={{ background: rgb(layer().colorRgb) }} title={`${layer().colorName} ${layer().colorRgb.join(", ")}`} />
+              <Tooltip text={layerHint(layer())}>
+                <Row onClick={() => props.onMakeCurrent(layer().name)}>
+                  <span class="layer-name-text">
+                    <span class="layer-name-head" dir="auto" aria-hidden="true">
+                      {splitName(layer().name).head}
+                    </span>
+                    <Show when={splitName(layer().name).tail}>
+                      {(tail) => (
+                        <span class="layer-name-tail" aria-hidden="true">
+                          {tail()}
+                        </span>
+                      )}
+                    </Show>
+                    <span class="layer-name-full">{layer().name}</span>
+                  </span>
+                </Row>
+              </Tooltip>
               <span
                 class={layer().used ? "layer-used is-used" : "layer-used"}
                 role="img"

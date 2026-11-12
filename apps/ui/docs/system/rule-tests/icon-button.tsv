@@ -8,3 +8,5 @@ rule/icon-button-fold-expanded	pass	pass	n/a: two-agent test not run this sessio
 rule/icon-button-touch-target	pass	pass	n/a: two-agent test not run this session (single-worker budget)	pass	ship	
 rule/icon-button-popup-kind	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: the Main menu key moves onto the prop at integration; its file is not this worker's	ship	
 rule/icon-button-no-native-title	pass	pass	n/a: falsify and sweep cover it	pass	ship	
+rule/icon-button-shortcut-prop	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: the 9 keys with a bracketed shortcut move onto the prop at integration; their files are not this worker's	ship	
+rule/icon-button-disabled-reason	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: the composer send key takes the prop at integration; its file is not this worker's	ship	

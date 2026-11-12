@@ -11,9 +11,13 @@
  * passes `spellcheck={false}`; a `password` field gets it without asking). A value the caller
  * refuses is `invalid`, and the line that says why, or a line of help, is tied to the input with
  * `describedBy`.
+ *
+ * `title` is the layer's hint (`./Tooltip.tsx`), never the native attribute: it shows in the hint
+ * box and joins `describedBy` as the field's accessible description. It is never the name.
  */
 
 import type { JSX } from "solid-js";
+import { describeByHint, installHints } from "./Tooltip";
 
 export interface FieldProps {
   /** The current value. The caller holds it and passes the new one back through `onInput`. */
@@ -28,7 +32,8 @@ export interface FieldProps {
   type?: "text" | "email" | "search" | "password";
   /** Blocks typing and drops the ink to the disabled step. */
   disabled?: boolean;
-  /** A tooltip. */
+  /** The hint: a short line about the value. It shows in the layer's hint box and is added to
+   *  the field's accessible description, after `describedBy`. Never the name: pass `ariaLabel`. */
   title?: string;
   /** Focus the input when it mounts. */
   autoFocus?: boolean;
@@ -45,20 +50,21 @@ export interface FieldProps {
 }
 
 export function Field(props: FieldProps): JSX.Element {
+  if (typeof document !== "undefined") installHints();
   return (
     <input
+      ref={(el: HTMLInputElement) => describeByHint(el, () => props.title, () => props.describedBy)}
       class="ui-field"
       type={props.type ?? "text"}
       value={props.value ?? ""}
       placeholder={props.placeholder}
       aria-label={props.ariaLabel}
       disabled={props.disabled}
-      title={props.title}
+      data-hint={props.title}
       autofocus={props.autoFocus}
       autocomplete={props.autocomplete}
       spellcheck={props.spellcheck ?? (props.type === "password" ? false : undefined)}
       aria-invalid={props.invalid ? "true" : undefined}
-      aria-describedby={props.describedBy}
       onInput={(event) => props.onInput?.(event.currentTarget.value)}
     />
   );

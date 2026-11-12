@@ -65,4 +65,22 @@ describe("Field", () => {
     const plain = inputIn(mount(() => <Field ariaLabel="Model" />));
     expect(plain.hasAttribute("aria-describedby")).toBe(false);
   });
+
+  test("the title is the layer's hint and joins the description after the caller's lines, never a native title or the name", () => {
+    const input = inputIn(mount(() => <Field ariaLabel="Base URL" title="Ends in /v1 for most servers" describedBy="url-error" />));
+    expect(input.hasAttribute("title")).toBe(false);
+    expect(input.getAttribute("aria-label")).toBe("Base URL");
+    expect(input.getAttribute("data-hint")).toBe("Ends in /v1 for most servers");
+    const [own, hint] = (input.getAttribute("aria-describedby") ?? "").split(" ");
+    expect(own).toBe("url-error");
+    expect(document.getElementById(hint ?? "")?.textContent).toBe("Ends in /v1 for most servers");
+    const bare = inputIn(mount(() => <Field ariaLabel="Model" />));
+    expect(bare.hasAttribute("data-hint")).toBe(false);
+  });
+
+  test("a title that repeats the field's name is not described twice", async () => {
+    const input = inputIn(mount(() => <Field ariaLabel="Model" title="Model" />));
+    await Promise.resolve();
+    expect(input.hasAttribute("aria-describedby")).toBe(false);
+  });
 });

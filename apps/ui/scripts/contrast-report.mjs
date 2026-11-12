@@ -7,7 +7,9 @@
 // never typed in: run this script and paste its command and output.
 //
 // Usage: node scripts/contrast-report.mjs
-// Exit 0 always: it is a report. The build's failing check is check-system.mjs.
+// Exit 0 with the report; a pair below its threshold is printed, not failed (the build's failing
+// check is check-system.mjs). Exit 1, naming the token, when a token this script lists is not
+// defined in src/tokens.css or is not a colour: a pair that cannot be measured is never skipped.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -72,10 +74,20 @@ const RING_FILLS = ["hover", "fill-active"];
 // The drawing is the same dark surface in both themes, so no theme ink is paired with it: these
 // are the only strokes the interface draws over it (3:1).
 const CANVAS_INK = ["selection", "canvas-focus-ring"];
-const FILLS = ["hover", "fill-active", "fill-pressed", "fill-disabled", "accent-soft", "border", "border-soft", "scrollbar", "scrollbar-hover", "composer-border", "composer-border-active", "cmd-history"];
+const FILLS = ["hover", "fill-active", "fill-pressed", "fill-disabled", "accent-soft", "border", "border-soft", "scrollbar", "scrollbar-hover", "composer-border", "composer-border-active"];
+// The hint box is its own surface in both themes, and these are the inks drawn on it: the text, the
+// second line and the key cap (4.5:1 each).
+const HINT_INK = ["text", "text-dim", "text-faint"];
+
+// Every token asked for that tokens.css does not define, or defines as something other than a colour.
+const unresolved = new Set();
 
 function report(theme, name) {
-  const color = (token) => parseColor(theme[token], theme);
+  const color = (token) => {
+    const parsed = parseColor(theme[token], theme);
+    if (!parsed) unresolved.add(token);
+    return parsed;
+  };
   const lines = [`### ${name}`, "", `| foreground \\ surface | ${SURFACES.map((s) => `\`--${s}\``).join(" | ")} |`, `| --- | ${SURFACES.map(() => "---").join(" | ")} |`];
   const below = [];
   for (const [fg, threshold] of Object.entries(INK)) {
@@ -124,6 +136,8 @@ function report(theme, name) {
     const cells = CANVAS_INK.flatMap((ink) => pairs(ink, ["canvas"], 3).map((cell) => cell.replace("`--canvas`", `\`--${ink}\``)));
     lines.push("", `On the drawing (\`--canvas\`, one dark surface in both themes): ${cells.join("; ")}.`);
   }
+  const hint = HINT_INK.flatMap((ink) => pairs(ink, ["tooltip-bg"], 4.5).map((cell) => cell.replace("`--tooltip-bg`", `\`--${ink}\``)));
+  lines.push("", `On the hint (\`--tooltip-bg\`): ${hint.join("; ")}.`);
   lines.push("", below.length ? `Below threshold: ${below.join("; ")}` : "Every ink pair is at or above its threshold.");
   return { lines, below };
 }
@@ -139,6 +153,8 @@ for (const [theme, name] of [[dark, "dark (default)"], [light, "light"]]) {
   const r = report(theme, name);
   out.push("", ...r.lines);
 }
-const missing = ["text", "icon", "accent", "error", "text-accent", "focus-ring", "on-accent", "on-error", "canvas-focus-ring"].filter((t) => !parseColor(dark[t], dark) || !parseColor(light[t], light));
-if (missing.length) out.push("", `Unresolved tokens: ${missing.join(", ")}`);
+if (unresolved.size > 0) {
+  console.error(`contrast-report: not defined as a colour in src/tokens.css: ${[...unresolved].map((t) => `--${t}`).join(", ")}. Define the token, or remove its name from this script.`);
+  process.exit(1);
+}
 console.log(out.join("\n"));

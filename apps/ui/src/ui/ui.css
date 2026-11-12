@@ -7,7 +7,9 @@
  * pressed/selected .14–.20, disabled ink .36, the focus ring 1px accent at offset -1, and the
  * borders are alpha strokes. Hover styles sit behind `@media (hover: hover)` so a touch device
  * never flashes a hover state (trap/touch-hover-flash). Reduced motion is the shell's:
- * `:root[data-animations="off"] *` in styles.css kills every transition below.
+ * `:root[data-animations="off"] *` in styles.css kills every transition below. A disabled Button
+ * or IconButton is `[aria-disabled="true"]`, never `:disabled`: it stays focusable so its hint can
+ * say why (docs/system/decisions.md, "Disabled controls").
  *
  * Every state transition is the measured `.1s ease` (`--dur-fast` + `--ease-standard`, §8). The
  * ring's ink is `--focus-ring`; on a control filled with an action colour or with the ink itself,
@@ -45,7 +47,7 @@
   outline-offset: var(--focus-outline-offset);
 }
 
-.ui-button:disabled {
+.ui-button[aria-disabled="true"] {
   cursor: default;
 }
 
@@ -68,17 +70,17 @@
 }
 
 @media (hover: hover) {
-  .ui-button--secondary:hover:not(:disabled) {
+  .ui-button--secondary:hover:not([aria-disabled="true"]) {
     background: var(--fill-active);
   }
 }
 
-.ui-button--secondary:active:not(:disabled) {
+.ui-button--secondary:active:not([aria-disabled="true"]) {
   /* the measured glass press: no third step (hover .14 stays) */
   background: var(--fill-active);
 }
 
-.ui-button--secondary:disabled {
+.ui-button--secondary[aria-disabled="true"] {
   background: var(--fill-disabled);
   color: var(--text-disabled);
 }
@@ -90,16 +92,16 @@
 }
 
 @media (hover: hover) {
-  .ui-button--primary:hover:not(:disabled) {
+  .ui-button--primary:hover:not([aria-disabled="true"]) {
     background: var(--accent-hover);
   }
 }
 
-.ui-button--primary:active:not(:disabled) {
+.ui-button--primary:active:not([aria-disabled="true"]) {
   background: var(--accent-pressed);
 }
 
-.ui-button--primary:disabled {
+.ui-button--primary[aria-disabled="true"] {
   background: var(--fill-disabled);
   color: var(--text-disabled);
 }
@@ -111,16 +113,16 @@
 }
 
 @media (hover: hover) {
-  .ui-button--ghost:hover:not(:disabled) {
+  .ui-button--ghost:hover:not([aria-disabled="true"]) {
     background: var(--hover);
   }
 }
 
-.ui-button--ghost:active:not(:disabled) {
+.ui-button--ghost:active:not([aria-disabled="true"]) {
   background: var(--fill-active);
 }
 
-.ui-button--ghost:disabled {
+.ui-button--ghost[aria-disabled="true"] {
   color: var(--text-disabled);
 }
 
@@ -131,16 +133,16 @@
 }
 
 @media (hover: hover) {
-  .ui-button--danger:hover:not(:disabled) {
+  .ui-button--danger:hover:not([aria-disabled="true"]) {
     background: var(--error-hover);
   }
 }
 
-.ui-button--danger:active:not(:disabled) {
+.ui-button--danger:active:not([aria-disabled="true"]) {
   background: var(--error-pressed);
 }
 
-.ui-button--danger:disabled {
+.ui-button--danger[aria-disabled="true"] {
   background: var(--fill-disabled);
   color: var(--text-disabled);
 }
@@ -167,7 +169,7 @@
 
 /* The measured press: an icon button scales to .98 for 50ms (Cursor §8); the quiet Button keeps
    its fill and does not move. */
-.ui-icon-button:active:not(:disabled) {
+.ui-icon-button:active:not([aria-disabled="true"]) {
   transform: scale(0.98);
 }
 
@@ -191,7 +193,7 @@
   outline-offset: var(--focus-outline-offset);
 }
 
-.ui-icon-button:disabled {
+.ui-icon-button[aria-disabled="true"] {
   cursor: default;
 }
 
@@ -203,18 +205,18 @@
 
 /* ghost — transparent, the .08 fill on hover; a selected one keeps its .14 fill under the pointer */
 @media (hover: hover) {
-  .ui-icon-button--ghost:hover:not(:disabled):not([aria-pressed="true"]) {
+  .ui-icon-button--ghost:hover:not([aria-disabled="true"]):not([aria-pressed="true"]) {
     background: var(--hover);
     color: var(--text);
   }
 }
 
-.ui-icon-button--ghost:active:not(:disabled) {
+.ui-icon-button--ghost:active:not([aria-disabled="true"]) {
   background: var(--fill-active);
   color: var(--text);
 }
 
-.ui-icon-button--ghost:disabled {
+.ui-icon-button--ghost[aria-disabled="true"] {
   color: var(--text-disabled);
 }
 
@@ -224,18 +226,18 @@
 }
 
 @media (hover: hover) {
-  .ui-icon-button--soft:hover:not(:disabled) {
+  .ui-icon-button--soft:hover:not([aria-disabled="true"]) {
     background: var(--fill-active);
     color: var(--text);
   }
 }
 
-.ui-icon-button--soft:active:not(:disabled) {
+.ui-icon-button--soft:active:not([aria-disabled="true"]) {
   background: var(--fill-pressed);
   color: var(--text);
 }
 
-.ui-icon-button--soft:disabled {
+.ui-icon-button--soft[aria-disabled="true"] {
   background: var(--fill-disabled);
   color: var(--text-disabled);
 }
@@ -254,16 +256,16 @@
 }
 
 @media (hover: hover) {
-  .ui-icon-button--inverted:hover:not(:disabled) {
+  .ui-icon-button--inverted:hover:not([aria-disabled="true"]) {
     background: var(--text-dim);
   }
 }
 
-.ui-icon-button--inverted:active:not(:disabled) {
+.ui-icon-button--inverted:active:not([aria-disabled="true"]) {
   background: var(--text-faint);
 }
 
-.ui-icon-button--inverted:disabled {
+.ui-icon-button--inverted[aria-disabled="true"] {
   background: var(--fill-disabled);
   color: var(--text-disabled);
 }
@@ -508,7 +510,8 @@
 }
 
 /* ---- Tooltip: one <div class="ui-tooltip"> on <body>, placed beside the control that carries
-        data-hint (IconButton, or a <span class="ui-tooltip-host"> around another control) ---- */
+        data-hint (a layer component, a <span class="ui-tooltip-host"> around another control, or
+        any element of a surface's own) ---- */
 
 .ui-tooltip-host {
   display: inline-flex;
@@ -516,13 +519,16 @@
 
 /* The measured hover box (research §8): the chrome fill, radius 3, the .15 hairline, 2/8 shadow,
    12px type. It sits in the viewport's own coordinates (the script sets `left` and `top`), so no
-   pane clips it and it never widens the page; a hint longer than the window clips with an
-   ellipsis. Hidden from the pointer always, and from the eye until it shows. */
+   pane clips it and it never widens the page or raises a scrollbar. It is as wide as its text up
+   to a 32ch measure, where it wraps; it is never wider or taller than the window less the gap on
+   each side. Hidden from the pointer always, and from the eye until it shows. */
 .ui-tooltip {
   position: fixed;
   top: 0;
   left: 0;
-  max-width: calc(100% - var(--gap-6) * 2);
+  width: max-content;
+  max-width: min(32ch, calc(100% - var(--gap-6) * 2));
+  max-height: calc(100% - var(--gap-6) * 2);
   overflow: hidden;
   padding: var(--gap-3) var(--gap-8);
   border: var(--hairline) solid var(--tooltip-border);
@@ -533,12 +539,25 @@
   font-family: var(--font-family);
   font-size: var(--font-label);
   line-height: var(--gap-16);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
   z-index: 60;
+}
+
+/* The shortcut: the layer's key cap after the text, one line with it where it fits. The cap gives
+   its two hairlines back from its line, so a hint with a shortcut is as tall as one without and
+   the box does not jump along a tool row. */
+.ui-tooltip .ui-kbd {
+  margin-left: var(--gap-6);
+  line-height: calc(var(--gap-16) - var(--hairline) * 2);
+}
+
+/* The second line: why a control is disabled, or what a clipped label's hint adds. */
+.ui-tooltip-note {
+  display: block;
+  color: var(--text-dim);
 }
 
 /* The measured arrival: the box fades in over 0.1s. It leaves at once (the base rule carries no
@@ -547,6 +566,19 @@
   opacity: 1;
   visibility: visible;
   transition: opacity var(--dur-fast) var(--ease-standard);
+}
+
+/* The next hint along a row arrives as the last one left: at once, with no fade to flicker. */
+.ui-tooltip--instant {
+  transition: none;
+}
+
+/* The fade is motion a person can ask the platform to spare them; the shell's own switch
+   (`data-animations="off"`, styles.css) does the same for every transition in the layer. */
+@media (prefers-reduced-motion: reduce) {
+  .ui-tooltip--shown {
+    transition: none;
+  }
 }
 
 /* ---- Touch: a coarse pointer gets a target of at least 24 by 24 (WCAG 2.5.8) ---- */

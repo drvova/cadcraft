@@ -13,7 +13,7 @@ Not applicable: hand-rolled — the recipe is the app's own `src/ui/ui.css`, mea
 ## Examples
 `<Button variant="primary">Save</Button>` — the one action of a dialog or a pane.
 
-Real uses, 8 call sites (`rg -c "<Button" src/components` → `src/components/AssistantPane.tsx:10`, `src/components/TopBar.tsx:1`):
+Real uses, 9 call sites (`rg -c "<Button" src/components` → `src/components/AssistantPane.tsx:11`, `src/components/TopBar.tsx:1`):
 - `src/components/AssistantPane.tsx` — the assistant's call sites: the empty state's Set up a model (`variant="primary"`, shown while no model is connected), the setup sheet's Check connection and Cancel (`variant="ghost"`) and Save (`variant="primary"`), and the stack over the composer: Stop on the run row and Undo all on the changes row (`variant="ghost" size="sm"`), and Keep beside it (`size="sm"`).
 - `src/components/TopBar.tsx:37` — the title bar's command centre (`size="sm"`): the drawing's name, opening the command palette.
 
@@ -75,7 +75,7 @@ import { Button } from "../../../../src/ui/Button";
 export default function InTopBar() {
   return (
     <div class="topbar-row">
-      <Button size="sm" title="Zoom extents">Zoom extents</Button>
+      <Button size="sm" title="Fit the whole drawing in the window">Zoom extents</Button>
     </div>
   );
 }
@@ -86,7 +86,7 @@ export default function InTopBar() {
 ### variant
 - `primary`: the one action of the pane or dialog; the accent fill. Used at 2 call sites (the setup sheet's Save, and the empty state's Set up a model, which shows only until a model is connected).
 - `secondary`: the default action; the `.08` fill that Cursor's own default button draws. Used at 2 call sites (the title bar's command centre and the changes row's Keep).
-- `ghost`: a quiet action on a tool bar or in a list; no resting fill. Used at 4 call sites (the setup sheet's Check connection and Cancel, the run row's Stop and the changes row's Undo all).
+- `ghost`: a quiet action on a tool bar or in a list; no resting fill. Used at 5 call sites (the transcript's Show earlier, the setup sheet's Check connection and Cancel, the run row's Stop and the changes row's Undo all).
 - `danger`: a destructive action; the error fill. Used at 0 call sites.
 
 Example: The accent fill, the one action of a pane. (`docs/system/examples/button/variant-primary.tsx`)
@@ -130,7 +130,7 @@ export default function VariantDanger() {
 ```
 
 ### size
-- `sm`: the 24px control, for a button beside a field or inside a row. Used at 4 call sites (the title bar's command centre, and the stack's Stop, Undo all and Keep).
+- `sm`: the 24px control, for a button beside a field or inside a row. Used at 5 call sites (the title bar's command centre, the transcript's Show earlier, and the stack's Stop, Undo all and Keep).
 - `md`: the 28px default, for a dialog footer or a pane header. Used at 4 call sites (the setup sheet's Check connection, Cancel and Save, and the empty state's Set up a model).
 
 Example: The 24px button that sits beside a field. (`docs/system/examples/button/size-sm.tsx`)
@@ -160,15 +160,21 @@ export default function SizeMd() {
 | Hover | The pointer is over the button, on a device with a hover pointer. | Click it. | The fill steps up one rung (`.08` to `.14`, `.14` to `.20`); the cursor is a pointer. | by hand |
 | Pressed | The pointer is held down on the button. | Release to run the action. | The quiet fill stays on the hover rung (`.14`, measured); the accent variants take their measured press step. | by hand |
 | Focused | Keyboard focus arrives by Tab. | Enter or Space runs the action. | The 1px ring in the focus ink at offset -1, following the 2px radius; on `primary` and `danger`, the ring is the label's ink drawn 3px inside the edge. | by hand |
-| Disabled | The caller's condition is false. | Nothing: no click, no hover, no focus ring. | The ink drops to the disabled step and the fill to the disabled step. | test |
+| Hinted | The caller passes `title`, and a mouse or a pen rests on the button for 0.4s (at once when another hint was up within the last 0.3s), or a key moves focus onto it. Never a finger, and never a `title` that only repeats the label. | Read what the label leaves out; a press, a click or Escape puts the box away until the pointer or the focus moves to another control. | The layer's hint box holding the `title` (and the shortcut as a key cap), below the button, above it at the window's foot, inside the window's edges. | test |
+| Disabled | The caller's condition is false. | Tab to it and read its hint, which says why when the caller passes `title`. No click by pointer, Enter or Space, and no hover fill. | The ink drops to the disabled step and the fill to the disabled step; `aria-disabled="true"`. | test |
 
 Example: A blocked action at the disabled ink and fill. (`docs/system/examples/button/disabled.tsx`)
 
 ```tsx
 import { Button } from "../../../../src/ui/Button";
 
+/** Disabled, and still reachable: the `title` says why, in the hint and as the description. */
 export default function Disabled() {
-  return <Button disabled>Save</Button>;
+  return (
+    <Button variant="primary" disabled title="To save, choose a provider or type a base URL.">
+      Save
+    </Button>
+  );
 }
 ```
 
@@ -177,6 +183,11 @@ export default function Disabled() {
 - Hover and Disabled: Disabled wins. A disabled button keeps its resting fill under the pointer and takes no click.
 - Pressed and Focused: both show. The ring stays drawn while the button is held down; the quiet fill stays on the hover rung.
 - Pressed and Disabled: Disabled wins. A disabled button never takes the pressed fill.
+- Focused and Disabled: both show. A disabled button takes focus and the ring, so a keyboard user can reach its hint; Enter and Space do nothing.
+- Hinted and Hover: both show. The hint follows the hover after its delay.
+- Hinted and Focused: both show. The hint arrives with the ring, with no delay.
+- Hinted and Pressed: Pressed wins. The press puts the hint away.
+- Hinted and Disabled: both show. The hint is how a disabled button says why it is blocked.
 
 ### Motion
 | Trigger | Kind | Preset | Properties | Reduced motion |
@@ -193,16 +204,18 @@ export default function Disabled() {
 | `children?` | `Element` |  | The label. |
 | `disabled?` | `boolean` |  | Blocks the click, drops the label to the disabled ink and the fill to the disabled step. |
 | `onClick?` | `((event: MouseEvent) => void)` |  | Runs on click. |
+| `shortcut?` | `string` |  | The shortcut that runs the same action, as the user reads it ("Ctrl+Shift+P"): a key cap in the hint and `aria-keyshortcuts` on the button. |
 | `size?` | `ButtonSize` |  | The control size. |
-| `title?` | `string` |  | A tooltip. |
+| `title?` | `string` |  | The hint: what the label leaves out, or why the button is disabled. |
 | `type?` | `"button" \| "submit" \| "reset"` |  | The native type. |
 | `variant?` | `ButtonVariant` |  | The purpose of the action. |
 
 - `variant`: the purpose of the action; the token layer picks the look. Defaults to `secondary`.
 - `size`: the control height; `md` is 28px and `sm` is 24px.
 - `type`: defaults to `button` so a button inside a form never submits by accident.
-- `disabled`: blocks the click and drops the ink to the disabled step.
-- `title`: a tooltip; it is not a substitute for the label.
+- `disabled`: blocks the click and drops the ink to the disabled step. It sets `aria-disabled="true"`, never the native `disabled`, so the button stays in the Tab order and under the pointer and its hint can say why.
+- `title`: the hint, shown in the layer's hint box and tied to the button as its accessible description (`aria-describedby`). It is what the label leaves out, or why the button is disabled; it is never the name, and no native `title` attribute is rendered. A `title` equal to the label draws no hint and adds no description.
+- `shortcut`: the shortcut that runs the same action, as the user reads it (`Ctrl+Shift+P`): a key cap after the hint's text, and `aria-keyshortcuts` on the button. A `title` that ends in the shortcut in brackets still draws the cap, without the attribute.
 - `ariaLabel`: the accessible name, only for a button whose visible label is a value rather than its action.
 - `onClick`: runs on click; a disabled button never fires it.
 
@@ -225,6 +238,13 @@ export default function Disabled() {
   - Don't: `.my-button:hover { color: var(--accent) }` — a colour change instead of a fill step.
   - Do: `.ui-button--secondary:hover { background: var(--fill-active) }`
 
+- `rule/button-disabled-reason`: When a button is disabled by something the user can fix, pass the reason as `title` in 1 short sentence, because a disabled button stays focusable and hoverable for exactly this and a dead button with 0 words leaves the user guessing what to fill in. Evidence: single use `src/components/AssistantPane.tsx:782`, the setup sheet's Save with `title={blocker() ?? undefined}`. Check: test `src/ui/Button.test.tsx`.
+  - Don't: `<Button variant="primary" disabled={blocker() !== null}>Save</Button>`
+  - Do: `<Button variant="primary" disabled={blocker() !== null} title={blocker() ?? undefined}>Save</Button>`
+- `rule/button-title-adds`: When a button takes `title`, write what the label leaves out and 0 words that repeat it, because the label is the name and the hint is announced after it as the description: "Save, button, Save" says the same thing twice, and the layer draws no box for a repeat. Evidence: single use `src/components/TopBar.tsx:40`, the command centre's "Search commands" hint over the drawing's name. Check: test `src/ui/Button.test.tsx`.
+  - Don't: `<Button title="Save">Save</Button>`
+  - Do: `<Button title="Check the address and the key">Check connection</Button>`
+
 ### Content
 - `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Undo all` — because the label is the action's name and the accessible name comes from it. Evidence: app 5/6 labels are verbs or verb phrases, `src/components/AssistantPane.tsx:817`, the label "Undo all" (the sixth, the command centre, is labelled with the drawing's name and names its action in its `title`). Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Button>SAVE</Button>`
@@ -244,7 +264,7 @@ export default function Disabled() {
   - Do: 2 buttons in the row and the rest inside a menu.
 
 ## Accessibility
-Rests on the native `<button>` element: role, Enter and Space, `disabled`, and form behaviour come from the platform.
+Rests on the native `<button>` element: role, Enter and Space, and form behaviour come from the platform. Disabled is the layer's own: `aria-disabled="true"` with the click refused on the button itself (`refuseWhenDisabled` in `src/ui/Button.tsx`), because the native `disabled` takes a button out of the Tab order and, in some of the system webviews the desktop app runs in, out of the pointer's reach, and a control nobody can reach cannot say why it is blocked (`docs/system/decisions.md`, "Disabled controls"). The hint is the description, never the name.
 
 ### Keyboard
 | Key | Where focus is | Effect | Focus after | Checked by |
@@ -252,12 +272,16 @@ Rests on the native `<button>` element: role, Enter and Space, `disabled`, and f
 | Tab | The button, in document order. | Moves focus to the button; the accent ring draws. | On the button. | by hand |
 | Enter | The focused button. | Runs the action. | Stays on the button. | test |
 | Space | The focused button. | Runs the action on release, exactly once. | Stays on the button. | by hand |
-| Tab (disabled) | A disabled button is skipped. | Focus moves past it. | On the next control. | by hand |
+| Tab (disabled) | A disabled button, in document order. | Moves focus to it, as to any button; the ring draws and its hint shows at once. | On the button. | by hand |
+| Enter or Space (disabled) | The focused disabled button. | Nothing: the click is refused before any handler hears it, and a submit button does not submit. | Stays on the button. | test |
+| Escape | The focused or hovered button, its hint showing. | Puts the hint away; the key is not consumed. | Stays on the button. | test |
 
 ### ARIA
 | Part | Role | Accessible name from | States and properties | Announced | Checked by |
 |---|---|---|---|---|---|
-| The button | `button` (native) | Its text content; `ariaLabel` when the label is a value | `disabled` when blocked; `type="button"` by default | "Save, button" / "Search commands, Bracket, button" | test |
+| The button | `button` (native) | Its text content; `ariaLabel` when the label is a value | `aria-disabled="true"` when blocked; `aria-describedby` pointing at the `title`'s words when it adds to the name; `aria-keyshortcuts` with `shortcut`; `type="button"` by default | "Save, button" / "Search commands, Bracket, button" / "Save, button, dimmed, To save, choose a provider or type a base URL." | test |
+| The description | None: a `<span>` in the hidden `.ui-hint-descriptions` element on `<body>` | — | Referenced by the button's `aria-describedby`; removed with the button | Read after the name and role | test |
+| The hint | None: the box is `aria-hidden="true"` | — | It shows the description's words for the eye | Nothing | test |
 
 ## Tokens
 | Part | State | Token |
@@ -291,3 +315,4 @@ Rests on the native `<button>` element: role, Enter and Space, `disabled`, and f
 - `SectionLabel`: when the text names a group rather than performing an action.
 - `Tab`: when the control brings one view of a strip to the front rather than running an action.
 - `Kbd`: when the text is the key that runs an action beside the button, not the action itself.
+- `Tooltip`: the hint box a button's `title` shows in; never wrap a button in one.

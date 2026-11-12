@@ -69,7 +69,7 @@ Real uses, 3 call sites (`rg -c "<Field" src/components` → `src/components/Ass
 - `ariaLabel`: the accessible name when no visible label is tied to the input.
 - `type`: the native input type; defaults to `text`.
 - `disabled`: blocks typing and drops the ink to the disabled step.
-- `title`: a tooltip.
+- `title`: the hint, shown in the layer's hint box (after 0.4s under a mouse or a pen, at once when a key moves focus in, away at the first keystroke) and added to the field's accessible description after `describedBy`. It is never the name (pass `ariaLabel`), and no native `title` attribute is rendered. Used at 0 call sites; a line of help under the field, tied by `describedBy`, is the usual pick because it stays on the page.
 - `autoFocus`: focuses the field when it mounts.
 - `autocomplete`: the native autofill hint; `off` for a value no form should remember, or a token the platform knows (`email`, `url`, `current-password`). Unset leaves it to the platform.
 - `spellcheck`: switches the platform's spelling checker. Unset leaves it to the platform, except `type="password"`, which is never checked.
@@ -130,7 +130,7 @@ Rests on the native `<input>` element: typing, selection, IME and autofill come 
 ### ARIA
 | Part | Role | Accessible name from | States and properties | Announced | Checked by |
 |---|---|---|---|---|---|
-| The input | `textbox` (native) | `aria-label`, or the label tied to it | `disabled` when blocked; the native `type`; `aria-invalid="true"` while the value is refused; `aria-describedby` naming the help line or the error line | "Base point, edit text" / "Base URL, invalid entry, edit text, Start the address with http:// or https://" | test |
+| The input | `textbox` (native) | `aria-label`, or the label tied to it | `disabled` when blocked; the native `type`; `aria-invalid="true"` while the value is refused; `aria-describedby` naming the help line or the error line, then the `title`'s words when it has one | "Base point, edit text" / "Base URL, invalid entry, edit text, Start the address with http:// or https://" | test |
 
 ## Tokens
 | Part | State | Token |
@@ -150,3 +150,4 @@ Rests on the native `<input>` element: typing, selection, IME and autofill come 
 - `Chip`: when the text is a fact rather than an editable value.
 - `Row`: when the value is picked from a list rather than typed.
 - `Button`: when the field's value is submitted.
+- `Tooltip`: the hint box a field's `title` shows in; never wrap a field in one.

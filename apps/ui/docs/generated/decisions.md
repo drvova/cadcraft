@@ -18,7 +18,7 @@ is a one-off with no shared API and no states.
 - **Field** — pick `ui/Field.tsx` (native `<input>`, single-line). Loses: `.assistant-input`, `.cmd-input`, `.prop-input` (each one surface's own padding and border), `.assistant-field` (a label wrapper, not the control). The composer's auto-growing `<textarea>` and the properties palette's `<select>` stay bespoke for now (found-not-fixed).
 - **Row** — pick `ui/Row.tsx` (native `<button>`, the full-width clickable band). Loses: `.prop-row`, `.menu-row`, `.assistant-row`, `.assistant-tool` (each repeats hover/selected padding by hand). A grid row carrying nested controls of its own (`.layer-row` with its toggle cluster) stays bespoke — a button cannot nest buttons. The pilot kept `.assistant-row` (the composer's toolbar is a container with nested buttons) and `.assistant-tool` (a transcript disclosure row, not a menu band) bespoke for the same reason; `row.md` records it.
 - **SectionLabel** — pick `ui/SectionLabel.tsx` (native `<h2>` — a heading, so a screen reader can jump between panels). Loses: `.section-label` (already shared but untyped — the pick is its typed home), `.properties-head` / `.layers-head` (the surrounding bar, not the label), `.assistant-title` (a pane title, a different role).
-- **Tooltip** — pick `ui/Tooltip.tsx`: the layer's one hint, a single box on `<body>` placed beside whichever control carries `data-hint`. `IconButton` carries it from its `title`; the `<Tooltip>` wrapper (a `<span>` host; the child keeps its own element and its own accessible name) gives it to any other control. Placements `bottom | top`, flipped and held inside the window by itself; it never takes the pointer. Loses: the native `title` attribute as an icon key's hint (it arrives on the platform's own delay, in the platform's own box, and never on keyboard focus), and any per-surface hover label a panel would draw for itself. The reasons are under "The hint" below.
+- **Tooltip** — pick `ui/Tooltip.tsx`: the layer's one hint, a single box on `<body>` placed beside whichever control carries `data-hint`. Every layer component that takes `title` carries it; the `<Tooltip>` wrapper (a `<span>` host; the child keeps its own element and its own accessible name) and the bare `data-hint` attribute give it to a surface's own element. Placements `bottom | top`, flipped and held inside the window by itself; it never takes the pointer. Loses: the native `title` attribute as an icon key's hint (it arrives on the platform's own delay, in the platform's own box, and never on keyboard focus), and any per-surface hover label a panel would draw for itself. The reasons are under "The hint" below.
 - **Tab** — pick `ui/Tab.tsx` (native `<button>` with `role="tab"`, `aria-selected` on the one in front; an optional close key as a sibling button). Sizes `md` (the editor tab, selected at `--tab-active`) and `sm` (the compact tab of a pane header, selected at `--fill-active`). Loses: `.layout-tab` (StatusBar's layout strip — a raw button with its own class), the chat tabs' `Row` workaround (AssistantPane — a `Row` in a width cell beside a close `IconButton`).
 - **Kbd** — pick `ui/Kbd.tsx` (native `<kbd>`, one recipe, no variants). Loses: `.assistant-key` (AssistantPane — the mono face at the disabled ink), `.palette-key` (CommandPalette — the recipe kept, now the pick's own).
 
@@ -29,7 +29,10 @@ is a one-off with no shared API and no states.
 - plus `disabled`, `selected`, `title`.
 - IconButton `expanded` and `controls`: a fold key says whether the region it folds is showing (`aria-expanded`) and which region it is (`aria-controls`, the region's `id`). A key is a fold key or a `selected` toggle, never both.
 - IconButton `popup`: `menu | dialog | listbox` (`aria-haspopup`), beside `expanded` and `controls`, on a key that opens something floating over the page. `menu` when what opens is a list of actions (`role="menu"`: the narrow window's Main menu), `listbox` when it is a list of values to pick one from (`role="listbox"`: a model picker), `dialog` when it holds fields or other controls (`role="dialog"`: the provider form). A fold key that shows a region in the page's own flow takes no `popup`.
-- IconButton `title` is the name (`aria-label`) and the hint's text; the component renders no native `title` attribute. Button, Chip, Tab and Field keep `title` as the native attribute until they move onto the hint.
+- `title` is the layer's hint on every component that takes it, and no component renders a native `title` attribute. What it is to assistive tech depends on whether the control has a visible label: on IconButton (a glyph, no label) it is the name (`aria-label`); on Button, Chip, Tab and Field (a label, or `ariaLabel`) it is the description (`aria-describedby`), never the name. "The hint" below has the reasons.
+- Button and IconButton `shortcut`: the shortcut as the user reads it (`Ctrl+Z`), drawn as a key cap in the hint and said through `aria-keyshortcuts`. `data-hint-keys` is the same thing on an element outside the layer.
+- IconButton `description`: the second line of the hint and the key's accessible description (`aria-describedby`): why it is disabled, what it will do. Button needs no such prop: its `title` already is its description.
+- `disabled` on Button and IconButton is `aria-disabled="true"`, never the native attribute ("Disabled controls" below). Field and Row keep the native `disabled`.
 - Field `autocomplete` and `spellcheck`: the native attributes, passed through; unset leaves each to the platform, except that a `password` field is never spell-checked. A secret passes `autocomplete="off"` and `spellcheck={false}` whatever `type` it shows at the moment.
 - Field `invalid` and `describedBy`: a refused value says so (`aria-invalid="true"`, the error stroke), and the help line or the error line under a field is tied to it by `id` (`aria-describedby`). `describedBy` is the layer's name for that tie on any component that grows one, as `ariaLabel` is for the name.
 - Button `ariaLabel` (the name Field already uses for the same job): the accessible name, only where the visible label is a value rather than the action; it starts with the action and holds the visible text.
@@ -45,8 +48,8 @@ One job, one preset (durations and easings from `tokens.css`):
 - **open** (menu, popover, composer focus) → `--dur-med` + `--ease-out-quint`.
 - **close** → `--dur-fast` + `--ease-out`.
 - **panel / larger change** → `--dur-slow` + `--ease-out`. Reserved: no panel moves yet, and `--dur-slow` is kept in `src/tokens.css` for this line alone, so the first panel that moves does not pick its own duration.
-- **hint** → arrives on the hover / focus preset (`opacity`), leaves at once. The wait before it is script, not a token: 0.4s under a resting pointer, none on keyboard focus, none for 0.3s after another hint went away.
-- Reduced motion: the app's `data-animations` attribute already gates motion; the presets keep it — no preset plays when animations are off.
+- **hint** → arrives on the hover / focus preset (`opacity`), leaves at once. The wait before it is script, not a token: 0.4s under a resting pointer, none on keyboard focus, none for 0.3s after another hint went away; and that next hint arrives without the fade too, because a fade restarting on every key of a row is a flicker.
+- Reduced motion: the app's `data-animations` attribute already gates motion; the presets keep it — no preset plays when animations are off. The hint also answers the platform's own setting (`prefers-reduced-motion: reduce`): it is a box the layer hangs on `<body>` for every surface, so it does not wait for the shell to mirror the setting into the attribute.
 
 ## Icon sizes
 
@@ -138,9 +141,10 @@ How it is built, and why:
   is gone, because the hold inside the window does its job without the caller knowing where the
   control sits.
 - **Timing**: 0.4s under a resting mouse or pen; at once when another hint went away within 0.3s,
-  so sweeping the strip reads every key; at once on keyboard focus (`:focus-visible`, so a click's
-  focus does not raise it); never under a finger, which has no hover.
-- **Dismissal**: Escape, a press, a click, a scroll, a resize and the window losing focus put it
+  so sweeping the strip reads every key; at once on keyboard focus (focus a key moved, so a
+  click's focus does not raise it; the second pass below replaced the first pass's
+  `:focus-visible` test); never under a finger, which has no hover.
+- **Dismissal**: Escape, a press, a click, typing, a scroll, a resize and the window losing focus put it
   away, and it stays away until the pointer or the focus moves to another control. Escape is not
   consumed: a menu that closes on Escape still closes.
 - **Hidden from assistive tech** (`aria-hidden`): the box repeats the `aria-label`, and a second
@@ -148,6 +152,86 @@ How it is built, and why:
 - **The name stays on `aria-label`**, and no native `title` is rendered, so the two hints cannot
   stack.
 
-Not done here: Button, Chip, Tab, Field and the raw buttons of the status bar still pass `title`
-to the native attribute. They move onto the `<Tooltip>` wrapper or grow the same `data-hint` one
-component at a time.
+### One hint in the whole layer (2026-11-11, second pass)
+
+Button, Chip, Tab and Field moved onto the box with no call-site change: each still takes `title`,
+and none renders the native attribute. What moved with them:
+
+- **The name and the description, per component.** The hint is the name only where there is no
+  other (IconButton: `aria-label`). A Button, a Chip or a Tab has a visible label and a Field has
+  `ariaLabel`, so there the hint is supplementary and is exposed as the control's **description**.
+  It must be exposed somehow: the box is `aria-hidden`, and with the native `title` gone a screen
+  reader would otherwise lose the words (the reason Save is disabled, what a tab switches to). A
+  static Chip is a `<span>` with no role, where a description is not announced; its hint is for the
+  eye only and its spec says to put nothing essential there.
+- **`aria-describedby`, not `aria-description`.** `aria-description` is one attribute and no
+  machinery, but it is an ARIA 1.3 working-draft attribute, and the desktop app runs in whatever
+  system webview the machine has (WebKit on macOS, WebView2 on Windows, WebKitGTK on Linux), which
+  is not evergreen everywhere. `aria-describedby` pointing at text is supported by every engine and
+  screen reader pairing. The text lives in one hidden element on `<body>`
+  (`.ui-hint-descriptions`, one `<span>` per control, removed with it), not beside the control: a
+  hidden child would enter `textContent` and a hidden sibling would change every surface's
+  `:first-child`, `+` and flex-gap arithmetic. A hidden element referenced by `aria-describedby`
+  is still read as the description. `describeByHint` in `src/ui/Tooltip.tsx` is the one place that
+  does this, and a surface's own element can call it.
+- **A repeat is nothing.** A hint equal to the label the control shows (trimmed, white space
+  collapsed) with no shortcut and no second line draws no box and adds no description: the chat
+  tabs pass their title as both, and "hello, tab, hello" helps nobody.
+- **A clipped label is always reachable.** When a control's own box cuts its label (`scrollWidth`
+  past `clientWidth`), the hint's first line is the full label, whether or not the caller passed
+  `title`, and what `title` adds drops to a second line. Tab and Chip always carry `data-hint`
+  (empty when there is no title) so this works without the caller thinking of it. Assistive tech
+  never needed it: the full text is in the element, and the ellipsis is paint.
+- **The shortcut is a key cap.** The explicit form is the one to write: `shortcut` on IconButton
+  and Button, `data-hint-keys` on any other element; it also sets `aria-keyshortcuts`. The old form,
+  a title ending "(Ctrl+Z)", is still split off by IconButton and Button so the 9 existing call
+  sites draw the cap today; there the accessible name keeps the bracket (changing a name is a
+  behaviour change the call site should make on purpose), and no `aria-keyshortcuts` is added,
+  which would say the shortcut twice. Only a bracket that is a key combination is split
+  ("Attach a picture (or paste, or drop one)" stays text), and the attribute form never parses: a
+  chat titled "Option (B)" must not grow a key cap.
+- **32ch, wrapped.** The box was one `nowrap` line clipped with an ellipsis at the window's width;
+  a reason a control is disabled is a sentence and was cut. It now wraps at a 32ch measure, and is
+  never wider or taller than the window less the gap on each side.
+- **Focus a key moved, only.** `:focus-visible` is true for a field on any focus and for a button a
+  closing dialog hands focus back to, and neither is a person asking what the control is. The hint
+  shows on focus only when the last key pressed was one that moves focus (Tab, the arrows, Home,
+  End, Page Up, Page Down, F6) and no press has followed it. Whichever of the pointer and the
+  focus moved last names the control: a pointer left resting on one key no longer silences the hint
+  of the key the keyboard moves to.
+- **Not over a popup.** A control whose own menu or dialog is open (`aria-haspopup` with
+  `aria-expanded="true"`) shows no hint, and while focus is inside a menu or a dialog only that
+  popup's own controls do. A fold key is `aria-expanded` too and keeps its hint: its region is in
+  the page's flow and covers nothing. A control inside a modal `<dialog>` gets the box as a child
+  of that dialog, because the top layer covers `<body>`.
+- **Outside the layer.** The delegation never looked at who rendered the element, so
+  `data-hint`, `data-hint-keys`, `data-hint-note` and `data-hint-placement` work on any element.
+  About ninety native `title`s remain in the surfaces' own markup (the status toggles, the layer
+  keys, the properties' clipped values); `tooltip.md` ("Adopting the hint outside the layer") is
+  the procedure, including what happens to the accessible name each of them was getting from
+  `title`.
+
+## Disabled controls
+
+Decided 2026-11-11. A disabled Button or IconButton is `aria-disabled="true"` and never carries
+the native `disabled` attribute; the component refuses the click.
+
+- **Why.** A control that is blocked by something the user can fix should be able to say what
+  (the setup sheet's Save: "To save, choose a provider or type a base URL."). The native attribute
+  takes the button out of the Tab order, so a keyboard user can never reach the words, and in some
+  engines it also swallows pointer events on the button, so a mouse user cannot either; the desktop
+  app runs in three different system webviews and the layer cannot pick the well-behaved one.
+- **How the click is refused.** `refuseWhenDisabled` (`src/ui/Button.tsx`, used by both) listens on
+  the button itself and, while `aria-disabled="true"`, calls `preventDefault` and
+  `stopImmediatePropagation`. That is before the caller's `onClick`, before any ancestor's handler
+  (a native disabled button's click reaches nobody, and a row that selects on click must not start
+  hearing its disabled key), and before a form takes a submit button's click. Enter and Space on a
+  button arrive as the same `click`, so one guard covers the pointer and both keys.
+- **What it costs.** A disabled button is now a Tab stop. That is the point where it has a reason
+  to give, and one extra stop where it has none (the ARIA Authoring Practices guide allows keeping
+  a disabled control focusable where a user must be able to find it). It takes the focus ring, no hover fill and
+  no pressed fill. `:disabled` no longer matches these two components: a surface that styles one
+  writes `[aria-disabled="true"]` (`src/ui/recipe.test.ts` holds the layer to it).
+- **Scope.** Field keeps the native `disabled` (a field one cannot type in should not take the
+  caret), and Row keeps it too (a disabled row in a menu or the palette is skipped by the list's
+  own arrow-key handling, and nothing asks a row to explain itself yet).

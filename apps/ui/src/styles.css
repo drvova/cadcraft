@@ -306,12 +306,18 @@ body {
   min-height: 0;
   flex: 0 1 auto;
   max-height: 55%;
+  /* A share of the rail is rarely a whole number of pixels, and everything under the pane would
+     sit on the fraction: its rows' text would fall between pixels. The cap steps down to a whole
+     pixel where the browser can round. */
+  max-height: round(down, 55%, 1px);
   background: transparent;
   border: none;
   border-radius: 0;
 }
 
+/* The heading keeps its height when the pane is capped: the list gives way, not the heading. */
 .layers-head {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: var(--gap-2);
@@ -330,7 +336,7 @@ body {
 .layers-count {
   margin-left: auto;
   font-size: var(--font-chip);
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
   color: var(--text-faint);
 }
 
@@ -379,12 +385,46 @@ body {
   border-radius: var(--radius-small);
 }
 
+/* The name's hint host fills the name track and lets it clip. */
+.layer-row > .ui-tooltip-host {
+  min-width: 0;
+}
+
+/* The name is set on a line as tall as the row: the line box starts on a whole pixel, so the
+   capitals sit half a pixel from the row's centre, where the glyphs beside them are centred
+   (centred as a 17px line in a 22px row, the baseline fell on a half pixel and the text read a
+   pixel and a half low). It is drawn as a head that gives way with an ellipsis and a tail that
+   never does, so two names that differ only at the end still read apart. */
 .layer-name-text {
+  position: relative;
   flex: 1 1 auto;
   min-width: 0;
+  display: flex;
+  overflow: hidden;
+  line-height: var(--control-h-row);
   white-space: nowrap;
+}
+
+/* The head carries the name's own direction (`dir="auto"`): a right-to-left name reads its own
+   way and clips at its own end, while the row's columns stay where they are. */
+.layer-name-head {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.layer-name-tail {
+  flex: 0 0 auto;
+}
+
+/* The whole name, once, for assistive tech: the two halves above are hidden from it. */
+.layer-name-full {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 
 .layer-row.is-current .ui-row {

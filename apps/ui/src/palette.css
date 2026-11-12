@@ -13,7 +13,8 @@
   height: 100%;
   max-height: none;
   margin: 0;
-  padding: var(--gap-6) var(--gap-8) 0;
+  /* A margin on every side, so the box never touches the window's edge however small it is. */
+  padding: var(--gap-6) var(--gap-8) var(--gap-8);
   border: none;
   background: transparent;
   color: var(--text);
@@ -29,7 +30,9 @@
   display: flex;
   flex-direction: column;
   width: min(76ch, 100%);
-  max-height: min(60vh, 100%);
+  /* The dynamic viewport: the box stays above an on-screen keyboard's bar where the platform
+     reports one, and never outgrows the dialog's padded area. */
+  max-height: min(60dvh, 100%);
   margin: 0 auto;
   background: var(--surface-elevated);
   border: var(--hairline) solid var(--border);
@@ -90,12 +93,26 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--gap-4);
-  /* The lit row stops short of the list's edge when the arrows bring it into view. */
-  scroll-padding-block: var(--gap-4);
+  /* The lit row keeps one row of context past it when the keys bring it into view. */
+  scroll-padding-block: calc(var(--control-h-row) + var(--gap-4));
   display: flex;
   flex-direction: column;
   gap: 0;
+}
+
+@media (pointer: coarse) {
+  .palette-list {
+    scroll-padding-block: calc(var(--control-h-input) + var(--gap-4));
+  }
+}
+
+/* The option is the listbox's item; the system's Row inside it is what is drawn and clicked. */
+.palette-option {
+  flex: 0 0 auto;
+  display: flex;
+  min-width: 0;
 }
 
 /* The row is the system's Row; these are its three parts. The label keeps its width and the
@@ -119,7 +136,9 @@
 }
 
 .palette-path {
-  flex: 0 100 auto;
+  /* It takes the room the label and the trailing column leave, and is cut first: the label
+     only shortens once the path has nothing left to give. */
+  flex: 1 1 0;
   min-width: 0;
   padding-left: var(--gap-4);
   overflow: hidden;
@@ -138,25 +157,112 @@
   display: inline-flex;
   align-items: center;
   gap: var(--gap-8);
+  /* The trailing column never takes more than half the row from the label. */
+  max-width: 50%;
+  min-width: 0;
 }
 
 .palette-tag {
+  flex: 0 0 auto;
   color: var(--text-faint);
   font-size: var(--font-chip);
+  white-space: nowrap;
 }
 
+/* The name gives way before the keycap does: the caps keep one right edge down the list. */
 .palette-id {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--text-faint);
   font-family: var(--font-family-mono);
   font-size: var(--font-chip);
   white-space: nowrap;
 }
 
-/* The empty line starts where a row's label would. */
+.palette-trail .ui-kbd {
+  flex: 0 0 auto;
+}
+
+/* A row that cannot run: the Row's disabled ink carries through its quiet parts too. */
+.palette-option[aria-disabled="true"] .palette-label,
+.palette-option[aria-disabled="true"] .palette-hit,
+.palette-option[aria-disabled="true"] .palette-path,
+.palette-option[aria-disabled="true"] .palette-id {
+  color: inherit;
+}
+
+/* The empty lines start where a row's label would: what was typed, then what to try. */
 .palette-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-4);
   padding: var(--gap-8);
   color: var(--text-faint);
   font-size: var(--font-body);
   line-height: 1.5;
   text-wrap: pretty;
+}
+
+.palette-empty-lead {
+  display: flex;
+  gap: var(--gap-4);
+  min-width: 0;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* A pasted paragraph is cut with an ellipsis: the box keeps its width. */
+.palette-empty-query {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+/* The foot: how many commands there are (or why the lit one will not run), and the keys that
+   act on the lit row. A hairline closes the list above it, as the field's does at the top, so
+   rows scroll under a line at both ends. */
+.palette-foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-12);
+  min-height: var(--control-h-button);
+  padding: 0 var(--gap-12);
+  border-top: var(--hairline) solid var(--border-soft);
+  color: var(--text-faint);
+  font-size: var(--font-chip);
+}
+
+.palette-status {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.palette-keys {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-12);
+}
+
+.palette-key {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-4);
+  white-space: nowrap;
+}
+
+/* A narrow window has an on-screen keyboard, not these keys: the count keeps the line. */
+@media (max-width: 560px) {
+  .palette-keys {
+    display: none;
+  }
 }

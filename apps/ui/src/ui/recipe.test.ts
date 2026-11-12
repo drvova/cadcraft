@@ -194,7 +194,7 @@ describe("the layer's recipe, from the stylesheet", () => {
   });
 
   test("a selected icon button keeps its fill under the pointer", () => {
-    expect(uiCss).toContain('.ui-icon-button--ghost:hover:not(:disabled):not([aria-pressed="true"])');
+    expect(uiCss).toContain('.ui-icon-button--ghost:hover:not([aria-disabled="true"]):not([aria-pressed="true"])');
   });
 
   test("the editor tab clips at 24ch and the compact tab at 18ch", () => {
@@ -207,6 +207,31 @@ describe("the layer's recipe, from the stylesheet", () => {
     const easings = [...uiCss.matchAll(/var\(--ease-[\w-]+\)/g)].map((m) => m[0]);
     expect(easings.length).toBeGreaterThan(0);
     for (const easing of easings) expect(easing).toBe("var(--ease-standard)");
+  });
+
+  test("the hint box never takes the pointer, never widens the page, and wraps at a 32ch measure inside the window", () => {
+    const box = rule(uiCss, ".ui-tooltip");
+    expect(box).toContain("pointer-events: none");
+    expect(box).toContain("position: fixed");
+    expect(box).toContain("max-width: min(32ch, calc(100% - var(--gap-6) * 2))");
+    expect(box).toContain("max-height: calc(100% - var(--gap-6) * 2)");
+    expect(box).toContain("overflow-wrap: anywhere");
+    expect(box).not.toContain("nowrap");
+  });
+
+  test("the hint fades in on the motion tokens, leaves at once, and does not fade for the next key along or under reduced motion", () => {
+    expect(rule(uiCss, ".ui-tooltip")).not.toContain("transition");
+    expect(rule(uiCss, ".ui-tooltip--shown")).toContain("transition: opacity var(--dur-fast) var(--ease-standard)");
+    expect(rule(uiCss, ".ui-tooltip--instant")).toContain("transition: none");
+    const at = uiCss.indexOf("@media (prefers-reduced-motion: reduce)");
+    expect(at).toBeGreaterThan(-1);
+    expect(rule(uiCss.slice(at), ".ui-tooltip--shown")).toContain("transition: none");
+  });
+
+  test("a disabled button and icon button are styled by aria-disabled, never by the native state they no longer carry", () => {
+    const selectors = [...uiCss.matchAll(/[^{}]*\.ui-(?:icon-)?button[^{}]*(?=\{)/g)].map((m) => m[0]);
+    expect(selectors.some((selector) => selector.includes('[aria-disabled="true"]'))).toBe(true);
+    for (const selector of selectors) expect(selector).not.toContain(":disabled");
   });
 
   test("a coarse pointer gets 24px targets: an overhang on the 20px controls, a taller row and compact tab", () => {

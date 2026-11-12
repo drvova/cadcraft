@@ -2,11 +2,14 @@
  * IconButton's contract: a native button whose accessible name is the `title`, the same string
  * as the layer's hint and no native `title` beside it, the code-drawn glyph inside, the
  * size/variant classes, `aria-pressed` when selected, `aria-expanded` and `aria-controls` on a
- * fold key, `aria-haspopup` on a key that opens a popup, and no click when disabled.
+ * fold key, `aria-haspopup` on a key that opens a popup, a shortcut as a key cap and
+ * `aria-keyshortcuts`, a `description` as the hint's second line, and a disabled key that stays
+ * focusable and takes no click by any means.
  */
 
 import { describe, expect, test } from "bun:test";
 import { IconButton } from "./IconButton";
+import { hintContent } from "./Tooltip";
 import { buttonIn, mount } from "../test-utils";
 
 describe("IconButton", () => {
@@ -35,12 +38,53 @@ describe("IconButton", () => {
     expect(clicks).toBe(1);
   });
 
-  test("a disabled icon button takes no click", () => {
+  test("a disabled icon button says so, stays focusable, and keeps its hint", () => {
+    const button = buttonIn(mount(() => <IconButton icon="send" title="Send" disabled description="Type a message first" />));
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+    expect(button.disabled).toBe(false);
+    expect(hintContent(button)).toEqual({ text: "Send", keys: "", note: "Type a message first" });
+    const enabled = buttonIn(mount(() => <IconButton icon="send" title="Send" />));
+    expect(enabled.hasAttribute("aria-disabled")).toBe(false);
+  });
+
+  test("a disabled icon button never runs its click: by pointer, by Enter or by Space", () => {
     let clicks = 0;
-    const button = buttonIn(mount(() => <IconButton icon="close" title="Close" disabled onClick={() => clicks++} />));
-    expect(button.disabled).toBe(true);
+    let heardAbove = 0;
+    const container = mount(() => <IconButton icon="close" title="Close" disabled onClick={() => clicks++} />);
+    container.addEventListener("click", () => heardAbove++);
+    const button = buttonIn(container);
     button.click();
+    // A pointer's click, then the click the platform fires for Enter and for Space (detail 0).
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 0 }));
     expect(clicks).toBe(0);
+    expect(heardAbove).toBe(0);
+  });
+
+  test("the description is the hint's second line and the key's accessible description, never its name", () => {
+    const button = buttonIn(mount(() => <IconButton icon="send" title="Send" description="Type a message first" />));
+    expect(button.getAttribute("aria-label")).toBe("Send");
+    expect(button.getAttribute("data-hint-note")).toBe("Type a message first");
+    expect(document.getElementById(button.getAttribute("aria-describedby") ?? "")?.textContent).toBe("Type a message first");
+    const plain = buttonIn(mount(() => <IconButton icon="send" title="Send" />));
+    expect(plain.hasAttribute("data-hint-note")).toBe(false);
+    expect(plain.hasAttribute("aria-describedby")).toBe(false);
+  });
+
+  test("a shortcut is a key cap in the hint and aria-keyshortcuts on the key", () => {
+    const button = buttonIn(mount(() => <IconButton icon="undo" title="Undo" shortcut="Ctrl+Z" />));
+    expect(button.getAttribute("aria-label")).toBe("Undo");
+    expect(button.getAttribute("aria-keyshortcuts")).toBe("Control+Z");
+    expect(hintContent(button)).toEqual({ text: "Undo", keys: "Ctrl+Z", note: "" });
+  });
+
+  test("a title ending in its shortcut in brackets keeps its name and draws the cap", () => {
+    const button = buttonIn(mount(() => <IconButton icon="undo" title="Undo (Ctrl+Z)" />));
+    expect(button.getAttribute("aria-label")).toBe("Undo (Ctrl+Z)");
+    expect(button.hasAttribute("aria-keyshortcuts")).toBe(false);
+    expect(hintContent(button)).toEqual({ text: "Undo", keys: "Ctrl+Z", note: "" });
+    const bracket = buttonIn(mount(() => <IconButton icon="attach" title="Attach a picture (or paste, or drop one)" />));
+    expect(hintContent(bracket)).toEqual({ text: "Attach a picture (or paste, or drop one)", keys: "", note: "" });
   });
 
   test("selected is announced as a pressed toggle", () => {

@@ -94,6 +94,8 @@
   display: flex;
   align-items: center;
   gap: var(--gap-6);
+  /* The title keeps its height: left to shrink, it gave up 10px to a long transcript. */
+  flex: 0 0 auto;
   height: 35px;
   padding: 0 var(--gap-8) 0 calc(var(--assistant-gutter) + var(--assistant-inset));
   border-bottom: var(--hairline) solid var(--border);
@@ -143,25 +145,52 @@
   flex-direction: column;
 }
 
+/* The scroller. Its own box never changes with what is said; only the transcript inside it grows. */
 .assistant-body {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* The rows. The panel watches this box's height to keep the scroller at its end. */
+.assistant-transcript {
   padding: var(--gap-12) var(--assistant-gutter);
   display: flex;
   flex-direction: column;
   gap: var(--gap-14);
 }
 
+/* A long chat opens on its newest rows; the ones before them are one key away. The key is a
+   ghost button with its own inset: stepping out by it puts its words on the text column. */
+.assistant-earlier {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-6);
+  padding: 0 var(--assistant-inset) 0 calc(var(--assistant-inset) - var(--button-pad-x));
+}
+
+.assistant-earlier-count,
+.assistant-earlier-note {
+  color: var(--text-faint);
+  font-size: var(--font-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-earlier-note {
+  margin: 0;
+  padding: 0 var(--assistant-inset);
+  line-height: 1.5;
+}
+
 /* The jump key: shown when the reader has scrolled away from the end; it rides the bottom edge
    of the transcript. The key's own fill is translucent, so the wrapper backs it with the panel. */
 .assistant-jump {
   position: sticky;
-  bottom: 0;
+  bottom: var(--gap-8);
   /* It rides over the last line instead of taking a row of its own, so the transcript's height
      (and the reader's place in it) does not move when the key comes and goes. */
   height: var(--control-h-input);
-  margin-top: calc(-1 * (var(--control-h-input) + var(--gap-14)));
+  margin-top: calc(-1 * var(--control-h-input));
   display: flex;
   justify-content: center;
   pointer-events: none;
@@ -646,6 +675,13 @@
 
 .assistant-stack-row > :not(.assistant-stack-text) {
   flex-shrink: 0;
+}
+
+/* The draft is longer than one message may be: said in the warning ink, in figures that hold
+   their width while the count changes under the typing. */
+.assistant-stack-row--over {
+  color: var(--warn);
+  font-variant-numeric: tabular-nums;
 }
 
 /* A row that opens with a key (the changes row's chevron): the key is a 20px circle around a

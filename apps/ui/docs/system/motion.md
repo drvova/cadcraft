@@ -32,7 +32,7 @@ Each preset, drawn with its token (hover or focus the bars to replay):
 - A control's hover and focus feedback is `--dur-fast` with `--ease-standard`, on every component of `src/ui/`, because that is the measured `.1s ease` and two controls easing differently under one pointer read as two systems.
 - Only `background-color`, `border-color`, `color`, `opacity` and `transform` transition, because anything else animates layout and drops frames.
 - Nothing loops, nothing bounces, nothing moves on its own: motion is only ever the consequence of an input, because ambient motion steals attention from the drawing.
-- Exit may be faster than enter, never slower, because a dismissed surface should leave before the eye returns to the canvas. The hint is the limit case: it arrives over `--dur-fast` and leaves at once.
+- Exit may be faster than enter, never slower, because a dismissed surface should leave before the eye returns to the canvas. The hint is the limit case: it arrives over `--dur-fast` and leaves at once, and the next hint along a row arrives at once too (no fade restarts under a moving pointer). Under `prefers-reduced-motion: reduce` it never fades, by its own media query in `src/ui/ui.css` as well as by the shell's attribute.
 - The hint waits before it shows, and the wait is script, not a token: 0.4s under a resting pointer, none on keyboard focus, none for 0.3s after another hint went away (`HINT_DELAY_MS` and `HINT_WARM_MS` in `src/ui/Tooltip.tsx`), because a box that appears under every passing pointer is noise, and one that makes a keyboard user wait is a delay with no pointer to settle.
 
 ## Accessibility

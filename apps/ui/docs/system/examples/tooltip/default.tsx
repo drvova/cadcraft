@@ -1,12 +1,11 @@
-// Caption: The hint over a text button.
+// Caption: The hint over a control of a surface's own.
 import { Tooltip } from "../../../../src/ui/Tooltip";
-import { Button } from "../../../../src/ui/Button";
 
-/** The hint over a control that is not an icon button (that one shows the hint by itself). */
+/** A fact of the status bar: the hint says what the number counts. Layer components need no wrapper. */
 export default function Example() {
   return (
-    <Tooltip text="Check the address and the key">
-      <Button>Check connection</Button>
+    <Tooltip text="Objects in the drawing" placement="top">
+      <span class="status-item status-count">46 objects</span>
     </Tooltip>
   );
 }

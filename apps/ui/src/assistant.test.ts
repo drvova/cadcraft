@@ -40,6 +40,14 @@ import {
   systemPrompt,
   trimToBudget,
   wireMessages,
+  focusIsOurs,
+  followAfterScroll,
+  growReply,
+  listProviderModels,
+  MAX_MESSAGE_CHARS,
+  MAX_REQUEST_CHARS,
+  replyBlocks,
+  type ReplyParse,
   type AssistantEvent,
   type Briefing,
   type ChatMessage,
@@ -627,6 +635,135 @@ describe("atEnd", () => {
   });
 });
 
+describe("followAfterScroll", () => {
+  test("a reply that grew under a following transcript does not stop the following", () => {
+    // The view was brought to 800 and has not moved; 400px of reply arrived since.
+    expect(followAfterScroll(true, 800, 800, 1400, 200)).toBe(true);
+    // Being brought to the new end is a move down.
+    expect(followAfterScroll(true, 800, 1200, 1400, 200)).toBe(true);
+  });
+  test("any move up is the reader's, even inside the slack, and stops it", () => {
+    expect(followAfterScroll(true, 800, 790, 1000, 200)).toBe(false);
+    expect(followAfterScroll(true, 800, 300, 1000, 200)).toBe(false);
+  });
+  test("a reader who scrolled away is left alone while the reply grows, and followed again at the end", () => {
+    expect(followAfterScroll(false, 300, 300, 5000, 200)).toBe(false);
+    expect(followAfterScroll(false, 300, 600, 5000, 200)).toBe(false);
+    expect(followAfterScroll(false, 300, 4790, 5000, 200)).toBe(true);
+  });
+  test("a transcript that got shorter settles at its end and goes on following", () => {
+    expect(followAfterScroll(true, 800, 500, 700, 200)).toBe(true);
+  });
+});
+
+describe("focusIsOurs", () => {
+  const panel = document.createElement("aside");
+  const inside = panel.appendChild(document.createElement("button"));
+  const outside = document.createElement("input");
+  const body = document.createElement("body");
+  test("a focus inside the panel, or nowhere, is the panel's to move", () => {
+    expect(focusIsOurs(panel, inside, body)).toBe(true);
+    expect(focusIsOurs(panel, body, body)).toBe(true);
+    expect(focusIsOurs(panel, null, body)).toBe(true);
+  });
+  test("a focus the person put elsewhere is left where it is", () => {
+    expect(focusIsOurs(panel, outside, body)).toBe(false);
+  });
+});
+
+describe("growReply", () => {
+  const REPLY = [
+    "## Result",
+    "",
+    "The drawing holds **3 objects**.",
+    "A second line of the same paragraph.",
+    "",
+    "- one line, 10 mm",
+    "  with a continuation",
+    "- one circle",
+    "",
+    "1. first",
+    "2. second",
+    "```lisp",
+    "(cmd \"circle\")",
+    "",
+    "(cmd \"describe\")",
+    "```",
+    "After the code, `inline ``` ticks` and more.",
+    "",
+    "```",
+    "an open fence",
+    "",
+    "to the end",
+  ].join("\n");
+
+  /** Feed `text` in pieces of `size` and return every parse on the way. */
+  const grow = (text: string, size: number): ReplyParse[] => {
+    const steps: ReplyParse[] = [];
+    let parse: ReplyParse | undefined;
+    for (let end = size; end < text.length + size; end += size) {
+      parse = growReply(parse, text.slice(0, end));
+      steps.push(parse);
+    }
+    return steps;
+  };
+
+  test("however a reply is cut into fragments, its blocks are those of the whole reply", () => {
+    for (const size of [1, 2, 3, 7, 16, 50, 1000]) {
+      const steps = grow(REPLY, size);
+      steps.forEach((step, i) => {
+        const upTo = REPLY.slice(0, Math.min(REPLY.length, (i + 1) * size));
+        expect([...step.settled, ...step.tail]).toEqual(replyBlocks(upTo));
+      });
+    }
+  });
+
+  test("a settled block is the same object from then on, and so is a tail block that did not change", () => {
+    const steps = grow(REPLY, 5);
+    for (let i = 1; i < steps.length; i++) {
+      const before = steps[i - 1]?.settled ?? [];
+      before.forEach((block, at) => expect(steps[i]?.settled[at]).toBe(block));
+    }
+    const first = growReply(undefined, "## Result\n\n- one\n- two");
+    const next = growReply(first, "## Result\n\n- one\n- two\n\nA new paragraph");
+    expect(first.settled).toHaveLength(1);
+    // The list settled as the blank line arrived; the heading before it is the object it was.
+    expect(next.settled[0]).toBe(first.settled[0]);
+    const tail = growReply(undefined, "# Title\nfirst line");
+    const more = growReply(tail, "# Title\nfirst line and more");
+    expect(more.tail[0]).toBe(tail.tail[0]);
+    expect(more.tail[1]).not.toBe(tail.tail[1]);
+  });
+
+  test("what is read again is the last block, not the reply: a 200,000-character reply keeps a short rest", () => {
+    const paragraph = "A paragraph of a long reply, with `code` and **bold** in it, long enough to wrap in the panel.\n\n";
+    const whole = paragraph.repeat(Math.ceil(200_000 / paragraph.length)).slice(0, 200_000);
+    let parse: ReplyParse | undefined;
+    let longestRest = 0;
+    for (let end = 200; end <= whole.length; end += 200) {
+      parse = growReply(parse, whole.slice(0, end));
+      longestRest = Math.max(longestRest, parse.rest.length);
+    }
+    expect(longestRest).toBeLessThan(paragraph.length + 200);
+    expect(parse?.settledChars ?? 0).toBeGreaterThan(200_000 - paragraph.length - 200);
+    expect([...(parse?.settled ?? []), ...(parse?.tail ?? [])]).toEqual(replyBlocks(whole));
+  });
+
+  test("a text that is not the last one with more after it is parsed from its start", () => {
+    const first = growReply(undefined, "one\n\ntwo");
+    expect(growReply(first, "another reply")).toEqual({ settled: [], tail: [{ kind: "para", text: "another reply" }], settledChars: 0, rest: "another reply" });
+    expect(growReply(first, "one\n\ntwo")).toBe(first);
+    expect(growReply(undefined, "")).toEqual({ settled: [], tail: [], settledChars: 0, rest: "" });
+  });
+});
+
+describe("the longest message", () => {
+  test("is half of what one request may carry", () => {
+    expect(MAX_MESSAGE_CHARS).toBe(MAX_REQUEST_CHARS / 2);
+    expect(Number.isInteger(MAX_MESSAGE_CHARS)).toBe(true);
+  });
+});
+
 describe("relativeTime", () => {
   const t0 = 1_000_000_000_000;
   test("the transcript's own words", () => {
@@ -883,6 +1020,30 @@ describe("a hostile provider", () => {
     const ids = await listModels(PROVIDER, new AbortController().signal, (async () => new Response(JSON.stringify({ data: rows }))) as unknown as typeof fetch);
     expect(ids).toHaveLength(MAX_LISTED_MODELS);
     expect(reachedNote(ids, "").text).toBe("Connected. 200 models.");
+  });
+
+  test("a list longer than what is kept is counted, and the note says the first 200 of how many", async () => {
+    const rows: unknown[] = Array.from({ length: 1_340 }, (_, i) => ({ id: `model-${i}` }));
+    // Rows that are not names, and a name listed twice, are not counted.
+    rows.push({ id: "model-3" }, { id: 7 }, { id: "bad\nname" });
+    const listing = await listProviderModels(PROVIDER, new AbortController().signal, (async () => new Response(JSON.stringify({ data: rows }))) as unknown as typeof fetch);
+    expect(listing.ids).toHaveLength(MAX_LISTED_MODELS);
+    expect(listing.total).toBe(1_340);
+    expect(reachedNote(listing.ids, "", listing.total).text).toBe("Connected. The first 200 of 1,340 models.");
+    expect(reachedNote(listing.ids, "model-7", listing.total).text).toBe("Connected. The first 200 of 1,340 models, including model-7.");
+    // A name past the first 200 may well be served: it is not said to be missing from the provider.
+    expect(reachedNote(listing.ids, "model-900", listing.total)).toEqual({
+      state: "reached",
+      text: "Connected. The first 200 of 1,340 models; model-900 is not among them. Pick one from the list, or keep the name you typed.",
+    });
+  });
+
+  test("a list that fits is its own count, and a name that held the key is not counted", async () => {
+    const short = await listProviderModels(PROVIDER, new AbortController().signal, (async () => new Response(JSON.stringify({ data: [{ id: "a" }, { id: "b" }] }))) as unknown as typeof fetch);
+    expect(short).toEqual({ ids: ["a", "b"], total: 2 });
+    expect(reachedNote(short.ids, "a", short.total).text).toBe("Connected. 2 models, including a.");
+    const leaky = await listProviderModels({ ...PROVIDER, apiKey: "sk-secret-9" }, new AbortController().signal, (async () => new Response(JSON.stringify({ data: [{ id: "a" }, { id: "echo-sk-secret-9" }] }))) as unknown as typeof fetch);
+    expect(leaky).toEqual({ ids: ["a"], total: 1 });
   });
 
   test("a model list too large to read says so, and the check does not read on", async () => {

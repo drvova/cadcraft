@@ -103,12 +103,12 @@ export default function ToneAccent() {
 |---|---|---|---|
 | `children?` | `Element` |  | The chip's text. |
 | `onClick?` | `((event: MouseEvent) => void)` |  | When present the chip is interactive and renders as a `<button>`; without it, a `<span>`. |
-| `title?` | `string` |  | A tooltip; on the interactive form it is also the accessible name when the text is short. |
+| `title?` | `string` |  | The hint: what the chip's text leaves out. |
 | `tone?` | `ChipTone` |  | The tone. |
 
 - `tone`: `neutral` or `accent`; defaults to `neutral`.
 - `onClick`: when present the chip renders as a `<button>`; without it, as a `<span>`.
-- `title`: a tooltip; on the interactive form the text is the accessible name.
+- `title`: the hint, shown in the layer's hint box after 0.4s under a mouse or a pen and at once when a key moves focus onto an interactive chip; no native `title` attribute is rendered. The chip's text is its name; on the interactive form the `title` is tied to the button as its accessible description (`aria-describedby`), and on the static form it is for the eye only, so nothing a screen-reader user needs goes there. A `title` equal to the text draws no hint. A chip a surface clips shows its full text in the hint by itself.
 - `children`: the chip's text: a noun or a short value, never a sentence.
 
 ## Usage
@@ -144,7 +144,7 @@ export default function ToneAccent() {
 - `rule/chip-row-limit`: When a chip row holds more than 6 chips, wrap the row or move the rest behind a "More" chip, because the measured chip is 20px tall with 8px side padding and a 608px composer row fits 6 of them before the row wraps. Evidence: measured 20px chip and 608px composer, `docs/system/decisions.md`. Check: review `src/components/CommandLine.tsx`.
   - Don't: 9 chips in one unwrapped row.
   - Do: 6 chips and a "More" chip that opens the rest.
-- `rule/chip-touch-target`: When interactive chips sit in a row, keep at least 4px between them and between 2 rows of them, because under a coarse pointer each 20px pill keeps its drawn size and takes a 24px target from an invisible `::after` 2px past every edge, and closer pills overlap their targets. Evidence: measured 20px pill with a 24px `::after` target, `src/ui/ui.css:567`. Check: review `src/ui/ui.css`.
+- `rule/chip-touch-target`: When interactive chips sit in a row, keep at least 4px between them and between 2 rows of them, because under a coarse pointer each 20px pill keeps its drawn size and takes a 24px target from an invisible `::after` 2px past every edge, and closer pills overlap their targets. Evidence: measured 20px pill with a 24px `::after` target, `src/ui/ui.css:599`. Check: review `src/ui/ui.css`.
   - Don't: `.my-chips { display: flex; gap: 0 }`
   - Do: `.my-chips { display: flex; flex-wrap: wrap; gap: var(--gap-4) }`
 
@@ -162,7 +162,8 @@ Rests on the native element each form renders: a `<span>` for the static chip, a
 | Part | Role | Accessible name from | States and properties | Announced | Checked by |
 |---|---|---|---|---|---|
 | The static chip | none (a `<span>`) | Its text content | — | "26 objects" as text | test |
-| The interactive chip | `button` (native) | Its text content | `type="button"` | "line, button" | test |
+| The interactive chip | `button` (native) | Its text content | `type="button"`; `aria-describedby` pointing at the `title`'s words when they add to the text | "line, button" / "gpt-5.1, button, Use gpt-5.1" | test |
+| The hint | None: the box is `aria-hidden="true"` | — | It shows the `title` for the eye | Nothing | test |
 
 ## Tokens
 | Part | State | Token |
@@ -185,3 +186,4 @@ Rests on the native element each form renders: a `<span>` for the static chip, a
 - `SectionLabel`: when the text names a group rather than a value.
 - `Tab`: when the control brings one view of a strip to the front rather than stating a fact.
 - `Kbd`: when the text is the key that runs an action rather than a value or a keyword.
+- `Tooltip`: the hint box a chip's `title` and its clipped label show in; never wrap a chip in one.

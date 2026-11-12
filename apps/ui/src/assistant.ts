@@ -210,14 +210,25 @@ export function redact(text: string, provider: ProviderConfig): string {
   return out.replace(URL_CREDENTIALS_RE, "$1");
 }
 
-/** The note for a check the server answered: how many models it lists, and whether the typed one is there. */
-export function reachedNote(ids: readonly string[], model: string): ConnectionNote {
+/**
+ * The note for a check the server answered: how many models it lists, and whether the typed one is
+ * there. `total` is how many the provider listed in all, when that is more than the `ids` kept
+ * ([`MAX_LISTED_MODELS`]): the note then says "the first 200 of 1,340", and a typed name that is
+ * not among them is not said to be missing from the provider.
+ */
+export function reachedNote(ids: readonly string[], model: string, total: number = ids.length): ConnectionNote {
   if (ids.length === 0) return { state: "no-list", text: "Connected. The provider lists no models. Type the model's name." };
-  const count = ids.length === 1 ? "1 model" : `${ids.length} models`;
   const name = model.trim();
-  if (name === "") return { state: "reached", text: `Connected. ${count}.` };
-  if (ids.includes(name)) return { state: "reached", text: `Connected. ${count}, including ${name}.` };
-  return { state: "reached", text: `Connected. ${count}, but not ${name}. Pick one from the list, or keep the name you typed.` };
+  if (total > ids.length) {
+    const first = `The first ${count(ids.length)} of ${count(total)} models`;
+    if (name === "") return { state: "reached", text: `Connected. ${first}.` };
+    if (ids.includes(name)) return { state: "reached", text: `Connected. ${first}, including ${name}.` };
+    return { state: "reached", text: `Connected. ${first}; ${name} is not among them. Pick one from the list, or keep the name you typed.` };
+  }
+  const listed = ids.length === 1 ? "1 model" : `${ids.length} models`;
+  if (name === "") return { state: "reached", text: `Connected. ${listed}.` };
+  if (ids.includes(name)) return { state: "reached", text: `Connected. ${listed}, including ${name}.` };
+  return { state: "reached", text: `Connected. ${listed}, but not ${name}. Pick one from the list, or keep the name you typed.` };
 }
 
 /** The note for a check that threw: the error's own state and words, as a sentence. */
@@ -246,25 +257,37 @@ export function saveBlocker(provider: ProviderConfig, needsKey: boolean, listed:
   return `To save, shorten the model name to ${PROVIDER_LIMITS.model} characters or fewer.`;
 }
 
+/** What a provider's model list held: the names kept (at most [`MAX_LISTED_MODELS`]) and how many it listed in all. */
+export interface ModelListing {
+  ids: string[];
+  total: number;
+}
+
 /**
  * Ask the provider which models it serves: the setup's connection check. Resolves with the model
- * ids (possibly none: some servers answer the route with an empty list); rejects with a message
- * in the sheet's own words when the server cannot be reached, does not answer in `timeoutMs`,
- * refuses the key, or answers with something that is not a model list. Every message it rejects
- * with has passed [`redact`].
+ * ids (possibly none: some servers answer the route with an empty list) and how many the provider
+ * listed in all; rejects with a message in the sheet's own words when the server cannot be
+ * reached, does not answer in `timeoutMs`, refuses the key, or answers with something that is not
+ * a model list. Every message it rejects with has passed [`redact`].
  */
-export async function listModels(provider: ProviderConfig, signal: AbortSignal, fetchImpl: typeof fetch = fetch, timeoutMs: number = CHECK_TIMEOUT_MS): Promise<string[]> {
+export async function listProviderModels(provider: ProviderConfig, signal: AbortSignal, fetchImpl: typeof fetch = fetch, timeoutMs: number = CHECK_TIMEOUT_MS): Promise<ModelListing> {
   try {
-    const ids = await askModels(provider, signal, fetchImpl, timeoutMs);
+    const listing = await askModels(provider, signal, fetchImpl, timeoutMs);
     // A name that holds the key is not a name to show.
-    return ids.filter((id) => redact(id, provider) === id);
+    const ids = listing.ids.filter((id) => redact(id, provider) === id);
+    return { ids, total: Math.max(ids.length, listing.total - (listing.ids.length - ids.length)) };
   } catch (e) {
     if (signal.aborted) throw new Error("stopped");
     throw new ConnectionError(e instanceof ConnectionError ? e.state : "failed", redact(message(e), provider));
   }
 }
 
-async function askModels(provider: ProviderConfig, signal: AbortSignal, fetchImpl: typeof fetch, timeoutMs: number): Promise<string[]> {
+/** The names of [`listProviderModels`], without the count. */
+export async function listModels(provider: ProviderConfig, signal: AbortSignal, fetchImpl: typeof fetch = fetch, timeoutMs: number = CHECK_TIMEOUT_MS): Promise<string[]> {
+  return (await listProviderModels(provider, signal, fetchImpl, timeoutMs)).ids;
+}
+
+async function askModels(provider: ProviderConfig, signal: AbortSignal, fetchImpl: typeof fetch, timeoutMs: number): Promise<ModelListing> {
   const missing = providerReady({ ...provider, model: provider.model.trim() === "" ? "any" : provider.model });
   if (missing !== null) throw new ConnectionError("invalid", missing);
   const url = modelsEndpoint(provider.baseUrl);
@@ -299,22 +322,24 @@ async function askModels(provider: ProviderConfig, signal: AbortSignal, fetchImp
     const root = asRecord(body);
     const rows = Array.isArray(root["data"]) ? root["data"] : Array.isArray(root["models"]) ? root["models"] : Array.isArray(body) ? body : null;
     if (rows === null) throw new ConnectionError("no-list", NOT_A_MODEL_LIST);
-    return modelIds(rows);
+    const ids = modelIds(rows);
+    // A full list may be the first of many more: the whole list is counted once, for the note.
+    return { ids, total: ids.length < MAX_LISTED_MODELS ? ids.length : modelIds(rows, Number.POSITIVE_INFINITY).length };
   } finally {
     watch.done();
   }
 }
 
 /**
- * The model names in a provider's list: at most [`MAX_LISTED_MODELS`], each once. A row that is
+ * The model names in a provider's list: at most `limit` ([`MAX_LISTED_MODELS`]), each once. A row that is
  * not a name is skipped, and so is a name no model field could hold (longer than the limit, or
  * with a line break or another control character in it). Markup in a name is only text: the
  * sheet never renders HTML.
  */
-export function modelIds(rows: readonly unknown[]): string[] {
+export function modelIds(rows: readonly unknown[], limit: number = MAX_LISTED_MODELS): string[] {
   const ids = new Set<string>();
   for (const row of rows) {
-    if (ids.size >= MAX_LISTED_MODELS) break;
+    if (ids.size >= limit) break;
     const r = asRecord(row);
     const raw = typeof row === "string" ? row : typeof r["id"] === "string" ? r["id"] : typeof r["name"] === "string" ? r["name"] : "";
     const id = raw.trim();
@@ -442,6 +467,12 @@ function fmt(x: number): string {
 export const MAX_TOOL_RESULT_CHARS = 8_000;
 export const MAX_REQUEST_CHARS = 60_000;
 export const MAX_ROUNDS = 12;
+/**
+ * The longest message a person may send: half the request's budget, so one message can never
+ * crowd everything said before it out of what the model is sent. A longer draft is not sent and
+ * not cut: the panel says by how much it is over.
+ */
+export const MAX_MESSAGE_CHARS = MAX_REQUEST_CHARS / 2;
 
 /** The report as the text a model reads (`Report::of(...).text()`), from the `run` command's result. */
 export function reportText(result: unknown): string {
@@ -960,6 +991,85 @@ export function parseBlocks(text: string): ProseBlock[] {
   return blocks;
 }
 
+/** One block of a reply as the transcript draws it: a block of prose, or a fenced block of code. */
+export type ReplyBlock = ProseBlock | { kind: "code"; text: string };
+
+/** A whole reply as its blocks: `splitFences`, then `parseBlocks` over each run of prose. */
+export function replyBlocks(text: string): ReplyBlock[] {
+  return splitFences(text).flatMap((part): ReplyBlock[] => (part.kind === "code" ? [part] : parseBlocks(part.text)));
+}
+
+/** Whether two blocks say the same thing. */
+export function sameBlock(a: ReplyBlock, b: ReplyBlock): boolean {
+  if (a.kind === "list" || b.kind === "list") {
+    return a.kind === "list" && b.kind === "list" && a.ordered === b.ordered && a.items.length === b.items.length && a.items.every((item, i) => item === b.items[i]);
+  }
+  if (a.kind === "heading" || b.kind === "heading") return a.kind === "heading" && b.kind === "heading" && a.level === b.level && a.text === b.text;
+  return a.kind === b.kind && a.text === b.text;
+}
+
+/**
+ * A reply parsed as it grows. `settled` are the blocks no later text can change, `tail` the ones
+ * that still can; `settledChars` is how much of the text the settled blocks cover and `rest` the
+ * text after that. A block that did not change between two parses is the same object in both, so
+ * a list keyed by the object redraws only what changed.
+ */
+export interface ReplyParse {
+  settled: readonly ReplyBlock[];
+  tail: readonly ReplyBlock[];
+  settledChars: number;
+  rest: string;
+}
+
+/**
+ * How far into `text` (which starts outside any fence) its blocks are final, whatever is written
+ * after it: to the end of the last closed fence, to the opening of a fence that is still open, or
+ * to the last blank line of the prose after them (a blank line ends a paragraph and a list).
+ */
+function settledLength(text: string): number {
+  let at = 0;
+  for (;;) {
+    const open = text.indexOf("```", at);
+    if (open === -1) break;
+    const from = open + 3;
+    const nl = text.indexOf("\n", from);
+    const lang = (nl === -1 ? text.slice(from) : text.slice(from, nl)).trim();
+    const bodyStart = nl !== -1 && /^[\w+#-]*$/.test(lang) ? nl + 1 : from;
+    const close = text.indexOf("```", bodyStart);
+    // The prose before a fence is over once the fence opens.
+    if (close === -1) return open;
+    at = close + 3;
+  }
+  const blank = text.lastIndexOf("\n\n");
+  return blank >= at ? blank + 2 : at;
+}
+
+/**
+ * Parse a reply that grew since `prev` was parsed from its beginning: only the text after the
+ * settled part is read again, so the work follows the size of the last block, not of the reply.
+ * The blocks are those of [`replyBlocks`] over the whole text. A text that is not `prev`'s with
+ * more after it (another reply, an edited one) is parsed from its start.
+ */
+export function growReply(prev: ReplyParse | undefined, text: string): ReplyParse {
+  const grown = prev !== undefined && text.length >= prev.settledChars + prev.rest.length && text.startsWith(prev.rest, prev.settledChars);
+  const base: ReplyParse = grown ? prev : { settled: [], tail: [], settledChars: 0, rest: "" };
+  const unsettled = text.slice(base.settledChars);
+  if (unsettled === base.rest) return base;
+  const cut = settledLength(unsettled);
+  const rest = unsettled.slice(cut);
+  const tail = replyBlocks(rest).map((block, i) => {
+    // Nothing settled this time: a tail block that reads as before is the block it was.
+    const before = cut === 0 ? base.tail[i] : undefined;
+    return before !== undefined && sameBlock(before, block) ? before : block;
+  });
+  return {
+    settled: cut === 0 ? base.settled : [...base.settled, ...replyBlocks(unsettled.slice(0, cut))],
+    tail,
+    settledChars: base.settledChars + cut,
+    rest,
+  };
+}
+
 /** The assistant panel's width, in CSS pixels: where it starts and how far a drag may take it. */
 export const PANEL_WIDTH = { min: 280, initial: 340, max: 720 } as const;
 /** What the drawing keeps beside the panel, however far the panel is dragged. */
@@ -983,6 +1093,27 @@ export const FOLLOW_SLACK = 24;
 /** Whether a scroller is at its end, so new content should keep it there. */
 export function atEnd(scrollHeight: number, scrollTop: number, clientHeight: number): boolean {
   return scrollHeight - scrollTop - clientHeight <= FOLLOW_SLACK;
+}
+
+/**
+ * Whether the transcript keeps to its end after a scroll event. Only the person moves it up, so a
+ * move up stops the following (unless it is the scroller settling at its very end, as when the
+ * content got shorter); a move down, or none, resumes it at the end and otherwise leaves it as it
+ * was. Content that grew under a transcript that follows moves nothing up, so a reply that
+ * arrives faster than the view is brought to its end never stops the following by itself.
+ */
+export function followAfterScroll(following: boolean, lastTop: number, scrollTop: number, scrollHeight: number, clientHeight: number): boolean {
+  if (scrollTop < lastTop) return scrollHeight - scrollTop - clientHeight <= 1;
+  return following || atEnd(scrollHeight, scrollTop, clientHeight);
+}
+
+/**
+ * Whether the focus is the panel's to move: it is inside the panel, or nowhere (on the page's
+ * body, where it lands when what held it went away). A focus anywhere else was put there by the
+ * person, and closing the setup sheet leaves it alone.
+ */
+export function focusIsOurs(panel: { contains: (node: Node | null) => boolean }, active: Element | null, body: Element | null): boolean {
+  return active === null || active === body || panel.contains(active);
 }
 
 export function parseInline(text: string): InlinePart[] {

@@ -171,6 +171,8 @@ Contrast, measured by `node scripts/contrast-report.mjs` (run from the app folde
 
 On the drawing (`--canvas`, one dark surface in both themes): `--selection` 6.2 ✓; `--canvas-focus-ring` 6.2 ✓.
 
+On the hint (`--tooltip-bg`): `--text` 16.2 ✓; `--text-dim` 9.2 ✓; `--text-faint` 6.4 ✓.
+
 Every ink pair is at or above its threshold.
 
 ### light
@@ -209,6 +211,8 @@ Every ink pair is at or above its threshold.
 `--focus-ring` against `--fill-active` over each surface: `--chrome` 4.8 ✓; `--chrome-dark` 4.6 ✓; `--panel` 4.9 ✓; `--tab-active` 4.9 ✓; `--control` 4.1 ✓; `--control-hover` 3.8 ✓; `--surface-elevated` 4.9 ✓; `--surface-inset` 4.6 ✓; `--list-bg` 5.0 ✓; `--cmd-bg` 4.3 ✓.
 
 On the drawing (`--canvas`, one dark surface in both themes): `--selection` 3.8 ✓; `--canvas-focus-ring` 6.2 ✓.
+
+On the hint (`--tooltip-bg`): `--text` 17.3 ✓; `--text-dim` 7.7 ✓; `--text-faint` 5.8 ✓.
 
 Every ink pair is at or above its threshold.
 

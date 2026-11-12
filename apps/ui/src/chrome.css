@@ -284,33 +284,33 @@
 }
 
 .toolstrip::-webkit-scrollbar,
-.editor-tabs::-webkit-scrollbar,
-.status-toggles::-webkit-scrollbar {
+.editor-tabs::-webkit-scrollbar {
   display: none;
 }
 
-/* The three bands that scroll sideways with no scrollbar say so at the edge that hides something:
-   the band fades out over one key's width there, and only there. `scrollBand` (ToolStrip.tsx)
-   marks the clipped edges as the band scrolls or the window resizes, and turns the mouse's wheel
-   along the band. A finger pans it sideways and nothing else, so a double tap does not zoom. */
+/* The two bands that scroll sideways with no scrollbar (this one and the editor tabs) say so at
+   the edge that hides something: the band fades out over one key's width there, and only there.
+   `scrollBand` (ToolStrip.tsx) marks the clipped edges as the band scrolls or the window resizes,
+   and turns the mouse's wheel along the band. A finger pans it sideways and nothing else, so a
+   double tap does not zoom. The fade's width is kept clear when the band scrolls a key or a tab
+   into view (the keyboard's focus moving along it): the key stops past the fade, its focus ring
+   whole. A divider can only meet an edge inside a fade, where it is not drawn alone. */
 .toolstrip,
-.editor-tabs,
-.status-toggles {
+.editor-tabs {
   --fade-start: 0;
   --fade-end: 0;
   mask-image: linear-gradient(to right, transparent, var(--text) var(--fade-start), var(--text) calc(100% - var(--fade-end)), transparent);
+  scroll-padding-inline: var(--control-h-input);
   touch-action: pan-x;
 }
 
 .toolstrip[data-clip-start],
-.editor-tabs[data-clip-start],
-.status-toggles[data-clip-start] {
+.editor-tabs[data-clip-start] {
   --fade-start: var(--control-h-input);
 }
 
 .toolstrip[data-clip-end],
-.editor-tabs[data-clip-end],
-.status-toggles[data-clip-end] {
+.editor-tabs[data-clip-end] {
   --fade-end: var(--control-h-input);
 }
 
@@ -360,47 +360,133 @@
 
 /* ---- The status bar ---- */
 
-/* One 22px line that never wraps. When the window narrows, what can only be read gives way before
-   what can be pressed: the counts and all but the start of a long layer name (900px), then the
-   coordinates (780px, where they would start to clip the toggles), then the engine's name (560px;
-   the layer's stays, the sidebar is gone there and the bar is the one place that names it). From
-   there down the toggles' run wraps onto a second line (see the end of this file); above it, a
-   run that still does not fit scrolls inside itself, fading at the edge that hides some. */
+/* The bar gives up room by need, not at window widths: nothing here asks how wide the window is.
+   Whatever the drawing puts in it (a long layer name, millions of objects, a selection of
+   thousands), each item is either whole or gone, and what can be pressed outlasts what can only
+   be read. The order in which the items give way as the bar gets too short for all of them:
+
+     1. the current layer's name narrows, with an ellipsis, down to its first letters
+     2. the layer count goes
+     3. the object count goes
+     4. the engine's badge goes
+     5. the coordinates go, with their rule
+     6. the selection count goes
+     7. the eleven drafting toggles wrap onto a second line (and a third), and the bar grows by it
+
+   The layer's name at its floor never goes: with the sidebar closed the bar is the one place that
+   names it. The toggles are never clipped and never scroll.
+
+   How: the bar is one flex row and the order is its items' `flex-shrink`, each step a million
+   times the one after it, so a step takes the whole shortfall before the next gives a pixel.
+   A container query on the bar's width was the other way to do it and was not taken: a width at
+   which to hide the counts is a guess at how long the counts are, and the guess is what clipped
+   the toggles in a drawing with long ones. An item that has been narrowed at all is gone, not
+   cut: it stands in a one-line box that wraps (`.status-fit`), so the moment the box is shorter
+   than the item, the item is on the box's second line, which the box does not show. The item is
+   still in the document there, so a screen reader reads the whole bar at any width. */
 .statusbar {
-  /* One line's height: the row's, the button's under a finger. */
+  /* One line's height: the row's, the button's under a finger. The items' own line is that less
+     the bar's top hairline. */
   --status-h: var(--control-h-row);
+  --status-line: calc(var(--status-h) - var(--hairline));
   display: flex;
   align-items: center;
-  gap: var(--gap-12);
-  height: var(--status-h);
+  min-height: var(--status-h);
   padding: 0 var(--gap-8);
   background: var(--chrome-dark);
   border-top: var(--hairline) solid var(--border);
-  overflow: hidden;
+  overflow: clip;
 }
 
-/* The left of the bar: what the window is working on, as one quiet run of small items. The run
-   has no box of its own: its items stand in the bar's own row (the bar's gap is the run's), so
-   the layer's name can give its width back to the toggles. */
-.status-left {
-  display: contents;
+/* The one-line box of an item that is whole or gone. Its first line starts with an empty cell, so
+   the item can leave it (a line keeps its first cell however long), and its natural width ends
+   with a hairline of slack, so a rounding of the bar's widths cannot send the item away while it
+   has room. It is clipped, not scrollable: nothing can scroll the second line into view. */
+.status-fit {
+  flex: 0 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  height: var(--status-line);
+  min-width: 0;
+  overflow: clip;
 }
 
-.status-item {
+/* The empty cell is the line's height: it is what makes the first line a whole line when the item
+   has left it. */
+.status-fit::before {
+  content: "";
+  height: var(--status-line);
+}
+
+.status-fit::after {
+  content: "";
+  flex: 0 0 var(--hairline);
+}
+
+.status-fit > * {
   flex: 0 0 auto;
+  height: var(--status-line);
+  line-height: var(--status-line);
+}
+
+/* The order (see the top of this section): the larger number gives way first. */
+.status-layer {
+  flex-shrink: 1e36;
+}
+
+.status-fit-layers {
+  flex-shrink: 1e30;
+}
+
+.status-fit-objects {
+  flex-shrink: 1e24;
+}
+
+.status-fit-mode {
+  flex-shrink: 1e18;
+}
+
+.status-fit-coord {
+  flex-shrink: 1e12;
+}
+
+.status-fit-selection {
+  flex-shrink: 1e6;
+}
+
+/* What the window is working on: a quiet run of small items at the start of the bar. An item's
+   gap is its own margin, so an item that is gone leaves no gap behind. */
+.status-item {
+  margin-inline-end: var(--gap-12);
   color: var(--text-faint);
   font-size: var(--font-small);
   white-space: nowrap;
 }
 
+/* The words that say what a value is ("Current layer:", "Pointer position:") to a screen reader.
+   A sighted reader has the value's place in the bar and its tooltip, so they are not drawn and
+   take no room. */
+.status-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* A long layer name clips with an ellipsis; its full text is its tooltip and in the layer list.
-   It is the first thing in the bar to give way: when the bar is short it narrows to its first
-   letters (`--layer-floor`, StatusBar.tsx: six characters, or the name's own length when it has
-   fewer) before the toggles' run loses a single word. */
+   It is the first thing in the bar to give way: it narrows to its first letters (`--layer-floor`,
+   StatusBar.tsx: six characters, or the name's own length when it has fewer) before anything
+   else in the bar is touched, and stays at that. */
 .status-layer {
-  flex: 0 1000 auto;
+  flex-grow: 0;
+  flex-basis: auto;
   min-width: calc(var(--layer-floor, 6) * 1ch);
   max-width: 24ch;
+  height: var(--status-line);
+  line-height: var(--status-line);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -423,38 +509,27 @@
   background: var(--toggle-on);
 }
 
-/* The right run is the bar's full height, so a toggle in it is too: the target is the bar, not
-   the word's line box. */
-.status-right {
-  flex: 1 1 auto;
-  align-self: stretch;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--gap-8);
-  min-width: 0;
-}
-
-/* The toggles' run: it keeps its words whole and scrolls sideways when the bar is too short. */
+/* The toggles' run stands at the end of the bar's room (the auto margin is the bar's slack) and
+   keeps every word whole. It is the last thing to give way, and it gives way by wrapping: a
+   toggle that has to be swiped to is a toggle not found, so the run takes a second line and the
+   bar grows by it. Every toggle is on screen, each line one line's height. */
 .status-toggles {
   flex: 0 1 auto;
-  align-self: stretch;
   display: flex;
-  align-items: stretch;
-  gap: var(--gap-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0 var(--gap-2);
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
+  margin-inline-start: auto;
 }
 
 /* Micro toggles: a word the height of the bar, quiet when off; on, the full ink over a rule in
    the on-green under the word. No pills, no borders, no fills: on and off differ in lightness as
-   well as in hue. */
+   well as in hue. The target is the bar's whole line, not the word's line box. */
 .status-toggle {
   position: relative;
   flex: 0 0 auto;
+  height: var(--status-line);
   padding: 0 var(--gap-4);
   border: none;
   border-radius: 0;
@@ -466,15 +541,19 @@
   text-transform: uppercase;
   white-space: nowrap;
   cursor: pointer;
+  /* A tap is a tap: no double-tap zoom on a control (and none of its wait). */
+  touch-action: manipulation;
 }
 
-/* Under a finger the bar is the button's height and each word has more room around it. */
+/* Under a finger the bar is the button's height, each word has more room around it and the
+   shortest words ("LW", "QP") are still a target 24 wide. The run's gap keeps two targets apart. */
 @media (pointer: coarse) {
   .statusbar {
     --status-h: var(--control-h-button);
   }
 
   .status-toggle {
+    min-width: var(--control-h-input);
     padding: 0 var(--gap-8);
   }
 }
@@ -504,26 +583,27 @@
   background: var(--toggle-on);
 }
 
-/* The taller bar under a finger: the rule keeps its distance from the word. */
+/* The taller bar under a finger: the rule keeps its distance from the word, and its width. */
 @media (pointer: coarse) {
   .status-toggle.is-on::after {
+    left: var(--gap-8);
+    right: var(--gap-8);
     bottom: var(--gap-6);
   }
 }
 
-.status-sep {
-  flex: 0 0 auto;
-  width: var(--hairline);
-  height: var(--icon-size-sm);
-  background: var(--border);
-}
-
-/* The readout holds its right edge and room for three four-digit ordinates with a sign
-   ("-1234.5678, -1234.5678, 0.0000" is 30 characters), so the digits change in place and the
-   toggles beside it never shift. */
+/* The readout is a box of a fixed width in tabular figures, so the digits change in place and
+   nothing beside it moves while the pointer does. The width is in characters and is the widest
+   text the readout has held (`--coord-ch`, StatusBar.tsx; thirty to start with, which is three
+   four-digit ordinates with a sign, "-1234.5678, -1234.5678, 0.0000"): a drawing far from the
+   origin widens the box once, the first time, not at every digit. The rule before it is its own,
+   so the two go together. */
 .status-coord {
-  flex: 0 0 auto;
-  min-width: 30ch;
+  position: relative;
+  box-sizing: content-box;
+  min-width: calc(var(--coord-ch, 30) * 1ch);
+  margin-inline-start: var(--gap-8);
+  padding-inline-start: var(--gap-8);
   text-align: right;
   font-family: var(--font-family-mono);
   font-size: var(--font-mono);
@@ -532,54 +612,20 @@
   white-space: nowrap;
 }
 
+.status-coord::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: calc((100% - var(--icon-size-sm)) / 2);
+  width: var(--hairline);
+  height: var(--icon-size-sm);
+  background: var(--border);
+}
+
 .status-selection {
-  flex: 0 0 auto;
+  margin-inline-start: var(--gap-8);
   color: var(--text-faint);
   font-size: var(--font-small);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-@media (max-width: 900px) {
-  .status-count {
-    display: none;
-  }
-
-  .status-layer {
-    max-width: 12ch;
-  }
-}
-
-@media (max-width: 780px) {
-  .status-sep,
-  .status-coord {
-    display: none;
-  }
-}
-
-/* A phone's width cannot hold the eleven toggles on one line, and a toggle that has to be swiped
-   to is a toggle not found: the run wraps onto a second line and the bar grows by that line. Every
-   toggle is on screen, each line still one line's height. */
-@media (max-width: 560px) {
-  .status-mode {
-    display: none;
-  }
-
-  .statusbar {
-    height: auto;
-    min-height: var(--status-h);
-  }
-
-  /* The toggles wrap here, so the layer's name has nothing to give way to. */
-  .status-layer {
-    flex-shrink: 0;
-  }
-
-  .status-toggles {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-
-  .status-toggle {
-    height: var(--status-h);
-  }
 }

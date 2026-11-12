@@ -23,9 +23,9 @@
  * shape).
  */
 
-import { createEffect, createMemo, createSignal, For, Index, Match, on, onCleanup, onMount, Show, Switch, type JSX } from "solid-js";
-import { activityLine, atEnd, clampPanelWidth, failedNote, MAX_REQUEST_CHARS, PANEL_WIDTH, listModels, parseBlocks, parseInline, presetFor, PROVIDER_PRESETS, providerReady, reachedNote, relativeTime, saveBlocker, splitFences, type ChatImage, type ConnectionNote, type ProseBlock, type ProviderConfig, type ReplyPart } from "../assistant";
-import type { AssistantSession } from "../assistant-session";
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack, type JSX } from "solid-js";
+import { activityLine, clampPanelWidth, failedNote, focusIsOurs, followAfterScroll, growReply, listProviderModels, MAX_MESSAGE_CHARS, MAX_REQUEST_CHARS, PANEL_WIDTH, parseInline, presetFor, PROVIDER_PRESETS, providerReady, reachedNote, relativeTime, saveBlocker, type ChatImage, type ConnectionNote, type ProviderConfig, type ReplyBlock, type ReplyParse } from "../assistant";
+import { turnStart, type AssistantSession } from "../assistant-session";
 import { highlight, rankCommands, slashQuery, SLASH_LIMIT, type PaletteItem } from "../palette";
 import { ToolIcon } from "../icons";
 import { Button } from "../ui/Button";
@@ -89,18 +89,12 @@ function grow(el: HTMLTextAreaElement): void {
   el.style.height = `${Math.min(Math.max(el.scrollHeight, 64), 240)}px`;
 }
 
-const headingLevel = (b: ProseBlock): number => (b.kind === "heading" ? b.level : 0);
-const textOf = (b: ProseBlock): string => (b.kind === "list" ? "" : b.text);
-const itemsOf = (b: ProseBlock): readonly string[] => (b.kind === "list" ? b.items : []);
-const orderedList = (b: ProseBlock): boolean => b.kind === "list" && b.ordered;
-
-/** Whether two parsed blocks say the same thing (a reply is parsed again on every fragment). */
-function sameBlock(a: ProseBlock, b: ProseBlock): boolean {
-  if (a.kind === "list" || b.kind === "list") {
-    return a.kind === "list" && b.kind === "list" && a.ordered === b.ordered && a.items.length === b.items.length && a.items.every((item, i) => item === b.items[i]);
-  }
-  return a.kind === b.kind && headingLevel(a) === headingLevel(b) && a.text === b.text;
-}
+/**
+ * How many of a chat's newest rows the transcript draws when it opens, and how many more each
+ * "Show earlier" adds. Opening the panel and changing chats draw the transcript anew, so what
+ * they cost follows this number and not the length of the chat.
+ */
+const TRANSCRIPT_WINDOW = 120;
 
 /** A message in the provider's or the engine's words, shown as a sentence: its first letter capital. */
 const sentence = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
@@ -156,39 +150,77 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   const [following, setFollowing] = createSignal(true);
   /** The transcript's ages move: the clock is re-read twice a minute. */
   const [now, setNow] = createSignal(Date.now());
+  let panelEl: HTMLElement | undefined;
   let body: HTMLDivElement | undefined;
+  let transcriptEl: HTMLDivElement | undefined;
   let inputEl: HTMLTextAreaElement | undefined;
   let fileInput: HTMLInputElement | undefined;
-  /** The pending move to the transcript's end, or 0. */
-  let followFrame = 0;
+  /** Where the transcript stood when it last moved: a scroll to above it is the reader's. */
+  let lastTop = 0;
 
   const tick = setInterval(() => setNow(Date.now()), 30_000);
   onCleanup(() => clearInterval(tick));
 
-  // The transcript follows the conversation as it grows, while the reader is at its end.
-  createEffect(() => {
-    void s.entries.length;
-    const last = s.entries[s.entries.length - 1];
-    if (last !== undefined && last.kind !== "tool") void last.text;
-    if (!following() || body === undefined || followFrame !== 0) return;
-    const el = body;
-    // Once a frame, however many fragments arrived in it: each move measures the whole transcript.
-    followFrame = requestAnimationFrame(() => {
-      followFrame = 0;
-      el.scrollTop = el.scrollHeight;
+  /** Bring the transcript to its end. */
+  const toEnd = (): void => {
+    if (body === undefined) return;
+    body.scrollTop = body.scrollHeight;
+    lastTop = body.scrollTop;
+  };
+
+  // The transcript follows the conversation as it grows, while the reader is at its end. Whatever
+  // changes its height (a reply's next words, a row that opens, the panel's width, the stack over
+  // the composer taking room from it) is seen by the observer after the frame's layout and before
+  // its paint: the move costs no layout of its own, and the reader never sees a frame out of place.
+  onMount(() => {
+    if (body === undefined || transcriptEl === undefined) return;
+    const watcher = new ResizeObserver(() => {
+      if (following()) toEnd();
     });
+    watcher.observe(body);
+    watcher.observe(transcriptEl);
+    onCleanup(() => watcher.disconnect());
   });
-  onCleanup(() => cancelAnimationFrame(followFrame));
+
+  /** The first row the transcript draws: the rows before it wait behind "Show earlier". */
+  const [start, setStart] = createSignal(turnStart(s.entries, s.entries.length - TRANSCRIPT_WINDOW));
+  const from = createMemo(() => Math.min(start(), s.entries.length));
+  const shown = createMemo(() => s.entries.slice(from()));
+  createEffect(() => {
+    const count = s.entries.length;
+    const at = untrack(start);
+    // A new chat starts at its first row. A long sitting at the transcript's end lets the rows
+    // far above fall back behind "Show earlier", so the page does not grow with the chat.
+    if (count <= at) setStart(0);
+    else if (untrack(following) && count - at > 3 * TRANSCRIPT_WINDOW) setStart(turnStart(s.entries, count - TRANSCRIPT_WINDOW));
+  });
+  // Rows the chat let go were its first: the window keeps the rows it showed.
+  createEffect(on(s.dropped, (now, before) => setStart(Math.max(0, start() - Math.max(0, now - (before ?? now)))), { defer: true }));
+  const showEarlier = (): void => {
+    const to = Math.max(0, from() - TRANSCRIPT_WINDOW);
+    const turn = turnStart(s.entries, to);
+    // The rows come in above the reader's place: what was in view stays where it was.
+    const below = body === undefined ? 0 : body.scrollHeight - body.scrollTop;
+    setStart(turn < from() ? turn : to);
+    if (body !== undefined) body.scrollTop = body.scrollHeight - below;
+    // The key leaves with the last hidden row; the focus it held goes to the first row's own key.
+    queueMicrotask(() => {
+      if (document.activeElement === document.body) (transcriptEl?.querySelector<HTMLElement>("button") ?? inputEl)?.focus({ preventScroll: true });
+    });
+  };
 
   // A new selection is context again, even if the last one was left out. The shell hands a fresh
   // array after every command, so what is selected is compared, not the array.
   const selectionKey = createMemo(() => props.selection().join(","));
   createEffect(on(selectionKey, () => s.setSelectionIncluded(true), { defer: true }));
-  /** How full the context is, in thousands of characters; nothing until it rounds to a figure. */
+  /** How much the next request carries, in thousands of characters; nothing until it rounds to a figure. */
+  const used = createMemo(() => s.used());
   const meter = (): string => {
-    const thousands = Math.round(s.used() / 100) / 10;
+    const thousands = Math.round(used() / 100) / 10;
     return thousands === 0 ? "" : `${thousands}k / ${Math.round(MAX_REQUEST_CHARS / 1000)}k`;
   };
+  /** How far the draft is over what one message may hold, or 0: it is said, and nothing is cut. */
+  const over = createMemo(() => s.overBy());
   const selectionShown = (): boolean => props.selection().length > 0 && s.selectionIncluded();
 
   onMount(() => {
@@ -243,10 +275,12 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
       openSetup();
       return;
     }
-    if (outcome === "empty") return;
+    // A draft that is too long stays as it is: the line over the composer says by how much.
+    if (outcome === "empty" || outcome === "too-long") return;
     if (inputEl !== undefined) inputEl.style.height = "";
     // The reader's own message always comes into view.
     setFollowing(true);
+    toEnd();
   };
 
   /** Copy a message or a tool's code (the turn-actions affordance). */
@@ -310,6 +344,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
 
   /** The setup sheet: what the connection check found, and the models the server listed. */
   const [models, setModels] = createSignal<readonly string[]>([]);
+  /** How many models the provider listed in all; `models` keeps the first of them. */
+  const [modelTotal, setModelTotal] = createSignal(0);
   const [checkNote, setCheckNote] = createSignal<ConnectionNote | null>(null);
   const [checking, setChecking] = createSignal(false);
   /** The provider row the reader chose, or the one the base URL belongs to; none before either. */
@@ -367,12 +403,15 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   };
 
   const closeSetup = (): void => {
+    // Escape pressed elsewhere in the window closes the sheet too: the focus stays where it is.
+    const ours = panelEl === undefined || focusIsOurs(panelEl, document.activeElement, document.body);
     checkAbort?.abort();
     setChecking(false);
     setKeyVisible(false);
     setMenuOpen(false);
     const back = opener;
     opener = null;
+    if (!ours) return;
     // The opener may be gone (the empty state's key leaves once a model is saved).
     queueMicrotask(() => (back !== null && back.isConnected ? back : inputEl)?.focus());
   };
@@ -406,7 +445,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   /** The model's name changed: the check's line keeps its count and drops what it said about the old name. */
   const setModel = (value: string): void => {
     setDraft({ ...draft(), model: value });
-    if (checkNote()?.state === "reached") setCheckNote(reachedNote(models(), ""));
+    if (checkNote()?.state === "reached") setCheckNote(reachedNote(models(), "", modelTotal()));
   };
 
   /** The provider list is one list to the arrow keys, as well as a run of Tab stops. */
@@ -430,10 +469,11 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     checkAbort = mine;
     setChecking(true);
     try {
-      const ids = await listModels(draft(), mine.signal);
+      const listing = await listProviderModels(draft(), mine.signal);
       if (mine.signal.aborted) return;
-      setModels(ids);
-      setCheckNote(reachedNote(ids, draft().model));
+      setModels(listing.ids);
+      setModelTotal(listing.total);
+      setCheckNote(reachedNote(listing.ids, draft().model, listing.total));
       // The list the check found is what the reader does next: it comes into view.
       queueMicrotask(() => modelsEl?.scrollIntoView({ block: "nearest" }));
     } catch (e) {
@@ -458,60 +498,46 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     </For>
   );
 
-  /**
-   * A reply's prose as its blocks: headings, lists and paragraphs, each with its inline runs. A
-   * reply grows by one fragment at a time and is parsed again each time, so a block is compared by
-   * what it says, not by its object: only the block that changed (the last one) is drawn again. A
-   * long reply drawn whole on every fragment held the page for seconds.
-   */
-  const Prose = (p: { text: string }): JSX.Element => (
-    <Index each={parseBlocks(p.text)}>
-      {(parsed) => {
-        const block = createMemo(parsed, undefined, { equals: sameBlock });
-        return (
-        <Switch>
-          <Match when={block().kind === "heading"}>
-            <h3 class={headingLevel(block()) <= 2 ? "assistant-heading" : "assistant-heading assistant-heading--minor"}>{richText(textOf(block()))}</h3>
-          </Match>
-          <Match when={block().kind === "list" && orderedList(block())}>
-            <ol class="assistant-list">
-              <For each={itemsOf(block())}>{(item) => <li>{richText(item)}</li>}</For>
-            </ol>
-          </Match>
-          <Match when={block().kind === "list"}>
-            <ul class="assistant-list">
-              <For each={itemsOf(block())}>{(item) => <li>{richText(item)}</li>}</For>
-            </ul>
-          </Match>
-          <Match when={block().kind === "para"}>
-            <div class="assistant-text">{richText(textOf(block()))}</div>
-          </Match>
-        </Switch>
-        );
-      }}
-    </Index>
-  );
-
-  /** One part of a reply, prose or fenced code. Its kind and its text are compared as values, so
-   *  the parts before the one being written stay as they are while the reply grows. */
-  const ReplyPartView = (p: { part: ReplyPart }): JSX.Element => {
-    const isCode = createMemo(() => p.part.kind === "code");
-    const text = createMemo(() => p.part.text);
-    return (
-      <Show when={isCode()} fallback={<Prose text={text()} />}>
+  /** One block of a reply: a heading, a list or a paragraph with its inline runs, or fenced code.
+   *  A block never changes once drawn; a block that reads differently is another block. */
+  const blockView = (block: ReplyBlock): JSX.Element => {
+    if (block.kind === "code") {
+      return (
         <div class="assistant-code-wrap">
-          <pre class="assistant-code">{text()}</pre>
+          <pre class="assistant-code">{block.text}</pre>
           <span class="assistant-code-copy">
-            <IconButton icon="copy" size="sm" title="Copy the code" onClick={() => copyText(text())} />
+            <IconButton icon="copy" size="sm" title="Copy the code" onClick={() => copyText(block.text)} />
           </span>
         </div>
-      </Show>
+      );
+    }
+    if (block.kind === "heading") return <h3 class={block.level <= 2 ? "assistant-heading" : "assistant-heading assistant-heading--minor"}>{richText(block.text)}</h3>;
+    if (block.kind === "para") return <div class="assistant-text">{richText(block.text)}</div>;
+    const items = <For each={block.items}>{(item) => <li>{richText(item)}</li>}</For>;
+    return block.ordered ? <ol class="assistant-list">{items}</ol> : <ul class="assistant-list">{items}</ul>;
+  };
+
+  /**
+   * A reply as its blocks. It grows a few fragments a frame, and each time only the text after
+   * its last settled block is parsed again (`growReply`); the blocks are keyed by their objects,
+   * so the settled ones stay as drawn and the one being written is the only one drawn again. What
+   * a frame costs follows the size of that block, not the length of the reply (a reply parsed and
+   * drawn whole on every fragment held the page for seconds).
+   */
+  const Reply = (p: { text: string }): JSX.Element => {
+    const parsed = createMemo<ReplyParse>((prev) => growReply(prev, p.text));
+    return (
+      <>
+        <For each={parsed().settled}>{blockView}</For>
+        <For each={parsed().tail}>{blockView}</For>
+      </>
     );
   };
 
   return (
     <aside
       class="assistant-panel"
+      ref={panelEl}
       role="complementary"
       aria-label="Assistant"
       style={{ "--assistant-width": `${width()}px` }}
@@ -571,8 +597,24 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         class="assistant-body"
         ref={body}
         inert={menuOpen()}
-        onScroll={(e) => setFollowing(atEnd(e.currentTarget.scrollHeight, e.currentTarget.scrollTop, e.currentTarget.clientHeight))}
+        onScroll={(e) => {
+          const top = e.currentTarget.scrollTop;
+          setFollowing(followAfterScroll(following(), lastTop, top, e.currentTarget.scrollHeight, e.currentTarget.clientHeight));
+          lastTop = top;
+        }}
       >
+        <div class="assistant-transcript" ref={transcriptEl}>
+        <Show when={from() > 0}>
+          <div class="assistant-earlier">
+            <Button variant="ghost" size="sm" onClick={showEarlier}>
+              Show earlier
+            </Button>
+            <span class="assistant-earlier-count">{`${from().toLocaleString()} more above`}</span>
+          </div>
+        </Show>
+        <Show when={from() === 0 && s.dropped() > 0}>
+          <p class="assistant-earlier-note">{`This chat is long: its oldest ${s.dropped().toLocaleString()} messages and steps are no longer kept.`}</p>
+        </Show>
         <Show when={s.entries.length === 0}>
           <div class="assistant-empty">
             <p>The assistant works in the open drawing: it draws, measures and changes it, and reports the numbers.</p>
@@ -605,8 +647,11 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             </For>
           </div>
         </Show>
-        <For each={s.entries}>
-          {(entry, index) => (
+        <For each={shown()}>
+          {(entry, shownIndex) => {
+            /** The row's place in the chat (the transcript may start after the chat's first rows). */
+            const index = (): number => from() + shownIndex();
+            return (
             <Switch>
               <Match when={entry.kind === "user"}>
                 <div class="assistant-prompt">
@@ -615,9 +660,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 </div>
               </Match>
               <Match when={entry.kind === "assistant"}>
-                <Index each={splitFences(entry.kind === "assistant" ? entry.text : "")}>
-                  {(part) => <ReplyPartView part={part()} />}
-                </Index>
+                <Reply text={entry.kind === "assistant" ? entry.text : ""} />
                 <div class="assistant-turn-actions">
                   <IconButton icon="copy" size="sm" title="Copy the reply" onClick={() => copyText(entry.kind === "assistant" ? entry.text : "")} />
                   <time class="assistant-time">{relativeTime(entry.kind === "assistant" ? entry.at : now(), now())}</time>
@@ -659,12 +702,22 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 </Show>
               </Match>
             </Switch>
-          )}
+            );
+          }}
         </For>
+        </div>
         <Show when={!following()}>
           <div class="assistant-jump">
             <span class="assistant-jump-key">
-              <IconButton icon="chevron-down" variant="soft" title="Jump to the latest" onClick={() => setFollowing(true)} />
+              <IconButton
+                icon="chevron-down"
+                variant="soft"
+                title="Jump to the latest"
+                onClick={() => {
+                  setFollowing(true);
+                  toEnd();
+                }}
+              />
             </span>
           </div>
         </Show>
@@ -756,7 +809,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                     </For>
                   </div>
                   <Show when={models().length > MODEL_CHIPS}>
-                    <span class="assistant-field-hint">{`And ${models().length - MODEL_CHIPS} more. Type the name of one that is not shown.`}</span>
+                    <span class="assistant-field-hint">{`And ${(Math.max(modelTotal(), models().length) - MODEL_CHIPS).toLocaleString()} more. Type the name of one that is not shown.`}</span>
                   </Show>
                 </Show>
               </div>
@@ -789,7 +842,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
       </div>
 
       <div class="assistant-composer">
-        <Show when={s.running() || s.status() !== "" || s.queued.length > 0 || s.changes() !== null}>
+        <Show when={s.running() || s.status() !== "" || s.queued.length > 0 || s.changes() !== null || over() > 0}>
           <div class="assistant-stack">
             <Show when={s.queued.length > 0}>
               <div class={queueOpen() ? "assistant-stack-head" : "assistant-stack-head is-folded"}>
@@ -848,6 +901,13 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                   </Button>
                   <Kbd>esc</Kbd>
                 </Show>
+              </div>
+            </Show>
+            <Show when={over() > 0}>
+              <div class="assistant-stack-row assistant-stack-row--over" id="assistant-over">
+                <span class="assistant-stack-text" title={`One message holds ${MAX_MESSAGE_CHARS.toLocaleString()} characters. Nothing is cut: shorten it to send it.`}>
+                  {`${over().toLocaleString()} ${over() === 1 ? "character" : "characters"} too long to send`}
+                </span>
               </div>
             </Show>
           </div>
@@ -909,6 +969,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             onKeyDown={onKeyDown}
             onPaste={onPaste}
             aria-label="Ask the assistant"
+            aria-invalid={over() > 0}
+            aria-describedby={over() > 0 ? "assistant-over" : undefined}
           />
           <div class="assistant-row">
             <button
@@ -925,7 +987,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               </span>
             </button>
             <div class="assistant-actions">
-              <span class="assistant-context" title={`Context sent to the model: ${s.used().toLocaleString()} of ${MAX_REQUEST_CHARS.toLocaleString()} characters`}>
+              <span class="assistant-context" title={`Context the next request carries: ${used().toLocaleString()} of ${MAX_REQUEST_CHARS.toLocaleString()} characters`}>
                 {meter()}
               </span>
               <IconButton icon="attach" title="Attach a picture (or paste, or drop one)" onClick={() => fileInput?.click()} />
@@ -936,7 +998,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                     icon="send"
                     variant="inverted"
                     title={s.running() ? "Queue (Enter)" : "Send (Enter)"}
-                    disabled={s.input().trim() === ""}
+                    disabled={s.input().trim() === "" || over() > 0}
                     onClick={send}
                   />
                 }

@@ -65,6 +65,11 @@ export function rovingBand(band: HTMLElement, selector: string, home?: () => HTM
     if (!(event.target instanceof HTMLElement) || !items().includes(event.target)) return;
     last = event.target;
     sync();
+    // The keyboard's focus (an arrow, or Tab arriving on the band) is brought clear of the band's
+    // faded edge: the band's scroll padding (chrome.css) is the fade's width, and the browser's
+    // own scroll on focus leaves a key that is in view where it is, fade or not. A pointer's
+    // focus is left alone: a key that moved under the press would lose its click.
+    if (event.target.matches(":focus-visible")) event.target.scrollIntoView({ block: "nearest", inline: "nearest" });
   };
   const onKeyDown = (event: KeyboardEvent): void => {
     if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || !(event.target instanceof HTMLElement)) return;
@@ -72,7 +77,7 @@ export function rovingBand(band: HTMLElement, selector: string, home?: () => HTM
     const next = rovingIndex(event.key, list.indexOf(event.target), list.length, "horizontal");
     if (next === null || !list.includes(event.target)) return;
     event.preventDefault();
-    // Focusing a key the band has scrolled away brings it into view (the browser's own scroll).
+    // Focusing a key the band has scrolled away brings it into view (`onFocusIn`).
     list[next]?.focus();
   };
   const observer = new MutationObserver(sync);

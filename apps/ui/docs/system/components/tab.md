@@ -42,8 +42,14 @@ Real uses, 2 call sites (`rg -c "<Tab" src/components` → `src/components/Assis
 | Focused | Keyboard focus arrives by Tab. | Enter or Space brings the tab to the front. | The 1px ring in the focus ink at offset -1. | by hand |
 | Selected | The caller passes `selected` (the tab in front). | Read it; move to another tab; close it when it has a close key. | `aria-selected="true"`; the selected fill (`--tab-active` on `md`, `--fill-active` on `sm`) and the full ink. | test |
 | Closable | The caller passes `onClose`. | Click the close key, or Tab to it and press Enter. | A trailing close glyph in its own 20px button, named by `closeLabel`. | test |
+| Hinted | The label is clipped, or the caller passes a `title` that says more than the label; and a mouse or a pen rests on the tab for 0.4s (at once when another hint was up within the last 0.3s), or a key moves focus onto it. Never a finger. | Read the full label and what the tab switches to; a press, a click or Escape puts the box away. | The layer's hint box: the full label when it is clipped, the `title` under it or by itself, below the tab, inside the window's edges. | test |
 
 ### State precedence
+- Hinted and Hover: both show. The hint follows the hover after its delay.
+- Hinted and Focused: both show. The hint arrives with the ring, with no delay.
+- Hinted and Pressed: Pressed wins. The press puts the hint away.
+- Hinted and Selected: both show. The tab in front hints like any other.
+- Hinted and Closable: both show. The close key shows its own hint (`closeLabel`) when the pointer or the focus is on it.
 - Hover and Selected: Selected wins. The active fill stays under the pointer; hover adds nothing to the tab in front.
 - Hover and Focused: both show. The ring stays drawn over the hover fill.
 - Selected and Focused: both show. The ring draws around the active fill.
@@ -59,7 +65,7 @@ Real uses, 2 call sites (`rg -c "<Tab" src/components` → `src/components/Assis
 ## Props
 - `selected`: the tab in front; sets `aria-selected="true"` (and `"false"` otherwise) and the selected fill of its size.
 - `size`: `sm` or `md`; defaults to `md`.
-- `title`: a tooltip: what the tab switches to, or the full label when it clips.
+- `title`: the hint, shown in the layer's hint box and tied to the tab as its accessible description (`aria-describedby`): what the tab switches to. It is never the name, and no native `title` attribute is rendered. A `title` equal to the label draws no hint and adds no description. A clipped label needs no `title`: the hint shows the full label by itself, with the `title` on a second line when it says more.
 - `onClick`: runs on click; the caller brings this tab to the front.
 - `onClose`: draws the trailing close key and runs when it is clicked; the tab's `onClick` does not run.
 - `closeLabel`: the close key's accessible name and tooltip; defaults to "Close".
@@ -99,13 +105,13 @@ Real uses, 2 call sites (`rg -c "<Tab" src/components` → `src/components/Assis
   - Do: `<Tab selected>Model</Tab>`
 
 ### Limits
-- `rule/tab-label-limit`: When an `sm` tab's label runs past 18 characters, keep the full text in `title`, because the tab clips at `max-width: 18ch` with an ellipsis and the 20-character "Summarise the layers" shows as "Summarise the la…". Evidence: measured 111.6px clipped `sm` tab at 1280px, `src/ui/ui.css:443`. Check: review `src/components/AssistantPane.tsx`.
-  - Don't: `<Tab size="sm">Summarise the layers</Tab>` — the clipped label has no full text anywhere.
-  - Do: `<Tab size="sm" title="Summarise the layers">Summarise the layers</Tab>`
-- `rule/tab-md-label-limit`: When an `md` tab's label runs past 24 characters, keep the full text in `title`, because the tab clips at `max-width: 24ch` with an ellipsis, and uncapped the 56-character "A1 Ground floor general arrangement plan, sheet 12 of 40" draws a 357.8px tab that pushes the other layouts out of the strip. Evidence: measured 168.2px clipped `md` tab at 1280px, `src/ui/ui.css:432`. Check: review `src/components/StatusBar.tsx`.
-  - Don't: `<Tab>A1 Ground floor general arrangement plan, sheet 12 of 40</Tab>` — the clipped label has no full text anywhere.
-  - Do: `<Tab title="A1 Ground floor general arrangement plan, sheet 12 of 40">A1 Ground floor general arrangement plan, sheet 12 of 40</Tab>`
-- `rule/tab-touch-target`: When `sm` tabs are laid out in a pane header, leave the header room for a 24px tab, because under a coarse pointer the 22px tab grows to the 24px control height (it clips its own overflow for the ellipsis, so it cannot take an overhanging target) and a header fixed at 22px would cut it. Evidence: measured 22px `sm` tab, 24px under a coarse pointer, `src/ui/ui.css:574`. Check: review `src/ui/ui.css`.
+- `rule/tab-label-limit`: When an `sm` tab's label runs past 18 characters, pass the whole label as the children and leave the shortening to the tab, because the tab clips at `max-width: 18ch` with an ellipsis (the 20-character "Summarise the layers" shows as "Summarise the la…") and shows the full label in its hint by itself, while a label cut by the caller has no full text anywhere. Evidence: measured 111.6px clipped `sm` tab at 1280px, `src/ui/ui.css:445`. Check: test `src/ui/Tab.test.tsx`.
+  - Don't: `<Tab size="sm">{title.slice(0, 16) + "…"}</Tab>` — the cut label has no full text anywhere.
+  - Do: `<Tab size="sm">Summarise the layers</Tab>`
+- `rule/tab-md-label-limit`: When an `md` tab's label runs past 24 characters, pass the whole label as the children and leave the shortening to the tab, because the tab clips at `max-width: 24ch` with an ellipsis and shows the full label in its hint by itself, and uncapped the 56-character "A1 Ground floor general arrangement plan, sheet 12 of 40" draws a 357.8px tab that pushes the other layouts out of the strip. Evidence: measured 168.2px clipped `md` tab at 1280px, `src/ui/ui.css:434`. Check: test `src/ui/Tab.test.tsx`.
+  - Don't: `<Tab title="A1 Ground floor general arrangement plan, sheet 12 of 40">A1 Ground floor…</Tab>` — the label a screen reader hears is the cut one.
+  - Do: `<Tab>A1 Ground floor general arrangement plan, sheet 12 of 40</Tab>`
+- `rule/tab-touch-target`: When `sm` tabs are laid out in a pane header, leave the header room for a 24px tab, because under a coarse pointer the 22px tab grows to the 24px control height (it clips its own overflow for the ellipsis, so it cannot take an overhanging target) and a header fixed at 22px would cut it. Evidence: measured 22px `sm` tab, 24px under a coarse pointer, `src/ui/ui.css:606`. Check: review `src/ui/ui.css`.
   - Don't: `.my-head { height: var(--control-h-row); overflow: hidden }`
   - Do: `.my-head { min-height: var(--control-h-button); align-items: center }`
 
@@ -124,7 +130,8 @@ Rests on the native `<button>` element with `role="tab"`: Enter and Space and fo
 ### ARIA
 | Part | Role | Accessible name from | States and properties | Announced | Checked by |
 |---|---|---|---|---|---|
-| The tab | `tab` (on a native `<button>`) | Its text content | `aria-selected="true"` on the tab in front, `"false"` on the others | "Model, tab, selected" | test |
+| The tab | `tab` (on a native `<button>`) | Its text content, in full even when the tab clips it for the eye | `aria-selected="true"` on the tab in front, `"false"` on the others; `aria-describedby` pointing at the `title`'s words when they add to the label | "Model, tab, selected, Switch to model space" | test |
+| The hint | None: the box is `aria-hidden="true"` | — | It shows the full label and the description for the eye | Nothing | test |
 | The close key | `button` (native, an `IconButton`) | `closeLabel` as `aria-label` | none | "Close hello, button" | test |
 
 ## Tokens
@@ -147,3 +154,4 @@ Rests on the native `<button>` element with `role="tab"`: Enter and Space and fo
 - `IconButton`: the close key a closable tab draws; and the pick for an on/off toggle.
 - `Button`: when the control runs an action rather than showing a view.
 - `Kbd`: when a tab's action has a shortcut to show beside it.
+- `Tooltip`: the hint box a tab's `title` and its clipped label show in; never wrap a tab in one.

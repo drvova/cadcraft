@@ -247,6 +247,11 @@
     "--gap-16",
     "--hairline",
     "--text",
+    "--text-dim",
+    "--text-faint",
+    "--border-soft",
+    "--font-chip",
+    "--gap-4",
     "--dur-fast",
     "--ease-standard"
    ],

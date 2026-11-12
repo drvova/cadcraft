@@ -12,10 +12,10 @@
  * behaves the same under the tests' non-reactive Solid build.
  */
 
-import { createSignal } from "solid-js";
+import { batch, createSignal } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import type { AppFacade } from "./facade";
-import { activityLine, PROVIDER_LIMITS, providerFault, runTurn, type AssistantEvent, type Briefing, type ChatImage, type ChatMessage, type ProviderConfig, type TurnOptions } from "./assistant";
+import { activityLine, MAX_MESSAGE_CHARS, MAX_REQUEST_CHARS, PROVIDER_LIMITS, providerFault, runTurn, trimToBudget, type AssistantEvent, type Briefing, type ChatImage, type ChatMessage, type ProviderConfig, type TurnOptions } from "./assistant";
 
 export interface ToolEntry {
   kind: "tool";
@@ -53,9 +53,48 @@ export interface Changes {
 /** What the session needs of the facade (the real `AppFacade` satisfies it). */
 export type SessionFacade = Pick<AppFacade, "drawingState" | "selection" | "execute">;
 
-/** What `send` did: sent the draft, queued it behind the running turn, had nothing to send, or
- *  needs a provider first. */
-export type SendOutcome = "sent" | "queued" | "empty" | "unconfigured";
+/** What `send` did: sent the draft, queued it behind the running turn, had nothing to send,
+ *  needs a provider first, or kept a draft longer than one message may be (it is never cut). */
+export type SendOutcome = "sent" | "queued" | "empty" | "unconfigured" | "too-long";
+
+/**
+ * The most rows a chat keeps. Past it, the oldest whole turns are let go when the next message is
+ * sent, and `dropped()` says how many rows went. The model's context is bounded separately, by
+ * `trimToBudget`.
+ */
+export const MAX_ENTRIES = 2_000;
+
+/** The start of a turn at or after `from`: the first of the reader's messages there, or `from`. */
+export function turnStart(entries: readonly Entry[], from: number): number {
+  if (from <= 0) return 0;
+  const at = Math.min(from, entries.length);
+  for (let i = at; i < entries.length; i++) if (entries[i]?.kind === "user") return i;
+  return at;
+}
+
+/** How long a reply's fragments may wait for a frame; a hidden page draws none, and the text is still due. */
+const FRAME_FALLBACK_MS = 250;
+
+/**
+ * Run `flush` once, before the next frame is drawn. A reply arrives in many fragments per frame:
+ * the session joins them and writes the transcript once per frame. Without frames (no window),
+ * `flush` runs at once.
+ */
+function nextFrame(flush: () => void): void {
+  if (typeof requestAnimationFrame !== "function") {
+    flush();
+    return;
+  }
+  let ran = false;
+  const once = (): void => {
+    if (ran) return;
+    ran = true;
+    clearTimeout(timer);
+    flush();
+  };
+  const timer = setTimeout(once, FRAME_FALLBACK_MS);
+  requestAnimationFrame(once);
+}
 
 export interface SessionOptions {
   facade: SessionFacade;
@@ -65,6 +104,8 @@ export interface SessionOptions {
   fetchImpl?: typeof fetch;
   /** How long a request may stay silent before it is stopped (tests shorten it). */
   idleMs?: number;
+  /** Runs its argument once before the next frame (tests drive it by hand); the real one is the browser's. */
+  frame?: (flush: () => void) => void;
 }
 
 /** The one place the setup (and the key in it) is kept: this entry of the browser's storage. */
@@ -122,7 +163,7 @@ export function saveProvider(p: ProviderConfig): void {
   }
 }
 
-/** How full the context is: the characters the conversation would send, against the budget. */
+/** The size of a conversation as the budget counts it: its characters, pictures and tool calls. */
 export function contextUsed(conversation: readonly ChatMessage[]): number {
   return conversation.reduce(
     (n, m) =>
@@ -148,6 +189,12 @@ export function createAssistantSession(opts: SessionOptions) {
   const [changes, setChanges] = createSignal<Changes | null>(null);
   /** Whether the briefing names the canvas selection; the reader can leave it out. */
   const [selectionIncluded, setSelectionIncluded] = createSignal(true);
+  /** How many of the chat's oldest rows were let go (see `MAX_ENTRIES`). */
+  const [dropped, setDropped] = createSignal(0);
+  const frame = opts.frame ?? nextFrame;
+  /** The reply's fragments since the last frame, and whether a frame is due to write them. */
+  let pendingText = "";
+  let frameDue = false;
   let controller: AbortController | null = null;
   let turn: Promise<void> = Promise.resolve();
   /** How the last turn ended; a queue only continues by itself after a clean end. */
@@ -157,7 +204,17 @@ export function createAssistantSession(opts: SessionOptions) {
   /** The code of each tool call that succeeded since the open checkpoint. */
   let ranSince: string[] = [];
 
-  const used = (): number => contextUsed(conversation());
+  /**
+   * How much of the conversation the next request carries: while a turn runs, what it is sending;
+   * otherwise what a message sent now would take with it. Turns that no longer fit the budget (a
+   * reply cut at its limit, for one) are not counted, because they are not sent.
+   */
+  const used = (): number => {
+    const all = conversation();
+    return contextUsed(trimToBudget(running() ? all : [...all, { role: "user", content: "" }], MAX_REQUEST_CHARS));
+  };
+  /** How far the draft is over what one message may hold, or 0. */
+  const overBy = (): number => Math.max(0, input().trim().length - MAX_MESSAGE_CHARS);
   /** A setup that can be sent: the same check the turn itself makes, not only "something is typed". */
   const ready = (): boolean => providerFault(provider()) === null;
   const title = (): string => {
@@ -181,17 +238,32 @@ export function createAssistantSession(opts: SessionOptions) {
     };
   };
 
+  /** Write the fragments that arrived since the last frame: one change to the transcript. */
+  const flushText = (): void => {
+    frameDue = false;
+    if (pendingText === "") return;
+    const text = pendingText;
+    pendingText = "";
+    setEntries(
+      produce((list) => {
+        const last = list[list.length - 1];
+        if (last?.kind === "assistant") last.text += text;
+        else list.push({ kind: "assistant", text, at: Date.now() });
+      }),
+    );
+  };
+
   const onEvent = (e: AssistantEvent): void => {
     if (e.type === "text") {
-      setEntries(
-        produce((list) => {
-          const last = list[list.length - 1];
-          if (last?.kind === "assistant") last.text += e.text;
-          else list.push({ kind: "assistant", text: e.text, at: Date.now() });
-        }),
-      );
+      pendingText += e.text;
+      if (!frameDue) {
+        frameDue = true;
+        frame(flushText);
+      }
       return;
     }
+    // Anything else comes after the words before it: they are written first.
+    flushText();
     if (e.type === "call") {
       steps += 1;
       setStatus(`Working, ${plural(steps, "step", "steps")}…`);
@@ -246,7 +318,9 @@ export function createAssistantSession(opts: SessionOptions) {
     try {
       await runTurn(options);
     } finally {
-      setConversation([...next]);
+      flushText();
+      // Only what can still be sent is kept: turns the budget has passed are never sent again.
+      setConversation(trimToBudget(next, MAX_REQUEST_CHARS));
       setRunning(false);
       setStatus("");
       controller = null;
@@ -268,7 +342,18 @@ export function createAssistantSession(opts: SessionOptions) {
   };
 
   const begin = (text: string, pictures: readonly ChatImage[]): void => {
-    setEntries(produce((list) => void list.push({ kind: "user", text, pictures: pictures.length, at: Date.now() })));
+    // A chat past its bound lets its oldest whole turns go, here and never in the middle of a turn.
+    const over = entries.length + 1 - MAX_ENTRIES;
+    const cut = over > 0 ? turnStart(entries, over) : 0;
+    batch(() => {
+      if (cut > 0) setDropped(dropped() + cut);
+      setEntries(
+        produce((list) => {
+          if (cut > 0) list.splice(0, cut);
+          list.push({ kind: "user", text, pictures: pictures.length, at: Date.now() });
+        }),
+      );
+    });
     const message: ChatMessage = pictures.length === 0 ? { role: "user", content: text } : { role: "user", content: text, images: pictures };
     const next: ChatMessage[] = [...conversation(), message];
     setConversation(next);
@@ -281,6 +366,7 @@ export function createAssistantSession(opts: SessionOptions) {
     const text = input().trim();
     if (text === "") return "empty";
     if (!ready()) return "unconfigured";
+    if (text.length > MAX_MESSAGE_CHARS) return "too-long";
     const pictures = attached();
     setInput("");
     setAttached([]);
@@ -355,6 +441,8 @@ export function createAssistantSession(opts: SessionOptions) {
   /** A new chat: stop the turn and forget the conversation, the queue, the draft and the bar. */
   const clear = (): void => {
     controller?.abort();
+    pendingText = "";
+    setDropped(0);
     setEntries(produce((list) => void list.splice(0, list.length)));
     setQueued(produce((list) => void list.splice(0, list.length)));
     setConversation([]);
@@ -395,6 +483,8 @@ export function createAssistantSession(opts: SessionOptions) {
     selectionIncluded,
     setSelectionIncluded,
     used,
+    overBy,
+    dropped,
     ready,
     title,
     send,

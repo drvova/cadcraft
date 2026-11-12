@@ -6,10 +6,15 @@
  *
  * With `onClose` the tab draws a trailing close key. A button cannot nest a button, so the tab
  * and its close `IconButton` are siblings inside one wrapper. The recipe lives in `./ui.css`.
+ *
+ * `title` is the layer's hint (`./Tooltip.tsx`), never the native attribute. The label is the
+ * tab's name; the hint is what the label leaves out, tied to the tab as its accessible
+ * description. A label the tab clips shows in full in the hint by itself, title or no title.
  */
 
 import { Show, type JSX } from "solid-js";
 import { IconButton } from "./IconButton";
+import { describeByHint, installHints } from "./Tooltip";
 
 /** `md` is the editor tab of the 35px strip; `sm` the compact tab of a pane header. */
 export type TabSize = "sm" | "md";
@@ -19,7 +24,8 @@ export interface TabProps {
   selected?: boolean;
   /** The size. Defaults to `md`. */
   size?: TabSize;
-  /** A tooltip, for what the tab switches to or for a clipped label. */
+  /** The hint: what the tab switches to. It shows in the layer's hint box and is the tab's
+   *  accessible description. A clipped label needs none: its full text shows by itself. */
   title?: string;
   /** Runs on click: the caller brings this tab to the front. */
   onClick?: (event: MouseEvent) => void;
@@ -32,13 +38,15 @@ export interface TabProps {
 }
 
 export function Tab(props: TabProps): JSX.Element {
+  if (typeof document !== "undefined") installHints();
   const tab = (): JSX.Element => (
     <button
+      ref={(el: HTMLButtonElement) => describeByHint(el, () => props.title)}
       type="button"
       role="tab"
       class={`ui-tab ui-tab--${props.size ?? "md"}`}
       aria-selected={props.selected === true}
-      title={props.title}
+      data-hint={props.title ?? ""}
       onClick={(event) => props.onClick?.(event)}
     >
       {props.children}

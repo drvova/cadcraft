@@ -25,6 +25,7 @@
 }
 
 .properties-head {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: var(--gap-2);
@@ -62,16 +63,18 @@
   min-height: var(--control-h-row);
   padding: 0 var(--gap-8);
   color: var(--text-faint);
-  font-size: var(--font-small);
+  font-size: var(--font-body);
 }
 
 /* Two equal columns over one gutter: the label starts on the heading's inset, the value ends on
-   the column the heading's state and the layers' count end on. */
+   the column the heading's state and the layers' count end on. A row is the rail's list row: the
+   layers' row height and the layers' type size, each text on a line as tall as the row, so the
+   label and the value share the first line's baseline and a value that wraps adds whole rows. */
 .prop-row {
   flex: 0 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: center;
+  align-items: start;
   column-gap: var(--gap-8);
   min-height: var(--control-h-row);
   padding: 0 var(--gap-8);
@@ -93,7 +96,8 @@
 .prop-label {
   min-width: 0;
   color: var(--text-faint);
-  font-size: var(--font-small);
+  font-size: var(--font-body);
+  line-height: var(--control-h-row);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -101,6 +105,7 @@
 
 .prop-value {
   min-width: 0;
+  min-height: var(--control-h-row);
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -124,7 +129,10 @@
   /* Values are words and numbers, not code: the interface's own face, with figures that line up. */
   font-family: var(--font-family);
   font-variant-numeric: lining-nums tabular-nums;
-  font-size: var(--font-small);
+  font-size: var(--font-body);
+  /* The line fills the field inside its hairlines, so the text sits on the read-only values'
+     baseline rather than a half pixel off it. */
+  line-height: calc(var(--control-h-chip) - 2 * var(--hairline));
   text-align: right;
   text-overflow: ellipsis;
 }
@@ -151,6 +159,12 @@
   background: var(--control);
 }
 
+/* The browser centres a typed value in its field and rounds the half pixel down the page, a pixel
+   under the label and the chosen values; a hairline of padding underneath rounds it back up. */
+.prop-input {
+  padding-bottom: var(--hairline);
+}
+
 /* Objects that disagree: the placeholder reads quieter than a real value. */
 .prop-input.is-varies,
 .prop-select.is-varies {
@@ -162,8 +176,11 @@
   color: var(--text);
 }
 
-/* The chosen option reads on the value edge, ahead of the arrow. */
+/* The chosen option ends on the value edge, the one the typed and the read-only values end on:
+   the platform's arrow is not drawn (it pushed a choice a glyph short of that edge), and the
+   field that shows under the pointer and the keyboard says the value can be changed. */
 .prop-select {
+  appearance: none;
   text-align-last: right;
   cursor: pointer;
 }
@@ -182,17 +199,18 @@
   outline-offset: var(--hairline);
 }
 
-/* A value that cannot be edited reads a step quieter than one that can. */
+/* A value that cannot be edited reads a step quieter than one that can. It cannot take the
+   keyboard either, so it is never cut: one too long for its column wraps, breaking inside a long
+   number or name only when no space offers a break, and the row grows by whole rows. */
 .prop-readonly {
   min-width: 0;
   color: var(--text-dim);
   font-family: var(--font-family);
   font-variant-numeric: lining-nums tabular-nums;
-  font-size: var(--font-small);
+  font-size: var(--font-body);
+  line-height: var(--control-h-row);
   text-align: right;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 /* ---- The command line's keyword chips ---- */

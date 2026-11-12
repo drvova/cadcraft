@@ -5,8 +5,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import type { ProviderConfig } from "./assistant";
-import { createAssistantSession, loadProvider, parseStoredProvider, STORAGE_KEY, type AssistantSession, type SessionFacade } from "./assistant-session";
+import { MAX_MESSAGE_CHARS, MAX_REQUEST_CHARS, type ProviderConfig } from "./assistant";
+import { createAssistantSession, loadProvider, MAX_ENTRIES, parseStoredProvider, STORAGE_KEY, turnStart, type AssistantSession, type SessionFacade } from "./assistant-session";
 import type { Envelope } from "./facade";
 
 const PROVIDER: ProviderConfig = { baseUrl: "http://127.0.0.1:11434/v1", model: "test-model", apiKey: "" };
@@ -618,5 +618,193 @@ describe("a provider that stops answering", () => {
     const reply = session.entries[1];
     expect(reply?.kind === "assistant" ? reply.text.length : 0).toBe(200_000);
     expect(session.canRetry()).toBe(false);
+  });
+
+  test("after a cut reply the meter shows what the next message takes with it, not the reply that no longer fits", async () => {
+    const piece = `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: "word ".repeat(10_000) }, finish_reason: null }] })}\n\n`;
+    const script = scriptedFetch([textReply("Short."), sseResponse(Array.from({ length: 10 }, () => piece)), textReply("Again.")]);
+    const session = sessionWith(script.fetch);
+    await say(session, "one");
+    expect(session.used()).toBe("one".length + "Short.".length);
+    await say(session, "two");
+    // The 200,000-character turn is past the budget. The next request leaves it out, and the turns
+    // before it with it (what is sent is the newest turns that fit, without a gap): the meter says so.
+    expect(session.used()).toBe(0);
+    expect(session.used()).toBeLessThanOrEqual(MAX_REQUEST_CHARS);
+    await say(session, "three");
+    const sent = (script.requests[2]?.body["messages"] as Array<{ role: string; content: string }>).map((m) => m.content);
+    expect(sent.slice(1)).toEqual(["three"]);
+    expect(session.used()).toBe("three".length + "Again.".length);
+  });
+
+  test("while a turn runs the meter shows what that request is sending", async () => {
+    const gate = gatedFetch();
+    const session = sessionWith(gate.fetch);
+    session.setInput("a question");
+    session.send();
+    expect(session.running()).toBe(true);
+    expect(session.used()).toBe("a question".length);
+    session.stop();
+    await session.whenIdle();
+  });
+});
+
+describe("a reply that arrives in many fragments", () => {
+  /** A frame the test draws by hand. */
+  function manualFrames(): { frame: (flush: () => void) => void; draw: () => void; due: () => number } {
+    let waiting: Array<() => void> = [];
+    return {
+      frame: (flush) => void waiting.push(flush),
+      draw: () => {
+        const run = waiting;
+        waiting = [];
+        run.forEach((flush) => flush());
+      },
+      due: () => waiting.length,
+    };
+  }
+  const fragment = (text: string): string => `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: text }, finish_reason: null }] })}\n\n`;
+  const DONE = [`data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\n`, "data: [DONE]\n\n"];
+
+  /** A reply whose fragments the test lets through, then ends. */
+  function heldStream(): { response: Response; push: (line: string) => void; end: () => void } {
+    let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const enc = new TextEncoder();
+    const response = new Response(new ReadableStream<Uint8Array>({ start: (c) => void (controller = c) }), { status: 200, headers: { "content-type": "text/event-stream" } });
+    return {
+      response,
+      push: (line) => controller?.enqueue(enc.encode(line)),
+      end: () => {
+        DONE.forEach((line) => controller?.enqueue(enc.encode(line)));
+        controller?.close();
+      },
+    };
+  }
+
+  test("is written to the transcript once a frame, however many fragments the frame brought", async () => {
+    const frames = manualFrames();
+    const held = heldStream();
+    const session = createAssistantSession({ facade: fakeFacade().facade, onChanged: () => {}, fetchImpl: scriptedFetch([held.response]).fetch, frame: frames.frame });
+    session.setProvider(PROVIDER);
+    session.setInput("hi");
+    session.send();
+    for (let i = 0; i < 50; i++) held.push(fragment(`w${i} `));
+    await until(() => frames.due() > 0);
+    await new Promise((r) => setTimeout(r, 5));
+    // Fifty fragments arrived; one write is due, and nothing is in the transcript before the frame.
+    expect(frames.due()).toBe(1);
+    expect(kinds(session)).toEqual(["user"]);
+    frames.draw();
+    expect(kinds(session)).toEqual(["user", "assistant"]);
+    const reply = (): string => {
+      const entry = session.entries[1];
+      return entry?.kind === "assistant" ? entry.text : "";
+    };
+    expect(reply()).toBe(Array.from({ length: 50 }, (_, i) => `w${i} `).join(""));
+    // The next fragments ask for the next frame, once.
+    held.push(fragment("more "));
+    held.push(fragment("words"));
+    await until(() => frames.due() > 0);
+    expect(frames.due()).toBe(1);
+    // The end of the turn does not wait for a frame: what arrived is in the transcript when it is over.
+    held.end();
+    await session.whenIdle();
+    expect(reply().endsWith("more words")).toBe(true);
+    frames.draw();
+    expect(kinds(session)).toEqual(["user", "assistant"]);
+  });
+
+  test("words before a step are in the transcript before the step, without a frame", async () => {
+    const frames = manualFrames();
+    const wordsThenCall = sseResponse([
+      fragment("Let me look."),
+      `data: ${JSON.stringify({ choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: "call_1", function: { name: "run", arguments: JSON.stringify({ code: "(+ 1 2)" }) } }] }, finish_reason: null }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] })}\n\n`,
+      "data: [DONE]\n\n",
+    ]);
+    const session = createAssistantSession({ facade: fakeFacade().facade, onChanged: () => {}, fetchImpl: scriptedFetch([wordsThenCall, textReply("Three.")]).fetch, frame: frames.frame });
+    session.setProvider(PROVIDER);
+    await say(session, "add");
+    expect(kinds(session)).toEqual(["user", "assistant", "tool", "assistant"]);
+    const first = session.entries[1];
+    expect(first?.kind === "assistant" ? first.text : "").toBe("Let me look.");
+  });
+
+  test("a new chat forgets the words still waiting for a frame", async () => {
+    const frames = manualFrames();
+    const held = heldStream();
+    const session = createAssistantSession({ facade: fakeFacade().facade, onChanged: () => {}, fetchImpl: scriptedFetch([held.response]).fetch, frame: frames.frame });
+    session.setProvider(PROVIDER);
+    session.setInput("hi");
+    session.send();
+    held.push(fragment("late words"));
+    await until(() => frames.due() > 0);
+    session.clear();
+    frames.draw();
+    await session.whenIdle();
+    expect(session.entries.length).toBe(0);
+  });
+});
+
+describe("the longest message", () => {
+  test("a draft past the limit is not sent, not queued and not cut, and the session says by how much", async () => {
+    const script = scriptedFetch([textReply("Hello")]);
+    const session = sessionWith(script.fetch);
+    const long = "x".repeat(MAX_MESSAGE_CHARS + 1_204);
+    session.setInput(long);
+    expect(session.overBy()).toBe(1_204);
+    expect(session.send()).toBe("too-long");
+    expect(session.input()).toBe(long);
+    expect(session.entries.length).toBe(0);
+    expect(script.requests.length).toBe(0);
+    // Shortened to the limit, it goes whole.
+    session.setInput("x".repeat(MAX_MESSAGE_CHARS));
+    expect(session.overBy()).toBe(0);
+    expect(session.send()).toBe("sent");
+    await session.whenIdle();
+    const first = session.entries[0];
+    expect(first?.kind === "user" ? first.text.length : 0).toBe(MAX_MESSAGE_CHARS);
+  });
+
+  test("space around a draft does not count", () => {
+    const session = sessionWith(scriptedFetch([]).fetch);
+    session.setInput(`  ${"x".repeat(MAX_MESSAGE_CHARS)}\n\n`);
+    expect(session.overBy()).toBe(0);
+  });
+});
+
+describe("a chat past its bound", () => {
+  test("turnStart finds the first of the reader's messages at or after a row", () => {
+    const rows = [
+      { kind: "user", text: "a", pictures: 0, at: 0 },
+      { kind: "assistant", text: "b", at: 0 },
+      { kind: "user", text: "c", pictures: 0, at: 0 },
+      { kind: "assistant", text: "d", at: 0 },
+    ] as const;
+    expect(turnStart(rows, -5)).toBe(0);
+    expect(turnStart(rows, 0)).toBe(0);
+    expect(turnStart(rows, 1)).toBe(2);
+    expect(turnStart(rows, 2)).toBe(2);
+    // No turn starts after the last reply: the row itself.
+    expect(turnStart(rows, 3)).toBe(3);
+    expect(turnStart(rows, 9)).toBe(4);
+  });
+
+  test("lets its oldest whole turns go when the next message is sent, and counts them", async () => {
+    const turns = MAX_ENTRIES / 2 + 3;
+    const session = sessionWith(scriptedFetch(Array.from({ length: turns }, (_, i) => textReply(`reply ${i}`))).fetch);
+    for (let i = 0; i < MAX_ENTRIES / 2; i++) await say(session, `message ${i}`);
+    expect(session.entries.length).toBe(MAX_ENTRIES);
+    expect(session.dropped()).toBe(0);
+    await say(session, "one more");
+    // The first turn (a message and its reply) went; the chat starts at the second.
+    expect(session.dropped()).toBe(2);
+    expect(session.entries.length).toBe(MAX_ENTRIES);
+    const first = session.entries[0];
+    expect(first?.kind === "user" ? first.text : "").toBe("message 1");
+    const last = session.entries[session.entries.length - 1];
+    expect(last?.kind === "assistant" ? last.text : "").toBe(`reply ${MAX_ENTRIES / 2}`);
+    session.clear();
+    expect(session.dropped()).toBe(0);
   });
 });

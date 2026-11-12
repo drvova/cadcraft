@@ -1,7 +1,7 @@
 {
-  "rule/css-px": 22,
+  "rule/css-px": 17,
   "rule/named-color": 3,
   "rule/raw-value": 27,
   "trap/button-div": 1,
-  "trap/native-control": 11
+  "trap/native-control": 9
 }

@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 import type { CommandInfo } from "./facade";
-import { fuzzy, highlight, paletteItems, rankCommands, rememberCommand, RECENT_LIMIT, slashQuery, type PaletteItem } from "./palette";
+import { fuzzy, highlight, paletteItems, rankCommands, rememberCommand, RECENT_LIMIT, rowName, slashQuery, stepActive, type PaletteItem } from "./palette";
 
 const command = (id: string, label: string, menu = "", extra: Partial<CommandInfo> = {}): CommandInfo => ({ id, label, menu, shortcut: "", aliases: [], params: "", enabled: true, ...extra });
 
@@ -71,6 +71,152 @@ describe("rankCommands", () => {
   test("nothing matches nothing, and the list is bounded", () => {
     expect(ids("qqq")).toEqual([]);
     expect(rankCommands("", ITEMS, [], 2).length).toBe(2);
+  });
+});
+
+/** A slice of the real registry: short labels that repeat, told apart by their menu and their names. */
+const CAD: PaletteItem[] = paletteItems(
+  [
+    command("line", "Line", "Draw > Line", { aliases: ["l"] }),
+    command("list", "List", "Tools > Inquiry > List", { aliases: ["li"] }),
+    command("dimlinear", "Linear", "Dimension > Linear", { aliases: ["dli", "dimlin"] }),
+    command("dimjogline", "Jogged Linear", "Dimension > Jogged Linear"),
+    command("pline", "Polyline", "Draw > Polyline", { aliases: ["pl"] }),
+    command("circle", "Circle", "Draw > Circle > Circle", { aliases: ["c"] }),
+    command("circle.2p", "2 Points", "Draw > Circle > 2 Points"),
+    command("copy", "Copy", "Modify > Copy", { aliases: ["co"] }),
+    command("mirror", "Mirror", "Modify > Mirror", { aliases: ["mi"] }),
+    command("move", "Move", "Modify > Move", { aliases: ["m"] }),
+    command("zoom", "Zoom", "", { aliases: ["z"] }),
+    command("zoom.extents", "Zoom Extents", "View > Zoom > Zoom Extents"),
+    command("zoom.realtime", "Zoom Realtime", "View > Zoom > Zoom Realtime"),
+    command("layfrz", "Freeze Layer", "Format > Layer Tools > Freeze Layer"),
+    command("layer", "Layers", "Format > Layers", { aliases: ["la"] }),
+    command("u", "Undo", "Edit > Undo", { shortcut: "Cmd+Z" }),
+    command("undo", "Undo", ""),
+    command("qsave", "Save", "File > Save", { shortcut: "Cmd+S" }),
+    command("saveas", "Save As...", "File > Save As...", { aliases: ["save"] }),
+    command("hatch.patterns", "Hatch Patterns", ""),
+    command("pasteclip", "Paste", "Edit > Paste", { enabled: false }),
+    command("burst", "Explode Attributes to Text", "Modify > Explode Attributes to Text"),
+  ],
+  [],
+);
+
+const cad = (query: string, recent: string[] = []): string[] => rankCommands(query, CAD, recent).map((m) => m.item.id);
+
+describe("rankCommands, the queries a CAD hand types", () => {
+  test("l: the alias typed whole, then the labels that start with it, then the rest", () => {
+    expect(cad("l").slice(0, 4)).toEqual(["line", "list", "layer", "dimlinear"]);
+    expect(cad("l").indexOf("pline")).toBeGreaterThan(cad("l").indexOf("layer"));
+  });
+  test("li: the alias of List outranks the label Line starts with", () => {
+    expect(cad("li").slice(0, 3)).toEqual(["list", "line", "dimlinear"]);
+  });
+  test("line: the exact name, then a label that starts with it, then a word that does, then inside a word", () => {
+    expect(cad("line")).toEqual(["line", "dimlinear", "dimjogline", "pline"]);
+  });
+  test("ln: the letters in order from a word's start, and never from the middle of one", () => {
+    expect(cad("ln")).toEqual(["line", "dimlinear", "dimjogline"]);
+  });
+  test("circ: the label first, then the commands its menu holds", () => {
+    expect(cad("circ")).toEqual(["circle", "circle.2p"]);
+  });
+  test("zoom e: the words as typed start Zoom Extents; a row with the letter inside a word follows", () => {
+    expect(cad("zoom e")).toEqual(["zoom.extents", "zoom.realtime"]);
+  });
+  test("ze: the initials of Zoom Extents outrank the letters inside Freeze", () => {
+    expect(cad("ze")).toEqual(["zoom.extents", "layfrz"]);
+  });
+  test("lay: a label's start, then a word's start", () => {
+    expect(cad("lay")).toEqual(["layer", "layfrz"]);
+  });
+  test("undo: the id typed whole leads the two commands that share the label", () => {
+    expect(cad("undo")).toEqual(["undo", "u"]);
+    expect(cad("u")[0]).toBe("u");
+  });
+  test("sav: by label, the shorter first; the alias typed whole wins", () => {
+    expect(cad("sav")).toEqual(["qsave", "saveas"]);
+    expect(cad("save")[0]).toBe("saveas");
+    expect(rankCommands("save", CAD, [])[0]?.via).toBe("save");
+  });
+  test("dim lin: every word must match something of the row: its menu, its label, its name", () => {
+    expect(cad("dim lin")).toEqual(["dimlinear", "dimjogline"]);
+    expect(cad("circle 2p")).toEqual(["circle.2p"]);
+    expect(cad("dim circle")).toEqual([]);
+  });
+  test("dimlin: an alias's start", () => {
+    expect(cad("dimlin")).toEqual(["dimlinear"]);
+  });
+  test("modify: a word of the menu path lists what the menu holds", () => {
+    expect(cad("modify")).toEqual(["copy", "move", "mirror", "burst"]);
+  });
+  test("cirlce: a slipped key still finds the command, and only when nothing else matched", () => {
+    expect(cad("cirlce")).toEqual(["circle", "circle.2p"]);
+    expect(cad("cirlc")).toEqual(["circle", "circle.2p"]);
+    expect(cad("mirorr")).toEqual(["mirror"]);
+    // Four letters are too few to guess from: "mive" is not Move.
+    expect(cad("mive")).toEqual([]);
+  });
+  test("paste: a command that cannot run is listed, never replaced by a look-alike that can", () => {
+    expect(cad("paste")).toEqual(["pasteclip"]);
+    expect(cad("pa").indexOf("pasteclip")).toBe(cad("pa").length - 1);
+  });
+  test("upper case and spaces around the query change nothing", () => {
+    expect(cad("LINE")).toEqual(cad("line"));
+    expect(cad("  line  ")).toEqual(cad("line"));
+    expect(cad("Zoom   E")).toEqual(cad("zoom e"));
+    expect(cad("   ")).toEqual(cad(""));
+  });
+  test("no hits, a paragraph, and letters far apart", () => {
+    expect(cad("qqqzzz")).toEqual([]);
+    expect(cad("line ".repeat(100))).toEqual(["line", "dimlinear", "dimjogline", "pline"]);
+    expect(cad("x".repeat(500))).toEqual([]);
+    // e-x-t is a word's start in Zoom Extents and inside a word of "Explode Attributes to Text";
+    // e-x-i-t is in that label too, but fifteen letters apart: noise, not a match.
+    expect(cad("ext")).toEqual(["zoom.extents", "burst"]);
+    expect(cad("exit")).toEqual([]);
+  });
+  test("the recently used come first inside a tier and never jump one", () => {
+    expect(cad("modify", ["mirror"])[0]).toBe("mirror");
+    expect(cad("l", ["dimlinear"]).slice(0, 2)).toEqual(["line", "dimlinear"]);
+    expect(cad("zoom", ["zoom.realtime"]).slice(0, 2)).toEqual(["zoom", "zoom.realtime"]);
+    expect(cad("", ["move", "line"]).slice(0, 2)).toEqual(["move", "line"]);
+  });
+  test("a row that ranks by its name still lights what its label shares with the query", () => {
+    const line = rankCommands("line", CAD, []).find((m) => m.item.id === "pline");
+    expect(line?.indices).toEqual([4, 5, 6, 7]);
+    expect(rankCommands("zoom e", CAD, [])[0]?.indices).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+  test("two thousand commands rank inside a frame", () => {
+    const many = paletteItems(
+      Array.from({ length: 2000 }, (_, i) => command(`cmd${i}.part`, `Command ${i} ${["Line", "Circle", "Layer", "Zoom"][i % 4]}`, `Menu ${i % 20} > Sub > Command`, { aliases: [`c${i}`] })),
+      [],
+    );
+    rankCommands("warm", many, []);
+    const start = performance.now();
+    for (const q of ["c", "ci", "cir", "circ", "cirlce", "command 19 zoom", "x".repeat(500)]) rankCommands(q, many, [], Number.POSITIVE_INFINITY);
+    expect((performance.now() - start) / 7).toBeLessThan(50);
+  });
+});
+
+describe("rowName", () => {
+  const row = (id: string, label: string, via?: string): string => rowName({ item: { id, label, path: "", shortcut: "", aliases: [], enabled: true }, score: 0, indices: [], ...(via === undefined ? {} : { via }) });
+  test("the id where it says more than the label, the alias that matched, nothing for the shell's own", () => {
+    expect(row("zoom.extents", "Zoom Extents")).toBe("zoom.extents");
+    expect(row("line", "Line")).toBe("");
+    expect(row("line", "Line", "l")).toBe("l");
+    expect(row("ui.toggle.assistant", "Assistant")).toBe("");
+  });
+});
+
+describe("stepActive", () => {
+  test("the arrows wrap, a page stops at the ends, an empty list stays at its top", () => {
+    expect(stepActive(4, 1, 5, true)).toBe(0);
+    expect(stepActive(0, -1, 5, true)).toBe(4);
+    expect(stepActive(1, 10, 5, false)).toBe(4);
+    expect(stepActive(3, -10, 5, false)).toBe(0);
+    expect(stepActive(2, 1, 0, true)).toBe(0);
   });
 });
 

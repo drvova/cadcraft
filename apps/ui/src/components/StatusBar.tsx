@@ -1,6 +1,6 @@
 /**
- * The status bar, as the editor's: on the left what the window is working on (which engine is
- * live, the current layer, how much the drawing holds), on the right the drafting toggles, the
+ * The status bar, as the editor's: at the start what the window is working on (which engine is
+ * live, the current layer, how much the drawing holds), at the end the drafting toggles, the
  * coordinate readout and the selection count. The layout tabs (Model plus the drawing's layouts)
  * are the editor tabs over the drawing: `LayoutTabs`, below, which the shell places there.
  *
@@ -9,7 +9,7 @@
  * (`formatPoint`), never here — no units logic in TS.
  */
 
-import { createEffect, For, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, For, Show, type JSX } from "solid-js";
 import type { FacadeMode, SettingsState } from "../facade";
 import { Tab } from "../ui/Tab";
 import { rovingBand, scrollBand } from "./ToolStrip";
@@ -93,6 +93,13 @@ const count = (n: number): string => n.toLocaleString("en-US");
 /** The fewest characters a long layer name keeps in a bar too short for all of it. */
 const LAYER_FLOOR = 6;
 
+/**
+ * The coordinate readout's width in characters: room for three four-digit ordinates with a sign
+ * ("-1234.5678, -1234.5678, 0.0000") to start with, and the most a longer position may claim.
+ */
+const COORD_FLOOR = 30;
+const COORD_CEILING = 48;
+
 export interface StatusBarProps {
   settings: SettingsState;
   /** Which engine is live (the wasm facade, or the mock). */
@@ -106,62 +113,76 @@ export interface StatusBarProps {
   onCommand: (id: string, params?: Record<string, unknown>) => void;
 }
 
+/**
+ * The bar gives up room by need (chrome.css has the order and how). What can only be read stands
+ * in a `status-fit` box, in which it is whole or gone; the layer's name narrows instead, and the
+ * toggles wrap. Each value is read with what it is: the words a sighted reader gets from the
+ * value's place are in a `status-label`, which is not drawn.
+ */
 export function StatusBar(props: StatusBarProps): JSX.Element {
+  const coord = (): string => (props.cursor === null ? "\u2014" : props.formatPoint(props.cursor.x, props.cursor.y));
+  // The readout's width in characters: the widest text it has held, so the box is widened once by
+  // a drawing far from the origin and not again at every digit. Capped, so one stray position (a
+  // pointer over a view zoomed out to nothing) does not hold the room for good.
+  const coordWidth = createMemo<number>((widest) => Math.max(widest, Math.min([...coord()].length, COORD_CEILING)), COORD_FLOOR);
   return (
     <footer class="statusbar">
-      <div class="status-left">
+      <span class="status-fit status-fit-mode">
         <span class={props.mode.kind === "wasm" ? "status-item status-mode is-wasm" : "status-item status-mode is-mock"} title={props.mode.detail}>
+          <span class="status-label">Engine: </span>
           {props.mode.kind}
         </span>
-        <span
-          class="status-item status-layer"
-          title={`The current layer (CLAYER): ${props.currentLayer}`}
-          // How narrow the name may be squeezed (chrome.css): never to fewer letters than it has.
-          style={{ "--layer-floor": Math.min([...props.currentLayer].length, LAYER_FLOOR) }}
-        >
-          {props.currentLayer}
-        </span>
+      </span>
+      <span
+        class="status-item status-layer"
+        title={`The current layer (CLAYER): ${props.currentLayer}`}
+        // How narrow the name may be squeezed (chrome.css): never to fewer letters than it has.
+        style={{ "--layer-floor": Math.min([...props.currentLayer].length, LAYER_FLOOR) }}
+      >
+        <span class="status-label">Current layer: </span>
+        {props.currentLayer}
+      </span>
+      <span class="status-fit status-fit-objects">
         <span class="status-item status-count" title="Objects in the drawing">
           {props.entityCount === 1 ? "1 object" : `${count(props.entityCount)} objects`}
         </span>
+      </span>
+      <span class="status-fit status-fit-layers">
         <span class="status-item status-count" title="Layers in the drawing">
           {props.layerCount === 1 ? "1 layer" : `${count(props.layerCount)} layers`}
         </span>
+      </span>
+      <div class="status-toggles" role="toolbar" aria-label="Drafting settings" ref={(element) => rovingBand(element, "button")}>
+        <For each={STATUS_TOGGLES}>
+          {(toggle) => (
+            <button
+              class={props.settings[toggle.key] ? "status-toggle is-on" : "status-toggle"}
+              type="button"
+              title={toggle.label}
+              aria-pressed={props.settings[toggle.key]}
+              onClick={() => props.onCommand(toggle.id, { on: !props.settings[toggle.key] })}
+            >
+              {toggle.short}
+            </button>
+          )}
+        </For>
       </div>
-      <div class="status-right">
-        <div
-          class="status-toggles"
-          role="toolbar"
-          aria-label="Drafting settings"
-          ref={(element) => {
-            scrollBand(element);
-            rovingBand(element, "button");
-          }}
-        >
-          <For each={STATUS_TOGGLES}>
-            {(toggle) => (
-              <button
-                class={props.settings[toggle.key] ? "status-toggle is-on" : "status-toggle"}
-                type="button"
-                title={toggle.label}
-                aria-pressed={props.settings[toggle.key]}
-                onClick={() => props.onCommand(toggle.id, { on: !props.settings[toggle.key] })}
-              >
-                {toggle.short}
-              </button>
-            )}
-          </For>
-        </div>
-        <span class="status-sep" aria-hidden="true" />
-        <span class="status-coord" title="Pointer position in the drawing's units">
-          {props.cursor === null ? "\u2014" : props.formatPoint(props.cursor.x, props.cursor.y)}
+      {/* Not a live region: the position changes with every move of the pointer. */}
+      <span class="status-fit status-fit-coord">
+        <span class="status-coord" title="Pointer position in the drawing's units" style={{ "--coord-ch": coordWidth() }}>
+          <span class="status-label">Pointer position: </span>
+          {coord()}
         </span>
+      </span>
+      {/* A live region, there from the start so that what arrives in it is announced: the count is
+          said when the selection changes, politely, and nothing is said when it empties. */}
+      <span class="status-fit status-fit-selection" role="status">
         <Show when={props.selectionCount > 0}>
           <span class="status-selection" title="Objects in the selection">
-            {count(props.selectionCount)} selected
+            {`${count(props.selectionCount)} selected`}
           </span>
         </Show>
-      </div>
+      </span>
     </footer>
   );
 }

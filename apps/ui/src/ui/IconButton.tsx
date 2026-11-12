@@ -6,7 +6,13 @@
  *
  * The same `title` is the hint a sighted person reads: the layer's own box (`./Tooltip.tsx`),
  * which shows under the pointer after a short delay and at once on keyboard focus. The button
- * carries no native `title` attribute, so the platform's box never doubles it.
+ * carries no native `title` attribute, so the platform's box never doubles it. A shortcut is a
+ * key cap in the box (`shortcut`, or the old "(Ctrl+Z)" at the end of the title), and
+ * `description` is a second line under the name: why the key is disabled, what it will do.
+ *
+ * A disabled key is `aria-disabled="true"`, not natively `disabled`: it stays in the Tab order
+ * and under the pointer, so its hint still says what it is and why it is blocked, and the click
+ * is refused here (`refuseWhenDisabled`, shared with `Button`).
  *
  * A key that folds and unfolds a region says so with `expanded` (and names the region with
  * `controls`); a key that switches a setting on and off says so with `selected`. One key is one
@@ -16,7 +22,8 @@
 
 import type { JSX } from "solid-js";
 import { ToolIcon } from "../icons";
-import { installHints } from "./Tooltip";
+import { refuseWhenDisabled } from "./Button";
+import { ariaKeyShortcuts, describeByHint, installHints, splitHint } from "./Tooltip";
 
 /** `ghost` for tool bars, `soft` for a resting fill, `inverted` for the one primary circle. */
 export type IconButtonVariant = "ghost" | "soft" | "inverted";
@@ -40,7 +47,15 @@ export interface IconButtonProps {
   variant?: IconButtonVariant;
   /** The box size. Defaults to `md`. */
   size?: IconButtonSize;
-  /** Blocks the click and drops the glyph to the disabled ink. */
+  /** The shortcut that runs the same action, as the user reads it ("Ctrl+Z", "F9"): a key cap in
+   *  the hint and `aria-keyshortcuts` on the button. A `title` ending "(Ctrl+Z)" still draws the
+   *  cap; the name keeps the bracket and no `aria-keyshortcuts` repeats it. */
+  shortcut?: string;
+  /** A second line under the name in the hint, and the key's accessible description: why it is
+   *  disabled ("Type a message first"), what it will do. Never the name. */
+  description?: string;
+  /** Blocks the click and drops the glyph to the disabled ink. The key stays focusable
+   *  (`aria-disabled`), so its hint still shows. */
   disabled?: boolean;
   /** A toggle-style icon button: sets `aria-pressed` and the .14 selected fill. */
   selected?: boolean;
@@ -57,20 +72,26 @@ export interface IconButtonProps {
 
 export function IconButton(props: IconButtonProps): JSX.Element {
   if (typeof document !== "undefined") installHints();
+  const hint = (): { text: string; keys: string | undefined } => splitHint(props.title);
   return (
     <button
+      ref={(el: HTMLButtonElement) => {
+        describeByHint(el, () => props.description);
+        refuseWhenDisabled(el);
+      }}
       type="button"
       class={`ui-icon-button ui-icon-button--${props.variant ?? "ghost"} ui-icon-button--${props.size ?? "md"}`}
       aria-label={props.title}
-      data-hint={props.title}
+      data-hint={hint().text}
+      data-hint-keys={props.shortcut ?? hint().keys}
+      data-hint-note={props.description}
+      aria-keyshortcuts={props.shortcut === undefined ? undefined : ariaKeyShortcuts(props.shortcut)}
       aria-pressed={props.selected === undefined ? undefined : props.selected}
       aria-expanded={props.expanded === undefined ? undefined : props.expanded}
       aria-controls={props.controls}
       aria-haspopup={props.popup}
-      disabled={props.disabled}
-      onClick={(event) => {
-        if (!props.disabled) props.onClick?.(event);
-      }}
+      aria-disabled={props.disabled ? "true" : undefined}
+      onClick={(event) => props.onClick?.(event)}
     >
       <ToolIcon id={props.icon} />
     </button>

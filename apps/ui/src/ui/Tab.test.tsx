@@ -6,7 +6,11 @@
 
 import { describe, expect, test } from "bun:test";
 import { Tab } from "./Tab";
+import { hintContent } from "./Tooltip";
 import { buttonIn, mount } from "../test-utils";
+
+/** The text assistive tech reads as the control's description: what its `aria-describedby` points at. */
+const descriptionOf = (el: Element): string | null => document.getElementById(el.getAttribute("aria-describedby") ?? "")?.textContent ?? null;
 
 describe("Tab", () => {
   test("renders a native button with the tab role and its label", () => {
@@ -15,10 +19,40 @@ describe("Tab", () => {
     expect(button.tagName).toBe("BUTTON");
     expect(button.getAttribute("type")).toBe("button");
     expect(button.getAttribute("role")).toBe("tab");
-    expect(button.getAttribute("title")).toBe("Switch to model space");
     expect(button.textContent).toBe("Model");
     expect(button.classList.contains("ui-tab")).toBe(true);
     expect(container.querySelectorAll("button").length).toBe(1);
+  });
+
+  test("the title is the layer's hint and the tab's description, never a native title or its name", () => {
+    const button = buttonIn(mount(() => <Tab title="Switch to model space">Model</Tab>));
+    expect(button.hasAttribute("title")).toBe(false);
+    expect(button.hasAttribute("aria-label")).toBe(false);
+    expect(button.getAttribute("data-hint")).toBe("Switch to model space");
+    expect(descriptionOf(button)).toBe("Switch to model space");
+  });
+
+  test("a title that repeats the label is no description and no hint, until the label is clipped", async () => {
+    const button = buttonIn(mount(() => <Tab title="Summarise the layers">Summarise the layers</Tab>));
+    await Promise.resolve();
+    expect(button.hasAttribute("aria-describedby")).toBe(false);
+    expect(hintContent(button)).toBeNull();
+    Object.defineProperty(button, "scrollWidth", { value: 300 });
+    Object.defineProperty(button, "clientWidth", { value: 120 });
+    expect(hintContent(button)).toEqual({ text: "Summarise the layers", keys: "", note: "" });
+  });
+
+  test("a clipped tab with no title still shows its full label, and one with a title keeps it as the second line", () => {
+    const bare = buttonIn(mount(() => <Tab>Ground floor plan, revision C</Tab>));
+    expect(bare.getAttribute("data-hint")).toBe("");
+    expect(hintContent(bare)).toBeNull();
+    Object.defineProperty(bare, "scrollWidth", { value: 300 });
+    Object.defineProperty(bare, "clientWidth", { value: 120 });
+    expect(hintContent(bare)?.text).toBe("Ground floor plan, revision C");
+    const titled = buttonIn(mount(() => <Tab title="Switch to this layout">Ground floor plan, revision C</Tab>));
+    Object.defineProperty(titled, "scrollWidth", { value: 300 });
+    Object.defineProperty(titled, "clientWidth", { value: 120 });
+    expect(hintContent(titled)).toEqual({ text: "Ground floor plan, revision C", keys: "", note: "Switch to this layout" });
   });
 
   test("selected is announced as aria-selected, true or false", () => {

@@ -19,7 +19,7 @@
 - [Row](docs/generated/components/row.md): It is the full-width clickable band of a list: a menu item, a property row or a layer, marked current when it is the selected one.
 - [SectionLabel](docs/generated/components/section-label.md): It names a panel's section as a real heading, so a screen reader can jump between the sections by heading.
 - [Tab](docs/generated/components/tab.md): It brings one view of a strip to the front: a layout over the drawing or a chat in the assistant, marked selected when it is the one show...
-- [Tooltip](docs/generated/components/tooltip.md): It is the layer's one hint: a small box that names a control under the pointer or under keyboard focus.
+- [Tooltip](docs/generated/components/tooltip.md): It is the layer's one hint: a small box beside a control under the pointer or under keyboard focus, saying what the control does not alre...
 
 ## Rules
 - [Rules](docs/generated/rules.md): every trap and rule ID, the page that answers it and the check that enforces it
