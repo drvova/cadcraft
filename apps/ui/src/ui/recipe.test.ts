@@ -102,6 +102,23 @@ describe("the layer's contrast, from the tokens", () => {
     ["the danger button's label, pressed", "on-error", ["error-pressed"]],
     ["a row's label on the hover fill", "text-dim", ["hover"]],
     ["a key cap inside the selected row", "text-faint", ["fill-active"]],
+    ["a select's value and a text area's text on the field fill", "text", ["control"]],
+    ["a mixed select's placeholder and a text area's placeholder on the field fill", "text-faint", ["control"]],
+    ["an inline select's value at rest, and a checkbox's label, on the surface", "text", []],
+    ["an inline mixed select's placeholder at rest, and a bare text area's placeholder, on the surface", "text-faint", []],
+    ["an option's label on the listbox's highlight", "text", ["fill-active"]],
+  ];
+  /** Not text: a glyph, or the edge that alone tells a control from its surface (WCAG 1.4.11). */
+  const graphics: [string, string, string[]][] = [
+    ["a select's arrow on the field fill", "icon", ["control"]],
+    ["an inline select's arrow at rest on the surface", "icon", []],
+    ["an empty checkbox's edge on the surface", "icon", []],
+    ["an empty checkbox's edge on its hover fill and its pressed fill", "icon", ["fill-active"]],
+    ["a ticked checkbox's fill against the surface", "accent", []],
+    ["a ticked checkbox's mark on the accent fill", "on-accent", ["accent"]],
+    ["a ticked checkbox's mark on the hovered fill", "on-accent", ["accent-hover"]],
+    ["a ticked checkbox's mark on the pressed fill", "on-accent", ["accent-pressed"]],
+    ["a refused select's and text area's error edge against the field fill", "error", ["control"]],
   ];
   for (const [name, theme] of Object.entries(themes)) {
     for (const [what, ink, fills] of text) {
@@ -109,6 +126,16 @@ describe("the layer's contrast, from the tokens", () => {
         expect(lowest(theme, ink, fills, SURFACES)).toBeGreaterThanOrEqual(4.5);
       });
     }
+    for (const [what, ink, fills] of graphics) {
+      test(`${name}: ${what} holds 3:1`, () => {
+        // The palette's rows sit on `--control-hover` under the pointer and while one is edited.
+        expect(lowest(theme, ink, fills, [...SURFACES, "control-hover"])).toBeGreaterThanOrEqual(3);
+      });
+    }
+    test(`${name}: the field's focus edge holds 3:1 against the field fill, and the checkbox's ring against the surface`, () => {
+      expect(lowest(theme, "focus-ring", ["control"], SURFACES)).toBeGreaterThanOrEqual(3);
+      expect(lowest(theme, "focus-ring", [], [...SURFACES, "control-hover"])).toBeGreaterThanOrEqual(3);
+    });
     test(`${name}: the focus ring holds 3:1 against the surface, the hover fill and the selected fill`, () => {
       expect(lowest(theme, "focus-ring", [], SURFACES)).toBeGreaterThanOrEqual(3);
       expect(lowest(theme, "focus-ring", ["hover"], SURFACES)).toBeGreaterThanOrEqual(3);
@@ -193,6 +220,59 @@ describe("the layer's recipe, from the stylesheet", () => {
     expect(rule(uiCss, ".ui-icon-button--inverted:focus-visible")).toContain("outline-color: var(--on-accent)");
   });
 
+  test("the select is a native control under a drawn face: the value clips before the arrow, and the face never takes the press", () => {
+    const control = rule(uiCss, ".ui-select-control");
+    expect(control).toContain("appearance: none");
+    expect(control).toContain("opacity: 0");
+    const value = rule(uiCss, ".ui-select-value");
+    expect(value).toContain("text-overflow: ellipsis");
+    expect(value).toContain("pointer-events: none");
+    expect(rule(uiCss, ".ui-select-arrow")).toContain("pointer-events: none");
+    expect(rule(uiCss, ".ui-select--end .ui-select-value")).toContain("text-align: end");
+    expect(rule(uiCss, ".ui-select--mixed .ui-select-value")).toContain("color: var(--text-faint)");
+    expect(rule(uiCss, ".ui-select")).toContain("height: var(--control-h-input)");
+    expect(rule(uiCss, ".ui-select--sm")).toContain("height: var(--control-h-chip)");
+    expect(rule(uiCss, ".ui-select:focus-within")).toContain("border-color: var(--focus-ring)");
+  });
+
+  test("the checkbox's box is edged in the glyph ink, ticked in the accent with the ink that passes on it, and ringed off its edge", () => {
+    expect(rule(uiCss, ".ui-checkbox-input")).toContain("border: var(--hairline) solid var(--icon)");
+    expect(rule(uiCss, ".ui-checkbox .ui-checkbox-input:checked, .ui-checkbox .ui-checkbox-input:indeterminate")).toContain("background: var(--accent)");
+    const mark = rule(uiCss, ".ui-checkbox-mark");
+    expect(mark).toContain("background: var(--on-accent)");
+    expect(mark).toContain("clip-path: polygon(");
+    expect(uiCss).not.toMatch(/\.ui-checkbox[^{}]*\{[^{}]*url\(/);
+    expect(rule(uiCss, ".ui-checkbox-input:focus-visible")).toContain("outline-offset: var(--hairline)");
+  });
+
+  test("a text area's one line is a field's height, and only the bare one drops its box and its ring", () => {
+    const area = rule(uiCss, ".ui-textarea");
+    expect(area).toContain("line-height: var(--gap-16)");
+    expect(area).toContain("padding: calc(var(--field-pad-y) - var(--hairline)) var(--field-pad-x)");
+    expect(area).toContain("resize: none");
+    expect(dark["gap-16"]).toBe("16px");
+    expect(dark["field-pad-y"]).toBe("4px");
+    const bare = rule(uiCss, ".ui-textarea--bare");
+    expect(bare).toContain("border: none");
+    expect(bare).toContain("background: transparent");
+    expect(bare).toContain("font-size: inherit");
+    expect(bare).toContain("outline-style: none");
+    expect([...uiCss.matchAll(/outline-style:\s*none/g)].length).toBe(1);
+  });
+
+  test("an option paints no hover of its own, and is lit and blocked by its ARIA state", () => {
+    expect(uiCss).toContain('.ui-row:hover:not(:disabled):not([aria-current="true"]):not(.ui-row--option)');
+    expect(rule(uiCss, '.ui-row[aria-current="true"], .ui-row[aria-selected="true"]')).toContain("background: var(--fill-active)");
+    expect(rule(uiCss, '.ui-row:disabled, .ui-row[aria-disabled="true"]')).toContain("color: var(--text-disabled)");
+  });
+
+  test("a section label is the measured heading: bold capitals with no added tracking", () => {
+    const label = rule(uiCss, ".ui-section-label");
+    expect(label).toContain("text-transform: uppercase");
+    expect(label).toContain("font-weight: 700");
+    expect(label).not.toContain("letter-spacing");
+  });
+
   test("a selected icon button keeps its fill under the pointer", () => {
     expect(uiCss).toContain('.ui-icon-button--ghost:hover:not([aria-disabled="true"]):not([aria-pressed="true"])');
   });
@@ -245,5 +325,10 @@ describe("the layer's recipe, from the stylesheet", () => {
     expect(dark["control-h-input"]).toBe("24px");
     expect(dark["control-h-chip"]).toBe("20px");
     expect(uiCss.slice(0, at)).not.toContain("::after");
+    expect(rule(coarse, ".ui-select--sm")).toContain("height: var(--control-h-input)");
+    const target = rule(coarse, ".ui-checkbox::after");
+    expect(target).toContain("width: max(100%, var(--control-h-input))");
+    expect(target).toContain("height: var(--control-h-input)");
+    expect(rule(coarse, ".ui-textarea, .ui-select-control")).toContain("font-size: max(16px, 1em)");
   });
 });

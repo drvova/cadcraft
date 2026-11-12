@@ -1,0 +1,8 @@
+rule_id	falsify	negation	two_agent	sweep	verdict	notes
+rule/checkbox-name	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the palette's yes-or-no rows move onto the component at integration, and their file is not this worker's	ship	
+rule/checkbox-label-inside	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the palette's yes-or-no rows move onto the component at integration, and their file is not this worker's	ship	
+rule/checkbox-mixed-three-states	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the palette's yes-or-no rows move onto the component at integration, and their file is not this worker's	ship	
+rule/checkbox-owns-nothing	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the palette's yes-or-no rows move onto the component at integration, and their file is not this worker's	ship	
+rule/checkbox-label-positive	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the palette's yes-or-no rows move onto the component at integration, and their file is not this worker's	ship	
+rule/checkbox-canonical-element	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the palette's yes-or-no rows move onto the component at integration, and their file is not this worker's	ship	
+rule/checkbox-touch-target	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the palette's yes-or-no rows move onto the component at integration, and their file is not this worker's	ship	

@@ -1,0 +1,11 @@
+rule_id	falsify	negation	two_agent	sweep	verdict	notes
+rule/select-options-data	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the palette's rows move onto the component at integration, and their file is not this worker's	ship	
+rule/select-label-bound	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the palette's rows move onto the component at integration, and their file is not this worker's	ship	
+rule/select-off-list-value	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the palette's rows move onto the component at integration, and their file is not this worker's	ship	
+rule/select-mixed-placeholder	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the palette's rows move onto the component at integration, and their file is not this worker's	ship	
+rule/select-described-by	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the palette's rows move onto the component at integration, and their file is not this worker's	ship	
+rule/select-inline-in-rows	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the palette's rows move onto the component at integration, and their file is not this worker's	ship	
+rule/select-option-label-noun	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the palette's rows move onto the component at integration, and their file is not this worker's	ship	
+rule/select-canonical-element	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the palette's rows move onto the component at integration, and their file is not this worker's	ship	
+rule/select-label-clip	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the palette's rows move onto the component at integration, and their file is not this worker's	ship	
+rule/select-touch-target	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the palette's rows move onto the component at integration, and their file is not this worker's	ship	

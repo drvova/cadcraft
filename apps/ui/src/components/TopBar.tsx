@@ -4,6 +4,11 @@
  * right the three keys that fold the window's parts away: the sidebar, the command line and the
  * assistant. What the drawing holds (its layer, its counts, which engine is live) is the status
  * bar's to say.
+ *
+ * The command centre's name is the action, the drawing's name and, while there are any, "unsaved
+ * changes" (a button's `aria-label` replaces what is inside it, so the dot cannot say it for
+ * itself); the dot's own hint is for the pointer. Each key's shortcut is passed by itself: a key
+ * cap in the hint and `aria-keyshortcuts`, not words in the name.
  */
 
 import { Show, type Accessor, type JSX } from "solid-js";
@@ -37,22 +42,22 @@ export function TopBar(props: TopBarProps): JSX.Element {
     <header class="titlebar">
       <div class="titlebar-start">{props.menu}</div>
       <div class="titlebar-center">
-        <Button size="sm" ariaLabel={`Search commands, ${title()}`} title={`Search commands (${props.paletteShortcut})`} onClick={() => props.onOpenPalette()}>
+        <Button size="sm" ariaLabel={dirty() ? `Search commands, ${title()}, unsaved changes` : `Search commands, ${title()}`} title="Command palette" shortcut={props.paletteShortcut} onClick={() => props.onOpenPalette()}>
           <span class="command-center">
             <span class="command-center-icon">
               <ToolIcon id="search" />
             </span>
             <span class="command-center-title">{title()}</span>
             <Show when={dirty()}>
-              <span class="command-center-dirty" role="img" aria-label="Unsaved changes" title="Unsaved changes" />
+              <span class="command-center-dirty" aria-hidden="true" data-hint="Unsaved changes" />
             </Show>
           </span>
         </Button>
       </div>
       <div class="titlebar-end">
-        <IconButton icon="ui.toggle.palettes" title={`Sidebar (${key("Cmd+B")})`} selected={props.sidebarOpen()} onClick={() => props.onToggleSidebar()} />
-        <IconButton icon="layout.bottom" title={`Command line (${key("Cmd+J")})`} selected={props.panelOpen()} onClick={() => props.onTogglePanel()} />
-        <IconButton icon="assistant" title={`Assistant (${key("Cmd+7")})`} selected={props.assistantOpen()} onClick={() => props.onToggleAssistant()} />
+        <IconButton icon="ui.toggle.palettes" title="Sidebar" shortcut={key("Cmd+B")} selected={props.sidebarOpen()} onClick={() => props.onToggleSidebar()} />
+        <IconButton icon="layout.bottom" title="Command line" shortcut={key("Cmd+J")} selected={props.panelOpen()} onClick={() => props.onTogglePanel()} />
+        <IconButton icon="assistant" title="Assistant" shortcut={key("Cmd+7")} selected={props.assistantOpen()} onClick={() => props.onToggleAssistant()} />
       </div>
     </header>
   );

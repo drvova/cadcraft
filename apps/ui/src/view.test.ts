@@ -7,17 +7,34 @@
 import { describe, expect, test } from "bun:test";
 import {
   boundsOfPoints,
+  clampZoomFactor,
   fitAspect,
   makeProjection,
+  MAX_UNITS_PER_PX,
+  MIN_PINCH_SPREAD,
+  MIN_UNITS_PER_PX,
   normalizeRect,
   padRect,
   panBy,
   parseRect,
+  PINCH_MAX_PX,
+  PINCH_ZOOM_PX,
+  pinchOf,
+  pinchView,
   rectIsDegenerate,
   rectsOverlap,
+  resizeView,
   screenToWorld,
+  WHEEL_LINE_PX,
+  WHEEL_MAX_PX,
+  WHEEL_PAGE_PX,
+  WHEEL_ZOOM_PX,
+  wheelZoomFactor,
   worldToScreen,
+  ZOOM_PRECISION,
   zoomAt,
+  type Rect,
+  type ScreenBox,
 } from "./view";
 
 const SCREEN = { w: 800, h: 400 };
@@ -100,6 +117,207 @@ describe("zoomAt", () => {
     expect(same).toEqual(view);
     const nan = zoomAt(view, SCREEN, { x: 1, y: 1 }, Number.NaN);
     expect(Number.isFinite(nan.x0)).toBe(true);
+  });
+});
+
+describe("zoomAt at its limits", () => {
+  const view = { x0: 0, y0: 0, x1: 100, y1: 50 };
+  const anchor = { x: 300, y: 100 };
+  const finite = (r: Rect): boolean => [r.x0, r.y0, r.x1, r.y1].every((n) => Number.isFinite(n));
+
+  test("a thousand steps in and a thousand out drift by nothing a pixel could show", () => {
+    const before = screenToWorld(view, SCREEN, anchor);
+    let v: Rect = view;
+    for (let i = 0; i < 1000; i++) v = zoomAt(v, SCREEN, anchor, 0.99);
+    const deep = screenToWorld(v, SCREEN, anchor);
+    expect(Math.abs(deep.x - before.x) / ((v.x1 - v.x0) / SCREEN.w)).toBeLessThan(0.01);
+    for (let i = 0; i < 1000; i++) v = zoomAt(v, SCREEN, anchor, 1 / 0.99);
+    const back = screenToWorld(v, SCREEN, anchor);
+    expect(Math.abs(back.x - before.x) / ((v.x1 - v.x0) / SCREEN.w)).toBeLessThan(0.01);
+    expect(Math.abs(back.y - before.y) / ((v.y1 - v.y0) / SCREEN.h)).toBeLessThan(0.01);
+    expect(v.x1 - v.x0).toBeCloseTo(100, 6);
+  });
+
+  test("zooming in stops at the floor with the anchor still under the pointer", () => {
+    const before = screenToWorld(view, SCREEN, anchor);
+    let v: Rect = view;
+    for (let i = 0; i < 400; i++) v = zoomAt(v, SCREEN, anchor, 1e-3);
+    const floor = Math.max(MIN_UNITS_PER_PX, Math.max(Math.abs(before.x), Math.abs(before.y)) * ZOOM_PRECISION);
+    expect((v.x1 - v.x0) / SCREEN.w).toBeGreaterThanOrEqual(floor * 0.999);
+    expect((v.x1 - v.x0) / SCREEN.w).toBeLessThanOrEqual(floor * 1.001);
+    const after = screenToWorld(v, SCREEN, anchor);
+    expect(Math.abs(after.x - before.x)).toBeLessThan(floor);
+    expect(Math.abs(after.y - before.y)).toBeLessThan(floor);
+  });
+
+  test("zooming out stops at the ceiling instead of overflowing, and comes back", () => {
+    const before = screenToWorld(view, SCREEN, anchor);
+    let v: Rect = view;
+    for (let i = 0; i < 400; i++) v = zoomAt(v, SCREEN, anchor, 1e30);
+    expect(finite(v)).toBe(true);
+    expect((v.x1 - v.x0) / SCREEN.w).toBeLessThanOrEqual(MAX_UNITS_PER_PX * 1.001);
+    expect((v.x1 - v.x0) / SCREEN.w).toBeGreaterThanOrEqual(MAX_UNITS_PER_PX * 0.999);
+    const after = screenToWorld(v, SCREEN, anchor);
+    expect(Math.abs(after.x - before.x)).toBeLessThan(MAX_UNITS_PER_PX);
+    // The limit is a stop, not a trap.
+    const back = zoomAt(v, SCREEN, anchor, 0.5);
+    expect((back.x1 - back.x0) / (v.x1 - v.x0)).toBeCloseTo(0.5, 9);
+  });
+
+  test("far from the origin the floor rises so a pixel stays wider than the number grid", () => {
+    const far = { x0: 1e9, y0: 1e9, x1: 1e9 + 100, y1: 1e9 + 50 };
+    let v: Rect = far;
+    for (let i = 0; i < 200; i++) v = zoomAt(v, SCREEN, anchor, 1e-3);
+    expect((v.x1 - v.x0) / SCREEN.w).toBeGreaterThanOrEqual(1e9 * ZOOM_PRECISION * 0.999);
+  });
+
+  test("a view that arrives outside the band is never pushed further and never snapped back", () => {
+    const tiny = { x0: 0, y0: 0, x1: 1e-6, y1: 5e-7 };
+    expect(zoomAt(tiny, SCREEN, anchor, 0.5)).toEqual(tiny);
+    const out = zoomAt(tiny, SCREEN, anchor, 2);
+    expect((out.x1 - out.x0) / 1e-6).toBeCloseTo(2, 9);
+  });
+
+  test("hostile factors, anchors and canvases leave a finite view", () => {
+    for (const factor of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 1e308, 5e-324]) {
+      expect(finite(zoomAt(view, SCREEN, anchor, factor))).toBe(true);
+    }
+    expect(zoomAt(view, SCREEN, { x: Number.NaN, y: 0 }, 0.5)).toEqual(zoomAt(view, SCREEN, { x: 400, y: 200 }, 0.5));
+    expect(finite(zoomAt(view, { w: 0, h: 0 }, anchor, 0.5))).toBe(true);
+    expect(finite(zoomAt({ x0: 3, y0: 3, x1: 3, y1: 3 }, { w: 0, h: 0 }, { x: Number.POSITIVE_INFINITY, y: 0 }, 2))).toBe(true);
+    expect(clampZoomFactor(view, SCREEN, { x: 0, y: 0 }, Number.NaN)).toBe(1);
+    expect(clampZoomFactor(view, SCREEN, { x: 0, y: 0 }, 0)).toBe(1);
+  });
+});
+
+describe("wheelZoomFactor", () => {
+  test("a notch in is the inverse of a notch out, and equal travel is an equal step", () => {
+    const out = wheelZoomFactor(100, 0, false);
+    const inward = wheelZoomFactor(-100, 0, false);
+    expect(out).toBeCloseTo(Math.exp(100 / WHEEL_ZOOM_PX), 12);
+    expect(out * inward).toBeCloseTo(1, 12);
+    // Ten small trackpad events travel as far as one notch.
+    expect(Math.pow(wheelZoomFactor(10, 0, false), 10)).toBeCloseTo(out, 12);
+  });
+
+  test("lines and pages are brought to pixels: a three-line notch is a 120px notch", () => {
+    expect(wheelZoomFactor(3, 1, false)).toBeCloseTo(wheelZoomFactor(3 * WHEEL_LINE_PX, 0, false), 12);
+    expect(wheelZoomFactor(1, 2, false)).toBeCloseTo(wheelZoomFactor(WHEEL_MAX_PX, 0, false), 12);
+    expect(WHEEL_PAGE_PX).toBeGreaterThan(WHEEL_MAX_PX);
+  });
+
+  test("one event is capped, so a free-spinning wheel or a hostile delta cannot leap", () => {
+    const cap = Math.exp(WHEEL_MAX_PX / WHEEL_ZOOM_PX);
+    expect(wheelZoomFactor(1e9, 0, false)).toBeCloseTo(cap, 12);
+    expect(wheelZoomFactor(-1e9, 0, false)).toBeCloseTo(1 / cap, 12);
+    expect(wheelZoomFactor(Number.MAX_VALUE, 2, false)).toBeCloseTo(cap, 12);
+  });
+
+  test("a pinch follows the fingers more steeply and is capped lower", () => {
+    expect(wheelZoomFactor(4, 0, true)).toBeCloseTo(Math.exp(4 / PINCH_ZOOM_PX), 12);
+    expect(wheelZoomFactor(4, 0, true)).toBeGreaterThan(wheelZoomFactor(4, 0, false));
+    // Ctrl with a notched wheel is the same event: it steps no further than a plain notch.
+    expect(wheelZoomFactor(100, 0, true)).toBeCloseTo(Math.exp(PINCH_MAX_PX / PINCH_ZOOM_PX), 12);
+    expect(wheelZoomFactor(100, 0, true)).toBeLessThanOrEqual(wheelZoomFactor(100, 0, false));
+  });
+
+  test("zero and non-numbers are no zoom", () => {
+    for (const d of [0, -0, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(wheelZoomFactor(d, 0, false)).toBe(1);
+      expect(wheelZoomFactor(d, 1, true)).toBe(1);
+    }
+    expect(Number.isFinite(wheelZoomFactor(50, Number.NaN, false))).toBe(true);
+  });
+});
+
+describe("resizeView", () => {
+  const view = { x0: 0, y0: 0, x1: 100, y1: 50 };
+  const box = { left: 250, top: 100, w: 1000, h: 500 };
+  /** The world point under a point of the window (client px), for a canvas at `b`. */
+  const under = (v: Rect, b: ScreenBox, clientX: number, clientY: number): { x: number; y: number } =>
+    screenToWorld(v, b, { x: clientX - b.left, y: clientY - b.top });
+
+  test("a panel opening on the right or the bottom leaves the drawing where it is", () => {
+    for (const to of [
+      { ...box, w: 660 },
+      { ...box, h: 320 },
+      { ...box, w: 1400, h: 900 },
+    ]) {
+      const out = resizeView(view, box, to);
+      expect(out.x0).toBeCloseTo(0, 12);
+      expect(out.y1).toBeCloseTo(50, 12);
+      // The same zoom: world units per pixel are unchanged on both axes.
+      expect((out.x1 - out.x0) / to.w).toBeCloseTo(0.1, 12);
+      expect((out.y1 - out.y0) / to.h).toBeCloseTo(0.1, 12);
+      const a = under(out, to, 500, 300);
+      const b = under(view, box, 500, 300);
+      expect(a.x).toBeCloseTo(b.x, 9);
+      expect(a.y).toBeCloseTo(b.y, 9);
+    }
+  });
+
+  test("a panel closing on the left or the top uncovers the drawing without sliding it", () => {
+    const to = { left: 0, top: 60, w: 1250, h: 540 };
+    const out = resizeView(view, box, to);
+    expect(out.x0).toBeCloseTo(-25, 12);
+    expect(out.y1).toBeCloseTo(54, 12);
+    const a = under(out, to, 700, 400);
+    const b = under(view, box, 700, 400);
+    expect(a.x).toBeCloseTo(b.x, 9);
+    expect(a.y).toBeCloseTo(b.y, 9);
+  });
+
+  test("opening then closing returns the view", () => {
+    const narrow = { ...box, w: 660 };
+    const back = resizeView(resizeView(view, box, narrow), narrow, box);
+    expect(back.x0).toBeCloseTo(view.x0, 9);
+    expect(back.x1).toBeCloseTo(view.x1, 9);
+    expect(back.y0).toBeCloseTo(view.y0, 9);
+    expect(back.y1).toBeCloseTo(view.y1, 9);
+  });
+
+  test("an unusable box or view returns the view untouched", () => {
+    expect(resizeView(view, { ...box, w: 0 }, box)).toBe(view);
+    expect(resizeView(view, box, { ...box, h: 0 })).toBe(view);
+    expect(resizeView(view, box, { ...box, left: Number.NaN })).toBe(view);
+    expect(resizeView(view, box, { ...box, w: Number.POSITIVE_INFINITY })).toBe(view);
+    const flat = { x0: 1, y0: 1, x1: 1, y1: 1 };
+    expect(resizeView(flat, box, { ...box, w: 500 })).toBe(flat);
+  });
+});
+
+describe("pinchView", () => {
+  const view = { x0: 0, y0: 0, x1: 100, y1: 50 };
+
+  test("the world points under both fingers stay under them", () => {
+    const a0 = { x: 300, y: 200 };
+    const b0 = { x: 500, y: 200 };
+    const a1 = { x: 220, y: 150 };
+    const b1 = { x: 620, y: 150 };
+    const wa = screenToWorld(view, SCREEN, a0);
+    const wb = screenToWorld(view, SCREEN, b0);
+    const out = pinchView(view, SCREEN, pinchOf(a0, b0), pinchOf(a1, b1));
+    const sa = worldToScreen(out, SCREEN, wa);
+    const sb = worldToScreen(out, SCREEN, wb);
+    expect(sa.x).toBeCloseTo(a1.x, 6);
+    expect(sa.y).toBeCloseTo(a1.y, 6);
+    expect(sb.x).toBeCloseTo(b1.x, 6);
+    expect(sb.y).toBeCloseTo(b1.y, 6);
+  });
+
+  test("two fingers moving together only pan", () => {
+    const from = pinchOf({ x: 300, y: 200 }, { x: 500, y: 200 });
+    const to = pinchOf({ x: 340, y: 230 }, { x: 540, y: 230 });
+    expect(pinchView(view, SCREEN, from, to)).toEqual(panBy(view, SCREEN, 40, 30));
+  });
+
+  test("fingers on one spot give no ratio: a pan, never a division by zero", () => {
+    const from = pinchOf({ x: 300, y: 200 }, { x: 300, y: 200 });
+    const to = pinchOf({ x: 310, y: 200 }, { x: 400, y: 200 });
+    const out = pinchView(view, SCREEN, from, to);
+    expect([out.x0, out.y0, out.x1, out.y1].every((n) => Number.isFinite(n))).toBe(true);
+    expect(out.x1 - out.x0).toBeCloseTo(100, 9);
+    expect(from.spread).toBeLessThan(MIN_PINCH_SPREAD);
   });
 });
 

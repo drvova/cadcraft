@@ -1,6 +1,7 @@
 /**
  * The canvas's screen-space constants: the lineweight display rule (mm → px) the desktop canvas
- * uses, and the grid step ladder. Pure functions, so they are pinned here.
+ * uses, the grid's levels and the device-pixel snap of its rules. Pure functions, so they are
+ * pinned here.
  *
  * The selection highlight is pinned too: a recording context stands in for the 2D canvas (no DOM),
  * so the drawing path can be checked — the selected primitives are stroked a second time, in the
@@ -8,7 +9,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { drawDisplay, gridStep, handleHex, isHighlighted, lineWidthPx, SELECTION_WIDTH, type Palette } from "./canvas";
+import { crispRule, drawDisplay, GRID_FULL_PX, GRID_MIN_PX, gridLevels, handleHex, isHighlighted, lineWidthPx, samePalette, SELECTION_WIDTH, type Palette } from "./canvas";
 import type { DisplayList, DisplayPrim } from "./display";
 import { UNIT_RECT } from "./view";
 
@@ -29,25 +30,92 @@ describe("lineWidthPx", () => {
   });
 });
 
-describe("gridStep", () => {
-  test("stays on the 1-2-5 ladder and inside the on-screen band", () => {
-    const view = { x0: 0, y0: 0, x1: 100, y1: 50 };
-    for (const width of [200, 800, 1600, 4000]) {
-      const step = gridStep(view, width);
-      expect(Number.isFinite(step)).toBe(true);
-      expect(step).toBeGreaterThan(0);
-      const px = (step / (view.x1 - view.x0)) * width;
-      expect(px).toBeGreaterThanOrEqual(8);
-      expect(px).toBeLessThanOrEqual(160);
-      const decade = Math.pow(10, Math.floor(Math.log10(step / 1)));
-      const n = step / decade;
-      expect([1, 2, 5, 10]).toContain(Math.round(n));
+describe("gridLevels", () => {
+  /** The view of an 800px canvas at `per` world units per pixel. */
+  const at = (per: number): { x0: number; y0: number; x1: number; y1: number } => ({ x0: 0, y0: 0, x1: 800 * per, y1: 400 * per });
+
+  test("the minor step is a power of ten, between the floor and ten times it on screen", () => {
+    for (const per of [1e-6, 0.003, 0.0166, 0.1, 0.99, 1, 7, 12345, 1e6]) {
+      const { step } = gridLevels(at(per), 800);
+      const px = step / per;
+      expect(px).toBeGreaterThanOrEqual(GRID_MIN_PX * 0.999999);
+      expect(px).toBeLessThan(GRID_MIN_PX * 10 * 1.000001);
+      expect(Math.log10(step)).toBeCloseTo(Math.round(Math.log10(step)), 9);
     }
   });
 
+  test("zooming out, the minor lines fade to nothing before the step changes", () => {
+    // 11px apart: almost gone. 20px: half. 30px and wider: fully drawn.
+    expect(gridLevels(at(1 / 11), 800).minorAlpha).toBeCloseTo(1 / 20, 6);
+    expect(gridLevels(at(1 / 20), 800).minorAlpha).toBeCloseTo(0.5, 6);
+    expect(gridLevels(at(1 / GRID_FULL_PX), 800).minorAlpha).toBeCloseTo(1, 6);
+    expect(gridLevels(at(1 / 45), 800).minorAlpha).toBe(1);
+  });
+
+  test("the look is continuous across the change of step: no line pops in or out", () => {
+    // Just before the change the minor lines (99.9px apart) wear the major ink in full; just after,
+    // those same lines are the major lines and the new minor lines between them are invisible.
+    const before = gridLevels(at(1 / 99.9), 800);
+    const after = gridLevels(at(1 / 100.1), 800);
+    expect(before.step).toBeCloseTo(1, 12);
+    expect(after.step).toBeCloseTo(0.1, 12);
+    expect(before.minorAlpha).toBe(1);
+    expect(before.majorBlend).toBeGreaterThan(0.99);
+    expect(after.minorAlpha).toBeLessThan(0.01);
+    expect(after.majorBlend).toBe(0);
+  });
+
   test("survives a degenerate view and a zero-width canvas", () => {
-    expect(Number.isFinite(gridStep({ x0: 0, y0: 0, x1: 0, y1: 1 }, 800))).toBe(true);
-    expect(Number.isFinite(gridStep({ x0: 0, y0: 0, x1: 1, y1: 1 }, 0))).toBe(true);
+    const hostile = [
+      gridLevels({ x0: 0, y0: 0, x1: 0, y1: 1 }, 800),
+      gridLevels({ x0: 0, y0: 0, x1: 1, y1: 1 }, 0),
+      gridLevels({ x0: Number.NaN, y0: 0, x1: 1, y1: 1 }, 800),
+      gridLevels({ x0: 0, y0: 0, x1: Number.POSITIVE_INFINITY, y1: 1 }, 800),
+    ];
+    for (const levels of hostile) {
+      expect(Number.isFinite(levels.step)).toBe(true);
+      expect(levels.step).toBeGreaterThan(0);
+      expect(levels.minorAlpha).toBeGreaterThanOrEqual(0);
+      expect(levels.minorAlpha).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+describe("crispRule", () => {
+  /** The rule's two edges in device pixels. */
+  const edges = (css: number, dpr: number): [number, number] => {
+    const { at, width } = crispRule(css, dpr);
+    return [(at - width / 2) * dpr, (at + width / 2) * dpr];
+  };
+
+  test("its edges sit on whole device pixels at every ratio, fractional ones too", () => {
+    for (const dpr of [1, 1.25, 1.5, 1.75, 2, 2.5, 3]) {
+      for (const css of [0, 0.3, 10.5, 123.456, 999.99]) {
+        const [a, b] = edges(css, dpr);
+        expect(a).toBeCloseTo(Math.round(a), 9);
+        expect(b).toBeCloseTo(Math.round(b), 9);
+      }
+    }
+  });
+
+  test("it is one device pixel wide below a ratio of 2, two at 2 and three at 3", () => {
+    expect(crispRule(5, 1).width).toBe(1);
+    expect(crispRule(5, 1.5).width * 1.5).toBeCloseTo(1, 12);
+    expect(crispRule(5, 2).width * 2).toBeCloseTo(2, 12);
+    expect(crispRule(5, 3).width * 3).toBeCloseTo(3, 12);
+  });
+
+  test("it never moves a rule more than half a device pixel from where it belongs", () => {
+    for (const dpr of [1, 1.5, 2]) {
+      for (const css of [0.2, 7.49, 7.5, 7.51, 300.75]) {
+        expect(Math.abs(crispRule(css, dpr).at - css) * dpr).toBeLessThanOrEqual(0.5 + 1e-9);
+      }
+    }
+  });
+
+  test("a ratio that is not a positive number is read as 1", () => {
+    expect(crispRule(10.2, Number.NaN)).toEqual({ at: 10.5, width: 1 });
+    expect(crispRule(10.2, 0)).toEqual({ at: 10.5, width: 1 });
   });
 });
 
@@ -124,6 +192,50 @@ function draw(selection?: ReadonlySet<string>): RecordingContext {
   });
   return ctx;
 }
+
+describe("samePalette", () => {
+  test("compares the inks, not the objects", () => {
+    expect(samePalette(PALETTE, { ...PALETTE })).toBe(true);
+    // A theme that changes one ink (the selection's) is a different palette.
+    expect(samePalette(PALETTE, { ...PALETTE, selection: PALETTE.axisX })).toBe(false);
+  });
+});
+
+describe("drawDisplay, the grid", () => {
+  const grid = (view: { x0: number; y0: number; x1: number; y1: number }): RecordingContext => {
+    const ctx = new RecordingContext();
+    drawDisplay(ctx as unknown as CanvasRenderingContext2D, { revision: 1, bounds: UNIT_RECT, verts: [], prims: [] }, view, { width: 800, height: 600, dpr: 1, palette: PALETTE, grid: true });
+    return ctx;
+  };
+
+  test("is a handful of strokes however many lines it holds: one path per ink", () => {
+    // 20px between minor lines: 40 by 30 of them, in four strokes (minor, major, the two axes).
+    const ctx = grid({ x0: -1, y0: -1, x1: 39, y1: 29 });
+    expect(ctx.strokes).toHaveLength(4);
+    expect(ctx.strokes.map((s) => s.style)).toEqual([PALETTE.gridMinor, PALETTE.gridMajor, PALETTE.axisY, PALETTE.axisX]);
+    expect(ctx.strokes.every((s) => s.width === 1)).toBe(true);
+  });
+
+  test("the minor ink carries the fade, and a view that does not hold the axes draws none", () => {
+    const ctx = grid({ x0: 100, y0: 100, x1: 140, y1: 130 });
+    expect(ctx.strokes.find((s) => s.style === PALETTE.gridMinor)?.alpha).toBeCloseTo(0.5, 6);
+    expect(ctx.strokes.find((s) => s.style === PALETTE.gridMajor)?.alpha).toBe(1);
+    expect(ctx.strokes.some((s) => s.style === PALETTE.axisX || s.style === PALETTE.axisY)).toBe(false);
+  });
+
+  test("a hostile view draws a bounded grid and no NaN stroke width", () => {
+    const hostile = [
+      { x0: 0, y0: 0, x1: 0, y1: 0 },
+      { x0: Number.NaN, y0: 0, x1: 1, y1: 1 },
+      { x0: -1e300, y0: -1e300, x1: 1e300, y1: 1e300 },
+    ];
+    for (const view of hostile) {
+      const ctx = grid(view);
+      expect(ctx.strokes.length).toBeLessThanOrEqual(5);
+      expect(ctx.strokes.every((s) => Number.isFinite(s.width) && Number.isFinite(s.alpha))).toBe(true);
+    }
+  });
+});
 
 describe("isHighlighted", () => {
   test("is membership of the selection set, by the engine's hex handle", () => {

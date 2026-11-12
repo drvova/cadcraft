@@ -7,7 +7,11 @@
 import { describe, expect, test } from "bun:test";
 import {
   APERTURE_SCALE,
+  CLICK_SLOP,
+  clickSlop,
   DEFAULT_APERTURE,
+  dragKind,
+  pickReach,
   DEFAULT_PICKBOX,
   MAX_APERTURE,
   MIN_APERTURE,
@@ -67,6 +71,58 @@ describe("toggleHandle", () => {
   test("an empty click clears through the caller passing [] (and [] + add keeps [])", () => {
     expect(toggleHandle([], "a", false)).toEqual(["a"]);
     expect(toggleHandle(["a"], "a", true)).toEqual([]);
+  });
+});
+
+describe("dragKind", () => {
+  test("travel inside the slop is a click, in every direction", () => {
+    expect(dragKind(0, 0, CLICK_SLOP)).toBe("click");
+    expect(dragKind(CLICK_SLOP, 0, CLICK_SLOP)).toBe("click");
+    expect(dragKind(-2, 2, CLICK_SLOP)).toBe("click");
+    expect(dragKind(0, -CLICK_SLOP, CLICK_SLOP)).toBe("click");
+  });
+
+  test("dragging to the right is a window and to the left a crossing, whatever the vertical travel", () => {
+    expect(dragKind(40, 10, CLICK_SLOP)).toBe("window");
+    expect(dragKind(40, -90, CLICK_SLOP)).toBe("window");
+    expect(dragKind(-40, 10, CLICK_SLOP)).toBe("crossing");
+    expect(dragKind(-1, -90, CLICK_SLOP)).toBe("crossing");
+    // Straight up or down has no side: it reads as a window.
+    expect(dragKind(0, 50, CLICK_SLOP)).toBe("window");
+  });
+
+  test("the rectangle starts just past the slop, not at it", () => {
+    expect(dragKind(CLICK_SLOP + 0.5, 0, CLICK_SLOP)).toBe("window");
+    expect(dragKind(-(CLICK_SLOP + 0.5), 0, CLICK_SLOP)).toBe("crossing");
+  });
+
+  test("travel that is not a number is a click, and a bad slop falls back to the mouse's", () => {
+    expect(dragKind(Number.NaN, 5, CLICK_SLOP)).toBe("click");
+    expect(dragKind(5, Number.POSITIVE_INFINITY, CLICK_SLOP)).toBe("click");
+    expect(dragKind(2, 0, Number.NaN)).toBe("click");
+    expect(dragKind(20, 0, -1)).toBe("window");
+  });
+});
+
+describe("clickSlop and pickReach", () => {
+  test("a mouse is exact, a pen has more room, a finger the most", () => {
+    expect(clickSlop("mouse")).toBe(CLICK_SLOP);
+    expect(clickSlop("pen")).toBeGreaterThan(clickSlop("mouse"));
+    expect(clickSlop("touch")).toBeGreaterThan(clickSlop("pen"));
+    expect(pickReach("mouse")).toBe(1);
+    expect(pickReach("pen")).toBeGreaterThan(1);
+    expect(pickReach("touch")).toBeGreaterThan(pickReach("pen"));
+  });
+
+  test("an unknown pointer is treated as a mouse", () => {
+    expect(clickSlop("")).toBe(CLICK_SLOP);
+    expect(pickReach("stylus")).toBe(1);
+  });
+
+  test("a finger's pick is the engine's own rule on a wider pixel: 13.5 CSS px for a pickbox of 3", () => {
+    const worldPerPixel = 0.02;
+    expect(pickAperture(worldPerPixel * pickReach("touch"), DEFAULT_PICKBOX) / worldPerPixel).toBeCloseTo(13.5, 9);
+    expect(pickAperture(worldPerPixel * pickReach("mouse"), DEFAULT_PICKBOX) / worldPerPixel).toBeCloseTo(4.5, 9);
   });
 });
 

@@ -70,6 +70,9 @@ src/selection.ts     the pick aperture and click selection semantics (pure)
 src/props.ts         the properties palette's parsing and patch building (pure)
 src/components/      TopBar, MenuBar, ToolStrip, StatusBar, CanvasView, LayersPanel,
                      PropertiesPanel, CommandLine
+src/ui/              the design system's twelve components (Button, IconButton, Chip, Field,
+                     Select, Checkbox, TextArea, Row, SectionLabel, Tooltip, Tab, Kbd), their
+                     tests and their one sheet, ui.css; the specs are in docs/system
 src/chrome.css       menu bar, tool strip, status bar
 src/interaction.css  properties rows and keyword chips
 src/tokens.css       the design tokens, measured from Cursor 3.27.22 (2026-10-28)

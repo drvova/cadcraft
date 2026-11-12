@@ -31,7 +31,7 @@ Not applicable: no variant axes — a section label is one heading; its size, we
 ## States
 | State | Trigger | What the user can do | Shown by, besides color | Checked by |
 |---|---|---|---|---|
-| Rest | The heading is rendered. | Read it; jump to it by heading navigation. | The uppercase label at the faint ink. | test |
+| Rest | The heading is rendered. | Read it; jump to it by heading navigation. | The bold uppercase label at the faint ink, with no added letter spacing (the measured header). | test |
 | Long label | The section's name is wider than its panel. | Read it; the label does not wrap. | The label runs to the panel's edge; a longer name is the caller's problem to shorten. | by hand |
 
 ### State precedence
@@ -96,6 +96,7 @@ Rests on the native `<h2>` element: heading role and level come from the platfor
 |---|---|---|
 | The text | all | `--font-chip`, `--text-faint` |
 | The weight | all | `700` (the one weight the system draws headings at) |
+| The tracking | all | none: the measured header is 11px bold capitals at the face's own spacing (`docs/system/typography.md`) |
 
 ## Related
 - `Row`: when the text is a clickable list item rather than a heading.

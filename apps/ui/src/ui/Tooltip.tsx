@@ -13,7 +13,8 @@
  * element outside the layer may carry the attribute itself. Beside it, `data-hint-keys` holds a
  * shortcut (drawn as a key cap after the text) and `data-hint-note` a second, quieter line (why a
  * control is disabled). A hint that only repeats what the control already shows is not drawn,
- * unless the control's label is clipped: then the hint is the full label.
+ * unless the control's label is clipped: then the hint is the full label. What the control shows
+ * is its text, or the text of the one element inside it marked `data-hint-label`.
  *
  * The hint shows after a short delay under a mouse or a pen (at once, and without the fade, when
  * another hint was up a moment ago, so sweeping a tool bar reads every key), at once when the
@@ -34,6 +35,9 @@ export const HINT_ATTR = "data-hint";
 export const HINT_KEYS_ATTR = "data-hint-keys";
 /** The attribute that holds a second, quieter line: why the control is disabled, what it will do. */
 export const HINT_NOTE_ATTR = "data-hint-note";
+/** The attribute on the one element inside a control that holds the label it shows, where the
+ *  control's own text is more than that label (a select holds every choice, and shows one). */
+export const HINT_LABEL_ATTR = "data-hint-label";
 /** The attribute that names the preferred side (`bottom` when absent). */
 export const HINT_PLACEMENT_ATTR = "data-hint-placement";
 
@@ -167,7 +171,7 @@ export function hintContent(host: Element): HintContent | null {
   const hint = plain(host.getAttribute(HINT_ATTR));
   const keys = plain(host.getAttribute(HINT_KEYS_ATTR));
   const note = plain(host.getAttribute(HINT_NOTE_ATTR));
-  const label = plain(host.textContent);
+  const label = plain((host.querySelector(`[${HINT_LABEL_ATTR}]`) ?? host).textContent);
   if (label !== "" && clipped(host)) {
     const rest = [hint, note].filter((line) => line !== "" && line !== label);
     return { text: label, keys, note: rest.join(". ") };

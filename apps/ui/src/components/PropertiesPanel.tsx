@@ -10,6 +10,10 @@
  * reaching the shell's own Escape; an unchanged value sends nothing; a control keeps its element
  * (and so the focus) across refreshes.
  *
+ * No native `title` here: text an ellipsis cuts (a label, the head's count) opts in to the
+ * system's hint with an empty `data-hint`, a field shows its value while it cuts it
+ * (`hintWhenClipped`), and a read-only value wraps and so needs none.
+ *
  * No engine call lives here: the shell owns the facade, shows a notice for a refused set, and
  * refreshes the reply.
  */
@@ -53,11 +57,11 @@ export function PropertiesPanel(props: PropertiesPanelProps): JSX.Element {
       <div class="properties-head">
         <IconButton icon="chevron-down" size="sm" title={open() ? "Hide the properties" : "Show the properties"} expanded={open()} controls="properties-body" onClick={() => setOpen(!open())} />
         <SectionLabel>Properties</SectionLabel>
-        <span class="properties-state" title={title()}>
+        <span class="properties-state" data-hint="">
           {title()}
         </span>
       </div>
-      <div class="properties-body" id="properties-body" role="list" hidden={!open()}>
+      <div class="properties-body" id="properties-body" role="list" aria-label="Properties" hidden={!open()}>
         <Index each={props.properties?.rows ?? []}>
           {(row) => (
             <PropRowView row={row} subject={subject} onSet={props.onSet} onNotice={props.onNotice} />
@@ -69,6 +73,29 @@ export function PropertiesPanel(props: PropertiesPanelProps): JSX.Element {
       </div>
     </aside>
   );
+}
+
+/** Whether a field is too narrow for its value. A text field scrolls, so its own box says; a
+ *  choice does not, so its value is measured in the field's font against the room inside it. */
+function cuts(field: HTMLInputElement | HTMLSelectElement): boolean {
+  if (field instanceof HTMLInputElement) return field.scrollWidth > field.clientWidth;
+  const style = getComputedStyle(field);
+  const pen = document.createElement("canvas").getContext("2d");
+  if (pen === null) return true;
+  // Not `style.font`: the shorthand computes to nothing when a longhand it cannot hold is set.
+  pen.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+  return pen.measureText(field.value).width > field.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
+}
+
+/**
+ * A field's hint is its whole value, and only while the field cuts it: a field has no text of its
+ * own for the layer to measure, so the field is measured here, just before the hint asks (the
+ * pointer arriving, the focus arriving). A value that fits raises no hint.
+ */
+function hintWhenClipped(field: HTMLInputElement | HTMLSelectElement): void {
+  const mark = (): void => field.setAttribute("data-hint", cuts(field) ? field.value : "");
+  field.addEventListener("pointerover", mark);
+  field.addEventListener("focusin", mark);
 }
 
 interface PropRowViewProps {
@@ -167,15 +194,13 @@ function PropRowView(props: PropRowViewProps): JSX.Element {
 
   return (
     <div class="prop-row" role="listitem">
-      <span class="prop-label" title={props.row().label}>
+      <span class="prop-label" data-hint="">
         {props.row().label}
       </span>
       <span class="prop-value">
         <Switch>
           <Match when={mode() === "readonly"}>
-            <span class="prop-readonly" title={props.row().value}>
-              {props.row().value}
-            </span>
+            <span class="prop-readonly">{props.row().value}</span>
           </Match>
           <Match when={mode() === "bool"}>
             <input
@@ -199,7 +224,8 @@ function PropRowView(props: PropRowViewProps): JSX.Element {
             <select
               class="prop-select"
               classList={{ "is-varies": draft() === VARIES }}
-              title={draft()}
+              data-hint=""
+              ref={hintWhenClipped}
               aria-label={props.row().label}
               onChange={(e) => {
                 const value = e.currentTarget.value;
@@ -230,7 +256,8 @@ function PropRowView(props: PropRowViewProps): JSX.Element {
               spellcheck={false}
               autocomplete="off"
               value={draft()}
-              title={draft()}
+              data-hint=""
+              ref={hintWhenClipped}
               aria-label={props.row().label}
               aria-invalid={invalid() ? "true" : undefined}
               onInput={(e) => {

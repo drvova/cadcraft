@@ -184,14 +184,62 @@ describe("send", () => {
     expect(changed).toBe(1);
   });
 
-  test("the status counts the steps", async () => {
+  test("the status says what the turn is doing: thinking, running a command by its name, writing", async () => {
     const seen: string[] = [];
-    const fake = fakeFacade();
     const holder: { session?: AssistantSession } = {};
-    holder.session = sessionWith(scriptedFetch([toolReply("(+ 1 2)"), textReply("Three.")]).fetch, fake, () => seen.push(holder.session?.status() ?? ""));
-    await say(holder.session, "add");
-    expect(seen).toEqual(["Working, 1 step…"]);
-    expect(holder.session.status()).toBe("");
+    const note = (): void => {
+      const now = holder.session?.status() ?? "";
+      if (seen[seen.length - 1] !== now) seen.push(now);
+    };
+    const session = createAssistantSession({
+      facade: fakeFacade().facade,
+      // The shell re-reads the drawing after a command: the status still names that command.
+      onChanged: note,
+      fetchImpl: scriptedFetch([toolReply("(+ 1 2)"), textReply("Three.")]).fetch,
+      // A frame is asked for when words arrive.
+      frame: (flush) => {
+        note();
+        flush();
+      },
+    });
+    holder.session = session;
+    session.setProvider(PROVIDER);
+    session.setInput("add");
+    session.send();
+    expect(session.status()).toBe("Thinking…");
+    await session.whenIdle();
+    expect(seen).toEqual(["Running (+ 1 2)…", "Writing…"]);
+    expect(session.status()).toBe("");
+  });
+
+  test("a command's name stays in the status while the model reads its report", async () => {
+    const gate = gatedFetch();
+    const session = sessionWith(gate.fetch);
+    session.setInput("add");
+    session.send();
+    gate.release(toolReply("(+ 1 2)"));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(session.running()).toBe(true);
+    expect(session.status()).toBe("Ran (+ 1 2). Thinking…");
+    gate.release(textReply("Three."));
+    await session.whenIdle();
+    expect(session.status()).toBe("");
+  });
+
+  test("a model that stays silent is a wait on the provider, and the wait ends with the turn", async () => {
+    const gate = gatedFetch();
+    const session = createAssistantSession({ facade: fakeFacade().facade, onChanged: () => {}, fetchImpl: gate.fetch, slowMs: 5 });
+    session.setProvider(PROVIDER);
+    session.setInput("hi");
+    session.send();
+    expect(session.status()).toBe("Thinking…");
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(session.status()).toBe("Waiting for the provider…");
+    session.stop();
+    await session.whenIdle();
+    expect(session.status()).toBe("");
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(session.status()).toBe("");
   });
 
   test("stop ends the turn without a failure row", async () => {

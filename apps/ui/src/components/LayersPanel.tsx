@@ -4,7 +4,11 @@
  * invented here — the swatch paints the engine's own `colorRgb`.
  *
  * Each state key is named for its layer and its flag ("Outline frozen") and says whether the flag
- * is set through `aria-pressed`; its tooltip keeps the sentence a pointer user reads.
+ * is set through `aria-pressed`: the name does not change with the state, so a screen reader hears
+ * one key that is pressed or not, never two names for one key. Its hint is what a press does now
+ * ("Freeze", "Thaw"), for the eye, beside the icon that draws the state. No native `title`: the
+ * swatch, the used mark and the count carry the system's hint (`data-hint`) for the pointer, and
+ * each has its own name.
  *
  * A name too long for its track keeps both ends (`splitName`): layer names tell each other apart
  * at the end ("…-PHASE-1", "…-PHASE-2") as often as at the start. The two halves are for the eye
@@ -81,7 +85,10 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
       <div class="layers-head">
         <IconButton icon="chevron-down" size="sm" title={open() ? "Hide the layers" : "Show the layers"} expanded={open()} controls="layers-list" onClick={() => setOpen(!open())} />
         <SectionLabel>Layers</SectionLabel>
-        <span class="layers-count">{props.layers().length}</span>
+        <span class="layers-count" data-hint={props.layers().length === 1 ? "1 layer" : `${props.layers().length} layers`}>
+          {props.layers().length}
+          <span class="status-label">{props.layers().length === 1 ? " layer" : " layers"}</span>
+        </span>
       </div>
       <div class="layers-list" id="layers-list" role="list" aria-label="Layers" hidden={!open()}>
         <Index each={props.layers()}>
@@ -92,7 +99,7 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
               aria-current={layer().current ? "true" : undefined}
               aria-description={layer().description !== "" ? layer().description : undefined}
             >
-              <span class="layer-swatch" role="img" aria-label={`Color ${layer().colorName}`} style={{ background: rgb(layer().colorRgb) }} title={`${layer().colorName} ${layer().colorRgb.join(", ")}`} />
+              <span class="layer-swatch" role="img" aria-label={`Color: ${layer().colorName}`} style={{ background: rgb(layer().colorRgb) }} data-hint={`${layer().colorName}, RGB ${layer().colorRgb.join(", ")}`} />
               <Tooltip text={layerHint(layer())}>
                 <Row onClick={() => props.onMakeCurrent(layer().name)}>
                   <span class="layer-name-text">
@@ -114,13 +121,13 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
                 class={layer().used ? "layer-used is-used" : "layer-used"}
                 role="img"
                 aria-label={layer().used ? "Has objects" : "No objects"}
-                title={layer().used ? "Has objects" : "No objects"}
+                data-hint={layer().used ? "Has objects" : "No objects"}
               />
               <span class="layer-toggles">
                 <button
                   class={layer().on ? "toggle is-on" : "toggle"}
                   type="button"
-                  title={layer().on ? "Layer is on" : "Layer is off"}
+                  data-hint={layer().on ? "Turn off" : "Turn on"}
                   aria-label={`${layer().name} on`}
                   aria-pressed={layer().on}
                   onClick={() => props.onToggle(layer().name, "on", !layer().on)}
@@ -132,7 +139,7 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
                 <button
                   class={layer().frozen ? "toggle is-frozen" : "toggle"}
                   type="button"
-                  title={layer().frozen ? "Layer is frozen" : "Layer is thawed"}
+                  data-hint={layer().frozen ? "Thaw" : "Freeze"}
                   aria-label={`${layer().name} frozen`}
                   aria-pressed={layer().frozen}
                   onClick={() => props.onToggle(layer().name, "frozen", !layer().frozen)}
@@ -144,7 +151,7 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
                 <button
                   class={layer().locked ? "toggle is-locked" : "toggle"}
                   type="button"
-                  title={layer().locked ? "Layer is locked" : "Layer is unlocked"}
+                  data-hint={layer().locked ? "Unlock" : "Lock"}
                   aria-label={`${layer().name} locked`}
                   aria-pressed={layer().locked}
                   onClick={() => props.onToggle(layer().name, "locked", !layer().locked)}

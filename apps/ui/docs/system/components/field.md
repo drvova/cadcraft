@@ -13,7 +13,7 @@ Not applicable: hand-rolled — the 24px height, the hairline stroke and the foc
 `<Field value={name} ariaLabel="Layer name" onInput={setName} />` — the layer name, owned by the panel.
 
 Real uses, 3 call sites (`rg -c "<Field" src/components` → `src/components/AssistantPane.tsx:6`, the provider popover's Base URL, Model and API key):
-- `src/components/AssistantPane.tsx` — the composer pilot: the provider popover's Base URL, Model and API key inputs; the composer's own multi-line editor stays a bespoke `<textarea>` (found-not-fixed).
+- `src/components/AssistantPane.tsx` — the composer pilot: the provider popover's Base URL, Model and API key inputs; the composer's own multi-line editor is a bespoke `<textarea>` until it moves onto `TextArea`.
 - (planned) `src/components/PropertiesPanel.tsx:226` — `class="prop-input"` (1 use) moves onto `<Field>` in a later arc; the palette keeps its own input for now.
 - (planned) `src/components/CommandLine.tsx:127` — `class="cmd-input"` (1 use) moves onto `<Field type="search">` in a later arc; the command line keeps its own input for now.
 
@@ -83,7 +83,8 @@ Real uses, 3 call sites (`rg -c "<Field" src/components` → `src/components/Ass
 - The value is owned by a surface above the field, which needs every keystroke.
 
 ### When not to use
-- The value is picked from a set rather than typed. Use `Chip` instead.
+- The value is picked from a set rather than typed. Use `Select` instead.
+- The text runs to more than 1 line. Use `TextArea` instead.
 - The control is an action rather than a value. Use `Button` instead.
 - The text is a fact to read. Use `Chip` instead.
 
@@ -147,6 +148,8 @@ Rests on the native `<input>` element: typing, selection, IME and autofill come 
 | The motion | focus | `--dur-fast`, `--ease-standard` |
 
 ## Related
+- `TextArea`: when the text runs to several lines.
+- `Select`: when the value is picked from a list rather than typed.
 - `Chip`: when the text is a fact rather than an editable value.
 - `Row`: when the value is picked from a list rather than typed.
 - `Button`: when the field's value is submitted.

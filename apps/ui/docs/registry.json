@@ -173,6 +173,140 @@
    "replaces": []
   },
   {
+   "id": "select",
+   "name": "Select",
+   "import": "../../../../src/ui/Select",
+   "source": "src/ui/Select.tsx",
+   "page": "/system/components/select",
+   "twin": "/system/components/select.md",
+   "docs": "/system/components/select",
+   "markdown": "/system/components/select.md",
+   "entry": "docs/system/components/select.md",
+   "status": "ready",
+   "variants": {
+    "variant": [
+     "field",
+     "inline"
+    ],
+    "size": [
+     "sm",
+     "md"
+    ],
+    "align": [
+     "start",
+     "end"
+    ]
+   },
+   "states": [
+    "mixed",
+    "disabled",
+    "invalid"
+   ],
+   "tokens": [
+    "--control-h-input",
+    "--control-h-chip",
+    "--field-pad-x",
+    "--gap-4",
+    "--radius-control",
+    "--font-body",
+    "--control",
+    "--border-soft",
+    "--hairline",
+    "--text",
+    "--text-faint",
+    "--text-disabled",
+    "--icon",
+    "--icon-size-sm",
+    "--focus-ring",
+    "--error",
+    "--dur-fast",
+    "--ease-standard"
+   ],
+   "replaces": []
+  },
+  {
+   "id": "checkbox",
+   "name": "Checkbox",
+   "import": "../../../../src/ui/Checkbox",
+   "source": "src/ui/Checkbox.tsx",
+   "page": "/system/components/checkbox",
+   "twin": "/system/components/checkbox.md",
+   "docs": "/system/components/checkbox",
+   "markdown": "/system/components/checkbox.md",
+   "entry": "docs/system/components/checkbox.md",
+   "status": "ready",
+   "variants": {},
+   "states": [
+    "checked",
+    "mixed",
+    "disabled"
+   ],
+   "tokens": [
+    "--icon-size-md",
+    "--radius-small",
+    "--gap-6",
+    "--gap-3",
+    "--gap-16",
+    "--font-body",
+    "--hairline",
+    "--icon",
+    "--text",
+    "--accent",
+    "--accent-hover",
+    "--accent-pressed",
+    "--on-accent",
+    "--hover",
+    "--fill-active",
+    "--fill-disabled",
+    "--text-disabled",
+    "--focus-ring",
+    "--control-h-input",
+    "--dur-fast",
+    "--ease-standard"
+   ],
+   "replaces": []
+  },
+  {
+   "id": "textarea",
+   "name": "TextArea",
+   "import": "../../../../src/ui/TextArea",
+   "source": "src/ui/TextArea.tsx",
+   "page": "/system/components/textarea",
+   "twin": "/system/components/textarea.md",
+   "docs": "/system/components/textarea",
+   "markdown": "/system/components/textarea.md",
+   "entry": "docs/system/components/textarea.md",
+   "status": "ready",
+   "variants": {
+    "variant": [
+     "field",
+     "bare"
+    ]
+   },
+   "states": [
+    "disabled",
+    "invalid"
+   ],
+   "tokens": [
+    "--field-pad-y",
+    "--field-pad-x",
+    "--radius-control",
+    "--font-body",
+    "--gap-16",
+    "--control",
+    "--border-soft",
+    "--hairline",
+    "--text",
+    "--text-faint",
+    "--text-disabled",
+    "--focus-ring",
+    "--error",
+    "--dur-fast",
+    "--ease-standard"
+   ],
+   "replaces": []
+  },
+  {
    "id": "row",
    "name": "Row",
    "import": "../../../../src/ui/Row",
@@ -186,7 +320,8 @@
    "variants": {},
    "states": [
     "selected",
-    "disabled"
+    "disabled",
+    "option"
    ],
    "tokens": [
     "--control-h-row",

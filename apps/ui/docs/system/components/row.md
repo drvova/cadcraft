@@ -16,6 +16,7 @@ Real uses, 4 call sites (`rg -c "<Row" src/components` → `src/components/Assis
 - `src/components/AssistantPane.tsx` — the setup sheet's provider rows and the composer's slash list (the commands a `/word` draft matches; `selected` marks the one the arrow keys are on); the chat tabs in the header moved onto `Tab`; the transcript's tool rows and the composer's toolbar row stay bespoke (the toolbar is a container, and the tool row carries a disclosure arrow and a note).
 - `src/components/CommandPalette.tsx:126` — each command in the palette's list; `selected` marks the one the arrow keys are on, `disabled` the ones that cannot run now.
 - `src/components/LayersPanel.tsx:53` — each layer's name band (`is-current` marks the current one); the toggle cluster beside it stays native buttons.
+- (planned) `src/components/CommandPalette.tsx` and the assistant's slash list — their rows sit in a `role="listbox"` and move onto `<Row option>` in the next pass, which removes the palette's wrapping `.palette-option` element and takes each row out of the Tab order; `decisions.md` ("Canonical picks") has the replacement.
 - (planned) `src/components/MenuBar.tsx` — `.menu-row` (1 use) moves onto `<Row>` once `Row` can carry the `menuitem` roles; the rows stay native buttons for now.
 - (planned) `src/components/PropertiesPanel.tsx:202` — `.prop-row` (1 use) moves onto `<Row>` when the palette's rows become clickable; today they are display rows with an inline editor.
 - `.layer-row` (LayersPanel) stays bespoke because its row nests a toggle cluster, and a button cannot nest buttons.
@@ -26,6 +27,7 @@ Real uses, 4 call sites (`rg -c "<Row" src/components` → `src/components/Assis
 | `docs/system/examples/row/default.tsx` | default | A plain list row with a trailing value. |
 | `docs/system/examples/row/selected.tsx` | state:selected | The current row at the .14 fill, announced as current. |
 | `docs/system/examples/row/disabled.tsx` | state:disabled | A blocked row at the disabled ink. |
+| `docs/system/examples/row/option.tsx` | state:option | Options of a listbox a search field drives: one lit, none a Tab stop. |
 | `docs/system/examples/row/in-menu-bar.tsx` | composition:MenuBar | A menu item inside an open menu. |
 
 ## Variants
@@ -42,6 +44,7 @@ Not applicable: no variant axes — a row is one band; the selected and disabled
 | Focused | Keyboard focus arrives by Tab. | Enter or Space runs the action. | The 1px ring in the focus ink at offset -1, following the 4px radius. | by hand |
 | Selected | The caller passes `selected` (the current row). | Click it; move to another row. | The `.14` fill, the full ink, and `aria-current="true"`. | test |
 | Disabled | The caller passes `disabled`. | Nothing: no click, no hover. | The label at the disabled ink; the cursor stays default. | test |
+| Option | The caller passes `option`, inside a `role="listbox"` that keeps the keyboard in its own field. | Press it; move the pointer over it, which tells the listbox (`onPointerMove`). The keys are the listbox's. | A `role="option"` band, not a button: no Tab stop, no ring and no hover fill of its own. The active one (`selected`) carries `aria-selected="true"` and the `.14` fill; a blocked one carries `aria-disabled="true"`. | test |
 
 ### State precedence
 - Hover and Selected: Selected wins. The `.14` selected fill stays under the pointer; hover adds nothing to the fill.
@@ -49,6 +52,10 @@ Not applicable: no variant axes — a row is one band; the selected and disabled
 - Hover and Disabled: Disabled wins. A disabled row keeps its resting look and takes no click.
 - Selected and Disabled: Disabled wins. A disabled row drops the selected fill and shows the disabled ink.
 - Pressed and Focused: both show. The ring stays drawn while the row is held down.
+- Option and Hover: Option wins. An option takes no fill from the pointer; the listbox moves the one highlight to it by setting `selected`.
+- Option and Selected: both show. The active option takes the `.14` fill and the full ink, as the current row does.
+- Option and Disabled: both show. A blocked option still takes the highlight when the keys reach it, at the disabled ink, and takes no click.
+- Option and Focused: Not applicable: an option is never focused; the listbox's field keeps the focus and names the active option with `aria-activedescendant`.
 
 ### Motion
 | Trigger | Kind | Preset | Properties | Reduced motion |
@@ -56,7 +63,10 @@ Not applicable: no variant axes — a row is one band; the selected and disabled
 | The pointer enters or leaves | input | hover / focus feedback (`--dur-fast` + `--ease-standard`) | background-color | The fill changes at once: the shell's `:root[data-animations="off"]` rule removes the transition. |
 
 ## Props
-- `selected`: the current row; sets `aria-current="true"` and the `.14` fill.
+- `selected`: the current row; sets `aria-current="true"` and the `.14` fill. On an `option` it is the listbox's active option and sets `aria-selected`.
+- `option`: the row is one option of a `role="listbox"` that owns the focus and the highlight; it renders a `role="option"` band with no Tab stop and no hover fill.
+- `id`: the element's `id`, for the listbox's `aria-activedescendant`.
+- `onPointerMove`: the pointer moved over the row; a listbox moves its highlight here.
 - `disabled`: blocks the click and drops the ink to the disabled step.
 - `title`: a tooltip, for a row whose label is clipped.
 - `onClick`: runs on click; a disabled row never fires it.
@@ -77,6 +87,9 @@ Not applicable: no variant axes — a row is one band; the selected and disabled
 - `rule/row-one-action`: When a row runs an action, wire it on `Row` itself rather than on a label inside it, because a label-only hit area leaves dead space that reads as broken. Evidence: app 8/8 lines across `src/chrome.css`, `src/components/MenuBar.tsx` and `src/styles.css`, `rg -c "menu-row" src`. Check: test `src/ui/Row.test.tsx`.
   - Don't: `<Row><span onClick={pick}>Layer 1</span></Row>`
   - Do: `<Row onClick={pick}>Layer 1</Row>`
+- `rule/row-option-in-listbox`: When rows are the items of a `role="listbox"` whose field keeps the focus, pass `option` on each with an `id`, mark the active one with `selected` and move it from `onPointerMove`, because a `<button>` inside a `role="option"` adds 1 Tab stop per row and its own hover fill, so two rows are lit at once: the pointer's and the keyboard's. Evidence: single use `src/components/CommandPalette.tsx:244`, a `Row` button inside a `.palette-option` wrapper. Check: test `src/ui/Row.test.tsx`.
+  - Don't: `<div role="option" aria-selected={lit}><Row selected={lit} onClick={run}>Line</Row></div>`
+  - Do: `<Row option id="command-0" selected={lit} onPointerMove={light} onClick={run}>Line</Row>`
 - `rule/row-current-marked`: When a list has a current item, pass `selected` on it, because the `.14` fill alone is colour and a screen reader needs `aria-current="true"` to hear it. Evidence: app 3/3 list surfaces draw a current row, `src/styles.css`. Check: test `src/ui/Row.test.tsx`.
   - Don't: a hand-painted background on the current row with no `aria-current`.
   - Do: `<Row selected>Current layer</Row>`
@@ -95,7 +108,7 @@ Not applicable: no variant axes — a row is one band; the selected and disabled
 - `rule/row-label-limit`: When a row's label runs past 40 characters at the 260px sidebar, clip it with an ellipsis and keep the full text in `title`, because the measured row is 22px tall and the sidebar 260px wide. Evidence: measured 22px row and 260px sidebar, `docs/system/decisions.md`. Check: review `src/styles.css`.
   - Don't: a 60-character layer name that overflows the row.
   - Do: a clipped label with the full name in `title`.
-- `rule/row-touch-target`: When rows stack in a list, let the list's height follow its rows rather than fixing it to a multiple of 22px, because under a coarse pointer each row grows from 22px to the 24px control height (rows stack with 0 gap, so an overhanging target would only overlap the next row) and a fixed list would cut its last rows. Evidence: measured 22px row, 24px under a coarse pointer, `src/ui/ui.css:606`. Check: review `src/ui/ui.css`.
+- `rule/row-touch-target`: When rows stack in a list, let the list's height follow its rows rather than fixing it to a multiple of 22px, because under a coarse pointer each row grows from 22px to the 24px control height (rows stack with 0 gap, so an overhanging target would only overlap the next row) and a fixed list would cut its last rows. Evidence: measured 22px row, 24px under a coarse pointer, `src/ui/ui.css:930`. Check: review `src/ui/ui.css`.
   - Don't: `.my-list { height: calc(var(--control-h-row) * 8); overflow: hidden }`
   - Do: `.my-list { max-height: calc(var(--control-h-input) * 8); overflow-y: auto }`
 
@@ -109,11 +122,14 @@ Rests on the native `<button>` element: role, Enter and Space, `disabled` and fo
 | Enter | The focused row. | Runs the action. | Stays on the row. | test |
 | Space | The focused row. | Runs the action on release, exactly once. | Stays on the row. | by hand |
 | ArrowDown | The focused row (in a menu, by the parent's key handler). | Moves to the next row. | On the next row. | by hand |
+| Tab (option) | Anywhere before a listbox of `option` rows. | Skips every option: none is a Tab stop. | On the next control after the list. | test |
+| ArrowDown, Enter (option) | The listbox's own field. | The listbox moves `selected` to the next option, or runs the active one; the option handles no key. | Stays in the field. | by hand |
 
 ### ARIA
 | Part | Role | Accessible name from | States and properties | Announced | Checked by |
 |---|---|---|---|---|---|
 | The row | `button` (native) | Its text content | `aria-current="true"` when selected; `disabled` when blocked | "Layer 1, button, current" | test |
+| The row as an option | `option` (`role="option"` on a `<div>`) | Its text content | `aria-selected` (`true` on the active one, `false` on the rest); `aria-disabled="true"` when blocked; the `id` the listbox's `aria-activedescendant` names | "Circle, 2 of 4" as the listbox's field moves to it | test |
 
 ## Tokens
 | Part | State | Token |
@@ -121,7 +137,7 @@ Rests on the native `<button>` element: role, Enter and Space, `disabled` and fo
 | The band | all | `--control-h-row`, `--radius-card`, `--gap-4`, `--font-body` |
 | The label | rest | `--text-dim` |
 | The fill | hover | `--hover` |
-| The fill | selected | `--fill-active` |
+| The fill | selected, the active option | `--fill-active` |
 | The label | selected | `--text` |
 | The label | disabled | `--text-disabled` |
 | The ring | focus-visible | `--focus-outline-w`, `--focus-ring`, `--focus-outline-offset` |
@@ -135,3 +151,4 @@ Rests on the native `<button>` element: role, Enter and Space, `disabled` and fo
 - `Tooltip`: when a row's glyph control needs its hint on hover rather than in the row text.
 - `Tab`: when the control brings one view of a strip to the front rather than being one band of a list.
 - `Kbd`: when the text is the key that runs an action, shown at the end of the row.
+- `Select`: when the list is a short set of values behind one closed control rather than rows on the page.

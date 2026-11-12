@@ -12,32 +12,38 @@
 import { createEffect, createMemo, For, Show, type JSX } from "solid-js";
 import type { FacadeMode, SettingsState } from "../facade";
 import { Tab } from "../ui/Tab";
+import { ariaKeyShortcuts } from "../ui/Tooltip";
 import { rovingBand, scrollBand } from "./ToolStrip";
 
 /** The boolean drafting settings a status toggle can flip. */
 type ToggleKey = "grid" | "snap" | "ortho" | "polar" | "isodraft" | "otrack" | "osnap" | "lwdisplay" | "transparency" | "dynmode" | "qpmode";
 
-/** One drafting toggle: the command id it invokes, the desktop's tooltip, and its settings key. */
+/**
+ * One drafting toggle: the command id it invokes, its settings key, the full words (the toggle's
+ * accessible name and its hint: a setting, not an action, because `aria-pressed` says whether it
+ * is on), the terse face the bar draws, and the function key the engine gives the command.
+ */
 export interface StatusToggle {
   id: string;
   label: string;
   short: string;
   key: ToggleKey;
+  shortcut?: string;
 }
 
-/** The toggles, in `chrome.rs`'s order; ids and tooltips transcribed from that table. */
+/** The toggles, in `chrome.rs`'s order; ids and function keys transcribed from that table. */
 export const STATUS_TOGGLES: readonly StatusToggle[] = [
-  { id: "grid", label: "Grid (F7)", short: "Grid", key: "grid" },
-  { id: "snap", label: "Snap Mode (F9)", short: "Snap", key: "snap" },
-  { id: "ortho", label: "Ortho Mode (F8)", short: "Ortho", key: "ortho" },
-  { id: "polar", label: "Polar Tracking (F10)", short: "Polar", key: "polar" },
-  { id: "isodraft", label: "Isometric Drafting", short: "Iso", key: "isodraft" },
-  { id: "otrack", label: "Object Snap Tracking (F11)", short: "OTrack", key: "otrack" },
-  { id: "osnap", label: "Object Snap (F3)", short: "OSnap", key: "osnap" },
-  { id: "lwdisplay", label: "Show/Hide Lineweight", short: "LW", key: "lwdisplay" },
-  { id: "transparencydisplay", label: "Show/Hide Transparency", short: "Transp", key: "transparency" },
-  { id: "dynmode", label: "Dynamic Input (F12)", short: "Dyn", key: "dynmode" },
-  { id: "qpmode", label: "Quick Properties", short: "QP", key: "qpmode" },
+  { id: "grid", label: "Grid", short: "Grid", key: "grid", shortcut: "F7" },
+  { id: "snap", label: "Snap mode", short: "Snap", key: "snap", shortcut: "F9" },
+  { id: "ortho", label: "Ortho mode", short: "Ortho", key: "ortho", shortcut: "F8" },
+  { id: "polar", label: "Polar tracking", short: "Polar", key: "polar", shortcut: "F10" },
+  { id: "isodraft", label: "Isometric drafting", short: "Iso", key: "isodraft" },
+  { id: "otrack", label: "Object snap tracking", short: "OTrack", key: "otrack", shortcut: "F11" },
+  { id: "osnap", label: "Object snap", short: "OSnap", key: "osnap", shortcut: "F3" },
+  { id: "lwdisplay", label: "Lineweight display", short: "LW", key: "lwdisplay" },
+  { id: "transparencydisplay", label: "Transparency display", short: "Transp", key: "transparency" },
+  { id: "dynmode", label: "Dynamic input", short: "Dyn", key: "dynmode", shortcut: "F12" },
+  { id: "qpmode", label: "Quick properties", short: "QP", key: "qpmode" },
 ];
 
 export interface LayoutTabsProps {
@@ -118,6 +124,11 @@ export interface StatusBarProps {
  * in a `status-fit` box, in which it is whole or gone; the layer's name narrows instead, and the
  * toggles wrap. Each value is read with what it is: the words a sighted reader gets from the
  * value's place are in a `status-label`, which is not drawn.
+ *
+ * Every hint here is the system's (`data-hint`, opening above the bar), never a native `title`.
+ * A toggle's is its full name with its function key as a key cap; the name is its `aria-label`
+ * and the key its `aria-keyshortcuts`. A fact's hint is for the pointer only (a `<span>` takes no
+ * focus), so it holds nothing a keyboard user needs: the fact itself is the text.
  */
 export function StatusBar(props: StatusBarProps): JSX.Element {
   const coord = (): string => (props.cursor === null ? "\u2014" : props.formatPoint(props.cursor.x, props.cursor.y));
@@ -128,14 +139,15 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
   return (
     <footer class="statusbar">
       <span class="status-fit status-fit-mode">
-        <span class={props.mode.kind === "wasm" ? "status-item status-mode is-wasm" : "status-item status-mode is-mock"} title={props.mode.detail}>
+        <span class={props.mode.kind === "wasm" ? "status-item status-mode is-wasm" : "status-item status-mode is-mock"} data-hint={props.mode.detail} data-hint-placement="top">
           <span class="status-label">Engine: </span>
           {props.mode.kind}
         </span>
       </span>
       <span
         class="status-item status-layer"
-        title={`The current layer (CLAYER): ${props.currentLayer}`}
+        data-hint="Set with CLAYER"
+        data-hint-placement="top"
         // How narrow the name may be squeezed (chrome.css): never to fewer letters than it has.
         style={{ "--layer-floor": Math.min([...props.currentLayer].length, LAYER_FLOOR) }}
       >
@@ -143,12 +155,12 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
         {props.currentLayer}
       </span>
       <span class="status-fit status-fit-objects">
-        <span class="status-item status-count" title="Objects in the drawing">
+        <span class="status-item status-count" data-hint="Objects in the drawing" data-hint-placement="top">
           {props.entityCount === 1 ? "1 object" : `${count(props.entityCount)} objects`}
         </span>
       </span>
       <span class="status-fit status-fit-layers">
-        <span class="status-item status-count" title="Layers in the drawing">
+        <span class="status-item status-count" data-hint="Layers in the drawing" data-hint-placement="top">
           {props.layerCount === 1 ? "1 layer" : `${count(props.layerCount)} layers`}
         </span>
       </span>
@@ -158,7 +170,11 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
             <button
               class={props.settings[toggle.key] ? "status-toggle is-on" : "status-toggle"}
               type="button"
-              title={toggle.label}
+              aria-label={toggle.label}
+              data-hint={toggle.label}
+              data-hint-keys={toggle.shortcut}
+              data-hint-placement="top"
+              aria-keyshortcuts={toggle.shortcut === undefined ? undefined : ariaKeyShortcuts(toggle.shortcut)}
               aria-pressed={props.settings[toggle.key]}
               onClick={() => props.onCommand(toggle.id, { on: !props.settings[toggle.key] })}
             >
@@ -169,7 +185,7 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
       </div>
       {/* Not a live region: the position changes with every move of the pointer. */}
       <span class="status-fit status-fit-coord">
-        <span class="status-coord" title="Pointer position in the drawing's units" style={{ "--coord-ch": coordWidth() }}>
+        <span class="status-coord" data-hint="In the drawing's units" data-hint-placement="top" style={{ "--coord-ch": coordWidth() }}>
           <span class="status-label">Pointer position: </span>
           {coord()}
         </span>
@@ -178,7 +194,7 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
           said when the selection changes, politely, and nothing is said when it empties. */}
       <span class="status-fit status-fit-selection" role="status">
         <Show when={props.selectionCount > 0}>
-          <span class="status-selection" title="Objects in the selection">
+          <span class="status-selection" data-hint="Objects in the selection" data-hint-placement="top">
             {`${count(props.selectionCount)} selected`}
           </span>
         </Show>

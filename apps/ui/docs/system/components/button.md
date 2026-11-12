@@ -14,7 +14,7 @@ Not applicable: hand-rolled — the recipe is the app's own `src/ui/ui.css`, mea
 
 Real uses, 9 call sites (`rg -c "<Button" src/components` → `src/components/AssistantPane.tsx:11`, `src/components/TopBar.tsx:1`):
 - `src/components/AssistantPane.tsx` — the assistant's call sites: the empty state's Set up a model (`variant="primary"`, shown while no model is connected), the setup sheet's Check connection and Cancel (`variant="ghost"`) and Save (`variant="primary"`), and the stack over the composer: Stop on the run row and Undo all on the changes row (`variant="ghost" size="sm"`), and Keep beside it (`size="sm"`).
-- `src/components/TopBar.tsx:37` — the title bar's command centre (`size="sm"`): the drawing's name, opening the command palette.
+- `src/components/TopBar.tsx:42` — the title bar's command centre (`size="sm"`): the drawing's name, opening the command palette.
 
 ### Example files
 | File | Covers | Caption |
@@ -98,15 +98,15 @@ Real uses, 9 call sites (`rg -c "<Button" src/components` → `src/components/As
   - Don't: `.my-button:hover { color: var(--accent) }` — a colour change instead of a fill step.
   - Do: `.ui-button--secondary:hover { background: var(--fill-active) }`
 
-- `rule/button-disabled-reason`: When a button is disabled by something the user can fix, pass the reason as `title` in 1 short sentence, because a disabled button stays focusable and hoverable for exactly this and a dead button with 0 words leaves the user guessing what to fill in. Evidence: single use `src/components/AssistantPane.tsx:782`, the setup sheet's Save with `title={blocker() ?? undefined}`. Check: test `src/ui/Button.test.tsx`.
+- `rule/button-disabled-reason`: When a button is disabled by something the user can fix, pass the reason as `title` in 1 short sentence, because a disabled button stays focusable and hoverable for exactly this and a dead button with 0 words leaves the user guessing what to fill in. Evidence: single use `src/components/AssistantPane.tsx:794`, the setup sheet's Save with `title={blocker() ?? undefined}`. Check: test `src/ui/Button.test.tsx`.
   - Don't: `<Button variant="primary" disabled={blocker() !== null}>Save</Button>`
   - Do: `<Button variant="primary" disabled={blocker() !== null} title={blocker() ?? undefined}>Save</Button>`
-- `rule/button-title-adds`: When a button takes `title`, write what the label leaves out and 0 words that repeat it, because the label is the name and the hint is announced after it as the description: "Save, button, Save" says the same thing twice, and the layer draws no box for a repeat. Evidence: single use `src/components/TopBar.tsx:40`, the command centre's "Search commands" hint over the drawing's name. Check: test `src/ui/Button.test.tsx`.
+- `rule/button-title-adds`: When a button takes `title`, write what the label leaves out and 0 words that repeat it, because the label is the name and the hint is announced after it as the description: "Save, button, Save" says the same thing twice, and the layer draws no box for a repeat. Evidence: single use `src/components/TopBar.tsx:45`, the command centre's "Command palette" hint over a name that already says "Search commands". Check: test `src/ui/Button.test.tsx`.
   - Don't: `<Button title="Save">Save</Button>`
   - Do: `<Button title="Check the address and the key">Check connection</Button>`
 
 ### Content
-- `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Undo all` — because the label is the action's name and the accessible name comes from it. Evidence: app 5/6 labels are verbs or verb phrases, `src/components/AssistantPane.tsx:817`, the label "Undo all" (the sixth, the command centre, is labelled with the drawing's name and names its action in its `title`). Check: review `src/components/AssistantPane.tsx`.
+- `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Undo all` — because the label is the action's name and the accessible name comes from it. Evidence: app 5/6 labels are verbs or verb phrases, `src/components/AssistantPane.tsx:829`, the label "Undo all" (the sixth, the command centre, is labelled with the drawing's name and names its action in its `title`). Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Button>SAVE</Button>`
   - Do: `<Button>Save</Button>`
 - `rule/button-aria-label-value`: When a button's visible label is a value rather than its action, pass `ariaLabel` starting with the action and holding the visible text, and pass it on 0 other buttons, because a drawing's name alone is announced as "Bracket, button" with no action in it, while an `aria-label` over a verb label hides the word a speech-input user says to press it. Evidence: single use `src/components/TopBar.tsx:40`, the command centre labelled with the drawing's name. Check: test `src/ui/Button.test.tsx`.
@@ -176,3 +176,4 @@ Rests on the native `<button>` element: role, Enter and Space, and form behaviou
 - `Tab`: when the control brings one view of a strip to the front rather than running an action.
 - `Kbd`: when the text is the key that runs an action beside the button, not the action itself.
 - `Tooltip`: the hint box a button's `title` shows in; never wrap a button in one.
+- `Checkbox`: when the control holds a yes or no rather than running an action.

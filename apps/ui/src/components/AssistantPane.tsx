@@ -36,6 +36,7 @@ import { Kbd } from "../ui/Kbd";
 import { Row } from "../ui/Row";
 import { SectionLabel } from "../ui/SectionLabel";
 import { Tab } from "../ui/Tab";
+import { describeByHint } from "../ui/Tooltip";
 import "../assistant.css";
 
 export interface AssistantPaneProps {
@@ -222,6 +223,16 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   /** How far the draft is over what one message may hold, or 0: it is said, and nothing is cut. */
   const over = createMemo(() => s.overBy());
   const selectionShown = (): boolean => props.selection().length > 0 && s.selectionIncluded();
+  /** The second line of the send key's hint: why it is off, or what a press does when that is not sending. */
+  const sendNote = (): string | undefined => {
+    if (over() > 0) return "The message is too long to send";
+    if (s.input().trim() === "") return "Type a message first";
+    if (!s.ready()) return "No model is set up yet: this opens the setup";
+    return s.running() ? "A turn is running: this waits for it to end" : undefined;
+  };
+  /** The model chip's hint: what a press does, and under it where the requests go. */
+  const chipHint = (): string => (menuOpen() ? "Close the setup" : s.ready() ? "Change the model" : "Choose a provider and model");
+  const chipNote = (): string | undefined => (s.ready() && !menuOpen() ? s.provider().baseUrl : undefined);
 
   onMount(() => {
     inputEl?.focus();
@@ -571,7 +582,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         <Show
           when={props.chats().length > 1}
           fallback={
-            <span class="assistant-title" title={s.title()}>
+            <span class="assistant-title" data-hint="">
               {s.title()}
             </span>
           }
@@ -630,6 +641,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 <button
                   class="assistant-example"
                   type="button"
+                  data-hint=""
                   onClick={() => {
                     s.setInput(example.text);
                     inputEl?.focus();
@@ -681,8 +693,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                   onClick={() => s.toggleTool(index())}
                   aria-expanded={entry.kind === "tool" && entry.open}
                 >
-                  <span class="assistant-tool-name">{entry.kind === "tool" ? activityLine(entry.code) : ""}</span>
-                  <span class="assistant-tool-note">{entry.kind === "tool" ? entry.note : ""}</span>
+                  <span class="assistant-tool-name" data-hint="">{entry.kind === "tool" ? activityLine(entry.code) : ""}</span>
+                  <span class="assistant-tool-note" data-hint="">{entry.kind === "tool" ? entry.note : ""}</span>
                   <span class="assistant-tool-chevron">
                     <ToolIcon id="chevron-right" />
                   </span>
@@ -825,14 +837,14 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 <Show when={blocker()}>{(reason) => <p class="assistant-setup-reason">{reason()}</p>}</Show>
               </div>
               <div class="assistant-setup-actions">
-                <Button variant="ghost" disabled={!canCheck()} onClick={() => void checkConnection()}>
+                <Button variant="ghost" disabled={!canCheck()} title={canCheck() ? undefined : "Needs an http or https base URL"} onClick={() => void checkConnection()}>
                   Check connection
                 </Button>
                 <span class="assistant-setup-spacer" />
                 <Button variant="ghost" onClick={closeSetup}>
                   Cancel
                 </Button>
-                <Button variant="primary" disabled={blocker() !== null} title={blocker() ?? undefined} onClick={saveDraft}>
+                <Button variant="primary" disabled={blocker() !== null} onClick={saveDraft}>
                   Save
                 </Button>
               </div>
@@ -853,8 +865,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 <For each={s.queued}>
                   {(item, index) => (
                     <div class="assistant-stack-row">
-                      <span class="assistant-stack-text" title={item.text}>{item.text}</span>
-                      <IconButton icon="send" size="sm" title="Send this now" disabled={s.running()} onClick={() => s.sendQueued(index())} />
+                      <span class="assistant-stack-text" data-hint="">{item.text}</span>
+                      <IconButton icon="send" size="sm" title="Send this now" description={s.running() ? "It goes by itself when this turn ends" : undefined} disabled={s.running()} onClick={() => s.sendQueued(index())} />
                       <IconButton icon="close" size="sm" title="Remove from the queue" onClick={() => s.unqueue(index())} />
                     </div>
                   )}
@@ -865,7 +877,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               {(c) => (
                 <>
                 <ol class="assistant-stack-list" id="assistant-changes" hidden={!changesOpen()}>
-                  <For each={c().labels}>{(label) => <li>{label}</li>}</For>
+                  <For each={c().labels}>{(label) => <li data-hint="">{label}</li>}</For>
                 </ol>
                 <div class={changesOpen() ? "assistant-stack-row" : "assistant-stack-row is-folded"}>
                   <Show when={c().labels.length > 0}>
@@ -878,11 +890,11 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                       onClick={() => setChangesOpen(!changesOpen())}
                     />
                   </Show>
-                  <span class="assistant-stack-text">{c().steps === 1 ? "1 change to the drawing" : `${c().steps} changes to the drawing`}</span>
-                  <Button variant="ghost" size="sm" disabled={s.running()} onClick={s.undoChanges}>
+                  <span class="assistant-stack-text" data-hint="">{c().steps === 1 ? "1 change to the drawing" : `${c().steps} changes to the drawing`}</span>
+                  <Button variant="ghost" size="sm" disabled={s.running()} title={s.running() ? "Wait for this turn to end" : undefined} onClick={s.undoChanges}>
                     Undo all
                   </Button>
-                  <Button size="sm" disabled={s.running()} onClick={s.keepChanges}>
+                  <Button size="sm" disabled={s.running()} title={s.running() ? "Wait for this turn to end" : undefined} onClick={s.keepChanges}>
                     Keep
                   </Button>
                 </div>
@@ -894,7 +906,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 <Show when={s.running()}>
                   <span class="assistant-ripple" />
                 </Show>
-                <span class="assistant-stack-text">{s.status() === "" ? "Working…" : sentence(s.status())}</span>
+                <span class="assistant-stack-text" data-hint="">{s.status() === "" ? "Working…" : sentence(s.status())}</span>
                 <Show when={s.running()}>
                   <Button variant="ghost" size="sm" onClick={s.stop}>
                     Stop
@@ -905,7 +917,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             </Show>
             <Show when={over() > 0}>
               <div class="assistant-stack-row assistant-stack-row--over" id="assistant-over">
-                <span class="assistant-stack-text" title={`One message holds ${MAX_MESSAGE_CHARS.toLocaleString()} characters. Nothing is cut: shorten it to send it.`}>
+                <span class="assistant-stack-text" data-hint={`One message holds ${MAX_MESSAGE_CHARS.toLocaleString()} characters`} data-hint-note="Nothing is cut: shorten it to send it">
                   {`${over().toLocaleString()} ${over() === 1 ? "character" : "characters"} too long to send`}
                 </span>
               </div>
@@ -934,24 +946,30 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         <div class="assistant-box">
           <Show when={selectionShown() || s.attached().length > 0}>
             <div class="assistant-attachments">
-              <Show when={selectionShown()}>
-                <span class="assistant-attachment assistant-attachment--context">
-                  <span class="assistant-attachment-icon">
-                    <ToolIcon id="pick" />
-                  </span>
-                  <span class="assistant-attachment-name">{props.selection().length === 1 ? "1 selected" : `${props.selection().length} selected`}</span>
-                  <IconButton icon="close" size="sm" title="Leave the selection out" onClick={() => s.setSelectionIncluded(false)} />
-                </span>
-              </Show>
-              <For each={s.attached()}>
-                {(picture, index) => (
-                  <span class="assistant-attachment">
-                    <img src={picture.dataUrl} alt={picture.name} />
-                    <span class="assistant-attachment-name">{picture.name}</span>
-                    <IconButton icon="close" size="sm" title={`Remove ${picture.name}`} onClick={() => s.setAttached(s.attached().filter((_, i) => i !== index()))} />
-                  </span>
-                )}
-              </For>
+              <div class="assistant-attachments-clip">
+                <div class="assistant-attachments-row">
+                  <Show when={selectionShown()}>
+                    <span class="assistant-attachment assistant-attachment--context">
+                      <span class="assistant-attachment-icon">
+                        <ToolIcon id="pick" />
+                      </span>
+                      <span class="assistant-attachment-name">{props.selection().length === 1 ? "1 selected" : `${props.selection().length} selected`}</span>
+                      <IconButton icon="close" size="sm" title="Leave the selection out" onClick={() => s.setSelectionIncluded(false)} />
+                    </span>
+                  </Show>
+                  <For each={s.attached()}>
+                    {(picture, index) => (
+                      <span class="assistant-attachment">
+                        <img src={picture.dataUrl} alt={picture.name} />
+                        <span class="assistant-attachment-name" data-hint="">
+                          {picture.name}
+                        </span>
+                        <IconButton icon="close" size="sm" title={`Remove ${picture.name}`} onClick={() => s.setAttached(s.attached().filter((_, i) => i !== index()))} />
+                      </span>
+                    )}
+                  </For>
+                </div>
+              </div>
             </div>
           </Show>
           <textarea
@@ -976,7 +994,9 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             <button
               class="assistant-ghost"
               type="button"
-              title={s.ready() ? `Change the model (${s.provider().model} at ${s.provider().baseUrl})` : "Choose a provider and model"}
+              ref={(el) => describeByHint(el, () => [chipHint(), chipNote()].filter((line) => line !== undefined).join(". "))}
+              data-hint={chipHint()}
+              data-hint-note={chipNote()}
               aria-expanded={menuOpen()}
               aria-controls="assistant-setup"
               onClick={() => (menuOpen() ? closeSetup() : openSetup())}
@@ -987,9 +1007,17 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               </span>
             </button>
             <div class="assistant-actions">
-              <span class="assistant-context" title={`Context the next request carries: ${used().toLocaleString()} of ${MAX_REQUEST_CHARS.toLocaleString()} characters`}>
-                {meter()}
-              </span>
+              <Show when={meter() !== ""}>
+                <span
+                  class="assistant-context"
+                  role="img"
+                  aria-label={`Context the next request carries: ${used().toLocaleString()} of ${MAX_REQUEST_CHARS.toLocaleString()} characters`}
+                  data-hint="Context in the next request"
+                  data-hint-note={`${used().toLocaleString()} of ${MAX_REQUEST_CHARS.toLocaleString()} characters`}
+                >
+                  {meter()}
+                </span>
+              </Show>
               <IconButton icon="attach" title="Attach a picture (or paste, or drop one)" onClick={() => fileInput?.click()} />
               <Show
                 when={s.running() && s.input().trim() === ""}
@@ -997,13 +1025,15 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                   <IconButton
                     icon="send"
                     variant="inverted"
-                    title={s.running() ? "Queue (Enter)" : "Send (Enter)"}
+                    title={s.running() ? "Queue" : "Send"}
+                    shortcut="Enter"
+                    description={sendNote()}
                     disabled={s.input().trim() === "" || over() > 0}
                     onClick={send}
                   />
                 }
               >
-                <IconButton icon="stop" variant="inverted" title="Stop (Esc)" onClick={s.stop} />
+                <IconButton icon="stop" variant="inverted" title="Stop" shortcut="Esc" onClick={s.stop} />
               </Show>
             </div>
           </div>

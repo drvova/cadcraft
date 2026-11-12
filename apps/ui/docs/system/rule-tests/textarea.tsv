@@ -1,0 +1,10 @@
+rule_id	falsify	negation	two_agent	sweep	verdict	notes
+rule/textarea-label-bound	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the composer's editor moves onto the component at integration, and its file is not this worker's	ship	
+rule/textarea-rows-not-height	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the composer's editor moves onto the component at integration, and its file is not this worker's	ship	
+rule/textarea-enter-in-keydown	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the composer's editor moves onto the component at integration, and its file is not this worker's	ship	
+rule/textarea-bare-card-focus	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the composer's editor moves onto the component at integration, and its file is not this worker's	ship	
+rule/textarea-described-by	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the composer's editor moves onto the component at integration, and its file is not this worker's	ship	
+rule/textarea-placeholder-example	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the composer's editor moves onto the component at integration, and its file is not this worker's	ship	
+rule/textarea-canonical-element	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the composer's editor moves onto the component at integration, and its file is not this worker's	ship	
+rule/textarea-max-rows	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the composer's editor moves onto the component at integration, and its file is not this worker's	ship	
+rule/textarea-one-row-field	pass	pass	n/a: two-agent test not run this session (single-worker budget)	n/a: 0 call sites yet; the composer's editor moves onto the component at integration, and its file is not this worker's	ship	

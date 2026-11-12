@@ -359,7 +359,326 @@
   color: var(--text-disabled);
 }
 
-/* ---- Row: <button class="ui-row"> ---- */
+/* ---- Select: <span class="ui-select ui-select--{variant} ui-select--{size} ui-select--{align}">
+        around the native <select class="ui-select-control">, the drawn value and the arrow ---- */
+
+/* The field recipe around a native select. The select lies under the drawn face at no opacity and
+   takes every press, so the list, the keys and a phone's picker are the platform's; the face is
+   the value (clipped with an ellipsis before the arrow) and the system's chevron. The select is in
+   the flow, so the box is as wide as its longest choice wants and never moves as the value
+   changes; a narrower place squeezes it and the value clips. */
+.ui-select {
+  --ui-select-pad: var(--field-pad-x);
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--gap-4);
+  min-width: 0;
+  max-width: 100%;
+  height: var(--control-h-input);
+  padding: 0 var(--ui-select-pad);
+  border: var(--hairline) solid var(--border-soft);
+  border-radius: var(--radius-control);
+  background: var(--control);
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-body);
+  vertical-align: middle;
+  transition:
+    border-color var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-fast) var(--ease-standard);
+}
+
+/* sm — the 20px box of a 22px list row, on the row's own 4px inset. */
+.ui-select--sm {
+  --ui-select-pad: var(--gap-4);
+  height: var(--control-h-chip);
+}
+
+/* The native control: over the whole box, padding included, with the arrow's room on its right so
+   the width it asks for is the face's. Its own colours are the open list's in the engines that
+   take them from the select. */
+.ui-select-control {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  align-self: stretch;
+  min-width: 0;
+  margin: 0 calc(-1 * var(--ui-select-pad));
+  padding: 0 calc(var(--ui-select-pad) + var(--gap-4) + var(--icon-size-sm)) 0 var(--ui-select-pad);
+  border: none;
+  background: var(--control);
+  color: var(--text);
+  font-family: inherit;
+  font-size: inherit;
+  appearance: none;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ui-select-value {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* end — a column of values: the value ends on the arrow's side, as the typed values beside it do. */
+.ui-select--end .ui-select-value {
+  text-align: end;
+}
+
+.ui-select-arrow {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  color: var(--icon);
+  pointer-events: none;
+}
+
+.ui-select-arrow .tool-icon {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+}
+
+/* mixed — the objects disagree: the placeholder reads quieter than a real value. */
+.ui-select--mixed .ui-select-value {
+  color: var(--text-faint);
+}
+
+/* inline — a value in a list row: text until it is touched, the field under the pointer and the
+   keyboard. The arrow stays, so a choice never reads as a fixed value. */
+.ui-select--inline {
+  border-color: transparent;
+  background: transparent;
+}
+
+@media (hover: hover) {
+  .ui-select--inline:hover {
+    border-color: var(--border-soft);
+    background: var(--control);
+  }
+}
+
+.ui-select:focus-within {
+  border-color: var(--focus-ring);
+  outline: var(--focus-outline-w) solid var(--focus-ring);
+  outline-offset: var(--focus-outline-offset);
+  background: var(--control);
+}
+
+/* A refused value: the error hairline, resting and focused alike, with the ring one line inside
+   it, as on Field. */
+.ui-select.ui-select--invalid {
+  border-color: var(--error);
+  background: var(--control);
+}
+
+.ui-select--invalid:focus-within {
+  outline-offset: calc(var(--focus-outline-offset) * 2);
+}
+
+.ui-select.ui-select--disabled {
+  color: var(--text-disabled);
+}
+
+.ui-select--inline.ui-select--disabled {
+  border-color: transparent;
+  background: transparent;
+}
+
+.ui-select--disabled .ui-select-value,
+.ui-select--disabled .ui-select-arrow {
+  color: var(--text-disabled);
+}
+
+.ui-select--disabled .ui-select-control {
+  cursor: default;
+}
+
+/* ---- Checkbox: <label class="ui-checkbox"> around <span class="ui-checkbox-box"> (the native
+        <input class="ui-checkbox-input"> and its <span class="ui-checkbox-mark">) and the label ---- */
+
+.ui-checkbox {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-6);
+  max-width: 100%;
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-body);
+  line-height: var(--gap-16);
+  cursor: pointer;
+}
+
+.ui-checkbox-box {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+}
+
+/* The box is the input itself, so the ring, the press and the state are the platform's. Its edge
+   is the glyph ink: a box is told from the surface by its stroke alone (3:1), which the hairline
+   strokes are not drawn to hold. */
+.ui-checkbox-input {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: var(--hairline) solid var(--icon);
+  border-radius: var(--radius-small);
+  background: transparent;
+  appearance: none;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard);
+}
+
+/* The ring stands a hairline off the box: on the edge it would be the accent on the accent fill. */
+.ui-checkbox-input:focus-visible {
+  outline: var(--focus-outline-w) solid var(--focus-ring);
+  outline-offset: var(--hairline);
+}
+
+@media (hover: hover) {
+  .ui-checkbox:hover .ui-checkbox-input {
+    background: var(--hover);
+  }
+}
+
+.ui-checkbox-input:active {
+  background: var(--fill-active);
+}
+
+/* ticked, or mixed — the accent is the fill and the mark is the ink that passes on it */
+.ui-checkbox .ui-checkbox-input:checked,
+.ui-checkbox .ui-checkbox-input:indeterminate {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+@media (hover: hover) {
+  .ui-checkbox:hover .ui-checkbox-input:checked,
+  .ui-checkbox:hover .ui-checkbox-input:indeterminate {
+    border-color: var(--accent-hover);
+    background: var(--accent-hover);
+  }
+}
+
+.ui-checkbox .ui-checkbox-input:checked:active,
+.ui-checkbox .ui-checkbox-input:indeterminate:active {
+  border-color: var(--accent-pressed);
+  background: var(--accent-pressed);
+}
+
+/* The mark is drawn in code: one filled shape cut to a tick, or to the dash of the mixed state. */
+.ui-checkbox-mark {
+  position: absolute;
+  inset: var(--gap-3);
+  background: var(--on-accent);
+  clip-path: polygon(8% 52%, 22% 38%, 40% 58%, 80% 12%, 94% 26%, 40% 88%);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.ui-checkbox-input:checked + .ui-checkbox-mark {
+  visibility: visible;
+}
+
+.ui-checkbox-input:indeterminate + .ui-checkbox-mark {
+  clip-path: inset(calc(50% - var(--hairline)) 0);
+  visibility: visible;
+}
+
+.ui-checkbox--disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.ui-checkbox--disabled .ui-checkbox-input:disabled {
+  border-color: var(--text-disabled);
+  background: transparent;
+  cursor: default;
+}
+
+.ui-checkbox--disabled .ui-checkbox-input:disabled:checked,
+.ui-checkbox--disabled .ui-checkbox-input:disabled:indeterminate {
+  background: var(--fill-disabled);
+}
+
+.ui-checkbox-input:disabled + .ui-checkbox-mark {
+  background: var(--text-disabled);
+}
+
+.ui-checkbox-label {
+  min-width: 0;
+}
+
+/* ---- TextArea: <textarea class="ui-textarea ui-textarea--{variant}"> ---- */
+
+/* Field's recipe over several lines. One line is as tall as a Field (a 16px line, the field's
+   padding less the hairline), so the two sit on one row; the height past that is the script's
+   (`TextArea.tsx` measures the text), between the `rows` floor and the `maxRows` cap. */
+.ui-textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: calc(var(--field-pad-y) - var(--hairline)) var(--field-pad-x);
+  border: var(--hairline) solid var(--border-soft);
+  border-radius: var(--radius-control);
+  background: var(--control);
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-body);
+  line-height: var(--gap-16);
+  resize: none;
+  transition: border-color var(--dur-fast) var(--ease-standard);
+}
+
+.ui-textarea::placeholder {
+  color: var(--text-faint);
+}
+
+.ui-textarea--field:focus {
+  border-color: var(--focus-ring);
+  outline: var(--focus-outline-w) solid var(--focus-ring);
+  outline-offset: var(--focus-outline-offset);
+}
+
+.ui-textarea--field[aria-invalid="true"] {
+  border-color: var(--error);
+}
+
+.ui-textarea--field[aria-invalid="true"]:focus {
+  outline-offset: calc(var(--focus-outline-offset) * 2);
+}
+
+.ui-textarea:disabled {
+  color: var(--text-disabled);
+}
+
+/* bare — the editor inside a card that draws the box: no stroke, no fill, no padding, the card's
+   own type. It draws no ring either: the card shows the focus (`:focus-within`), and a second
+   ring inside it would be a box in a box. */
+.ui-textarea--bare {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  outline-style: none;
+}
+
+/* ---- Row: <button class="ui-row">, or <div role="option" class="ui-row ui-row--option"> in a listbox ---- */
 
 .ui-row {
   display: flex;
@@ -385,19 +704,23 @@
   outline-offset: var(--focus-outline-offset);
 }
 
+/* An option paints no hover of its own: its listbox moves the one highlight (`aria-selected`),
+   by key and by pointer, so two rows are never lit at once. */
 @media (hover: hover) {
-  .ui-row:hover:not(:disabled):not([aria-current="true"]) {
+  .ui-row:hover:not(:disabled):not([aria-current="true"]):not(.ui-row--option) {
     background: var(--hover);
   }
 }
 
 /* selected — the .14 fill and the full ink; it keeps the fill under the pointer */
-.ui-row[aria-current="true"] {
+.ui-row[aria-current="true"],
+.ui-row[aria-selected="true"] {
   background: var(--fill-active);
   color: var(--text);
 }
 
-.ui-row:disabled {
+.ui-row:disabled,
+.ui-row[aria-disabled="true"] {
   color: var(--text-disabled);
   cursor: default;
 }
@@ -588,8 +911,9 @@
    2px a side as an invisible ::after, so a chip row and a pane header keep their rhythm. Two
    controls cannot take a pseudo-element: rows stack with no gap, so an overhang would only
    overlap the next row, and a compact tab clips its own overflow for the ellipsis. Those two grow
-   from 22px to the 24px control height instead. Button (28/24), the 24px icon button, Field (24)
-   and the editor tab (the 35px strip) already meet the size. */
+   from 22px to the 24px control height instead, and so does the small select. The checkbox keeps
+   its 14px box and takes the target on its label. Button (28/24), the 24px icon button, Field,
+   Select and TextArea (24) and the editor tab (the 35px strip) already meet the size. */
 @media (pointer: coarse) {
   .ui-icon-button--sm,
   .ui-chip--interactive {
@@ -610,5 +934,33 @@
 
   .ui-tab--sm {
     min-width: var(--control-h-input);
+  }
+
+  /* The small select grows as the row does; its list row is the caller's to let grow with it. */
+  .ui-select--sm {
+    height: var(--control-h-input);
+  }
+
+  /* The 14px box keeps its size and the label its line: the target is the whole label, at least
+     24 by 24 around its middle. */
+  .ui-checkbox::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--control-h-input));
+    height: var(--control-h-input);
+    transform: translate(-50%, -50%);
+  }
+
+  /* Text a finger edits is never under 16px, or the phone zooms the page into the control and
+     leaves it there. The select's own text is not drawn, so only its measure changes. */
+  .ui-textarea,
+  .ui-select-control {
+    font-size: max(16px, 1em);
+  }
+
+  .ui-textarea--field {
+    line-height: 1.25;
   }
 }

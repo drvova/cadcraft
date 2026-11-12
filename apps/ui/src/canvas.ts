@@ -5,7 +5,7 @@
  */
 
 import { boundsOfPrim, type DisplayList, type DisplayPrim } from "./display";
-import { makeProjection, rectsOverlap, type Point, type Rect } from "./view";
+import { makeProjection, normalizeRect, rectsOverlap, type Point, type Rect } from "./view";
 
 export interface Palette {
   canvas: string;
@@ -30,6 +30,11 @@ export const SELECTION_WIDTH = 1.5;
  */
 export function lineWidthPx(lwMm: number): number {
   return lwMm > 0 ? Math.min(12, Math.max(1, lwMm * 3.78)) : 1;
+}
+
+/** Whether two palettes hold the same inks (a theme change that did not touch the canvas's). */
+export function samePalette(a: Palette, b: Palette): boolean {
+  return a.canvas === b.canvas && a.gridMinor === b.gridMinor && a.gridMajor === b.gridMajor && a.axisX === b.axisX && a.axisY === b.axisY && a.selection === b.selection;
 }
 
 /** Read the model-space colours from the CSS custom properties (tokens.css is their source). */
@@ -92,15 +97,54 @@ function pxPerUnit(view: Rect, width: number): number {
   return (view.x1 - view.x0) / w;
 }
 
-/** A grid step that stays between 8 and 80 px on screen, from the 1-2-5 ladder. */
-export function gridStep(view: Rect, width: number): number {
-  const target = 48;
-  const raw = pxPerUnit(view, width) * target;
-  if (!Number.isFinite(raw) || raw <= 0) return 1;
-  const decade = Math.pow(10, Math.floor(Math.log10(raw)));
-  const n = raw / decade;
-  const step = n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10;
-  return step * decade;
+/** Minor grid lines closer together than this (CSS px) are not drawn: the next decade takes over. */
+export const GRID_MIN_PX = 10;
+
+/** The spacing (CSS px) at which a minor line has faded fully in. */
+export const GRID_FULL_PX = 30;
+
+/** The spacing (CSS px) from which a minor line starts to take the major line's ink. */
+export const GRID_PROMOTE_PX = 60;
+
+/** How the grid is drawn at a zoom: the minor step (world units) and the two inks' strengths. */
+export interface GridLevels {
+  /** The minor step, a power of ten; every tenth line is a major line. */
+  step: number;
+  /** The minor ink's opacity, 0..1: it fades in as the lines part. */
+  minorAlpha: number;
+  /** How much of the major ink lies over the minor lines, 0..1: it rises as they near promotion. */
+  majorBlend: number;
+}
+
+/**
+ * The grid for a view: minor lines a power of ten apart, between [`GRID_MIN_PX`] and ten times
+ * that on screen. Their look is a continuous function of the zoom: zooming out, the lines fade as
+ * they crowd and are gone before the step changes; zooming in, they take the major ink as they
+ * part, and are the major lines when the next decade appears, faint, between them. Nothing pops
+ * and the grid never turns to noise. A degenerate view or canvas draws the unit grid.
+ */
+export function gridLevels(view: Rect, width: number): GridLevels {
+  const per = pxPerUnit(view, width);
+  const raw = per * GRID_MIN_PX;
+  if (!Number.isFinite(raw) || raw <= 0) return { step: 1, minorAlpha: 1, majorBlend: 0 };
+  const step = Math.pow(10, Math.ceil(Math.log10(raw)));
+  const spacing = step / per;
+  if (!Number.isFinite(step) || !(step > 0) || !Number.isFinite(spacing)) return { step: 1, minorAlpha: 1, majorBlend: 0 };
+  const ramp = (from: number, to: number): number => Math.max(0, Math.min(1, (spacing - from) / (to - from)));
+  return { step, minorAlpha: ramp(GRID_MIN_PX, GRID_FULL_PX), majorBlend: ramp(GRID_PROMOTE_PX, GRID_MIN_PX * 10) };
+}
+
+/**
+ * Where to stroke a one-pixel rule so it lands on whole device pixels: its centre and its width,
+ * in CSS px. The rule is a whole number of device pixels wide (one at ratios below 2, two at 2,
+ * three at 3) and its edges sit on device pixel boundaries, so it is as sharp at a ratio of 1.5 as
+ * at 1 or 2 instead of smearing across two rows of pixels.
+ */
+export function crispRule(css: number, dpr: number): { at: number; width: number } {
+  const scale = Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
+  const device = Math.max(1, Math.floor(scale + 1e-6));
+  const edge = Math.round(css * scale - device / 2);
+  return { at: (edge + device / 2) / scale, width: device / scale };
 }
 
 export function drawDisplay(ctx: CanvasRenderingContext2D, list: DisplayList, view: Rect, options: DrawOptions): void {
@@ -114,7 +158,7 @@ export function drawDisplay(ctx: CanvasRenderingContext2D, list: DisplayList, vi
   ctx.fillRect(0, 0, w, h);
 
   const proj = makeProjection(view, { w, h });
-  if (options.grid) drawGrid(ctx, view, w, h, palette);
+  if (options.grid) drawGrid(ctx, normalizeRect(view), w, h, scale, palette);
 
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
@@ -190,31 +234,65 @@ function highlightPrim(
   if (started) ctx.stroke();
 }
 
-function drawGrid(ctx: CanvasRenderingContext2D, view: Rect, w: number, h: number, palette: Palette): void {
-  const step = gridStep(view, w);
-  const firstX = Math.ceil(view.x0 / step) * step;
-  const firstY = Math.ceil(view.y0 / step) * step;
-  const toScreenX = (x: number): number => ((x - view.x0) / (view.x1 - view.x0)) * w;
-  const toScreenY = (y: number): number => h - ((y - view.y0) / (view.y1 - view.y0)) * h;
-  ctx.lineWidth = 1;
-  for (let i = 0, x = firstX; x <= view.x1 && i < 4000; i++, x += step) {
-    const sx = Math.round(toScreenX(x)) + 0.5;
-    const k = Math.round(x / step);
-    ctx.strokeStyle = k === 0 ? palette.axisY : k % 10 === 0 ? palette.gridMajor : palette.gridMinor;
+/** The most grid lines drawn along one axis: the spacing floor keeps a real canvas far below it. */
+const MAX_GRID_LINES = 2000;
+
+function drawGrid(ctx: CanvasRenderingContext2D, view: Rect, w: number, h: number, dpr: number, palette: Palette): void {
+  const { step, minorAlpha, majorBlend } = gridLevels(view, w);
+  const spanX = view.x1 - view.x0;
+  const spanY = view.y1 - view.y0;
+  const width = crispRule(0, dpr).width;
+  /** Put every rule of one rank (1 major, 2 minor; 0 is the axes, drawn last) on one path. */
+  const trace = (rank: 1 | 2): void => {
+    ctx.beginPath();
+    const rankOf = (k: number): number => (k === 0 ? 0 : k % 10 === 0 ? 1 : 2);
+    const firstX = Math.ceil(view.x0 / step);
+    for (let i = 0, k = firstX; i < MAX_GRID_LINES && k * step <= view.x1; i++, k++) {
+      if (rankOf(k) !== rank) continue;
+      const sx = crispRule(((k * step - view.x0) / spanX) * w, dpr).at;
+      ctx.moveTo(sx, 0);
+      ctx.lineTo(sx, h);
+    }
+    const firstY = Math.ceil(view.y0 / step);
+    for (let i = 0, k = firstY; i < MAX_GRID_LINES && k * step <= view.y1; i++, k++) {
+      if (rankOf(k) !== rank) continue;
+      const sy = crispRule(h - ((k * step - view.y0) / spanY) * h, dpr).at;
+      ctx.moveTo(0, sy);
+      ctx.lineTo(w, sy);
+    }
+  };
+  const ink = (style: string, alpha: number): void => {
+    if (!(alpha > 0)) return;
+    ctx.strokeStyle = style;
+    ctx.globalAlpha = alpha;
+    ctx.stroke();
+  };
+  ctx.lineWidth = width;
+  ctx.lineCap = "butt";
+  ctx.setLineDash([]);
+  if (minorAlpha > 0) {
+    trace(2);
+    ink(palette.gridMinor, minorAlpha);
+    ink(palette.gridMajor, majorBlend);
+  }
+  trace(1);
+  ink(palette.gridMajor, 1);
+  // The axes last, each in its own ink: the vertical rule at x = 0 is the Y axis.
+  if (view.x0 <= 0 && view.x1 >= 0) {
+    const sx = crispRule((-view.x0 / spanX) * w, dpr).at;
     ctx.beginPath();
     ctx.moveTo(sx, 0);
     ctx.lineTo(sx, h);
-    ctx.stroke();
+    ink(palette.axisY, 1);
   }
-  for (let i = 0, y = firstY; y <= view.y1 && i < 4000; i++, y += step) {
-    const sy = Math.round(toScreenY(y)) + 0.5;
-    const k = Math.round(y / step);
-    ctx.strokeStyle = k === 0 ? palette.axisX : k % 10 === 0 ? palette.gridMajor : palette.gridMinor;
+  if (view.y0 <= 0 && view.y1 >= 0) {
+    const sy = crispRule(h + (view.y0 / spanY) * h, dpr).at;
     ctx.beginPath();
     ctx.moveTo(0, sy);
     ctx.lineTo(w, sy);
-    ctx.stroke();
+    ink(palette.axisX, 1);
   }
+  ctx.globalAlpha = 1;
 }
 
 function drawPrim(

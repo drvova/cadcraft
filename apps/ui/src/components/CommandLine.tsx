@@ -11,7 +11,7 @@
  * is announced; the prompt, which a sighted user reads as the placeholder, is repeated in a status
  * line that is not drawn, so a change of prompt is announced too; and an error shown beside the
  * field is an alert. A long error wraps to two lines and is then cut; it takes the focus (Tab, a
- * click) and shows its whole text while it has it, and its `title` holds the whole text too.
+ * click) and shows its whole text while it has it; one cut by its width is the system's hint too.
  *
  * The props accept the value or the accessor form (Solid passes an attribute expression through
  * as written, so a parent may hand either); the component reads both.
@@ -141,7 +141,7 @@ export function CommandLine(props: CommandLineProps): JSX.Element {
         />
         <Show when={freshError()}>
           {(error) => (
-            <span class="cmd-error" role="alert" title={error()} tabindex="0">
+            <span class="cmd-error" role="alert" data-hint="" tabindex="0">
               {error()}
             </span>
           )}

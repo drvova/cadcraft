@@ -23,7 +23,8 @@ Composite styles (family, size, line height, weight, tracking), as the app sets 
 | Style | Family | Size | Line height | Weight | Tracking |
 | --- | --- | --- | --- | --- | --- |
 | Button label | `--font-family` | `--font-button` | 1 | 400 | normal |
-| Chip / section label | `--font-family` | `--font-chip` | 1 | 400 | `0.05em`–`0.06em` on uppercased section labels |
+| Chip | `--font-family` | `--font-chip` | 1 | 400 | normal |
+| Section label | `--font-family` | `--font-chip` | normal | 700 | normal, uppercased |
 | Field label | `--font-family` | `--font-label` | normal | 400 | normal |
 | Body / row | `--font-family` | `--font-body` | normal | 400 | normal |
 | Assistant message | `--font-family` | `--font-body` | `1.4` | 400 | normal |
@@ -42,7 +43,7 @@ Composite styles (family, size, line height, weight, tracking), as the app sets 
 
 - One size per role, never per surface: a button is `--font-button` wherever it sits, because a control that changes size between panels reads as a different control.
 - The mono family is for machine text only — coordinates, commands, code — because mixing the families inside one sentence makes both harder to scan.
-- Uppercase belongs to section labels alone, with `letter-spacing` at `0.05em`–`0.06em`, because spaced caps on a normal sentence read as shouting.
+- Uppercase belongs to the heading of a section (`SectionLabel`) and to the status bar's drafting toggles, never to a sentence, because capitals on a sentence read as shouting. A section label adds no `letter-spacing`: the measured header is 11px at weight 700 in capitals at the face's own spacing (research §2, the sidebar's section header), and the bold weight already separates the letters. This line asked for `0.05em`–`0.06em` until 2026-11-11; the measurement and `src/ui/ui.css` had none, and the page was the side that moved (`src/ui/recipe.test.ts` holds the recipe to it).
 - The smallest size is `--font-chip` at `11px`; nothing in the chrome goes below it, because below 11px the stroke font's glyphs start to blur at 100%.
 - Sizes do not scale with the viewport; the app's chrome keeps its density and the canvas handles scale, because a zoomed chrome wastes the drawing's space.
 

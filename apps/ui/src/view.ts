@@ -104,17 +104,139 @@ export function screenToWorld(view: Rect, screen: ScreenSize, p: Point): Point {
   };
 }
 
-/** Zoom by `factor` (>1 zooms out) keeping the world point under `anchor` (screen px) fixed. */
+/**
+ * The zoom's floor and ceiling, in world units per CSS pixel. Past the floor a pixel is finer than
+ * anything a drawing holds; past the ceiling the spans head for overflow, where a view stops being
+ * a view. A view may arrive outside the band (a file, a command): zooming never pushes it further
+ * out, and never snaps it back in either.
+ */
+export const MIN_UNITS_PER_PX = 1e-7;
+export const MAX_UNITS_PER_PX = 1e7;
+
+/**
+ * The floor far from the origin: a pixel must stay many times wider than the gap between adjacent
+ * doubles at the anchor's coordinates, or the drawing shakes as it zooms and pans.
+ */
+export const ZOOM_PRECISION = 1e-12;
+
+/**
+ * The factor `zoomAt` really applies: `factor` held so the view's scale stays inside the band.
+ * A factor that is not a positive finite number does nothing (1). Zooming in is held by the floor
+ * and zooming out by the ceiling; neither ever reverses the direction asked for. `anchor` is the
+ * world point the zoom holds still.
+ */
+export function clampZoomFactor(view: Rect, screen: ScreenSize, anchor: Point, factor: number): number {
+  if (!Number.isFinite(factor) || !(factor > 0)) return 1;
+  const v = normalizeRect(view);
+  const w = screen.w > 0 ? screen.w : 1;
+  const h = screen.h > 0 ? screen.h : 1;
+  const perX = (v.x1 - v.x0) / w;
+  const perY = (v.y1 - v.y0) / h;
+  if (factor < 1) {
+    const floor = Math.max(MIN_UNITS_PER_PX, Math.max(Math.abs(anchor.x), Math.abs(anchor.y)) * ZOOM_PRECISION);
+    const held = Math.min(1, floor / Math.min(perX, perY));
+    return Number.isFinite(held) && held > 0 ? Math.max(factor, held) : 1;
+  }
+  const held = Math.max(1, MAX_UNITS_PER_PX / Math.max(perX, perY));
+  return Number.isFinite(held) ? Math.min(factor, held) : 1;
+}
+
+/**
+ * Zoom by `factor` (>1 zooms out) keeping the world point under `anchor` (screen px) fixed. The
+ * scale stays inside [`MIN_UNITS_PER_PX`, `MAX_UNITS_PER_PX`]: at either end the factor is held,
+ * not the rectangle, so the anchor stays under the pointer there too. An anchor that is not finite
+ * (an unmeasured canvas) is read as the centre.
+ */
 export function zoomAt(view: Rect, screen: ScreenSize, anchor: Point, factor: number): Rect {
   const v = normalizeRect(view);
-  const f = Number.isFinite(factor) && factor > 0 ? factor : 1;
-  const a = screenToWorld(v, screen, anchor);
+  const centre = { x: (screen.w > 0 ? screen.w : 1) / 2, y: (screen.h > 0 ? screen.h : 1) / 2 };
+  const a = screenToWorld(v, screen, Number.isFinite(anchor.x) && Number.isFinite(anchor.y) ? anchor : centre);
+  const f = clampZoomFactor(v, screen, a, factor);
+  if (f === 1) return v;
   return normalizeRect({
     x0: a.x + (v.x0 - a.x) * f,
     y0: a.y + (v.y0 - a.y) * f,
     x1: a.x + (v.x1 - a.x) * f,
     y1: a.y + (v.y1 - a.y) * f,
   });
+}
+
+/** What one line and one page of wheel travel count as, in pixels (`WheelEvent.deltaMode` 1 and 2). */
+export const WHEEL_LINE_PX = 40;
+export const WHEEL_PAGE_PX = 800;
+
+/** The most one wheel event may zoom, in pixels of travel: a free-spinning wheel stays steerable. */
+export const WHEEL_MAX_PX = 300;
+
+/** Wheel travel that zooms by e: one 100px notch is a step of about 1.28. */
+export const WHEEL_ZOOM_PX = 400;
+
+/**
+ * A pinch arrives as a wheel event with `ctrlKey` and a small delta per frame, so it takes a
+ * steeper rate to follow the fingers, and a lower cap so that Ctrl with a notched wheel (the same
+ * event) steps gently instead of leaping.
+ */
+export const PINCH_ZOOM_PX = 100;
+export const PINCH_MAX_PX = 24;
+
+/**
+ * The zoom factor for one wheel event (>1 zooms out, as `zoomAt` reads it). The delta is brought
+ * to pixels whatever unit the device reports (`deltaMode`: 0 pixels, 1 lines, 2 pages), capped per
+ * event, and turned into a factor exponentially, so equal travel is an equal step at any zoom and
+ * a step out undoes a step in. A delta that is not a number, or zero, is no zoom (1).
+ */
+export function wheelZoomFactor(deltaY: number, deltaMode: number, pinch: boolean): number {
+  if (!Number.isFinite(deltaY) || deltaY === 0) return 1;
+  const unit = deltaMode === 1 ? WHEEL_LINE_PX : deltaMode === 2 ? WHEEL_PAGE_PX : 1;
+  const cap = pinch ? PINCH_MAX_PX : WHEEL_MAX_PX;
+  const px = Math.max(-cap, Math.min(cap, deltaY * unit));
+  return Math.exp(px / (pinch ? PINCH_ZOOM_PX : WHEEL_ZOOM_PX));
+}
+
+/** Where the canvas sits in the window (CSS px): its size and its top-left corner. */
+export interface ScreenBox extends ScreenSize {
+  left: number;
+  top: number;
+}
+
+/**
+ * The view after the canvas's box changed from `from` to `to`: the same world size per pixel, and
+ * every world point that is still visible stays where it was in the window. A panel that opens
+ * covers part of the drawing and one that closes uncovers it; nothing slides and nothing rescales.
+ * When only the right or bottom edge moves (the assistant, the command line, the window's own
+ * corner) that is the top-left corner held; when the left or top edge moves (the sidebar, the tool
+ * strip) the view shifts by exactly that much. An unusable box or result returns the view as it is.
+ */
+export function resizeView(rect: Rect, from: ScreenBox, to: ScreenBox): Rect {
+  const sizes = [from.w, from.h, to.w, to.h];
+  const corners = [from.left, from.top, to.left, to.top];
+  if (!sizes.every((n) => Number.isFinite(n) && n > 0) || !corners.every((n) => Number.isFinite(n))) return rect;
+  if (rectIsDegenerate(rect)) return rect;
+  const perX = (rect.x1 - rect.x0) / from.w;
+  const perY = (rect.y1 - rect.y0) / from.h;
+  const x0 = rect.x0 + (to.left - from.left) * perX;
+  const y1 = rect.y1 - (to.top - from.top) * perY;
+  const next = { x0, y0: y1 - to.h * perY, x1: x0 + to.w * perX, y1 };
+  return rectIsDegenerate(next) ? rect : next;
+}
+
+/** The centre of two screen points and the distance between them (a two-finger gesture's state). */
+export function pinchOf(a: Point, b: Point): { centre: Point; spread: number } {
+  return { centre: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, spread: Math.hypot(b.x - a.x, b.y - a.y) };
+}
+
+/** The spread (px) below which two touches are one point and their ratio is not a zoom. */
+export const MIN_PINCH_SPREAD = 8;
+
+/**
+ * The view after a two-finger gesture moved from `from` to `to`: panned by the centre's travel and
+ * zoomed by the spread's ratio about the new centre, so the two world points under the fingers
+ * stay under them. Fingers too close together to give a ratio only pan.
+ */
+export function pinchView(view: Rect, screen: ScreenSize, from: { centre: Point; spread: number }, to: { centre: Point; spread: number }): Rect {
+  const panned = panBy(view, screen, to.centre.x - from.centre.x, to.centre.y - from.centre.y);
+  if (!(from.spread >= MIN_PINCH_SPREAD) || !(to.spread >= MIN_PINCH_SPREAD)) return panned;
+  return zoomAt(panned, screen, to.centre, from.spread / to.spread);
 }
 
 /** Drag the view by a screen delta: dragging right moves the drawing right. */

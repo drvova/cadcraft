@@ -217,7 +217,7 @@ Every ink pair is at or above its threshold.
 
 ### The layer's pairs
 
-The nine components of `src/ui/`, measured in the running app on 2026-11-11 from the browser's computed token colours (WCAG 2.x): each ink composited over its own fill over every surface the component sits on, with the lowest ratio and the surface it falls on. Text needs 4.5:1; a glyph and a focus ring need 3:1; a disabled state is exempt. Before is the layer as it stood that morning; after is the layer with `--text-accent`, `--focus-ring`, `--on-error` and the light action steps.
+The first nine components of `src/ui/` (the three added later that day follow the table), measured in the running app on 2026-11-11 from the browser's computed token colours (WCAG 2.x): each ink composited over its own fill over every surface the component sits on, with the lowest ratio and the surface it falls on. Text needs 4.5:1; a glyph and a focus ring need 3:1; a disabled state is exempt. Before is the layer as it stood that morning; after is the layer with `--text-accent`, `--focus-ring`, `--on-error` and the light action steps.
 
 | Component | State | Theme | Lowest on | Before | After | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -337,6 +337,45 @@ The nine components of `src/ui/`, measured in the running app on 2026-11-11 from
 | Kbd | text in a selected row | light | `--control` | 4.78 | 4.78 | 4.5 |
 | Tooltip | text | light | `--tooltip-bg` | 17.35 | 17.35 | 4.5 |
 | SectionLabel | text | light | `--control` | 5.45 | 5.45 | 4.5 |
+
+The three components added on 2026-11-11 (`Select`, `Checkbox`, `TextArea`) and `Row`'s option, by the same method. "Rendered" is the pair read from specimens mounted in the running app (the sidebar's `--panel`, the title bar's `--chrome`, a card on `--surface-elevated`); "Lowest" is the same ink over every surface of `src/ui/recipe.test.ts` (and `--control-hover`, the palette's hovered row, for the edges and glyphs), which is what the test holds.
+
+| Component | Pair | Theme | Rendered | Lowest, on | Needs |
+| --- | --- | --- | --- | --- | --- |
+| Select field, TextArea field | value on the field fill | dark | 14.95 | 14.95, `--control` | 4.5 |
+| Select field (mixed), TextArea field | placeholder on the field fill | dark | 6.14 | 6.14, `--control` | 4.5 |
+| Select field | arrow on the field fill | dark | 7.16 | 7.16, `--control` | 3 |
+| Select field, TextArea field | error edge against the field fill | dark | 4.36 | 4.36, `--control` | 3 |
+| Select field, TextArea field | focus edge against the field fill | dark | not read | 5.95, `--control` | 3 |
+| Select inline | value at rest on the surface | dark | 16.16 | 14.12, `--surface-elevated` | 4.5 |
+| Select inline (mixed), TextArea bare | placeholder on the surface | dark | 6.38 / 5.95 | 5.95, `--surface-elevated` | 4.5 |
+| Select inline | arrow at rest on the surface | dark | 7.49 | 6.78, `--control-hover` | 3 |
+| Select, TextArea | disabled value | dark | 3.07 | 3.07, `--control` | exempt |
+| Checkbox | label on the surface | dark | 16.16 | 14.12, `--surface-elevated` | 4.5 |
+| Checkbox | empty box's edge against the surface | dark | 7.49 | 6.78, `--control-hover` | 3 |
+| Checkbox | empty box's edge on its pressed fill | dark | not read | 5.02, `--control-hover` | 3 |
+| Checkbox | ticked fill against the surface | dark | 6.43 | 5.48, `--control-hover` | 3 |
+| Checkbox | mark on the ticked fill (hover, pressed) | dark | 5.96 | 5.96 (6.69, 7.51), `--accent` | 3 |
+| Checkbox | focus ring against the surface | dark | not read | 5.48, `--control-hover` | 3 |
+| Row option | label on the listbox's highlight | dark | 9.38 | 9.38, `--surface-elevated` | 4.5 |
+| Select field, TextArea field | value on the field fill | light | 15.03 | 15.03, `--control` | 4.5 |
+| Select field (mixed), TextArea field | placeholder on the field fill | light | 5.45 | 5.45, `--control` | 4.5 |
+| Select field | arrow on the field fill | light | 5.45 | 5.45, `--control` | 3 |
+| Select field, TextArea field | error edge against the field fill | light | 5.04 | 5.04, `--control` | 3 |
+| Select field, TextArea field | focus edge against the field fill | light | not read | 5.52, `--control` | 3 |
+| Select inline | value at rest on the surface | light | 17.95 | 15.03, `--control` | 4.5 |
+| Select inline (mixed), TextArea bare | placeholder on the surface | light | 5.86 / 5.86 | 5.45, `--control` | 4.5 |
+| Select inline | arrow at rest on the surface | light | 5.86 | 5.23, `--control-hover` | 3 |
+| Select, TextArea | disabled value | light | 2.24 | 2.24, `--control` | exempt |
+| Checkbox | label on the surface | light | 17.34 | 15.03, `--control` | 4.5 |
+| Checkbox | empty box's edge against the surface | light | 5.78 | 5.23, `--control-hover` | 3 |
+| Checkbox | empty box's edge on its pressed fill | light | not read | 4.58, `--control-hover` | 3 |
+| Checkbox | ticked fill against the surface | light | 4.35 | 3.43, `--control-hover` | 3 |
+| Checkbox | mark on the ticked fill (hover, pressed) | light | 4.50 | 4.50 (5.35, 6.40), `--accent` | 3 |
+| Checkbox | focus ring against the surface | light | not read | 5.03, `--control-hover` | 3 |
+| Row option | label on the listbox's highlight | light | 13.37 | 11.27, `--control` | 4.5 |
+
+The checkbox's empty box is edged in `--icon`, not in a hairline stroke: the edge is all that tells the box from its surface, and `--border` measures under 1.5:1 there. The light ticked fill's 3.43 over `--control-hover` is the pair with the least room.
 
 The accent chip on the command line itself, read from the rendered chip (11px, `--cmd-bg`): light 3.37 before, 4.93 after; dark 5.01, unchanged.
 

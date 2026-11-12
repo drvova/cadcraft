@@ -72,6 +72,12 @@ export function turnStart(entries: readonly Entry[], from: number): number {
   return at;
 }
 
+/**
+ * How long the model may stay silent before the status stops saying it is thinking and says the
+ * provider is being waited on: past this, the wait is more likely the server than the thought.
+ */
+export const SLOW_REPLY_MS = 8_000;
+
 /** How long a reply's fragments may wait for a frame; a hidden page draws none, and the text is still due. */
 const FRAME_FALLBACK_MS = 250;
 
@@ -106,6 +112,8 @@ export interface SessionOptions {
   idleMs?: number;
   /** Runs its argument once before the next frame (tests drive it by hand); the real one is the browser's. */
   frame?: (flush: () => void) => void;
+  /** How long the model may stay silent before the status names the provider ([`SLOW_REPLY_MS`]; tests shorten it). */
+  slowMs?: number;
 }
 
 /** The one place the setup (and the key in it) is kept: this entry of the browser's storage. */
@@ -199,8 +207,8 @@ export function createAssistantSession(opts: SessionOptions) {
   let turn: Promise<void> = Promise.resolve();
   /** How the last turn ended; a queue only continues by itself after a clean end. */
   let lastEnd: "done" | "stopped" | "failed" = "done";
-  /** Tool calls made so far this turn, for the status line. */
-  let steps = 0;
+  /** Due when the model has been silent for `slowMs`: the status then names the provider. */
+  let slow: ReturnType<typeof setTimeout> | undefined;
   /** The code of each tool call that succeeded since the open checkpoint. */
   let ranSince: string[] = [];
 
@@ -238,6 +246,23 @@ export function createAssistantSession(opts: SessionOptions) {
     };
   };
 
+  /**
+   * The status row says what the turn is doing now, in four phases. The model has the conversation
+   * and has said nothing yet: it is thinking, and past `slowMs` of silence it is the provider that
+   * is being waited on. Its words are arriving: it is writing. It asked for a command: that
+   * command is running, by its first line. A command runs within one frame, so its name stays in
+   * the row while the model reads the report (`ran`): "Ran …. Thinking…".
+   */
+  const awaitReply = (ran = ""): void => {
+    clearTimeout(slow);
+    setStatus(ran === "" ? "Thinking…" : `${ran}. Thinking…`);
+    slow = setTimeout(() => setStatus("Waiting for the provider…"), opts.slowMs ?? SLOW_REPLY_MS);
+  };
+  const heard = (doing: string): void => {
+    clearTimeout(slow);
+    if (status() !== doing) setStatus(doing);
+  };
+
   /** Write the fragments that arrived since the last frame: one change to the transcript. */
   const flushText = (): void => {
     frameDue = false;
@@ -255,6 +280,7 @@ export function createAssistantSession(opts: SessionOptions) {
 
   const onEvent = (e: AssistantEvent): void => {
     if (e.type === "text") {
+      heard("Writing…");
       pendingText += e.text;
       if (!frameDue) {
         frameDue = true;
@@ -265,8 +291,7 @@ export function createAssistantSession(opts: SessionOptions) {
     // Anything else comes after the words before it: they are written first.
     flushText();
     if (e.type === "call") {
-      steps += 1;
-      setStatus(`Working, ${plural(steps, "step", "steps")}…`);
+      heard(e.code.trim() === "" ? "Reading the manual…" : `Running ${activityLine(e.code)}…`);
       setEntries(produce((list) => void list.push({ kind: "tool", name: e.name, code: e.code, report: "", ok: true, note: "running…", open: false, at: Date.now() })));
       return;
     }
@@ -286,6 +311,8 @@ export function createAssistantSession(opts: SessionOptions) {
         }),
       );
       opts.onChanged();
+      // The report goes back to the model: the turn waits on its next words.
+      awaitReply(e.code.trim() === "" ? "Read the manual" : `Ran ${activityLine(e.code)}`);
       return;
     }
     if (e.type === "failed") {
@@ -298,9 +325,8 @@ export function createAssistantSession(opts: SessionOptions) {
 
   const run = async (next: ChatMessage[]): Promise<void> => {
     lastEnd = "done";
-    steps = 0;
     setRunning(true);
-    setStatus("Thinking…");
+    awaitReply();
     controller = new AbortController();
     const options: TurnOptions = {
       provider: provider(),
@@ -322,6 +348,7 @@ export function createAssistantSession(opts: SessionOptions) {
       // Only what can still be sent is kept: turns the budget has passed are never sent again.
       setConversation(trimToBudget(next, MAX_REQUEST_CHARS));
       setRunning(false);
+      clearTimeout(slow);
       setStatus("");
       controller = null;
     }

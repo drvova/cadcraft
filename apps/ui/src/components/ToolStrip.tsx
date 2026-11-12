@@ -1,7 +1,7 @@
 /**
  * The tool strip: the icon row of `chrome.rs`'s `TOOLBAR` table, in the same groups and order,
- * with a thin divider between groups. Each button invokes its command id through `onInvoke` and
- * its tooltip names the command and its shortcut, exactly as the desktop does.
+ * with a thin divider between groups. Each button invokes its command id through `onInvoke`; its
+ * name is the command's label, and its shortcut is a key cap in the hint and `aria-keyshortcuts`.
  *
  * The icons come from `icons.ts` (original code-drawn paths); the table below is transcribed from
  * the Rust table, egui types removed.
@@ -170,7 +170,8 @@ export function ToolStrip(props: ToolStripProps): JSX.Element {
               {(entry) => (
                 <IconButton
                   icon={entry.icon}
-                  title={entry.shortcut === "" ? entry.label : `${entry.label} (${shortcutLabel(entry.shortcut, isMacPlatform())})`}
+                  title={entry.label}
+                  shortcut={entry.shortcut === "" ? undefined : shortcutLabel(entry.shortcut, isMacPlatform())}
                   onClick={() => props.onInvoke(entry.id)}
                 />
               )}

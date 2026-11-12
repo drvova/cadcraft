@@ -24,7 +24,7 @@ import { defaultFileName, downloadBytes, pickFile } from "./files";
 import { TopBar } from "./components/TopBar";
 import { MenuBar } from "./components/MenuBar";
 import { ToolStrip } from "./components/ToolStrip";
-import { LayoutTabs, StatusBar } from "./components/StatusBar";
+import { LayoutTabs, STATUS_TOGGLES, StatusBar } from "./components/StatusBar";
 import { CommandPalette } from "./components/CommandPalette";
 import { AssistantPane } from "./components/AssistantPane";
 import { createAssistantSession, type AssistantSession } from "./assistant-session";
@@ -310,6 +310,15 @@ export function App(props: AppProps): JSX.Element {
         e.preventDefault();
         focusRegion(e.shiftKey ? -1 : 1);
         return;
+      }
+      // A drafting toggle's function key (the cap its status key shows) flips that setting.
+      if (!mod && !e.altKey && !e.shiftKey && !e.repeat) {
+        const toggle = STATUS_TOGGLES.find((t) => t.shortcut === e.key);
+        if (toggle !== undefined) {
+          e.preventDefault();
+          onStatusCommand(toggle.id, { on: !settings()[toggle.key] });
+          return;
+        }
       }
       const target = e.target instanceof Element ? e.target : null;
       // The setup sheet closes on its own Escape while the keyboard is in the assistant. From
@@ -620,6 +629,20 @@ export function App(props: AppProps): JSX.Element {
     refresh();
   };
 
+  /** A rectangle dragged on the drawing: the engine's `select` by window or crossing; Shift adds. */
+  const onSelectRect = (rect: Rect, kind: "window" | "crossing", shift: boolean): void => {
+    const env = props.facade.execute("select", {
+      window: [
+        [rect.x0, rect.y0],
+        [rect.x1, rect.y1],
+      ],
+      crossing: kind === "crossing",
+      add: shift,
+    });
+    setNotice(env.ok ? null : env.error);
+    refresh();
+  };
+
   const onLayerToggle = (name: string, flag: "on" | "frozen" | "locked", value: boolean): void => {
     const env = props.facade.setLayerFlag(name, flag, value);
     setNotice(env.ok ? null : env.error);
@@ -708,6 +731,7 @@ export function App(props: AppProps): JSX.Element {
               onViewChange={onViewChange}
               onNotice={setNotice}
               onPick={onPick}
+              onSelectRect={onSelectRect}
               onCursor={setCursor}
             />
           </main>

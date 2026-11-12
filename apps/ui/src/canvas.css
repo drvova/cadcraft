@@ -1,0 +1,55 @@
+/* The drawing canvas under the hand: its cursors and the selection rectangle. The stage's box and
+   focus ring are in styles.css; the two cursor rules there (grab at rest, grabbing while any
+   button is down) are overridden here, because a press that turns out to be a click must not
+   flash the pan cursor. */
+
+/* A drag that leaves the canvas never selects the text of the panels it passes over. */
+.canvas-stage {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* At rest the canvas is a place to pick: the arrow. The gesture in hand names its own cursor, and
+   only once it has left the click slop, so a click never changes it. */
+.canvas-stage .canvas,
+.canvas-stage .canvas:active {
+  cursor: default;
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+
+.canvas-stage .canvas[data-gesture="pan"] {
+  cursor: grabbing;
+}
+
+.canvas-stage .canvas[data-gesture="select"] {
+  cursor: crosshair;
+}
+
+/* The selection rectangle, over the canvas and outside its drawing: dragging it repaints one box,
+   not the display list. A window (left to right, objects wholly inside) is a solid rule over a
+   fuller wash; a crossing (right to left, objects touched) is a dashed rule over a fainter one.
+   The rule is the selection ink, and a hairline of the canvas's own ground outside it keeps the
+   edge readable where it runs along geometry of the same hue. */
+.canvas-marquee {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: var(--marquee-w, 0);
+  height: var(--marquee-h, 0);
+  transform: translate(var(--marquee-x, 0), var(--marquee-y, 0));
+  pointer-events: none;
+  border: var(--hairline) solid var(--selection);
+  outline: var(--hairline) solid color-mix(in srgb, var(--canvas) 70%, transparent);
+  background: color-mix(in srgb, var(--selection) 14%, transparent);
+}
+
+.canvas-marquee[data-kind="crossing"] {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--selection) 7%, transparent);
+}
+
+.canvas-marquee[hidden] {
+  display: none;
+}

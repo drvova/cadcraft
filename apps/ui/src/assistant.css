@@ -182,25 +182,28 @@
   line-height: 1.5;
 }
 
-/* The jump key: shown when the reader has scrolled away from the end; it rides the bottom edge
-   of the transcript. The key's own fill is translucent, so the wrapper backs it with the panel. */
+/* The jump key: shown when the reader has scrolled away from the end. It stands in a band of the
+   panel's own surface along the bottom edge of the transcript, so it never sits on top of a line
+   of text: the words end at the band, as they end at any edge of the scroller. The key's own fill
+   is translucent, so the wrapper backs it with the panel. */
 .assistant-jump {
+  --assistant-jump-h: calc(var(--control-h-input) + 2 * var(--gap-4));
   position: sticky;
-  bottom: var(--gap-8);
-  /* It rides over the last line instead of taking a row of its own, so the transcript's height
-     (and the reader's place in it) does not move when the key comes and goes. */
-  height: var(--control-h-input);
-  margin-top: calc(-1 * var(--control-h-input));
+  bottom: 0;
+  /* The band lies over the transcript's last rows instead of taking a row of its own, so the
+     transcript's height (and the reader's place in it) does not move when it comes and goes. */
+  height: var(--assistant-jump-h);
+  margin-top: calc(-1 * var(--assistant-jump-h));
   display: flex;
+  align-items: center;
   justify-content: center;
-  pointer-events: none;
+  background: var(--panel);
 }
 
 .assistant-jump-key {
   display: inline-flex;
   border-radius: var(--radius-round);
   background: var(--panel);
-  pointer-events: auto;
 }
 
 .assistant-empty {
@@ -245,6 +248,11 @@
   .assistant-example:hover {
     background: var(--hover);
   }
+}
+
+/* Pressed: one rung up the fill ladder, as the layer's ghost controls take. */
+.assistant-example:active {
+  background: var(--fill-active);
 }
 
 .assistant-example:focus-visible {
@@ -405,6 +413,7 @@
   line-height: var(--composer-leading);
   text-align: left;
   cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-standard);
 }
 
 /* A run of steps reads as one list: 4px between them, not the body's 14. */
@@ -416,6 +425,11 @@
   .assistant-tool:hover {
     color: var(--text-dim);
   }
+}
+
+/* The flat row has no fill to step: pressed, its ink takes the full step. */
+.assistant-tool:active {
+  color: var(--text);
 }
 
 .assistant-tool:focus-visible {
@@ -500,10 +514,12 @@
 
 /* A code block: the measured recipe — the recessed surface, radius 12, the .12 hairline,
    12px/18px mono (research §2). Its side inset is the bubble's 12px, not the measured 10, so the
-   code starts on the panel's text column. */
+   code starts on the panel's text column. Code keeps its lines: a long one scrolls sideways
+   inside the block (a wrapped line of code reads as two), and the block never widens the panel. */
 .assistant-code {
   margin: 0;
   padding: var(--gap-6) var(--gap-12);
+  max-width: 100%;
   max-height: var(--block-max-height);
   overflow: auto;
   background: var(--surface-inset);
@@ -513,9 +529,13 @@
   font-family: var(--font-family-mono);
   font-size: var(--font-mono);
   line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: anywhere;
+  white-space: pre;
+  tab-size: 2;
+}
+
+/* The wrap gives way with the panel, so the block's own width is the panel's and not its longest line's. */
+.assistant-code-wrap {
+  min-width: 0;
 }
 
 /* The copy affordance: the measured 20px overlay at the block's top-right, shown on hover. It is
@@ -604,18 +624,20 @@
   overflow-y: auto;
 }
 
-/* The queue's heading is its fold key and its count on one line. The key is a 20px circle around
-   a 12px glyph, so it steps out by the glyph's margin and the glyph sits on the rows' text column
-   (the same step the changes row's chevron takes). */
+/* The queue's heading is its fold key and its count on one line. It is a row of the stack like
+   the others (the same height, type, gap and inset as the changes row, the other row that opens
+   with a chevron), so the two chevrons and the two labels share their columns and every row of
+   the stack is one pitch from the next. The key is a 20px circle around a 12px glyph, so it steps
+   out by the glyph's margin and the glyph sits on the rows' text column. */
 .assistant-stack-head {
   display: flex;
   align-items: center;
-  gap: var(--gap-2);
+  gap: var(--gap-6);
   flex-shrink: 0;
-  padding: var(--gap-2) var(--gap-8) 0 var(--gap-4);
-  color: var(--text-disabled);
-  font-size: var(--font-chip);
-  line-height: var(--gap-16);
+  min-height: var(--control-h-button);
+  padding: 0 var(--gap-8) 0 var(--gap-4);
+  color: var(--text-faint);
+  font-size: var(--font-body);
 }
 
 .assistant-stack-head > .ui-icon-button:first-child {
@@ -677,6 +699,17 @@
   flex-shrink: 0;
 }
 
+/* What waits in the queue is the reader's own words: a step above the rows that only report. */
+.assistant-stack-queue .assistant-stack-text {
+  color: var(--text-dim);
+}
+
+/* The running dot stands where a row's chevron glyph stands (3px into the glyph's 12px box, the
+   row's 6px gap after it), so the status starts on the column the labels beside a chevron start on. */
+.assistant-stack-row > .assistant-ripple {
+  margin: 0 var(--gap-6) 0 var(--gap-3);
+}
+
 /* The draft is longer than one message may be: said in the warning ink, in figures that hold
    their width while the count changes under the typing. */
 .assistant-stack-row--over {
@@ -730,7 +763,33 @@
   border-color: var(--composer-border-active);
 }
 
+/* What the message carries (the canvas selection, pictures) sits in the card, over the words, as
+   on the reference board's composers. The card grows upward by this row, and the growth is drawn:
+   the row opens from nothing over the popover's pace instead of arriving whole in one frame (the
+   grid track runs 0fr to 1fr, the one way a box of unknown height can be eased open). */
 .assistant-attachments {
+  display: grid;
+  grid-template-rows: 1fr;
+  animation: assistant-attachments-in var(--dur-med) var(--ease-out-quint);
+}
+
+@keyframes assistant-attachments-in {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+}
+
+.assistant-attachments-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.assistant-attachments-row {
   display: flex;
   flex-wrap: wrap;
   gap: var(--gap-4);
@@ -917,11 +976,6 @@
   font-size: var(--font-chip);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-/* Nothing sent yet: no meter, and no gap where it would be. */
-.assistant-context:empty {
-  display: none;
 }
 
 /* The slash list: the commands a `/word` draft matches, on the stack's surface, flush on the
@@ -1134,13 +1188,15 @@
   border-top: var(--hairline) solid var(--border);
 }
 
-/* The foot's two lines: what the connection check found, and why Save is off. Each is there only
-   while it has something to say, and the foot keeps one line's height when neither does. */
+/* The foot's two lines: what the connection check found, and why Save is off (said here once, in
+   words that are always in view; the Save key's hint does not repeat it). Each is there only while
+   it has something to say, and the foot keeps both lines' height when they do not, so Save and
+   Cancel do not move under the pointer when the last field is filled and the reason leaves. */
 .assistant-setup-notes {
   display: flex;
   flex-direction: column;
   gap: var(--gap-2);
-  min-height: var(--gap-16);
+  min-height: calc(2 * var(--gap-16) + var(--gap-2));
   padding: 0 var(--assistant-inset);
   font-size: var(--font-label);
   line-height: var(--gap-16);
