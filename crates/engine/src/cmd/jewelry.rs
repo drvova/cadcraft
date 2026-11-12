@@ -15,6 +15,9 @@
 mod bench;
 mod gem;
 mod mesh;
+#[cfg(test)]
+#[path = "jewelry/mesh_tests.rs"]
+mod mesh_tests;
 mod pave;
 mod piece;
 mod piece_params;
