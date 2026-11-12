@@ -82,6 +82,166 @@ describe("the toolbar table", () => {
   });
 });
 
+/** One straight piece of a glyph. */
+interface Stroke {
+  from: readonly [number, number];
+  to: readonly [number, number];
+}
+
+/** What a glyph's path draws: points along every stroke (an arc is walked, so its bulge counts),
+ *  its straight pieces, and how many separate strokes it is made of. */
+interface Drawing {
+  points: [number, number][];
+  strokes: Stroke[];
+  subpaths: number;
+}
+
+/** Walks path data made of moves, lines, circular arcs and closes, the only commands a strip glyph uses. */
+function drawing(d: string): Drawing {
+  const tokens = d.match(/[A-Za-z]|-?(?:\d+\.?\d*|\.\d+)/g) ?? [];
+  const out: Drawing = { points: [], strokes: [], subpaths: 0 };
+  let at = 0;
+  let x = 0;
+  let y = 0;
+  let startX = 0;
+  let startY = 0;
+  let command = "";
+  const number = (): number => {
+    const value = Number(tokens[at++]);
+    if (!Number.isFinite(value)) throw new Error(`a number is missing in ${d}`);
+    return value;
+  };
+  const lineTo = (nx: number, ny: number): void => {
+    out.strokes.push({ from: [x, y], to: [nx, ny] });
+    out.points.push([nx, ny]);
+    x = nx;
+    y = ny;
+  };
+  while (at < tokens.length) {
+    const token = tokens[at] ?? "";
+    if (/[A-Za-z]/.test(token)) {
+      command = token;
+      at++;
+      if (command === "Z" || command === "z") {
+        lineTo(startX, startY);
+        continue;
+      }
+    }
+    const relative = command === command.toLowerCase();
+    const baseX = relative ? x : 0;
+    const baseY = relative ? y : 0;
+    switch (command.toUpperCase()) {
+      case "M":
+        x = baseX + number();
+        y = baseY + number();
+        startX = x;
+        startY = y;
+        out.points.push([x, y]);
+        out.subpaths++;
+        command = relative ? "l" : "L";
+        break;
+      case "L":
+        lineTo(baseX + number(), baseY + number());
+        break;
+      case "H":
+        lineTo(baseX + number(), y);
+        break;
+      case "V":
+        lineTo(x, baseY + number());
+        break;
+      case "A": {
+        const rx = number();
+        const ry = number();
+        number();
+        const large = number();
+        const sweep = number();
+        const endX = baseX + number();
+        const endY = baseY + number();
+        if (rx !== ry) throw new Error(`an arc that is not circular in ${d}`);
+        // The centre from the chord, then points along the sweep.
+        const halfX = (endX - x) / 2;
+        const halfY = (endY - y) / 2;
+        const half = Math.hypot(halfX, halfY);
+        const radius = Math.max(rx, half);
+        const rise = Math.sqrt(Math.max(0, radius * radius - half * half));
+        const side = large === sweep ? -1 : 1;
+        const centreX = x + halfX + (side * rise * -halfY) / (half || 1);
+        const centreY = y + halfY + (side * rise * halfX) / (half || 1);
+        const first = Math.atan2(y - centreY, x - centreX);
+        let last = Math.atan2(endY - centreY, endX - centreX);
+        if (sweep === 1 && last < first) last += 2 * Math.PI;
+        if (sweep === 0 && last > first) last -= 2 * Math.PI;
+        for (let step = 1; step <= 24; step++) {
+          const angle = first + ((last - first) * step) / 24;
+          out.points.push([centreX + radius * Math.cos(angle), centreY + radius * Math.sin(angle)]);
+        }
+        x = endX;
+        y = endY;
+        break;
+      }
+      default:
+        throw new Error(`a strip glyph uses ${command}, which the family does not draw with: ${d}`);
+    }
+  }
+  return out;
+}
+
+describe("the strip's glyphs are one family", () => {
+  const glyphs = entries.map((entry) => ({ icon: entry.icon, ...drawing(ICON_PATHS[entry.icon] ?? "") }));
+  /** One pixel of the strip's 16px glyph, on the 24 grid. */
+  const PIXEL = 24 / 16;
+
+  test("every glyph stays inside the box's margin and fills it to the same measure", () => {
+    for (const glyph of glyphs) {
+      const xs = glyph.points.map((point) => point[0]);
+      const ys = glyph.points.map((point) => point[1]);
+      // The margin: no stroke's middle nearer than 2 to the box's edge.
+      expect(Math.min(...xs, ...ys), `${glyph.icon} leaves the box`).toBeGreaterThanOrEqual(2);
+      expect(Math.max(...xs, ...ys), `${glyph.icon} leaves the box`).toBeLessThanOrEqual(22);
+      // The measure: the longer side is 16 to 19 of the 24, so no key looks a size smaller than the next.
+      const longer = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+      expect(longer, `${glyph.icon} is small for the strip`).toBeGreaterThanOrEqual(16);
+      expect(longer, `${glyph.icon} is large for the strip`).toBeLessThanOrEqual(19);
+    }
+  });
+
+  test("a glyph is at most six strokes, so its idea survives at sixteen pixels", () => {
+    for (const glyph of glyphs) expect(glyph.subpaths, `${glyph.icon} is drawn with too many strokes`).toBeLessThanOrEqual(6);
+  });
+
+  test("no long horizontal or vertical stroke lies between two pixels at the strip's size", () => {
+    // A stroke on a multiple of 1.5 is half on each of two pixels at 16: a soft pair, not a line.
+    const between = (value: number): boolean => Math.abs(value / PIXEL - Math.round(value / PIXEL)) * PIXEL < 0.3;
+    const soft = glyphs
+      .filter((glyph) =>
+        glyph.strokes.some((stroke) => {
+          const length = Math.hypot(stroke.to[0] - stroke.from[0], stroke.to[1] - stroke.from[1]);
+          if (length < 2 * PIXEL) return false;
+          if (stroke.from[0] === stroke.to[0]) return between(stroke.from[0]);
+          return stroke.from[1] === stroke.to[1] && between(stroke.from[1]);
+        }),
+      )
+      .map((glyph) => glyph.icon);
+    // The two whose stem is the box's own centre line, which an even size has no pixel for.
+    expect(soft).toEqual(["text", "pan"]);
+  });
+
+  test("the pairs a drafter must tell apart at a glance differ in how they are built", () => {
+    const strokesOf = (icon: string): number => glyphs.find((glyph) => glyph.icon === icon)?.subpaths ?? 0;
+    const has = (icon: string, piece: string): boolean => (ICON_PATHS[icon] ?? "").includes(piece);
+    // The offset is a pair of curves with nothing else; the fillet one curve and the corner's dot.
+    expect(strokesOf("offset")).toBe(2);
+    expect(has("offset", "h0")).toBe(false);
+    expect(has("fillet", "h0")).toBe(true);
+    // The copy carries a plus and no circle; the window zoom a magnifier's lens.
+    expect(has("copy-objects", "a")).toBe(false);
+    expect(has("zoom.window", "a4.5 4.5 0 1 0 0 9")).toBe(true);
+    // The line is one straight piece between its grips; the polyline bends twice between the same grips.
+    expect(drawing(ICON_PATHS["line"] ?? "").strokes.length).toBe(1);
+    expect(drawing(ICON_PATHS["polyline"] ?? "").strokes.length).toBe(3);
+  });
+});
+
 describe("ICON_PATHS", () => {
   test("every toolbar icon id has a path, and the only extra paths are the composer's and the palettes'", () => {
     const iconIds = entries.map((entry) => entry.icon);

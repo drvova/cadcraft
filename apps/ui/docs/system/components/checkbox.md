@@ -15,7 +15,7 @@ Not applicable: hand-rolled — a native `<input type="checkbox">` drawn from th
 Real uses, 3 call sites (`rg -c "<Checkbox" src/components` → `src/components/DraftingSettings.tsx:2`, `src/components/PropertiesPanel.tsx:1`):
 - `src/components/DraftingSettings.tsx:199` — the Drafting Settings dialog's switches (Snap on, Grid on, Polar tracking on, and the rest), each with its label as children and a refusal tied by `describedBy`.
 - `src/components/DraftingSettings.tsx:313` — the dialog's box per object snap: the label is the snap's marker and its name.
-- `src/components/PropertiesPanel.tsx:195` — the palette's yes-or-no rows: named by the row's label, `mixed` when the picked objects disagree.
+- `src/components/PropertiesPanel.tsx:239` — the palette's yes-or-no rows: named by the row's label, `mixed` when the picked objects disagree.
 
 ### Example files
 | File | Covers | Caption |
@@ -95,7 +95,7 @@ Not applicable: no variant axes — a checkbox is one 14px box with or without a
   - Do: `<Checkbox checked={snap()} onChange={setSnap}>Snap</Checkbox>`
 
 ### Content
-- `rule/checkbox-label-positive`: When a checkbox's label is written, name what is true when the box is ticked, in 1 to 4 words in the positive form (Show the grid), because a ticked box beside a negative label has to be read twice. Evidence: single use `src/components/PropertiesPanel.tsx:225`, the palette's yes-or-no rows, labelled by the property's name. Check: review `src/components/PropertiesPanel.tsx`.
+- `rule/checkbox-label-positive`: When a checkbox's label is written, name what is true when the box is ticked, in 1 to 4 words in the positive form (Show the grid), because a ticked box beside a negative label has to be read twice. Evidence: single use `src/components/PropertiesPanel.tsx:269`, the palette's yes-or-no rows, labelled by the property's name. Check: review `src/components/PropertiesPanel.tsx`.
   - Don't: `<Checkbox checked={!grid()} onChange={(off) => setGrid(!off)}>Do not show the grid</Checkbox>`
   - Do: `<Checkbox checked={grid()} onChange={setGrid}>Show the grid</Checkbox>`
 

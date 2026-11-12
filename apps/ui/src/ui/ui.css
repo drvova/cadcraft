@@ -287,9 +287,9 @@
 /* ---- Toggle: <button aria-pressed class="ui-toggle ui-toggle--{variant} ui-toggle--{size} ui-toggle--{tone}"> ---- */
 
 /* A setting switched in place. The state is the face's alone: a glyph and its ink, with no fill at
-   rest, on or off, because a column of them is mostly in one state; or a word, which is a quiet
-   chip while on and bare while off (the word has no second glyph to change, so the chip is what
-   says on besides the ink). The button itself never takes a state's fill: a glyph's hover and
+   rest, on or off, because a column of them is mostly in one state; or a word, which is the full
+   ink on the faintest chip while on and the quiet ink on nothing while off (the word has no second
+   glyph to change, so the step of ink and the chip say on between them). The button itself never takes a state's fill: a glyph's hover and
    press are its own background, a word's chip is its `::before`. Every colour rule below weighs
    the same, so the later one wins: a state's ink over the hover's, and the disabled ink over
    them all. */
@@ -346,12 +346,15 @@
 
 /* text — a word in capitals, a little tracked. The small one is as tall as the line it stands in
    (`--ui-toggle-line`, set by the bar that holds it; a list row's height when nothing sets it),
-   so the target is the whole line and not the word's own box. On, the word is the secondary ink
-   on a chip; off, the quiet ink on nothing: the two differ by the fill and by lightness, never by
-   hue. */
+   so the target is the whole line and not the word's own box. On, the word is the full ink on
+   the faintest fill (`--hover`); off, the quiet ink on nothing: the two differ by lightness first
+   (the ink carries the state with the chip taken away) and by the chip second, never by hue. As
+   the secondary ink on the selected fill the on words of a bar ran together into grey slabs, and
+   read a step from the off words beside them. The word's inset is the chip's own distance from
+   the line's edges, so the chip is as far from the word on every side, and the bar that holds a
+   run of them sets the gap that keeps two chips apart. */
 .ui-toggle--text {
-  --ui-toggle-pad: var(--gap-4);
-  --ui-toggle-ink-on: var(--text-dim);
+  --ui-toggle-pad: var(--gap-3);
   padding: 0 var(--ui-toggle-pad);
   border-radius: 0;
   letter-spacing: 0.04em;
@@ -392,6 +395,13 @@
     color: var(--text);
   }
 
+  /* An off word under the pointer stops a step short of the full ink: the full ink on the
+     faintest chip is what an on word looks like at rest, and a word is never drawn on before it
+     is. The on ink, below, outlasts this. */
+  .ui-toggle--text:hover {
+    color: var(--text-dim);
+  }
+
   .ui-toggle--glyph:hover,
   .ui-toggle--text:hover::before {
     background: var(--hover);
@@ -408,15 +418,16 @@
   color: var(--ui-toggle-ink-on);
 }
 
-/* An on word's chip: the selected fill at rest and under the pointer, one step up while held.
-   Under the pointer the word takes the full ink, as an off word does. */
+/* An on word's chip: the faintest fill at rest, the selected fill under the pointer, one step up
+   again while held. Each is a step over what an off word shows in the same state (nothing, the
+   faintest, the selected), so on and off differ under the pointer and under the press too. */
 .ui-toggle--text[aria-pressed="true"]::before {
-  background: var(--fill-active);
+  background: var(--hover);
 }
 
 @media (hover: hover) {
-  .ui-toggle--text[aria-pressed="true"]:hover:not([aria-disabled="true"]) {
-    color: var(--text);
+  .ui-toggle--text[aria-pressed="true"]:hover::before {
+    background: var(--fill-active);
   }
 }
 
@@ -464,7 +475,7 @@
 }
 
 /* disabled — after every state above: the disabled ink whatever the state, and no fill under the
-   pointer or the press. A blocked word that is on keeps a chip, at the faintest fill that shows,
+   pointer or the press. A blocked word that is on keeps its chip, the faintest fill that shows,
    so its state is still drawn. */
 .ui-toggle[aria-disabled="true"] {
   background: transparent;
@@ -535,10 +546,14 @@
 /* A value longer than the box ends in an ellipsis while the field is at rest; the hint shows it
    in full (`Tooltip.tsx`), and the caret scrolls it while it is edited. */
 .ui-field {
+  /* The edge at rest. On the dark surfaces the hairline stroke shows (1.33 against the pane); on
+     the light ones it measured 1.27 against the pane and 1.18 against the field's own fill, and a
+     field read as a grey slab with no edge. The light theme takes the default stroke, below. */
+  --ui-field-edge: var(--border-soft);
   min-width: 0;
   height: var(--control-h-input);
   padding: var(--field-pad-y) var(--field-pad-x);
-  border: var(--hairline) solid var(--border-soft);
+  border: var(--hairline) solid var(--ui-field-edge);
   border-radius: var(--radius-control);
   background: var(--control);
   color: var(--text);
@@ -549,6 +564,15 @@
   transition:
     border-color var(--dur-fast) var(--ease-standard),
     background-color var(--dur-fast) var(--ease-standard);
+}
+
+/* The light theme's edge: one step up the stroke ladder (1.39 against the pane, 1.28 against the
+   fill). It is set as the edge's ink, never as `border-color`, so the inline, focus, refused and
+   disabled rules below still win by their place in the file. The select is the same box and
+   reads the same ink. */
+:root[data-theme="light"] .ui-field,
+:root[data-theme="light"] .ui-select {
+  --ui-field-edge: var(--border);
 }
 
 .ui-field::placeholder {
@@ -584,7 +608,7 @@
 
 @media (hover: hover) {
   .ui-field--inline:hover {
-    border-color: var(--border-soft);
+    border-color: var(--ui-field-edge);
     background: var(--control);
   }
 }
@@ -636,7 +660,8 @@
   max-width: 100%;
   height: var(--control-h-input);
   padding: 0 var(--ui-select-pad);
-  border: var(--hairline) solid var(--border-soft);
+  /* The field's edge (the Field section sets its ink for the light theme). */
+  border: var(--hairline) solid var(--ui-field-edge, var(--border-soft));
   border-radius: var(--radius-control);
   background: var(--control);
   color: var(--text);
@@ -717,7 +742,7 @@
 
 @media (hover: hover) {
   .ui-select--inline:hover {
-    border-color: var(--border-soft);
+    border-color: var(--ui-field-edge, var(--border-soft));
     background: var(--control);
   }
 }

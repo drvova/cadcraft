@@ -22,6 +22,7 @@ import {
   listModels,
   reachedNote,
   saveBlocker,
+  setupStatus,
   withoutKey,
   MAX_CALL_ARGS_CHARS,
   MAX_CALLS_PER_REPLY,
@@ -193,6 +194,23 @@ describe("setting a provider up", () => {
     expect(reachedNote(["a", "b"], "c").text).toBe("Connected. 2 models, but not c. Pick one from the list, or keep the name you typed.");
     expect(reachedNote([], "c")).toEqual({ state: "no-list", text: "Connected. The provider lists no models. Type the model's name." });
     expect(failedNote(new Error("the socket closed"))).toEqual({ state: "failed", text: "The socket closed" });
+  });
+
+  test("the setup's one status line: the check running, else its result, else what Save needs, else nothing", () => {
+    const reached = reachedNote(["a"], "a");
+    const refused = { state: "refused" as const, text: "The provider refused the key." };
+    const blocker = saveBlocker({ baseUrl: "https://api.openai.com/v1", model: "gpt-5.1", apiKey: "" }, true, 0);
+    expect(blocker).toBe("To save, add the API key this provider needs.");
+    // A running check outranks everything, the last result included.
+    expect(setupStatus(true, refused, blocker)).toEqual({ tone: "checking", text: "Checking the connection…" });
+    expect(setupStatus(true, null, null)?.tone).toBe("checking");
+    // A result outranks what Save needs, whether it is good news or bad.
+    expect(setupStatus(false, refused, blocker)).toEqual({ tone: "refused", text: refused.text });
+    expect(setupStatus(false, reached, blocker)).toEqual({ tone: "reached", text: reached.text });
+    expect(setupStatus(false, reachedNote([], ""), null)?.tone).toBe("no-list");
+    // With no result, the line is what Save still needs; with nothing to say it is empty.
+    expect(setupStatus(false, null, blocker)).toEqual({ tone: "blocked", text: "To save, add the API key this provider needs." });
+    expect(setupStatus(false, null, null)).toBeNull();
   });
 
   test("a provider that quotes the key back does not get it shown", async () => {
@@ -867,12 +885,12 @@ describe("parseBlocks", () => {
     expect(parseBlocks("-5 mm offset")).toEqual([{ kind: "para", text: "-5 mm offset" }]);
     expect(parseBlocks("")).toEqual([]);
   });
-  test("a table is read as text: its header a minor heading, each row an item, no pipes left", () => {
+  test("a table is read as text: its header a caption, each row an item, no pipes left", () => {
     const table = ["Layers:", "| Layer | Colour | Objects |", "|:------|:------:|--------:|", "| Outline | white | 12 |", "| `Hatch` | grey |  |", "after"].join("\n");
     const blocks = parseBlocks(table);
     expect(blocks).toEqual([
       { kind: "para", text: "Layers:" },
-      { kind: "heading", level: 4, text: "Layer · Colour · Objects" },
+      { kind: "caption", text: "Layer · Colour · Objects" },
       { kind: "list", ordered: false, items: ["**Outline** · white · 12", "`Hatch` · grey"] },
       { kind: "para", text: "after" },
     ]);
@@ -880,11 +898,11 @@ describe("parseBlocks", () => {
   });
   test("a table without outer pipes, and a pipe escaped inside a cell", () => {
     expect(parseBlocks(["Area | Change", "--- | ---", "a\\|b | removed"].join("\n"))).toEqual([
-      { kind: "heading", level: 4, text: "Area · Change" },
+      { kind: "caption", text: "Area · Change" },
       { kind: "list", ordered: false, items: ["**a|b** · removed"] },
     ]);
     // A header with no rows under it is still not drawn as pipes.
-    expect(parseBlocks(["| A | B |", "|---|---|"].join("\n"))).toEqual([{ kind: "heading", level: 4, text: "A · B" }]);
+    expect(parseBlocks(["| A | B |", "|---|---|"].join("\n"))).toEqual([{ kind: "caption", text: "A · B" }]);
   });
   test("pipes that are not a table stay the text they are", () => {
     expect(parseBlocks("a | b")).toEqual([{ kind: "para", text: "a | b" }]);
@@ -896,7 +914,7 @@ describe("parseBlocks", () => {
   test("a hostile table is read without failing", () => {
     const wide = `${"| x ".repeat(5_000)}|`;
     const blocks = parseBlocks([wide, `${"|---".repeat(5_000)}|`, wide, "|".repeat(20_000), "\\|".repeat(10_000)].join("\n"));
-    expect(blocks[0]?.kind).toBe("heading");
+    expect(blocks[0]?.kind).toBe("caption");
     expect(blocks[1]).toMatchObject({ kind: "list", ordered: false });
   });
 });

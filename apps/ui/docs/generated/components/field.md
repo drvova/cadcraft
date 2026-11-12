@@ -216,7 +216,7 @@ export default function TypePassword() {
 ```
 
 ### variant
-- `field`: the default; the form control, stroked and filled at rest. Used at 3 call sites (the provider form).
+- `field`: the default; the form control, stroked and filled at rest. The stroke is an ink of the field's own (`--ui-field-edge`): the hairline stroke (`--border-soft`) on the dark surfaces, where it measures 1.34 against the pane and 1.24 against the field's fill, and the default stroke (`--border`) on the light ones, 1.39 and 1.28. With the hairline stroke the light field measured 1.27 and 1.18 and read as a grey slab with no edge (`#F3F3F3` on `#FCFCFC`). The theme sets the ink, never `border-color`, so the inline, focused and refused strokes still win; `Select` reads the same ink. Used at 3 call sites (the provider form).
 - `inline`: a value in a dense list row; no stroke and no fill until the pointer or the keyboard is on it, as `Select variant="inline"`. Used at 0 call sites (planned: the properties palette's value rows).
 
 Example: The form control, stroked and filled at rest. (`docs/system/examples/field/variant-field.tsx`)
@@ -506,7 +506,7 @@ Rests on the native `<input>` element: typing, selection, IME and autofill come 
 |---|---|---|
 | The box | all | `--control-h-input`, `--radius-control`, `--field-pad-y`, `--field-pad-x`, `--font-body`, `--leading-ui` |
 | The fill | all | `--control` |
-| The stroke | rest | `--border-soft`, `--hairline` |
+| The stroke | rest | `--border-soft` (dark), `--border` (light), `--hairline` |
 | The stroke | focus | `--focus-ring` |
 | The stroke | invalid | `--error` |
 | The text | all | `--text` |

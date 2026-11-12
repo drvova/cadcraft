@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { commandMenu, drawingMenu, layerMenu, layoutMenu, LONG_PRESS_MS, QUICK_CLICK_MS, ranCommands, RECENT_LIMIT, restMenu, rightClickAction, selectionMenu, type ContextMenuModel, type DrawingContext } from "./context";
+import { commandMenu, drawingMenu, gripMenu, layerMenu, layoutMenu, LONG_PRESS_MS, QUICK_CLICK_MS, ranCommands, RECENT_LIMIT, restMenu, rightClickAction, selectionMenu, type ContextMenuModel, type DrawingContext } from "./context";
 import type { CommandInfo, LayerInfo } from "./facade";
 import type { MenuItem } from "./menu";
 
@@ -305,5 +305,31 @@ describe("a layout tab's menu", () => {
   test("a registry with no layout commands gives a menu with no row", () => {
     expect(layoutMenu(without("layout", "layout.new", "layout.delete", "pagesetup"), "Layout1").items).toEqual([]);
     expect(rows(layoutMenu(without("layout", "pagesetup"), "Layout1").items)).toEqual(["New Layout", "| Delete"]);
+  });
+});
+
+describe("a grip's menu", () => {
+  test("holds the engine's options for that grip, in its order, each invoked on that grip", () => {
+    const menu = gripMenu("131:2", [
+      { id: "addVertex", label: "Add Vertex" },
+      { id: "removeVertex", label: "Remove Vertex" },
+    ]);
+    expect(rows(menu.items)).toEqual(["Add Vertex", "Remove Vertex"]);
+    expect(action(menu, "Add Vertex")).toEqual({ kind: "grip", grip: "131:2", option: "addVertex" });
+    expect(action(menu, "Remove Vertex")).toEqual({ kind: "grip", grip: "131:2", option: "removeVertex" });
+    expect(menu.label).toBe("Grip");
+  });
+
+  test("a grip with no option has no row, so no menu is shown", () => {
+    expect(gripMenu("12F:1", []).items).toEqual([]);
+  });
+
+  test("a list grip's choices keep their own ids, whatever they are called", () => {
+    const menu = gripMenu("9A:d4:at", [
+      { id: "enter", label: "enter" },
+      { id: "cancel", label: "cancel" },
+    ]);
+    expect(action(menu, "enter")).toEqual({ kind: "grip", grip: "9A:d4:at", option: "enter" });
+    expect(action(menu, "cancel")).toEqual({ kind: "grip", grip: "9A:d4:at", option: "cancel" });
   });
 });

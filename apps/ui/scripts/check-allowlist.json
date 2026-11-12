@@ -18,7 +18,7 @@
       "#2a2a2a": 1,
       "#552633": 1,
       "#81a1c1": 1,
-      "rgb(212,212,212)": 3
+      "rgb(212,212,212)": 1
     }
   },
   "src/canvas.ts": {
@@ -79,7 +79,6 @@
   "src/styles.css": {
     "rule/css-px": {
       "height: 10px": 1,
-      "max-height: 84px": 1,
       "width: 10px": 1,
       "width: 252px": 1
     }

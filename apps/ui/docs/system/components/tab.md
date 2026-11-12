@@ -17,7 +17,7 @@ Not applicable: hand-rolled — the editor tab (13px type on a 12px inset in the
 
 Real uses, 2 call sites (`rg -c "<Tab" src/components` → `src/components/AssistantPane.tsx:4`, `src/components/StatusBar.tsx:1`):
 - `src/components/StatusBar.tsx:76` — `LayoutTabs`, the editor tabs over the drawing (`size="md"`): Model, then each layout; `selected` marks the space in front, `title` says what the tab switches to.
-- `src/components/AssistantPane.tsx:502` — the chat tabs in the assistant's header when more than one chat is open (`size="sm"`): `selected` marks the chat in front, `onClose` closes that chat, `closeLabel` names it ("Close hello"), `title` carries the full chat title when the label clips.
+- `src/components/AssistantPane.tsx:513` — the chat tabs in the assistant's header when more than one chat is open (`size="sm"`): `selected` marks the chat in front, `onClose` closes that chat, `closeLabel` names it ("Close hello"), `title` carries the full chat title when the label clips.
 - The menu titles in `src/components/MenuBar.tsx` stay native buttons: they open menus, a different role.
 - The status bar's drafting toggles in `src/components/StatusBar.tsx` are `Toggle`: a drafting toggle is an `aria-pressed` switch, not a tab.
 
@@ -91,13 +91,13 @@ Real uses, 2 call sites (`rg -c "<Tab" src/components` → `src/components/Assis
 - The label is a short fact with no view behind it. Use `Chip` instead.
 
 ### Rules
-- `rule/tab-selected-marked`: When a strip has a tab in front, pass `selected` on it, because the fill alone is colour and a screen reader needs `aria-selected="true"` to hear which view shows. Evidence: app 2/2 strips mark the tab in front, `src/components/StatusBar.tsx:57` and `src/components/AssistantPane.tsx:477`. Check: test `src/ui/Tab.test.tsx`.
+- `rule/tab-selected-marked`: When a strip has a tab in front, pass `selected` on it, because the fill alone is colour and a screen reader needs `aria-selected="true"` to hear which view shows. Evidence: app 2/2 strips mark the tab in front, `src/components/StatusBar.tsx:57` and `src/components/AssistantPane.tsx:488`. Check: test `src/ui/Tab.test.tsx`.
   - Don't: `<Tab onClick={show}>Model</Tab>` for the tab whose view is showing.
   - Do: `<Tab selected onClick={show}>Model</Tab>`
-- `rule/tab-in-tablist`: When tabs are rendered, place them in 1 container carrying `role="tablist"` and an `aria-label`, because a `tab` role outside a `tablist` is announced without its strip and its position. Evidence: app 2/2 strips, `src/components/StatusBar.tsx:54` and `src/components/AssistantPane.tsx:564`. Check: review `src/components/StatusBar.tsx`.
+- `rule/tab-in-tablist`: When tabs are rendered, place them in 1 container carrying `role="tablist"` and an `aria-label`, because a `tab` role outside a `tablist` is announced without its strip and its position. Evidence: app 2/2 strips, `src/components/StatusBar.tsx:54` and `src/components/AssistantPane.tsx:570`. Check: review `src/components/StatusBar.tsx`.
   - Don't: `<div class="editor-tabs"><Tab selected>Model</Tab></div>`
   - Do: `<div class="editor-tabs" role="tablist" aria-label="Layouts"><Tab selected>Model</Tab></div>`
-- `rule/tab-close-sibling`: When a tab can be closed, pass `onClose` rather than putting a button in the tab's children, because a `<button>` cannot nest a `<button>` and `Tab` renders the close key as a sibling. Evidence: single use `src/components/AssistantPane.tsx:434`, the one closable strip. Check: test `src/ui/Tab.test.tsx`.
+- `rule/tab-close-sibling`: When a tab can be closed, pass `onClose` rather than putting a button in the tab's children, because a `<button>` cannot nest a `<button>` and `Tab` renders the close key as a sibling. Evidence: single use `src/components/AssistantPane.tsx:443`, the one closable strip. Check: test `src/ui/Tab.test.tsx`.
   - Don't: `<Tab onClick={show}>hello<IconButton icon="close" title="Close hello" onClick={close} /></Tab>`
   - Do: `<Tab onClick={show} onClose={close} closeLabel="Close hello">hello</Tab>`
 
@@ -112,13 +112,13 @@ Real uses, 2 call sites (`rg -c "<Tab" src/components` → `src/components/Assis
   - Do: `<Tab selected>Model</Tab>`
 
 ### Limits
-- `rule/tab-label-limit`: When an `sm` tab's label runs past 18 characters, pass the whole label as the children and leave the shortening to the tab, because the tab clips at `max-width: 18ch` with an ellipsis (the 20-character "Summarise the layers" shows as "Summarise the la…") and shows the full label in its hint by itself, while a label cut by the caller has no full text anywhere. Evidence: measured 111.6px clipped `sm` tab at 1280px, `src/ui/ui.css:1059`. Check: test `src/ui/Tab.test.tsx`.
+- `rule/tab-label-limit`: When an `sm` tab's label runs past 18 characters, pass the whole label as the children and leave the shortening to the tab, because the tab clips at `max-width: 18ch` with an ellipsis (the 20-character "Summarise the layers" shows as "Summarise the la…") and shows the full label in its hint by itself, while a label cut by the caller has no full text anywhere. Evidence: measured 111.6px clipped `sm` tab at 1280px, `src/ui/ui.css:1084`. Check: test `src/ui/Tab.test.tsx`.
   - Don't: `<Tab size="sm">{title.slice(0, 16) + "…"}</Tab>` — the cut label has no full text anywhere.
   - Do: `<Tab size="sm">Summarise the layers</Tab>`
-- `rule/tab-md-label-limit`: When an `md` tab's label runs past 24 characters, pass the whole label as the children and leave the shortening to the tab, because the tab clips at `max-width: 24ch` with an ellipsis and shows the full label in its hint by itself, and uncapped the 56-character "A1 Ground floor general arrangement plan, sheet 12 of 40" draws a 357.8px tab that pushes the other layouts out of the strip. Evidence: measured 168.2px clipped `md` tab at 1280px, `src/ui/ui.css:1048`. Check: test `src/ui/Tab.test.tsx`.
+- `rule/tab-md-label-limit`: When an `md` tab's label runs past 24 characters, pass the whole label as the children and leave the shortening to the tab, because the tab clips at `max-width: 24ch` with an ellipsis and shows the full label in its hint by itself, and uncapped the 56-character "A1 Ground floor general arrangement plan, sheet 12 of 40" draws a 357.8px tab that pushes the other layouts out of the strip. Evidence: measured 168.2px clipped `md` tab at 1280px, `src/ui/ui.css:1073`. Check: test `src/ui/Tab.test.tsx`.
   - Don't: `<Tab title="A1 Ground floor general arrangement plan, sheet 12 of 40">A1 Ground floor…</Tab>` — the label a screen reader hears is the cut one.
   - Do: `<Tab>A1 Ground floor general arrangement plan, sheet 12 of 40</Tab>`
-- `rule/tab-touch-target`: When `sm` tabs are laid out in a pane header, leave the header room for a 24px tab, because under a coarse pointer the 22px tab grows to the 24px control height (it clips its own overflow for the ellipsis, so it cannot take an overhanging target) and a header fixed at 22px would cut it. Evidence: measured 22px `sm` tab, 24px under a coarse pointer, `src/ui/ui.css:1421`. Check: review `src/ui/ui.css`.
+- `rule/tab-touch-target`: When `sm` tabs are laid out in a pane header, leave the header room for a 24px tab, because under a coarse pointer the 22px tab grows to the 24px control height (it clips its own overflow for the ellipsis, so it cannot take an overhanging target) and a header fixed at 22px would cut it. Evidence: measured 22px `sm` tab, 24px under a coarse pointer, `src/ui/ui.css:1446`. Check: review `src/ui/ui.css`.
   - Don't: `.my-head { height: var(--control-h-row); overflow: hidden }`
   - Do: `.my-head { min-height: var(--control-h-button); align-items: center }`
 

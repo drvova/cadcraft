@@ -108,14 +108,24 @@ describe("the layer's contrast, from the tokens", () => {
     ["an inline mixed select's placeholder at rest, and a bare text area's placeholder, on the surface", "text-faint", []],
     ["an option's label on the listbox's highlight", "text", ["fill-active"]],
     ["a menu row's label on the fill of the pointer, the keyboard and an open submenu", "text", ["hover"]],
-    ["a menu row's typed name and shortcut on that fill", "text-faint", ["hover"]],
+    // The typed name takes the secondary ink on the row under the pointer or the keyboard (it was
+    // the quiet ink there too, with the shortcut); at rest it is the quiet ink on the surface.
+    ["a menu row's shortcut on that fill", "text-faint", ["hover"]],
+    ["a menu row's typed name on that fill", "text-dim", ["hover"]],
+    ["a menu row's typed name and shortcut at rest, on the surface", "text-faint", []],
     ["an off text toggle's word at rest, on the surface", "text-faint", []],
-    ["an off text toggle's word under the pointer, on the hover chip", "text", ["hover"]],
-    ["an off text toggle's word while held, and an on word under the pointer, on the selected chip", "text", ["fill-active"]],
+    // An off word under the pointer was the full ink on the hover chip. That is now what an on
+    // word is at rest (below), so the off word stops at the secondary ink: the two rows that held
+    // the full ink for it hold the secondary ink, at the same threshold.
+    ["an off text toggle's word under the pointer, on the hover chip", "text-dim", ["hover"]],
+    ["an off text toggle's word while held, on the selected chip", "text-dim", ["fill-active"]],
     // The on word was the full ink over a 1px rule in the on-green (three 3:1 rows for the rule,
-    // below, until 2026-11-11). It is now the secondary ink on a chip: the chip replaced the rule,
-    // so the rule's three rows became the word's on its chip, at the text threshold.
-    ["an on text toggle's word at rest, on its chip", "text-dim", ["fill-active"]],
+    // below, until 2026-11-11), then the secondary ink on the selected chip. A second review found
+    // a bar of those chips reading as grey slabs, with on (.74) a step from off (.60): the on word
+    // is now the full ink on the faintest chip, the selected chip under the pointer, the pressed
+    // one while held. The rule's three rows are still the word's three on its chip.
+    ["an on text toggle's word at rest, on its chip", "text", ["hover"]],
+    ["an on text toggle's word under the pointer, on the selected chip", "text", ["fill-active"]],
     ["an on text toggle's word while held, on the pressed chip", "text", ["fill-pressed"]],
   ];
   /** Not text: a glyph, or the edge that alone tells a control from its surface (WCAG 1.4.11). */
@@ -225,7 +235,10 @@ describe("the app's own sheets speak the layer's colour vocabulary", () => {
       }
     }
     const styles = sheets[0]?.[1] ?? "";
-    expect(rule(styles, ".canvas-stage:focus-visible")).toContain("solid var(--canvas-focus-ring)");
+    // The drawing's ring moved off `:focus-visible` in the same pass (styles.css, the canvas rules,
+    // another worker's: a key pressed while the pointer works in the drawing framed it). It is
+    // drawn where the stage is marked as focused by the keyboard; the ink is the same.
+    expect(rule(styles, ".canvas-stage[data-focus-ring]:focus")).toContain("solid var(--canvas-focus-ring)");
     expect(rule(styles, ".cmd-input:focus")).toContain("border-color: var(--focus-ring)");
     // The properties palette's own field, for as long as it draws one (it is moving onto Field and Select).
     const propFocus = [...(sheets[1]?.[1] ?? "").matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => (m[1] ?? "").includes(".prop-input:focus-visible"));
@@ -393,6 +406,22 @@ describe("the layer's recipe, from the stylesheet", () => {
     expect(rule(uiCss, ".ui-field--inline:disabled")).toContain("background: transparent");
   });
 
+  // The light theme's field had the hairline stroke at rest, as the dark one has: it measured 1.18
+  // against the field's own fill and the field read as an edgeless slab. The edge is an ink of the
+  // field's own, one step up the stroke ladder in the light theme, and the theme sets the ink and
+  // never `border-color`, which would outweigh the inline, focus and refused rules.
+  test("a field's resting edge is an ink of its own: the hairline stroke, and the default stroke in the light theme", () => {
+    expect(rule(uiCss, ".ui-field")).toContain("--ui-field-edge: var(--border-soft)");
+    expect(rule(uiCss, ".ui-field")).toContain("border: var(--hairline) solid var(--ui-field-edge)");
+    const light = rule(uiCss, ':root[data-theme="light"] .ui-field, :root[data-theme="light"] .ui-select');
+    expect(light).toContain("--ui-field-edge: var(--border)");
+    expect(light).not.toContain("border-color");
+    expect(rule(uiCss, ".ui-field--inline:hover")).toContain("border-color: var(--ui-field-edge)");
+    // The select is the same box and reads the same ink, with the dark stroke where none is set.
+    expect(rule(uiCss, ".ui-select")).toContain("border: var(--hairline) solid var(--ui-field-edge, var(--border-soft))");
+    expect(rule(uiCss, ".ui-select--inline:hover")).toContain("border-color: var(--ui-field-edge, var(--border-soft))");
+  });
+
   test("the small field is the small select's box, a value on the far side lines its figures up, and a mixed one reads quieter", () => {
     expect(rule(uiCss, ".ui-field")).toContain("height: var(--control-h-input)");
     expect(rule(uiCss, ".ui-field")).toContain("text-overflow: ellipsis");
@@ -438,12 +467,25 @@ describe("the layer's recipe, from the stylesheet", () => {
     expect(pressed.length).toBeGreaterThan(0);
     for (const m of pressed) expect(m[2]).not.toContain("background");
     expect(rule(uiCss, '.ui-toggle[aria-pressed="true"]')).toContain("color: var(--ui-toggle-ink-on)");
-    expect(rule(uiCss, ".ui-toggle--text")).toContain("--ui-toggle-ink-on: var(--text-dim)");
+    // The on word was the secondary ink on the selected fill; a bar of them read as slabs and the
+    // ink was a step from off. It is the layer's own on ink (the full one), which the word face no
+    // longer restates, on the faintest fill; the selected fill is the on chip's hover now.
+    expect(rule(uiCss, ".ui-toggle")).toContain("--ui-toggle-ink-on: var(--text)");
+    expect(rule(uiCss, ".ui-toggle")).toContain("--ui-toggle-ink-off: var(--text-faint)");
+    expect(rule(uiCss, ".ui-toggle--text")).not.toContain("--ui-toggle-ink-on");
+    // The word's inset is the chip's distance from the line's edges, so the chip clears the word evenly.
+    expect(rule(uiCss, ".ui-toggle--text")).toContain("--ui-toggle-pad: var(--gap-3)");
     const chip = rule(uiCss, ".ui-toggle--text::before");
     expect(chip).toContain("background: transparent");
     expect(chip).toContain("inset: var(--gap-3) 0");
     expect(chip).toContain("border-radius: var(--radius-control)");
-    expect(rule(uiCss, '.ui-toggle--text[aria-pressed="true"]::before')).toContain("background: var(--fill-active)");
+    expect(rule(uiCss, '.ui-toggle--text[aria-pressed="true"]::before')).toContain("background: var(--hover)");
+    expect(rule(uiCss, '.ui-toggle--text[aria-pressed="true"]:hover::before')).toContain("background: var(--fill-active)");
+    expect(rule(uiCss, '.ui-toggle--text[aria-pressed="true"]:active::before')).toContain("background: var(--fill-pressed)");
+    // An off word under the pointer is never drawn as an on word at rest: it stops a step short,
+    // and the on ink, later in the sheet at the same weight, outlasts that step.
+    expect(rule(uiCss, ".ui-toggle--text:hover")).toContain("color: var(--text-dim)");
+    expect(uiCss.indexOf(".ui-toggle--text:hover {")).toBeLessThan(uiCss.indexOf('.ui-toggle[aria-pressed="true"] {'));
     // No hue says on: the on-green is not in the layer's sheet at all.
     expect(uiCss).not.toContain("var(--toggle-on)");
   });

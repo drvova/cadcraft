@@ -16,11 +16,11 @@ Dark is the default (`:root`); light restates only the roles that change, under 
 | `--chrome-dark` | `#0f0f0f` | `#F3F3F3` | The recessed chrome: the status bar, the tab strip's well. |
 | `--panel` | `#141414` | `#FCFCFC` | A floating panel's surface, one step above chrome. |
 | `--tab-active` | `#181818` | `#FCFCFC` | The selected tab, lifted off the strip. |
-| `--control` | `#1c1c1c` | `#F3F3F3` | A control's own fill: fields, buttons at rest, list rows. Light's was `#e8e8e8` until 2026-11-11: on the `#FCFCFC` pane (1.19:1) a resting field read as disabled; `#F3F3F3` is a step under the pane (1.08:1) and the hairline carries the edge. |
+| `--control` | `#1c1c1c` | `#F3F3F3` | A control's own fill: fields, buttons at rest, list rows. Light's was `#e8e8e8` until 2026-11-11: on the `#FCFCFC` pane (1.19:1) a resting field read as disabled; `#F3F3F3` is a step under the pane (1.08:1) and the stroke carries the edge: a light `Field` and `Select` take `--border` at rest (1.39 against the pane), because `--border-soft` measured 1.27 there and 1.18 against the fill, and the field had no edge to the eye. |
 | `--control-hover` | `#232323` | `#e8e8e8` | The control fill under the pointer, and the properties palette's hovered row. Light's is the old field grey, which is the `.08` hover fill over the pane. |
 | `--surface-elevated` | `#212121` | `#FCFCFC` | The elevated surface: the composer, menus, popovers. |
 | `--border` | `rgba(240,240,240,.12)` | `rgba(20,20,20,.12)` | The measured border stroke (Cursor §1). |
-| `--border-soft` | `rgba(240,240,240,.08)` | `rgba(20,20,20,.08)` | The hairline stroke inside controls. |
+| `--border-soft` | `rgba(240,240,240,.08)` | `rgba(20,20,20,.08)` | The hairline stroke inside controls. A field's resting edge on the dark surfaces only: the light field takes `--border` (`--control`, above). |
 
 ### Drawing area
 
@@ -31,6 +31,8 @@ Dark is the default (`:root`); light restates only the roles that change, under 
 | `--grid-major` | `#2a2a2a` | `#2a2a2a` | The major grid every ten units. |
 | `--axis-x` | `#552633` | `#552633` | The X axis, warm and dim so it never reads as geometry. |
 | `--axis-y` | `#23412f` | `#23412f` | The Y axis, cool and dim. |
+| `--canvas-grip-hover` | `#f1b467` | `#f1b467` | A grip under the pointer on the drawing: one value in both themes, because the canvas under it does not change. |
+| `--canvas-grip-hot` | `#e34671` | `#e34671` | A grip being edited on the drawing: one value in both themes, for the same reason. |
 | `--canvas-focus-ring` | `#599CE7` | `#599CE7` | The keyboard ring on the drawing: the dark accent in both themes, because the canvas under it does not change (the light `--focus-ring` measures 2.62 there). |
 
 ### Text and icons
@@ -119,7 +121,7 @@ Each specimen is drawn with the token itself, never a copied value.
 
 ## Usage
 
-- Reach for a role, never a hue: `--accent` for the one action, `--error` for a failure, `--warn` for a caution, because a second meaning per hue makes the interface unreadable at a glance. A setting that is on is not a hue at all: it is a fill and a lighter ink (`Toggle`, `IconButton`'s `selected`), and the current layer is the selected fill and the accent bar. `--toggle-on` is the engine badge's dot and nothing else.
+- Reach for a role, never a hue: `--accent` for the one action, `--error` for a failure, `--warn` for a caution, because a second meaning per hue makes the interface unreadable at a glance. A setting that is on is not a hue at all: it is the full ink on the faintest fill (`Toggle`'s word, `IconButton`'s `selected`), or a glyph of its own (`Toggle`'s glyph), and the current layer is the selected fill and the accent bar. `--toggle-on` is the engine badge's dot and nothing else.
 - Hover and selection are fills, not colour changes — `--hover`, `--fill-active`, `--fill-pressed` over whatever surface the control sits on — because a hue swap changes a control's meaning, while a fill step only moves it.
 - Disabled is a lighter ink (`--text-disabled`) on an unchanged fill (`--fill-disabled`), because a disabled control should read as unavailable, not as a different control.
 - On an accent fill the label is `--on-accent`, never `--text`, because the fill is the same in both themes' buttons and the ink must stay readable on it; on the error fill it is `--on-error`, because the dark error fill is darker than the dark accent and the accent's ink misses 4.5 on it.
@@ -172,7 +174,7 @@ Contrast, measured by `node scripts/contrast-report.mjs` (run from the app folde
 
 `--text-dim` as text on `--fill-active` over each surface: `--chrome` 6.9 ✓; `--chrome-dark` 7.2 ✓; `--panel` 6.9 ✓; `--tab-active` 6.6 ✓; `--control` 6.3 ✓; `--surface-elevated` 6.0 ✓; `--surface-inset` 6.6 ✓; `--list-bg` 6.3 ✓; `--cmd-bg` 6.3 ✓.
 
-On the drawing (`--canvas`, one dark surface in both themes): `--selection` 6.2 ✓; `--canvas-focus-ring` 6.2 ✓.
+On the drawing (`--canvas`, one dark surface in both themes): `--selection` 6.2 ✓; `--canvas-focus-ring` 6.2 ✓; `--canvas-grip-hover` 9.7 ✓; `--canvas-grip-hot` 4.5 ✓.
 
 On the hint (`--tooltip-bg`): `--text` 16.2 ✓; `--text-dim` 9.2 ✓; `--text-faint` 6.4 ✓.
 
@@ -217,7 +219,7 @@ Every ink pair is at or above its threshold.
 
 `--text-dim` as text on `--fill-active` over each surface: `--chrome` 6.5 ✓; `--chrome-dark` 6.4 ✓; `--panel` 6.7 ✓; `--tab-active` 6.7 ✓; `--control` 6.4 ✓; `--surface-elevated` 6.7 ✓; `--surface-inset` 6.4 ✓; `--list-bg` 6.7 ✓; `--cmd-bg` 6.5 ✓.
 
-On the drawing (`--canvas`, one dark surface in both themes): `--selection` 3.8 ✓; `--canvas-focus-ring` 6.2 ✓.
+On the drawing (`--canvas`, one dark surface in both themes): `--selection` 3.8 ✓; `--canvas-focus-ring` 6.2 ✓; `--canvas-grip-hover` 9.7 ✓; `--canvas-grip-hot` 4.5 ✓.
 
 On the hint (`--tooltip-bg`): `--text` 17.3 ✓; `--text-dim` 7.7 ✓; `--text-faint` 5.8 ✓.
 

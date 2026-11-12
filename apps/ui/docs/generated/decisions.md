@@ -555,6 +555,24 @@ did not agree. Before and after captures are `.design-system/review/wE10-*.png`.
   state fill and the target is still the whole line; the word's hover and press are drawn on the
   same chip. Measured on the status bar: off 6.48 (dark) and 5.68 (light), on 7.23 and 6.37.
   The glyph face is unchanged: a glyph has a second glyph to change to, a word does not.
+- **An on word is the full ink on the faintest chip** (a second review, the same week). As
+  `--text-dim` on `--fill-active` a bar of on words read as grey slabs: two chips 2px apart
+  (OTRACK and OSNAP, TRANSP and DYN) merged into one bar, and the on ink stood 1.6 from the off
+  ink (1.5 light), so the fill alone carried the state. On is now `--text` on `--hover`, and off
+  is still `--text-faint` on nothing: 14.1 on its chip against 6.5 on the bar (dark), 14.1 against
+  5.7 (light), the two inks 2.6 and 2.9 apart, so the word says on with the chip taken away. The
+  chip steps to `--fill-active` under the pointer and `--fill-pressed` while held. An off word
+  under the pointer takes `--text-dim` on `--hover`, a step short of the on word at rest, which
+  it would otherwise be drawn as. The word's inset is 3px, the chip's own distance from the
+  line's ends, and the status bar keeps two words 4px apart: the run is 2px shorter over its
+  eleven words than it was, and wraps at 499px where it wrapped at 501.
+- **A light field's edge is the default stroke.** `Field` and `Select` drew `--border-soft` at
+  rest in both themes. On the dark pane that edge measures 1.34 and shows; on the light pane it
+  measured 1.27, and 1.18 against the field's own `#F3F3F3`, and a form was three grey slabs.
+  The light theme sets the edge's ink (`--ui-field-edge`) to `--border`: 1.39 against the pane,
+  1.28 against the fill. It is an ink and not `border-color`, so the inline variant's
+  transparent edge, the focus ink and the error ink still win by their place in the sheet.
+  `TextArea`'s field variant still draws `--border-soft` in both themes and should follow.
 - **A selected icon button is the full ink on the `.08` fill, squared.** It was the `.14` fill
   at the button's round radius. Its three call sites are the title bar's layout keys, two of
   which are on at rest: two filled discs were the second most salient thing in the bar. Ink

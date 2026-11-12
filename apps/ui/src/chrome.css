@@ -106,6 +106,8 @@
      not inherit its parent's pull. */
   --menu-shift-x: 0;
   --menu-shift-y: 0;
+  /* What stands between a menu and the submenu beside it (Menu.tsx reads it to place one). */
+  --menu-sub-gap: var(--gap-2);
   translate: var(--menu-shift-x) var(--menu-shift-y);
   position: absolute;
   top: 100%;
@@ -119,11 +121,16 @@
      scrolls would clip the submenus that open beside its rows. The columns read, and the arrow
      keys walk, down the first and then down the next. A track is half a row: a row takes two and
      the separator between two groups one. Menu.tsx says which rows start a column
-     (`data-column-start`), so the columns break between groups and come out even. */
+     (`data-column-start`), so the columns break between groups and come out even.
+
+     A column of rows is three tracks of the grid, which every row of it shares (a row is a
+     subgrid, below): the labels, the names typed at the command line, and the shortcuts or the
+     submenus' chevrons. So down a whole column the names start on one edge and the shortcuts end
+     on one, whatever each row holds. The labels' track takes the room that is left. */
   display: grid;
   grid-auto-flow: column;
   grid-template-rows: repeat(auto-fit, calc(var(--menu-row-h) / 2));
-  grid-auto-columns: minmax(30ch, max-content);
+  grid-auto-columns: minmax(0, 1fr) auto auto;
   column-gap: var(--menu-inset);
   /* A menu ends above the status bar: Menu.tsx measures the bar and sets `--menu-floor` (the
      bar's height under a finger until then). */
@@ -136,23 +143,32 @@
   z-index: 40;
 }
 
-/* A submenu opens beside its row, its first row level with it. */
+/* A submenu opens beside its menu, its first row level with the row that opened it. It never
+   covers its menu's other rows: it starts past the menu's own edge, which is `--menu-reach` from
+   its row's (the menu's inset and hairline for a row of the last column; Menu.tsx measures the
+   rest for a row with another column between it and the edge). */
 .menu-drop-sub {
+  --menu-reach: calc(var(--menu-inset) + var(--hairline));
   top: calc(-1 * (var(--menu-inset) + var(--hairline)));
-  left: calc(100% + var(--menu-inset) + var(--hairline) + var(--gap-2));
+  left: calc(100% + var(--menu-reach) + var(--menu-sub-gap));
   min-width: 24ch;
   z-index: 50;
 }
 
-/* A submenu with no room on the right of its row (a menu near the window's edge, or the last
-   column of a tall one) opens on the left of it instead. */
+/* A submenu with no room on the right of its menu (a menu near the window's edge) opens on the
+   left of it instead, past that edge. */
 .menu-drop-sub.is-flipped {
   left: auto;
-  right: calc(100% + var(--menu-inset) + var(--hairline) + var(--gap-2));
+  right: calc(100% + var(--menu-reach) + var(--menu-sub-gap));
 }
 
+/* A row's box: two half-row tracks down, and across the three tracks of its column, which it
+   hands on to the row itself. */
 .menu-item {
   grid-row-end: span 2;
+  grid-column-end: span 3;
+  display: grid;
+  grid-template-columns: subgrid;
 }
 
 .menu-item[data-column-start] {
@@ -163,11 +179,24 @@
   position: relative;
 }
 
+/* The row (the layer's `Row menuitem`) lays its slots on its column's tracks: only where they
+   stand is set here; its height, inset, gap, corner, inks and fills stay the layer's. */
+.menu-item > [role="menuitem"] {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+}
+
+.menu-item > [role="menuitem"] > * {
+  grid-row: 1;
+}
+
 /* The separator between two groups of rows: a hairline in the middle of half a row, as long as
    the rows' own text runs (it starts where the labels do and ends where the shortcuts do). The
    one that would lead or end a column is not drawn (Menu.tsx hides it). */
 .menu-separator {
   grid-row-end: span 1;
+  grid-column-end: span 3;
   display: flex;
   align-items: center;
   height: calc(var(--menu-row-h) / 2);
@@ -218,6 +247,16 @@
   rotate: 90deg;
 }
 
+/* A stacked menu is not a grid, so its rows have no shared tracks to stand on: each is the
+   layer's own flex row again, and gives way in the order the slots say (the name first). */
+.menu-drop.is-stacked .menu-item {
+  display: block;
+}
+
+.menu-drop.is-stacked .menu-item > [role="menuitem"] {
+  display: flex;
+}
+
 /* A row is the layer's (`Row menuitem`, ui.css: its height, corner, inks, fills and ring). What
    follows is what the menu puts in one: the label first, then the name typed at the command line,
    then the shortcut or the submenu's chevron against the same right edge. */
@@ -235,6 +274,7 @@
 }
 
 .menu-label {
+  grid-column: 1;
   flex: 1 1 auto;
   min-width: 0;
   white-space: nowrap;
@@ -243,12 +283,24 @@
 }
 
 /* A row's glyph (the tool strip's overflow menu: each row is a key of the strip), in the icon ink
-   at the strip's size, half the row's gap from its label. */
+   at the strip's size, half the row's gap from its label. It shares the labels' track: the label
+   after it starts past the glyph and that half gap. (In a stacked menu the two are flex items,
+   and the glyph gives the other half of the row's gap back by its margin.) */
 .menu-icon {
+  grid-column: 1;
+  justify-self: start;
   flex: 0 0 auto;
   display: inline-flex;
   margin-inline-end: calc(var(--gap-8) - var(--gap-16));
   color: var(--icon);
+}
+
+.menu-icon + .menu-label {
+  padding-inline-start: calc(var(--icon-size-md) + var(--gap-8));
+}
+
+.menu-drop.is-stacked .menu-icon + .menu-label {
+  padding-inline-start: 0;
 }
 
 .menu-icon .tool-icon {
@@ -261,14 +313,20 @@
 }
 
 /* The name typed at the command line that runs the row: read, not skipped, so the quiet ink and
-   never the disabled one, in the mono face the command line writes it in. It stands before the
-   shortcut, which keeps the row's end. A menu is as wide as its longest row, so the name always
-   has room there; in a menu of a fixed width (the stacked one) it is the first thing in a row to
-   give way, before the label is cut and with the shortcut untouched, and it is whole or gone,
-   never cut: a name cut short would be another name. It is gone the way the status bar's facts
-   are: it stands in a one-line box that wraps, so in a box narrower than the name the name is on
-   the second line, which the box does not show. */
+   never the disabled one (which measures 3.05 on the menu's surface, under the 4.5 a name that is
+   read needs; the quiet ink is the faintest that holds it, 5.9 dark and 5.6 light), in the mono
+   face the command line writes it in and in lower case, as it is typed there: in capitals the
+   column of names was louder than the labels it serves. On the row under the pointer or the
+   keyboard it steps up to the secondary ink. It stands in the names' own track, before the
+   shortcuts', so the names of a column share their left edge. A menu is as wide as its longest
+   row, so the name always has room there; in a menu of a fixed width (the stacked one) it is the
+   first thing in a row to give way, before the label is cut and with the shortcut untouched, and
+   it is whole or gone, never cut: a name cut short would be another name. It is gone the way the
+   status bar's facts are: it stands in a one-line box that wraps, so in a box narrower than the
+   name the name is on the second line, which the box does not show. */
 .menu-name {
+  grid-column: 2;
+  justify-self: start;
   flex: 0 1000000 auto;
   display: flex;
   flex-wrap: wrap;
@@ -280,7 +338,20 @@
   font-family: var(--font-family-mono);
   font-size: var(--font-mono);
   line-height: var(--menu-row-h);
+  text-transform: lowercase;
   white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+
+@media (hover: hover) {
+  .menu-item > [role="menuitem"]:hover:not([aria-disabled="true"]) .menu-name {
+    color: var(--text-dim);
+  }
+}
+
+.menu-item > [role="menuitem"]:focus-visible:not([aria-disabled="true"]) .menu-name,
+.menu-item > [role="menuitem"][aria-expanded="true"] .menu-name {
+  color: var(--text-dim);
 }
 
 .menu-name::before {
@@ -301,7 +372,10 @@
   color: inherit;
 }
 
+/* The shortcut and the submenu's chevron share the last track and end on its edge. */
 .menu-shortcut {
+  grid-column: 3;
+  justify-self: end;
   flex: 0 0 auto;
   color: var(--text-faint);
   font-size: var(--font-label);
@@ -315,6 +389,8 @@
 /* The chevron's stroke sits in the middle of its box: the box is pulled out so the stroke, not
    the box, meets the shortcuts' right edge. */
 .menu-arrow {
+  grid-column: 3;
+  justify-self: end;
   flex: 0 0 auto;
   display: inline-flex;
   margin-right: calc(-1 * var(--gap-4));
@@ -353,8 +429,10 @@
    does not zoom. The fade's width is kept clear when the band scrolls a tab into view (the
    keyboard's focus moving along it): the tab stops past the fade, its focus ring whole. */
 .editor-tabs {
-  --fade-start: 0;
-  --fade-end: 0;
+  /* A length, not a bare 0: `calc(100% - 0)` is no value at all, and with it the whole mask was
+     dropped whenever only the start was clipped (the band scrolled to its end showed no fade). */
+  --fade-start: 0px;
+  --fade-end: 0px;
   mask-image: linear-gradient(to right, transparent, var(--text) var(--fade-start), var(--text) calc(100% - var(--fade-end)), transparent);
   scroll-padding-inline: var(--control-h-input);
   touch-action: pan-x;
@@ -538,6 +616,17 @@
 
 .status-fit-coord {
   flex-shrink: 1e12;
+  /* The readout is the mono face, which stands higher in a line than the facts' face does (a
+     pixel, measured: 793 against 794 in a bar ending at 800). Its box's empty first cell holds a
+     strut in the facts' face and size, and the readout is set on the strut's baseline, so the
+     figures and the words beside them read on one line whatever mono face the platform has. */
+  align-items: baseline;
+}
+
+.status-fit-coord::before {
+  content: "\200B";
+  font-size: var(--font-label);
+  line-height: var(--status-line);
 }
 
 /* The selection count keeps its box: it is whole at every width. */
@@ -605,15 +694,18 @@
    bar grows by it. Every toggle is on screen, each line one line's height.
 
    The toggles are the layer's `Toggle` with a word as its face (ui.css): the quiet ink when off;
-   on, the secondary ink on a chip. Each is as tall as the bar's line (`--ui-toggle-line`), so the
-   target is the whole line and not the word's own box. */
+   on, the full ink on the faintest chip. Each is as tall as the bar's line (`--ui-toggle-line`),
+   so the target is the whole line and not the word's own box. Two words stand `--gap-4` apart:
+   at 2px two chips side by side (OTRACK and OSNAP, TRANSP and DYN) read as one bar. The word's
+   own inset (ui.css) is a pixel less than it was, so the run is 2px shorter over its eleven words
+   and wraps no earlier. */
 .status-toggles {
   --ui-toggle-line: var(--status-line);
   flex: 0 1 auto;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 0 var(--gap-2);
+  gap: 0 var(--gap-4);
   min-width: 0;
   margin-inline-start: auto;
 }

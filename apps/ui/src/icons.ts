@@ -8,6 +8,14 @@
  * dashed. A glyph is drawn from the geometry of what its tool does, never from another product's
  * icon.
  *
+ * The strip draws a glyph at 16, where one pixel is 1.5 of the grid: a horizontal or vertical stroke
+ * belongs on a pixel's middle (0.75 plus a multiple of 1.5: 3.75, 5.25 ... 20.25), where it is one
+ * sharp pixel at ratio 1, and never between two pixels (a multiple of 1.5), where it is a soft pair.
+ * `icons.test.ts` holds the strip's glyphs to that and names the older ones that still put a stroke
+ * between two pixels. Each strip glyph has one idea that is still there in ten pixels, and no two
+ * share a silhouette (a pair of strokes is the offset, one round corner the fillet; a plus on a twin
+ * is the copy, a magnifier on a window the zoom).
+ *
  * The stroke is one weight at every size: `STROKE` CSS pixels on the screen whether the glyph is
  * drawn at 12, 14 or 16 (`vector-effect: non-scaling-stroke`), not a width on the 24 grid that
  * thins as the glyph shrinks.
@@ -27,21 +35,21 @@ export const STROKE = 1.25;
 /** The id -> `<path d>` map. Every toolbar id has one; ids are unique to each drawing. */
 export const ICON_PATHS: Readonly<Record<string, string>> = {
   /** A sheet with a folded corner. */
-  new: "M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z M14 3v6h6",
+  new: "M13 3.75H7a2 2 0 0 0-2 2v12.5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9.75z M13 3.75v6h6",
   /** A folder with a tab. */
-  open: "M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+  open: "M3.75 5.75a2 2 0 0 1 2-2h3.5l2 3h7a2 2 0 0 1 2 2v9.5a2 2 0 0 1-2 2H5.75a2 2 0 0 1-2-2z",
   /** A floppy disk: shutter and label. */
-  save: "M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M8 3v6h8V3 M7 21v-7h10v7",
+  save: "M5.75 3.75h11.5l3 3v11.5a2 2 0 0 1-2 2H5.75a2 2 0 0 1-2-2V5.75a2 2 0 0 1 2-2z M8.25 3.75v6h7.5v-6 M6.75 20.25v-6h10.5v6",
   /** An arrow curving back to the left. */
-  u: "M9 14L4 9l5-5 M4 9h10a6 6 0 0 1 0 12h-4",
+  u: "M9 14.75l-5-5 5-5 M4 9.75h10.75a5.25 5.25 0 0 1 0 10.5H10",
   /** The same arrow mirrored to the right. */
-  redo: "M15 14l5-5-5-5 M20 9H10a6 6 0 0 0 0 12h4",
+  redo: "M15 14.75l5-5-5-5 M20 9.75H9.25a5.25 5.25 0 0 0 0 10.5H14",
   /** A printer: feed slot, body and the emerging sheet. */
-  plot: "M7 8V3h10v5 M5 8h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2z M7 14h10v7H7z",
+  plot: "M6.75 8.25v-4.5h10.5v4.5 M5.75 8.25h12.5a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H5.75a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2z M6.75 14.25h10.5v6h-10.5z",
   /** A paperclip. */
   attach: "M21 11l-9 9a5 5 0 0 1-7-7l8-8a3.5 3.5 0 0 1 5 5l-8 8a2 2 0 0 1-3-3l7-7",
-  /** A rectangle with a magnifier over its lower-right corner. */
-  "zoom.window": "M3 5h9v9H3z M11 14l3 3 M18 13a4 4 0 1 0 0 8a4 4 0 1 0 0-8",
+  /** Three corners of a dragged window, a magnifier standing where the fourth would be: zoom to a window. */
+  "zoom.window": "M3.75 8.25v-4.5h4.5 M12 3.75h3.75v3.75 M3.75 12v3.75h3.75 M15.75 11.25a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0-9 M19 19l2.5 2.5",
   /** A four-way move cross. */
   pan: "M12 3v18 M3 12h18 M9 6l3-3 3 3 M9 18l3 3 3-3 M6 9l-3 3 3 3 M18 9l3 3-3 3",
   /** Four corner brackets around a small square. */
@@ -56,31 +64,31 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
   list: "M4 5h2v2H4z M4 11h2v2H4z M4 17h2v2H4z M9 6h11 M9 12h11 M9 18h11",
   /** A segment between two end grips: the line tool. */
   line: "M6.4 17.6L17.6 6.4 M5 17a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M19 3a2 2 0 1 0 0 4a2 2 0 1 0 0-4",
-  /** A path bent twice, a dot on each of its four vertices: the polyline tool. */
-  polyline:
-    "M5.1 17.1L8.9 7.9 M10.3 7.8L13.7 13.2 M15.2 13.2L18.8 6.8 M4.5 17a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3 M9.5 5a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3 M14.5 13a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3 M19.5 4a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3",
+  /** One path bent twice between two end grips: the polyline tool (the line's grips, a zigzag between them). */
+  polyline: "M5.7 17.1L9.5 7l5 8 3.7-8.2 M5 17a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M19 3a2 2 0 1 0 0 4a2 2 0 1 0 0-4",
   /** A quarter arc between two end grips, a dot at its centre: the arc tool. */
   arc: "M5.2 16A13 13 0 0 1 16 5.2 M5 16a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M18 3a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M18 18h0",
   /** A rectangle held by the two opposite corners that define it: the rectangle tool. */
-  rectangle: "M17 6H5v10 M7 18h12V8 M19 4a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M5 16a2 2 0 1 0 0 4a2 2 0 1 0 0-4",
+  rectangle: "M16.75 6.75H5.25v8.5 M7.25 17.25h11.5v-8.5 M18.75 4.75a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M5.25 15.25a2 2 0 1 0 0 4a2 2 0 1 0 0-4",
   /** A closed boundary filled with slanted lines: the hatch tool. */
   hatch: "M4 4h16v16H4z M4 12l8-8 M4 20L20 4 M12 20l8-8",
   /** A capital T with its serifs: the text tool. */
   text: "M5 7V4h14v3 M12 4v16 M9 20h6",
   /** A square and an arrow carrying it up and away: the move tool. */
-  move: "M4 12h8v8H4z M13 11l7-7 M14 4h6v6",
-  /** A square and its twin set down beside it: the copy tool (`copy` is the clipboard's). */
-  "copy-objects": "M4 12h8v8H4z M12 4h8v8h-8z",
-  /** A square with an arrow swung a quarter turn round it: the rotate tool. */
-  rotate: "M4 11h9v9H4z M9 5a10 10 0 0 1 10 10 M16 12l3 3 3-3",
-  /** A triangle and its reflection either side of a dashed mirror line: the mirror tool. */
-  mirror: "M12 3v3 M12 10v4 M12 18v3 M8 7v10H3z M16 7v10h5z",
-  /** A rounded corner and its parallel at a set distance: the offset tool. */
-  offset: "M4 20V10a6 6 0 0 1 6-6h10 M9 20v-9a2 2 0 0 1 2-2h9",
-  /** A segment stopped at a cutting edge, a cross where the end it lost was: the trim tool. */
-  trim: "M12 3v18 M3 12h9 M16 9.5l5 5 M21 9.5l-5 5",
-  /** Two lines joined by an arc, the sharp corner it replaced left as a bracket: the fillet tool. */
-  fillet: "M5 20v-7a8 8 0 0 1 8-8h7 M5 8V5h3",
+  move: "M3.75 12.75h7.5v7.5h-7.5z M12.75 11.25l7.5-7.5 M14.25 3.75h6v6",
+  /** A square in front of its twin, a plus on the one being made: the copy tool (`copy` is the clipboard's). */
+  "copy-objects": "M3.75 8.25h12v12h-12z M8.25 8.25v-4.5h12v12h-4.5 M9.75 11.25v6 M6.75 14.25h6",
+  /** A square with an arrow turning three quarters of a circle about it: the rotate tool. */
+  rotate: "M20.25 12A8.25 8.25 0 1 1 12 3.75 M10 2l2 1.75-2 2.5 M9.75 9.75h4.5v4.5h-4.5z",
+  /** A triangle and its reflection pointing away from a dashed mirror line: the mirror tool. */
+  mirror: "M12.75 3.75v2.25 M12.75 10.5v4.5 M12.75 19.5v2.25 M8.25 6.75v12L3.75 12.75z M17.25 6.75v12l4.5-6z",
+  /** A rounded corner and, well clear inside it, its parallel (the round shrunk to a point, as an
+   *  offset by the radius does): the offset tool. A pair of strokes, where the fillet is one. */
+  offset: "M3.75 20.25v-9a7.5 7.5 0 0 1 7.5-7.5h9 M11.25 20.25v-9h9",
+  /** A cutting edge, a line that stops at it, and the piece cut off left as dashes: the trim tool. */
+  trim: "M9.75 3v18 M3 15.75h6.75 M13.5 15.75h2.25 M19.5 15.75h1.5",
+  /** Two long legs turning through one round corner, a dot where the sharp corner was: the fillet tool. */
+  fillet: "M3.75 3.75h9a7.5 7.5 0 0 1 7.5 7.5v9 M20.25 3.75h0",
   /** An eraser on its edge over the line it rubs out: the erase tool. */
   erase: "M14 4l7 7-8 8H9l-5-5z M9 9l7 7 M13 19h8",
   /** A span between two extension lines, an arrow at each end, over the edge it measures: the linear dimension tool. */

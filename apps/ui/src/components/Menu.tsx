@@ -15,8 +15,9 @@
  * close it (`onDismiss`); Left there and Right on an item ask for the menu beside (`onStep`),
  * which only a menu bar has.
  *
- * A submenu opens beside its row on hover or a click, flipped to the row's other side where the
- * window ends. A `stacked` menu has no room beside its rows: it is one column that scrolls, and a
+ * A submenu opens on hover or a click, level with its row and outside its whole parent menu (a
+ * menu that stands in columns keeps its other column in view), on the menu's other side where the
+ * window ends. A row crossed on the way to an open submenu does not close it. A `stacked` menu has no room beside its rows: it is one column that scrolls, and a
  * submenu opens in place, as an indented group under its row, on a click only.
  *
  * A row may be the first of a group (`group`): a separator is drawn above it. A separator is not a
@@ -31,14 +32,14 @@
 import { createSignal, createUniqueId, Index, onCleanup, Show, type Accessor, type JSX } from "solid-js";
 import { isMacPlatform, shortcutLabel } from "../commands";
 import { ToolIcon } from "../icons";
-import { clickPath, flips, hoverPath, isOnPath, menuBounds, menuColumns, menuShift, ROW_TRACKS, rowKeyAction, samePath, stackedBlock, walkIndex, type MenuItem, type MenuPath } from "../menu";
+import { AIM_GRACE_MS, aimsAt, clickPath, hoverPath, isOnPath, menuBounds, menuColumns, menuShift, ROW_TRACKS, rowKeyAction, samePath, showsName, stackedBlock, submenuPlacement, walkIndex, type MenuItem, type MenuPath, type Point } from "../menu";
 import { IconButton } from "../ui/IconButton";
 import { Row } from "../ui/Row";
 
 /**
- * Keeps an opened menu inside the window. A submenu with no room on the right of its row (its
- * menu is near the window's edge, or it opens from the last column of a tall menu) opens on the
- * left of it (`is-flipped`, chrome.css). Whatever still overhangs, such as a submenu low in a
+ * Keeps an opened menu inside the window. A submenu opens on the right of its parent menu, and
+ * with no room there (the menu is near the window's edge) on the left of it (`is-flipped`,
+ * chrome.css), past the menu's edge either way (`--menu-reach`). Whatever still overhangs, such as a submenu low in a
  * short window, is pulled back by the overhang, never past the top-left corner. The margin kept
  * from the window's edge is the menu's own inset. The status bar is an edge too: a menu ends above
  * it (`--menu-floor`, which chrome.css takes out of a menu's height), and a menu taller than that
@@ -89,7 +90,16 @@ function keepOnScreen(drop: HTMLElement): void {
   drop.style.setProperty("--menu-floor", `${Math.max(0, window.innerHeight - floor)}px`);
   layColumns(drop, style);
   const bounds = menuBounds(window.innerWidth, floor, margin);
-  if (drop.classList.contains("menu-drop-sub") && flips(drop.getBoundingClientRect(), bounds)) drop.classList.add("is-flipped");
+  // A submenu stands outside its whole parent menu, on the side with room (`submenuPlacement`):
+  // chrome.css starts it `--menu-reach` past its row's edge on that side.
+  const item = drop.parentElement;
+  const parent = item?.parentElement;
+  if (drop.classList.contains("menu-drop-sub") && item !== null && parent !== null && parent !== undefined) {
+    const gap = Number.parseFloat(style.getPropertyValue("--menu-sub-gap")) || 0;
+    const place = submenuPlacement(item.getBoundingClientRect(), parent.getBoundingClientRect(), drop.getBoundingClientRect().width, gap, bounds);
+    drop.style.setProperty("--menu-reach", `${place.reach}px`);
+    drop.classList.toggle("is-flipped", place.flipped);
+  }
   const shift = menuShift(drop.getBoundingClientRect(), bounds);
   if (shift.x !== null) drop.style.setProperty("--menu-shift-x", `${shift.x}px`);
   if (shift.y !== null) drop.style.setProperty("--menu-shift-y", `${shift.y}px`);
@@ -204,6 +214,7 @@ export function Menu(props: MenuProps): JSX.Element {
     for (const drop of [root, ...root.querySelectorAll<HTMLElement>(".menu-drop")]) {
       if (getComputedStyle(drop).position === "static") continue;
       drop.classList.remove("is-flipped");
+      drop.style.removeProperty("--menu-reach");
       drop.style.removeProperty("--menu-shift-x");
       drop.style.removeProperty("--menu-shift-y");
       keepOnScreen(drop);
@@ -220,14 +231,51 @@ export function Menu(props: MenuProps): JSX.Element {
 
   const isOpen = (path: MenuPath, label: string): boolean => isOnPath(chain(), path, label);
 
-  const hover = (item: MenuItem, path: MenuPath): void => {
+  /**
+   * The pointer's last two places over the menu, the older first, and when it last moved. A
+   * submenu that stands past the other columns of its menu is reached across their rows: a row
+   * the pointer crosses while it heads for the open submenu (`aimsAt`) waits before it answers,
+   * and answers only if the pointer has come to rest on it.
+   */
+  let trail: Point[] = [];
+  let movedAt = 0;
+  let aim: number | undefined;
+  const onPointerMove = (event: PointerEvent): void => {
+    trail = [...trail.slice(-1), { x: event.clientX, y: event.clientY }];
+    movedAt = event.timeStamp;
+  };
+  onCleanup(() => window.clearTimeout(aim));
+
+  /** Whether a pointer on `row` that moved from `from` to `to` is on its way to the submenu open beside one of the row's siblings. */
+  const aiming = (row: HTMLElement, from: Point | undefined, to: Point): boolean => {
+    const open = row.closest('[role="menu"]')?.querySelector<HTMLElement>(":scope > .menu-item > .menu-drop-sub");
+    return open !== null && open !== undefined && from !== undefined && open.parentElement !== row.parentElement && aimsAt(from, to, open.getBoundingClientRect());
+  };
+
+  const hover = (item: MenuItem, path: MenuPath, row: HTMLElement | null, at: Point): void => {
     // A submenu that opens in place would push the rows away from under the pointer: there a
     // submenu opens on a click only.
     if (props.stacked) return;
+    window.clearTimeout(aim);
     // Only a real change: a signal that notified on every hover would redo the work under the
     // pointer for nothing.
     const next = hoverPath(chain(), item, path);
     if (next === chain()) return;
+    // The pointer's place before it came onto the row is the last one the menu heard.
+    if (row !== null && aiming(row, trail[trail.length - 1], at)) {
+      const rest = (): void => {
+        if (!row.matches(":hover")) return;
+        // Still moving, and still toward the submenu: the row goes on waiting.
+        const [from, to] = trail;
+        if (performance.now() - movedAt < AIM_GRACE_MS && to !== undefined && aiming(row, from, to)) {
+          aim = window.setTimeout(rest, AIM_GRACE_MS);
+          return;
+        }
+        hover(item, path, null, at);
+      };
+      aim = window.setTimeout(rest, AIM_GRACE_MS);
+      return;
+    }
     hoverOpened = item.id === null ? next : null;
     setChain(next);
   };
@@ -311,7 +359,7 @@ export function Menu(props: MenuProps): JSX.Element {
             expanded={submenu() ? isOpen(path, item().label) : undefined}
             describedBy={name() === "" ? undefined : nameId}
             onPointerEnter={(event) => {
-              if (hovers(event)) hover(item(), path);
+              if (hovers(event)) hover(item(), path, rowOf(event), { x: event.clientX, y: event.clientY });
             }}
             onKeyDown={(event) => {
               const row = rowOf(event);
@@ -331,12 +379,15 @@ export function Menu(props: MenuProps): JSX.Element {
             </Show>
             <span class="menu-label">{item().label}</span>
             {/* The typed name is drawn for the eye and said as the row's description ("Type PL"),
-                so the row's name stays its label. In a row too narrow for all of it, it is the
-                part that goes, whole (chrome.css: a one-line box around the name). */}
-            <Show when={name() !== ""}>
+                so the row's name stays its label. A long name is said and not drawn
+                (`showsName`). In a row too narrow for all of it, it is the part that goes, whole
+                (chrome.css: a one-line box around the name). */}
+            <Show when={showsName(name())}>
               <span class="menu-name" aria-hidden="true">
                 <span>{name()}</span>
               </span>
+            </Show>
+            <Show when={name() !== ""}>
               <span id={nameId} hidden>{`Type ${name()}`}</span>
             </Show>
             <Show when={item().shortcut !== ""}>
@@ -366,6 +417,7 @@ export function Menu(props: MenuProps): JSX.Element {
       class={props.stacked ? "menu-drop is-stacked" : "menu-drop"}
       role="menu"
       aria-label={props.label}
+      onPointerMove={onPointerMove}
       ref={(element) => {
         root = element;
         placeMenu(element);

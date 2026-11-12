@@ -6,8 +6,8 @@
  *   - the composer box: the glass recipe
  *     (`.design-system/research/cursor-recipes-2026-10-28.md` §2), re-proportioned for the
  *     shell's type: the elevated surface at `--assistant-radius`, no shadow, a hairline that turns
- *     active on focus, the editor at `--composer-font`/`--composer-leading` (two lines at least)
- *     inset `--gap-8`/`--gap-12`, and a toolbar row of `--control-h-input` controls with
+ *     active on focus, the editor at `--composer-font`/`--composer-leading` (one line at rest,
+ *     growing with what is typed) inset `--gap-8`/`--gap-12`, and a toolbar row of `--control-h-input` controls with
  *     `--gap-6` over and under them (`gap: --gap-4`);
  *   - the model chip: the pill (`--radius-round`, `--control-h-input`, `padding: 0 --gap-8`,
  *     `--font-body`), transparent at rest, the `.08` hover fill (§2);
@@ -125,6 +125,13 @@
   font-size: var(--font-body);
 }
 
+/* One chat: the band only names the panel (the chat's first prompt is the first thing under it,
+   and a title cut from that prompt said it twice), so the name steps back to the dim ink. The
+   setup's title is the task in hand and keeps the full ink. */
+.assistant-title.is-quiet {
+  color: var(--text-dim);
+}
+
 /* More than one chat: the title gives way to the chats as tabs, the one in front marked, each
    with its own close key (the editor's chat tabs). The strip scrolls when they do not fit. */
 .assistant-tabs {
@@ -224,8 +231,10 @@
   background: var(--panel);
 }
 
-/* The empty state stands at the foot of the transcript, directly on the composer it leads to:
-   what the assistant is, then the one thing to do next (set a model up, or pick a suggestion). */
+/* The empty state stands at the foot of the transcript, directly on the composer it leads to (the
+   reference's empty panel reads from its input, not from the middle of its height): one line that
+   says what the assistant does here, and, once a model is set up, the suggestions under it. Before
+   that the composer is the next thing to do, and nothing stands between the line and it. */
 .assistant-empty {
   display: flex;
   flex-direction: column;
@@ -234,12 +243,12 @@
   padding: 0;
 }
 
-/* The one sentence: what the assistant does with the drawing. It is read, so it takes the dim
-   ink, a step above the quiet one. */
+/* The one line: what the assistant does with the drawing, in the quiet ink (the ink of help that
+   is read, a step above the disabled one). */
 .assistant-empty p {
-  margin: 0 0 var(--gap-6);
+  margin: 0;
   padding: 0 var(--assistant-inset);
-  color: var(--text-dim);
+  color: var(--text-faint);
   font-size: var(--composer-font);
   line-height: var(--composer-leading);
   text-wrap: pretty;
@@ -252,7 +261,7 @@
 .assistant-examples {
   display: flex;
   flex-direction: column;
-  margin: 0 calc(var(--assistant-inset) - var(--gap-4));
+  margin: var(--gap-6) calc(var(--assistant-inset) - var(--gap-4)) 0;
 }
 
 .assistant-example-icon {
@@ -328,12 +337,14 @@
   word-break: break-word;
 }
 
-/* A reply's headings: the size of its prose, never larger, set apart by weight and by air (the
-   body's gap and `--gap-4` above, `--gap-6` below, so a heading belongs to what follows it). A
-   title or a section (`#`, `##`) takes the full ink; a heading under one (`###` and deeper) the
-   dim ink, so two levels read apart without a second size. */
+/* A reply's headings: the size of its prose, never larger, set apart by weight and by air, and
+   `--gap-6` from what follows, so a heading belongs to it. Every heading takes the full ink and
+   the one weight: sibling headings are peers, and a dimmer one read as disabled. Depth is said by
+   the air above. A title or a section (`#`, `##`) opens a part of the reply and stands the body's
+   gap and `--gap-8` clear of what came before; a heading under one (`###` and deeper) stays
+   within its part, the body's gap and `--gap-2` under it. */
 .assistant-heading {
-  margin: var(--gap-4) 0 calc(-1 * var(--gap-6));
+  margin: var(--gap-8) 0 calc(-1 * var(--gap-6));
   padding: 0 var(--assistant-inset);
   color: var(--text);
   font-size: var(--composer-font);
@@ -344,7 +355,24 @@
 }
 
 .assistant-heading--minor {
+  margin-top: var(--gap-2);
+}
+
+/* A reply that opens with a heading: nothing came before it, so it takes no air above. */
+.assistant-prompt + .assistant-heading {
+  margin-top: 0;
+}
+
+/* A table's column names ("Layer · Colour · Objects"), over the rows it was read into: the label
+   style (the small text, the dim ink, the plain weight), `--gap-4` over its list, so under a real
+   heading it reads as that section's caption and never as a second heading. */
+.assistant-caption {
+  margin: 0 0 calc(-1 * var(--gap-8));
+  padding: 0 var(--assistant-inset);
   color: var(--text-dim);
+  font-size: var(--font-label);
+  line-height: var(--gap-16);
+  overflow-wrap: anywhere;
 }
 
 /* A reply's lists: the prose's own type. The markers are drawn here and stand on the panel's text
@@ -389,6 +417,7 @@ ol.assistant-list li::before {
 
 .assistant-text code,
 .assistant-heading code,
+.assistant-caption code,
 .assistant-list code {
   padding: 0 3px;
   border-radius: var(--radius-control);
@@ -990,8 +1019,10 @@ ol.assistant-list li::before {
   }
 }
 
-/* The editor is the system's bare TextArea, which draws no box and sets its own height (two lines
-   of `--composer-leading` to nine, then it scrolls). This label around it is the card's inset and
+/* The editor is the system's bare TextArea, which draws no box and sets its own height (one line
+   of `--composer-leading` at rest, a line more for each line typed up to nine, then it scrolls;
+   the card stands on the panel's foot, so it grows upward and the toolbar under the words keeps
+   its place). This label around it is the card's inset and
    the composer's type, which the editor inherits; a press on the inset lands in the editor, as a
    press on a label does. The inset is `--gap-8` over the words and `--gap-4` under them: the
    toolbar's own `--gap-6` follows, so the last line stands a little further from the keys than
@@ -1084,9 +1115,10 @@ ol.assistant-list li::before {
   white-space: nowrap;
 }
 
-/* No model yet: the slot says so quietly. The call to action is the empty state's, above. */
+/* No model yet: the slot is the panel's one call to action ("Set up a model"), so it takes the
+   accent's text ink, the ink of a link; the pill's own hover fill and focus ring say it is a key. */
 .assistant-ghost-label.is-unset {
-  color: var(--text-faint);
+  color: var(--text-accent);
 }
 
 .assistant-ghost-caret {
@@ -1250,16 +1282,37 @@ ol.assistant-list li::before {
   text-wrap: pretty;
 }
 
-/* The provider once it is chosen: its name on the column at the list's own size, and the key that
-   brings the list back at the line's end (a small ghost button carries 6px of inset: stepping out by
-   it ends its words where the fields under it end). */
+/* The second step's title: the provider whose connection the form is, in the prose's size at the
+   heading's weight, and directly beside it the quiet key that brings the list back (a small ghost
+   button, its word in the dim ink so the name is the line's one full-ink thing). The name gives
+   way to an ellipsis; the key keeps its size. */
 .assistant-setup-chosen {
   display: flex;
   align-items: center;
-  gap: var(--gap-8);
+  gap: var(--gap-2);
   min-height: var(--control-h-input);
-  margin-right: calc(-1 * var(--gap-6));
+}
+
+.assistant-setup-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text);
+  font-size: var(--font-body);
+  font-weight: 600;
+  line-height: var(--composer-leading);
+}
+
+.assistant-setup-change {
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+
+.assistant-setup-change .ui-button {
+  color: var(--text-dim);
 }
 
 /* The preset rows are the system's `Row`; its children carry the two inks. */
@@ -1289,18 +1342,11 @@ ol.assistant-list li::before {
    the three names are what the eye finds first down the column. */
 .assistant-field {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--gap-4);
   color: var(--text-dim);
   font-size: var(--font-label);
   line-height: var(--gap-16);
-}
-
-/* The field and its help take the whole width: every field of the sheet starts and ends on the
-   same two edges. */
-.assistant-field > .ui-field,
-.assistant-field > .assistant-field-hint {
-  grid-column: 1 / -1;
 }
 
 /* A field and what follows it in the group stand `--gap-4` further apart than a field and its own
@@ -1309,16 +1355,29 @@ ol.assistant-list li::before {
   margin-top: var(--gap-4);
 }
 
-/* The key's show/hide key stands on the name's line, at the field's right edge, so the key field
-   is as wide as the two around it (beside the field, it made that one field narrower). It comes
-   after the field in the page and in the Tab order; the grid puts it on the first row. Its small
-   circle is taller than the name's line and overhangs it evenly, and steps out by its glyph's
-   margin so the glyph ends on the fields' edge. */
-.assistant-field > .ui-icon-button {
-  grid-row: 1;
-  grid-column: 2;
-  align-self: center;
-  margin: calc((var(--gap-16) - var(--control-h-chip)) / 2) calc(-1 * var(--gap-4)) calc((var(--gap-16) - var(--control-h-chip)) / 2) 0;
+/* The key's show/hide key stands inside the field, at its end, so the key field is one box as
+   wide as the two around it. `Field` has no end slot, so this box is the positioning parent and
+   the field itself is left exactly as the layer draws it. The key's small circle sits in a patch
+   of the field's own fill, one hairline inside the field's stroke on three sides: a long key ends
+   at the patch instead of running under the glyph. (The field cannot be given end padding from
+   here without restyling it, so the last characters of a key longer than the box, and the caret
+   after them, are under the patch until the layer's Field takes an end adornment.) */
+.assistant-field-box {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.assistant-field-end {
+  position: absolute;
+  top: var(--hairline);
+  right: var(--hairline);
+  bottom: var(--hairline);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--hairline) 0 var(--gap-2);
+  border-radius: 0 calc(var(--radius-control) - var(--hairline)) calc(var(--radius-control) - var(--hairline)) 0;
+  background: var(--control);
 }
 
 /* Help is read, so it takes the quiet ink, not the disabled one (11px at .36 is below reading
@@ -1351,8 +1410,8 @@ ol.assistant-list li::before {
   line-height: var(--control-h-chip);
 }
 
-/* The sheet's foot stays put: what the check found, then Check on the left and the two answers
-   on the right. */
+/* The sheet's foot stays put: one status line, then Cancel on the column and, at the fields' far
+   edge, the two keys that move the setup on, in the order they are used: check, then save. */
 .assistant-setup-foot {
   flex: 0 0 auto;
   display: flex;
@@ -1373,73 +1432,58 @@ ol.assistant-list li::before {
   margin-left: 0;
 }
 
-/* The foot's two lines: what the connection check found, and why Save is off (said here once, in
-   words that are always in view; the Save key's hint does not repeat it). Each is there only while
-   it has something to say, and the foot keeps both lines' height when they do not, so Save and
-   Cancel do not move under the pointer when the last field is filled and the reason leaves. */
-.assistant-setup-notes {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-2);
-  min-height: calc(2 * var(--gap-16) + var(--gap-2));
+/* The foot's one line (`setupStatus`): the check running, else what it found, else what Save still
+   needs, else nothing. It keeps one line's height when it has nothing to say, and a longer message
+   grows the foot upward, so the keys under it never move. One ink per state: quiet while a check
+   runs, the full ink for a server that answered with its models, the warning ink for one that
+   answered without a list (the name must be typed), the error ink for an address that cannot be
+   asked, a server that did not answer, a refused key and any other error, and the dim ink for what
+   Save still needs. The words say the state too. */
+.assistant-setup-status {
+  margin: 0;
+  min-height: var(--gap-16);
   padding: 0 var(--assistant-inset);
+  color: var(--text-dim);
   font-size: var(--font-label);
   line-height: var(--gap-16);
   overflow-wrap: anywhere;
 }
 
-/* The check's line, one ink per state: quiet before a check and during one, the full ink for a
-   server that answered with its models, the warning ink for one that answered without a list
-   (the name must be typed), the error ink for an address that cannot be asked, a server that did
-   not answer, a refused key and any other error. The words say the state too. */
-.assistant-setup-note {
-  margin: 0;
-  color: var(--text-faint);
-}
-
-.assistant-setup-note .assistant-ripple {
+.assistant-setup-status .assistant-ripple {
   display: inline-block;
   margin-right: var(--gap-6);
   vertical-align: 1px;
 }
 
-.assistant-setup-note.is-reached {
+.assistant-setup-status.is-checking {
+  color: var(--text-faint);
+}
+
+.assistant-setup-status.is-reached {
   color: var(--text);
 }
 
-.assistant-setup-note.is-no-list {
+.assistant-setup-status.is-no-list {
   color: var(--warn);
 }
 
-.assistant-setup-note.is-invalid,
-.assistant-setup-note.is-unreachable,
-.assistant-setup-note.is-refused,
-.assistant-setup-note.is-failed {
+.assistant-setup-status.is-invalid,
+.assistant-setup-status.is-unreachable,
+.assistant-setup-status.is-refused,
+.assistant-setup-status.is-failed {
   color: var(--error);
 }
 
-/* Why Save is off: read, so the dim ink, not the disabled one. */
-.assistant-setup-reason {
-  margin: 0;
-  color: var(--text-dim);
-}
-
-/* The ghost Check button carries its own inset: stepping out by it puts its word on the column.
-   Save ends where the fields above it end, the column's mirror on the right. */
+/* Cancel is a ghost button: stepping out by its own inset puts its word on the column, in the
+   same place in both steps. Save ends where the fields above it end, the column's mirror on the
+   right, with the check that comes before it directly beside it. */
 .assistant-setup-actions {
   display: flex;
   align-items: center;
-  gap: var(--gap-4);
+  gap: var(--gap-6);
   padding: 0 var(--assistant-inset) 0 calc(var(--assistant-inset) - var(--button-pad-x));
 }
 
 .assistant-setup-spacer {
   flex: 1 1 auto;
-}
-
-/* The empty state when no model is connected: the one key that fixes it, its fill starting on
-   the text column under the sentence. */
-.assistant-empty-setup {
-  display: flex;
-  padding: var(--gap-4) var(--assistant-inset) 0;
 }

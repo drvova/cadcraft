@@ -4,7 +4,7 @@
  * 3.27's composer (`.design-system/research/cursor-recipes-2026-10-28.md` §2), re-proportioned
  * for the shell's type (`../assistant.css` names each measure by its token): the elevated surface
  * at the panel's card corner, no shadow, a hairline that turns active on focus, an editor at
- * `--composer-font`/`--composer-leading` of two lines at least, and a toolbar row that holds
+ * `--composer-font`/`--composer-leading` that rests on one line and grows with what is typed, and a toolbar row that holds
  * `--control-h-input` circles and the pill model chip; send and stop are the inverted circle. Its
  * controls are the system's own: `ui/TextArea` (the editor, bare: the card draws its box and its
  * focus), `ui/IconButton` (attach, remove-attachment, stop, send), `ui/Row` (the preset rows, the
@@ -17,7 +17,9 @@
  * changed, and opens on click to its code and report.
  *
  * Setting a model up is a sheet over the panel (the composer is out of the page meanwhile): the
- * provider list alone first, then the connection that provider filled in.
+ * provider list alone first, then the connection that provider filled in. The composer is the way
+ * in: before a model is set up its model slot reads "Set up a model" and opens the sheet, and so
+ * does Send, which keeps the draft and sends it once the setup is saved.
  *
  * Over the composer sits the stack (the reference board's "one surface over the input"): what is
  * queued behind the running turn, the turn's status with Stop, and the assistant's unresolved
@@ -30,7 +32,7 @@
  */
 
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack, type JSX } from "solid-js";
-import { activityParts, clampPanelWidth, failedNote, focusIsOurs, followAfterScroll, growReply, listProviderModels, MAX_MESSAGE_CHARS, MAX_REQUEST_CHARS, PANEL_WIDTH, parseInline, presetFor, PROVIDER_PRESETS, providerReady, reachedNote, relativeTime, saveBlocker, type ChatImage, type ConnectionNote, type ProviderConfig, type ReplyBlock, type ReplyParse } from "../assistant";
+import { activityParts, clampPanelWidth, failedNote, focusIsOurs, followAfterScroll, growReply, listProviderModels, MAX_MESSAGE_CHARS, MAX_REQUEST_CHARS, PANEL_WIDTH, parseInline, presetFor, PROVIDER_PRESETS, providerReady, reachedNote, relativeTime, saveBlocker, setupStatus, type ChatImage, type ConnectionNote, type ProviderConfig, type ReplyBlock, type ReplyParse } from "../assistant";
 import { turnStart, type AssistantSession } from "../assistant-session";
 import { highlight, rankCommands, slashQuery, SLASH_LIMIT, type PaletteItem } from "../palette";
 import { ToolIcon } from "../icons";
@@ -72,6 +74,9 @@ const MODEL_CHIPS = 12;
 /** The fewest rows the provider list keeps in a short panel; past that the sheet itself scrolls. */
 const MIN_LIST_ROWS = 3;
 
+/** The empty transcript's one line: what the assistant does in this product. */
+const EMPTY_LINE = "Ask it to draw, measure or change this drawing.";
+
 /** The empty state's suggestions, once a model is set up: one click fills the composer and sends
  *  nothing (each is one of the system's list rows). Each works on whatever drawing is open. */
 const EXAMPLES: readonly { icon: string; text: string }[] = [
@@ -94,9 +99,10 @@ function readAsDataUrl(file: File): Promise<string> {
   return promise;
 }
 
-/** The composer's editor is never shorter than two lines of `--composer-leading`, and scrolls
- *  past nine (whole lines, counted by the editor itself: no pixel floor or cap to drift from the type). */
-const COMPOSER_ROWS = 2;
+/** The composer's editor rests on one line of `--composer-leading`, grows a line at a time with
+ *  what is typed (upward: the card stands on the panel's foot, so its toolbar keeps its place), and
+ *  scrolls past nine (whole lines, counted by the editor itself: no pixel floor or cap to drift from the type). */
+const COMPOSER_ROWS = 1;
 const COMPOSER_MAX_ROWS = 9;
 
 const COMPOSER_ID = "assistant-editor";
@@ -240,7 +246,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   const sendNote = (): string | undefined => {
     if (over() > 0) return "The message is too long to send";
     if (s.input().trim() === "") return "Type a message first";
-    if (!s.ready()) return "No model is set up yet: this opens the setup";
+    if (!s.ready()) return "No model yet: opens the setup, then sends";
     return s.running() ? "A turn is running: this waits for it to end" : undefined;
   };
   /** What the turn is doing now, or the last notice: the status row's words, over the composer and in the setup sheet. */
@@ -341,7 +347,10 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     for (const item of leaving()) takeOut(item);
     const outcome = s.send();
     if (outcome === "unconfigured") {
+      // The draft stays in the composer under the sheet. Send was already pressed for it, so a
+      // successful Save sends it; Cancel and Escape leave it as a draft.
       openSetup();
+      sendAfterSetup = true;
       return;
     }
     // A draft that is too long stays as it is: the line over the composer says by how much.
@@ -453,6 +462,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   /** The key is shown as typed instead of masked. Every opening of the sheet starts masked. */
   const [keyVisible, setKeyVisible] = createSignal(false);
   let checkAbort: AbortController | null = null;
+  /** Send opened the sheet (no model was set up): saving it sends the draft that press was for. */
+  let sendAfterSetup = false;
   let setupEl: HTMLElement | undefined;
   let fieldsEl: HTMLDivElement | undefined;
   let modelsEl: HTMLDivElement | undefined;
@@ -506,14 +517,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   const blocker = createMemo(() => saveBlocker(draft(), picked()?.key === true, models().length));
   /** The address can be asked: there is one, and it is an http or https one. */
   const canCheck = (): boolean => providerReady({ ...draft(), model: "any" }) === null;
-  /** The check's line: what is happening, what was found, or that nothing was checked yet. */
-  const checkState = (): string => (checking() ? "checking" : (checkNote()?.state ?? "idle"));
-  const checkText = (): string => {
-    if (checking()) return "Checking the connection…";
-    const note = checkNote();
-    if (note !== null) return note.text;
-    return canCheck() ? "Not checked yet." : "";
-  };
+  /** The foot's one line: the check running, else what it found, else what Save still needs, else nothing. */
+  const status = createMemo(() => setupStatus(checking(), checkNote(), blocker()));
 
   const openSetup = (): void => {
     const saved = s.provider();
@@ -559,10 +564,11 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     setChecking(false);
     setKeyVisible(false);
     setMenuOpen(false);
+    sendAfterSetup = false;
     const back = opener;
     opener = null;
     if (!ours) return;
-    // The opener may be gone (the empty state's key leaves once a model is saved).
+    // The opener may be gone (a key of the transcript that the chat has since let go): the editor then.
     queueMicrotask(() => (back !== null && back.isConnected ? back : inputEl)?.focus());
   };
 
@@ -643,7 +649,9 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   const saveDraft = (): void => {
     if (blocker() !== null) return;
     s.setProvider({ baseUrl: draft().baseUrl.trim(), model: draft().model.trim(), apiKey: draft().apiKey.trim() });
+    const resend = sendAfterSetup;
     closeSetup();
+    if (resend) send();
   };
 
   /** The model's words, with inline `code`, **bold** runs and links rendered as elements. A link
@@ -682,6 +690,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
       );
     }
     if (block.kind === "heading") return <h3 class={block.level <= 2 ? "assistant-heading" : "assistant-heading assistant-heading--minor"}>{richText(block.text)}</h3>;
+    // A table's column names: a label over its rows, not a heading of the reply.
+    if (block.kind === "caption") return <p class="assistant-caption">{richText(block.text)}</p>;
     if (block.kind === "para") return <div class="assistant-text">{richText(block.text)}</div>;
     const items = <For each={block.items}>{(item) => <li>{richText(item)}</li>}</For>;
     // The markers are the stylesheet's own; the role keeps the list a list where that would drop it.
@@ -747,12 +757,15 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         onKeyDown={onResizeKey}
       />
       <div class="assistant-head">
-        {/* While a model is being set up the panel is that task: its title says so, in place of the chat's. */}
+        {/* While a model is being set up the panel is that task: its title says so. One chat needs
+            no title of its own (its first prompt is the first thing under this band, and a title cut
+            from it would say it twice): the band names the panel, quietly. Several chats are told
+            apart by their tabs. */}
         <Show
           when={props.chats().length > 1 && !menuOpen()}
           fallback={
-            <span class="assistant-title" data-hint="">
-              {menuOpen() ? "Set up a model" : s.title()}
+            <span class={menuOpen() ? "assistant-title" : "assistant-title is-quiet"} data-hint="">
+              {menuOpen() ? "Set up a model" : "Assistant"}
             </span>
           }
         >
@@ -797,14 +810,9 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         </Show>
         <Show when={s.entries.length === 0}>
           <div class="assistant-empty">
-            <p>The assistant works in the open drawing: it draws, measures and changes it, and reports the numbers.</p>
-            <Show when={!s.ready()}>
-              <div class="assistant-empty-setup">
-                <Button variant="primary" onClick={openSetup}>
-                  Set up a model
-                </Button>
-              </div>
-            </Show>
+            {/* One quiet line. Before a model is set up the composer under it is the way in (its
+                model slot, or Send); after, the suggestions follow the line. */}
+            <p>{EMPTY_LINE}</p>
             <Show when={s.ready()}>
               <div class="assistant-examples">
                 <For each={EXAMPLES}>
@@ -924,21 +932,12 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 onCleanup(() => watcher.disconnect());
               }}
             >
-              <div class="assistant-setup-group">
-                <SectionLabel>Provider</SectionLabel>
-                {/* The first decision. Until it is made the sheet holds nothing else; once it is,
-                    the list is the chosen provider's line, and "Change provider" brings it back. */}
-                <Show
-                  when={listShown()}
-                  fallback={
-                    <div class="assistant-setup-chosen">
-                      <span class="assistant-preset-label" data-hint="">{picked()?.label ?? ""}</span>
-                      <Button variant="ghost" size="sm" onClick={changeProvider}>
-                        Change provider
-                      </Button>
-                    </div>
-                  }
-                >
+              {/* The first decision. Until it is made the sheet holds nothing else; once it is, the
+                  list gives way to the form, whose title is the chosen provider, and "Change"
+                  beside that title brings the list back. */}
+              <Show when={listShown()}>
+                <div class="assistant-setup-group">
+                  <SectionLabel>Provider</SectionLabel>
                   <div
                     class="assistant-setup-list"
                     style={{ "--assistant-list-rows": String(listRows()) }}
@@ -965,11 +964,22 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                   <Show when={presetId() === null}>
                     <p class="assistant-setup-next">Choosing one fills in its address and model.</p>
                   </Show>
-                </Show>
-              </div>
+                </div>
+              </Show>
+              {/* The second step is one short form: whose connection it is, the address, the key,
+                  the model. The foot under it checks it, then saves it. */}
               <Show when={presetId() !== null}>
               <div class="assistant-setup-group" ref={fieldsEl}>
-                <SectionLabel>Connection</SectionLabel>
+                <Show when={!listShown()}>
+                  <div class="assistant-setup-chosen">
+                    <h2 class="assistant-setup-title" data-hint="">{picked()?.label ?? ""}</h2>
+                    <span class="assistant-setup-change">
+                      <Button variant="ghost" size="sm" title="Choose another provider" onClick={changeProvider}>
+                        Change
+                      </Button>
+                    </span>
+                  </div>
+                </Show>
                 <div class="assistant-field">
                   <span>Base URL</span>
                   <Field
@@ -988,6 +998,9 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 <Show when={keyWanted()}>
                   <div class="assistant-field">
                     <span>API key</span>
+                    {/* The show/hide key stands inside the field's end. `Field` has no slot for it,
+                        so this box places it over the field: after the field in the Tab order. */}
+                    <div class="assistant-field-box">
                     <Field
                       type={keyVisible() ? "text" : "password"}
                       value={draft().apiKey}
@@ -1002,8 +1015,10 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                         forgetCheck();
                       }}
                     />
-                    {/* After the field in the Tab order; the stylesheet stands it on the name's line. */}
-                    <IconButton icon={keyVisible() ? "eye" : "eye-off"} size="sm" title={keyVisible() ? "Hide the key" : "Show the key"} onClick={() => setKeyVisible(!keyVisible())} />
+                    <span class="assistant-field-end">
+                      <IconButton icon={keyVisible() ? "eye" : "eye-off"} size="sm" title={keyVisible() ? "Hide the key" : "Show the key"} onClick={() => setKeyVisible(!keyVisible())} />
+                    </span>
+                    </div>
                     <span class="assistant-field-hint" id="assistant-key-hint">Stored in this browser, not encrypted.</span>
                   </div>
                 </Show>
@@ -1052,31 +1067,31 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                   </Button>
                 </div>
               </Show>
-              {/* The check, its line, the reason and Save come with the fields they are about;
-                  before a provider is chosen the foot is the one way out. */}
+              {/* The status line, the check and Save come with the fields they are about; before a
+                  provider is chosen the foot is the one way out. The line holds one message
+                  (`setupStatus`): the check running, else what it found, else what Save needs. */}
               <Show when={presetId() !== null}>
-                <div class="assistant-setup-notes">
-                  <p class={`assistant-setup-note is-${checkState()}`} role="status" aria-live="polite" aria-atomic="true">
-                    <Show when={checking()}>
-                      <span class="assistant-ripple" />
-                    </Show>
-                    {checkText()}
-                  </p>
-                  <Show when={blocker()}>{(reason) => <p class="assistant-setup-reason">{reason()}</p>}</Show>
-                </div>
+                <p class={`assistant-setup-status is-${status()?.tone ?? "idle"}`} role="status" aria-live="polite" aria-atomic="true">
+                  <Show when={status()?.tone === "checking"}>
+                    <span class="assistant-ripple" />
+                  </Show>
+                  {status()?.text ?? ""}
+                </p>
               </Show>
+              {/* Cancel keeps its place in both steps, apart from the two keys that move the setup
+                  on; those read in the order they are used, check then save, and only Save is filled. */}
               <div class="assistant-setup-actions">
-                <Show when={presetId() !== null}>
-                  <Button variant="ghost" disabled={!canCheck()} title={canCheck() ? undefined : "Needs an http or https base URL"} onClick={() => void checkConnection()}>
-                    Check connection
-                  </Button>
-                </Show>
-                <span class="assistant-setup-spacer" />
                 <Button variant="ghost" onClick={closeSetup}>
                   Cancel
                 </Button>
+                <span class="assistant-setup-spacer" />
                 <Show when={presetId() !== null}>
-                  <Button variant="primary" disabled={blocker() !== null} onClick={saveDraft}>
+                  <Button disabled={!canCheck()} title={canCheck() ? undefined : "Needs an http or https base URL"} onClick={() => void checkConnection()}>
+                    Check connection
+                  </Button>
+                  {/* Why Save is off is the status line's to say; where a check's result has the
+                      line, it is this key's hint. */}
+                  <Button variant="primary" disabled={blocker() !== null} title={status()?.tone === "blocked" ? undefined : (blocker() ?? undefined)} onClick={saveDraft}>
                     Save
                   </Button>
                 </Show>
@@ -1228,7 +1243,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               }}
               rows={COMPOSER_ROWS}
               maxRows={COMPOSER_MAX_ROWS}
-              placeholder={s.running() ? "Queue a follow-up" : s.ready() ? "Ask, or / for commands" : "Set up a model to start"}
+              placeholder={s.running() ? "Queue a follow-up" : "Ask, or / for commands"}
               value={s.input()}
               onInput={(value) => {
                 s.setInput(value);
@@ -1261,10 +1276,14 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 aria-controls="assistant-setup"
                 onClick={() => (menuOpen() ? closeSetup() : openSetup())}
               >
-                <span class={s.ready() ? "assistant-ghost-label" : "assistant-ghost-label is-unset"}>{s.ready() ? s.provider().model : "No model"}</span>
-                <span class="assistant-ghost-caret">
-                  <ToolIcon id="chevron-down" />
-                </span>
+                {/* No model yet: the slot is the call to action, in the accent's text ink, and it
+                    opens the setup. It is not a picker until there is a model to change. */}
+                <span class={s.ready() ? "assistant-ghost-label" : "assistant-ghost-label is-unset"}>{s.ready() ? s.provider().model : "Set up a model"}</span>
+                <Show when={s.ready()}>
+                  <span class="assistant-ghost-caret">
+                    <ToolIcon id="chevron-down" />
+                  </span>
+                </Show>
               </button>
               <Show when={meter() !== ""}>
                 <span

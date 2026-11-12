@@ -212,7 +212,7 @@ export default function Invalid() {
 - The text is a fact to read rather than to edit. Use `Chip` instead.
 
 ### Rules
-- `rule/textarea-label-bound`: When a text area is rendered without a visible `<label>`, pass `ariaLabel`, because a placeholder disappears at the first character and leaves 1 unnamed text box. Evidence: single use `src/components/AssistantPane.tsx:1107`, the composer's editor, named "Ask the assistant" with a placeholder beside it. Check: test `src/ui/TextArea.test.tsx`.
+- `rule/textarea-label-bound`: When a text area is rendered without a visible `<label>`, pass `ariaLabel`, because a placeholder disappears at the first character and leaves 1 unnamed text box. Evidence: single use `src/components/AssistantPane.tsx:1122`, the composer's editor, named "Ask the assistant" with a placeholder beside it. Check: test `src/ui/TextArea.test.tsx`.
   - Don't: `<TextArea placeholder="Ask, or / for commands" value={draft()} onInput={setDraft} />`
   - Do: `<TextArea ariaLabel="Ask the assistant" placeholder="Ask, or / for commands" value={draft()} onInput={setDraft} />`
 - `rule/textarea-rows-not-height`: When a text area needs a smallest or a largest size, pass `rows` and `maxRows` rather than a `height`, `min-height` or `max-height` in a stylesheet, because the component sets the height itself from the measured text on every edit and a second height fights it by 1 line or more. Evidence: single use `src/ui/TextArea.tsx:113`, the one place the height is set. Check: test `src/ui/TextArea.test.tsx`.
@@ -221,7 +221,7 @@ export default function Invalid() {
 - `rule/textarea-enter-in-keydown`: When Enter sends the text, handle it in `onKeyDown` and call `preventDefault`, leaving Shift+Enter to break the line, because `onKeyDown` hears 0 keys while an input method is composing and a handler on a wrapper would send a half-composed word. Evidence: single use `src/ui/TextArea.tsx:191`, the composition guard. Check: test `src/ui/TextArea.test.tsx`.
   - Don't: `<div onKeyDown={(e) => e.key === "Enter" && send()}><TextArea ariaLabel="Ask" value={draft()} onInput={setDraft} /></div>`
   - Do: `<TextArea ariaLabel="Ask" value={draft()} onInput={setDraft} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />`
-- `rule/textarea-bare-card-focus`: When `variant="bare"` is used, give the card around it the focus cue with `:focus-within`, because the bare editor draws 0 rings of its own and a keyboard user would otherwise see no focus at all. Evidence: single use `src/ui/ui.css:929`, the bare recipe, which drops the ring. Check: review `src/assistant.css`.
+- `rule/textarea-bare-card-focus`: When `variant="bare"` is used, give the card around it the focus cue with `:focus-within`, because the bare editor draws 0 rings of its own and a keyboard user would otherwise see no focus at all. Evidence: single use `src/ui/ui.css:954`, the bare recipe, which drops the ring. Check: review `src/assistant.css`.
   - Don't: `<div class="card"><TextArea variant="bare" ariaLabel="Ask" /></div>` with no `.card:focus-within` rule.
   - Do: `.card:focus-within { border-color: var(--composer-border-active) }` around `<TextArea variant="bare" ariaLabel="Ask" />`
 - `rule/textarea-described-by`: When a line of help, a count or an error sits beside a text area, give the line an `id` and pass it as `describedBy`, and pass `invalid` while the text is refused, because a line that only sits near the control is read 0 times by a screen reader that lands on it by Tab. Evidence: single use `src/ui/TextArea.tsx:167`, the tie `Field` makes the same way (`rule/field-described-by`). Check: test `src/ui/TextArea.test.tsx`.
@@ -233,12 +233,12 @@ export default function Invalid() {
   - Do: `<TextArea ariaLabel="Ask the assistant" role={listed() ? "combobox" : undefined} expanded={listed() ? true : undefined} controls={listed() ? "slash-list" : undefined} activeDescendant={listed() ? activeId() : undefined} value={draft()} onInput={setDraft} />`
 
 ### Content
-- `rule/textarea-placeholder-example`: When a placeholder is written, show in 2 to 6 words what goes here or what the control takes (Ask, or / for commands) and put a rule the user must keep in mind in a line tied by `describedBy`, because the placeholder is gone at the first character. Evidence: single use `src/components/AssistantPane.tsx:976`, the composer's two placeholders. Check: review `src/components/AssistantPane.tsx`.
+- `rule/textarea-placeholder-example`: When a placeholder is written, show in 2 to 6 words what goes here or what the control takes (Ask, or / for commands) and put a rule the user must keep in mind in a line tied by `describedBy`, because the placeholder is gone at the first character. Evidence: single use `src/components/AssistantPane.tsx:986`, the composer's two placeholders. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<TextArea ariaLabel="Ask" placeholder="Messages must be under 8,000 characters and may not be empty" />`
   - Do: `<TextArea ariaLabel="Ask the assistant" placeholder="Ask, or / for commands" />`
 
 ### Anti-slop
-- `rule/textarea-canonical-element`: When a surface needs multi-line text, render `TextArea` rather than a raw `<textarea>` with its own class and its own grow function, because the hand-built one fixes its limits in pixels (64 and 240) where the type size they were counted from can change, and every copy re-solves composition and growth. Evidence: single use `src/components/AssistantPane.tsx:88`, the composer's own `grow`. Check: review `src/ui/TextArea.tsx`.
+- `rule/textarea-canonical-element`: When a surface needs multi-line text, render `TextArea` rather than a raw `<textarea>` with its own class and its own grow function, because the hand-built one fixes its limits in pixels (64 and 240) where the type size they were counted from can change, and every copy re-solves composition and growth. Evidence: single use `src/components/AssistantPane.tsx:93`, the composer's own `grow`. Check: review `src/ui/TextArea.tsx`.
   - Don't: `<textarea class="assistant-input" rows={1} onInput={(e) => grow(e.currentTarget)} />`
   - Do: `<TextArea variant="bare" rows={2} maxRows={9} ariaLabel="Ask the assistant" value={draft()} onInput={setDraft} />`
 

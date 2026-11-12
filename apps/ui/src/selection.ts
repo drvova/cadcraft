@@ -114,3 +114,62 @@ export function sameSelection(a: readonly string[], b: readonly string[]): boole
   }
   return true;
 }
+
+/** What a press reads of the grip under it (the facade's `Grip` has all of it). */
+export interface PressedGrip {
+  id: string;
+  kind: "standard" | "linear" | "point" | "list";
+  /** Its object is on a locked layer: the engine refuses an edit of it. */
+  locked: boolean;
+}
+
+/** What a left press at rest does when grips are shown. */
+export type GripPress =
+  /** No grip is under the press: it picks, or starts a selection rectangle, as it always has. */
+  | { kind: "none" }
+  /** Shift on a grip: the grips collected for the next edit are now these; nothing starts. */
+  | { kind: "collect"; collected: ReadonlySet<string> }
+  /** The press starts the edit of these grips; the first is the one pressed, the base grip. */
+  | { kind: "start"; ids: readonly string[] }
+  /** A list grip has nothing to drag: the press opens its choices. */
+  | { kind: "menu"; id: string };
+
+/**
+ * What a left press at rest does, from the grip under it (`grip`, or null), Shift, and the grips
+ * Shift+click has collected so far. A plain press on a grip starts its edit: with every collected
+ * grip when it is one of them (the pressed one first, as the base), alone when it is not (the
+ * collection is for the grips it names, and a press elsewhere lets it go). Shift on a grip adds
+ * it to the collection, or takes it out again, and starts nothing. A grip on a locked layer is
+ * never collected (its edit would be refused), and a plain press on one still asks the engine, so
+ * the refusal is the engine's own words. A list grip opens its menu. Neither input is changed.
+ */
+export function gripPress(grip: PressedGrip | null, shift: boolean, collected: ReadonlySet<string>): GripPress {
+  if (grip === null) return { kind: "none" };
+  if (grip.kind === "list") return { kind: "menu", id: grip.id };
+  if (shift) {
+    const next = new Set(collected);
+    if (next.has(grip.id)) next.delete(grip.id);
+    else if (!grip.locked) next.add(grip.id);
+    return { kind: "collect", collected: next };
+  }
+  return { kind: "start", ids: collected.has(grip.id) ? [grip.id, ...[...collected].filter((id) => id !== grip.id)] : [grip.id] };
+}
+
+/** The collected grips that are still grips of the selection: an edit or a new selection drops the rest. */
+export function keptGrips(collected: ReadonlySet<string>, shown: readonly { id: string }[]): ReadonlySet<string> {
+  if (collected.size === 0) return collected;
+  const ids = new Set(shown.map((grip) => grip.id));
+  const kept = [...collected].filter((id) => ids.has(id));
+  return kept.length === collected.size ? collected : new Set(kept);
+}
+
+/**
+ * How the press that started a grip edit goes on, from its travel (CSS px, now minus the press):
+ * past the click slop it is a drag, and its release commits the edit there; inside it the press
+ * was a click, the edit follows the pointer with no button held, and the next click commits it.
+ * The same slop that tells a pick from a selection rectangle decides it, so a hand that clicks
+ * objects clicks grips the same way.
+ */
+export function gripGesture(dx: number, dy: number, pointerType: string): "click" | "drag" {
+  return dragKind(dx, dy, clickSlop(pointerType)) === "click" ? "click" : "drag";
+}

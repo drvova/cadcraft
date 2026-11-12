@@ -3,9 +3,10 @@
  * uses, the grid's levels and the device-pixel snap of its rules. Pure functions, so they are
  * pinned here.
  *
- * The selection highlight is pinned too: a recording context stands in for the 2D canvas (no DOM),
- * so the drawing path can be checked — the selected primitives are stroked a second time, in the
- * palette's selection colour, at the highlight width.
+ * The selection's mark is pinned too: a recording context stands in for the 2D canvas (no DOM),
+ * so the drawing path can be checked: a selected primitive keeps its own colour, over a halo of
+ * the selection ink and under a dash of it. So are the grips (their boxes on device pixels, their
+ * three heats) and where the label beside the point a click will take stands.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -15,24 +16,36 @@ import {
   DRAG_ALPHA,
   drawDisplay,
   drawOverlay,
+  DYNAMIC_GRIP_REACH,
+  dynamicGripShape,
   GRID_DOT_RADIUS,
   GRID_FULL_PX,
   GRID_MIN_PX,
   gridLevels,
+  GRIP_WARM_GROW,
+  gripBox,
+  gripHeat,
   GUIDE_ALPHA,
   GUIDE_DASH,
   guideIsEmpty,
+  HALO_ALPHA,
+  HALO_HOVER_EXTRA,
+  HALO_SPREAD,
   handleHex,
   HOVER_ALPHA,
+  HOVER_SPREAD,
+  LABEL_GAP,
   isHighlighted,
   lineWidthPx,
   overlayIsEmpty,
+  placeLabel,
   RUBBER_WIDTH,
   samePalette,
-  SELECTION_WIDTH,
+  SELECTION_DASH,
   SNAP_MARKER_HALF,
   SNAP_MARKER_WIDTH,
   snapGlyph,
+  type GripMark,
   type OverlayGuide,
   type OverlayOptions,
   type Palette,
@@ -183,10 +196,11 @@ class RecordingContext {
   }
   strokeRect(): void {
     this.strokes.push({ style: this.strokeStyle, width: this.lineWidth, alpha: this.globalAlpha });
+    this.dashes.push(this.dash);
   }
 }
 
-const PALETTE: Palette = {
+const INKS = {
   canvas: "#181818",
   gridMinor: "#202020",
   gridMajor: "#2a2a2a",
@@ -194,6 +208,9 @@ const PALETTE: Palette = {
   axisY: "#23412f",
   selection: "#81a1c1",
 };
+
+/** The grips' two warm inks stand in as two of the other inks: all that matters here is that the three differ. */
+const PALETTE: Palette = { ...INKS, gripHover: INKS.axisX, gripHot: INKS.axisY };
 
 const VIEW = { x0: 0, y0: 0, x1: 10, y1: 10 };
 
@@ -231,6 +248,9 @@ describe("samePalette", () => {
     expect(samePalette(PALETTE, { ...PALETTE })).toBe(true);
     // A theme that changes one ink (the selection's) is a different palette.
     expect(samePalette(PALETTE, { ...PALETTE, selection: PALETTE.axisX })).toBe(false);
+    // The grips' two warm inks are part of it: a theme that changes only them redraws the grips.
+    expect(samePalette(PALETTE, { ...PALETTE, gripHover: PALETTE.gripHot })).toBe(false);
+    expect(samePalette(PALETTE, { ...PALETTE, gripHot: PALETTE.gripHover })).toBe(false);
   });
 });
 
@@ -292,36 +312,54 @@ describe("handleHex", () => {
   });
 });
 
-describe("drawDisplay — the selection highlight", () => {
+describe("drawDisplay, the selection's mark", () => {
+  const OWN = "rgb(212,212,212)";
+  /** Another colour as the renderer writes it: the test primitives' own, with its three numbers changed. */
+  const ink = (color: readonly [number, number, number]): string => OWN.replace(prim("point", 0, 1, 0).color.join(","), color.join(","));
+  const RED = [255, 0, 0] as const;
+  const YELLOW = [255, 255, 0] as const;
+
   test("without a selection, each primitive is drawn once", () => {
     const ctx = draw();
     expect(ctx.strokes).toHaveLength(1);
-    expect(ctx.strokes[0]?.style).toBe("rgb(212,212,212)");
+    expect(ctx.strokes[0]?.style).toBe(OWN);
     expect(ctx.strokes[0]?.width).toBeCloseTo(lineWidthPx(0.25), 6);
     expect(ctx.fills).toHaveLength(0);
     // The background fill plus the point marker.
     expect(ctx.fillRects).toHaveLength(2);
   });
 
-  test("a selected polyline is stroked again on top in the selection colour", () => {
+  test("a selected polyline keeps its own colour, over a halo of the selection ink and under a dash of it", () => {
     const ctx = draw(new Set(["2F"]));
-    expect(ctx.strokes).toHaveLength(2);
-    expect(ctx.strokes[0]?.style).toBe("rgb(212,212,212)");
-    const highlight = ctx.strokes[1];
-    expect(highlight?.style).toBe(PALETTE.selection);
-    expect(highlight?.width).toBe(SELECTION_WIDTH);
-    expect(highlight?.alpha).toBe(1);
+    const own = lineWidthPx(0.25);
+    expect(ctx.strokes).toEqual([
+      { style: PALETTE.selection, width: own + HALO_SPREAD, alpha: HALO_ALPHA },
+      { style: OWN, width: own, alpha: 1 },
+      { style: PALETTE.selection, width: own, alpha: 1 },
+    ]);
+    // The halo and the object are solid; only the mark over the object is dashed.
+    expect(ctx.dashes).toEqual([[], [], [...SELECTION_DASH]]);
     expect(ctx.fills).toHaveLength(0);
   });
 
-  test("a selected point is re-stroked as its own marker box", () => {
-    const ctx = draw(new Set(["30"]));
-    expect(ctx.strokes).toHaveLength(2);
-    expect(ctx.strokes[1]?.style).toBe(PALETTE.selection);
-    expect(ctx.strokes[1]?.width).toBe(SELECTION_WIDTH);
+  test("the halo is wider than the object and the dash leaves most of the object's colour showing", () => {
+    expect(HALO_SPREAD).toBeGreaterThanOrEqual(2);
+    expect(HALO_ALPHA).toBeLessThan(1);
+    expect(SELECTION_DASH[1]).toBeGreaterThan(SELECTION_DASH[0]);
   });
 
-  test("a handle the display list does not carry highlights nothing", () => {
+  test("a selected point has a larger box of the selection ink under its marker, and its marker outlined whole", () => {
+    const ctx = draw(new Set(["30"]));
+    // The ground, the halo's box, then the point's own marker.
+    expect(ctx.fillRects).toEqual([PALETTE.canvas, PALETTE.selection, OWN]);
+    expect(ctx.strokes).toEqual([
+      { style: OWN, width: lineWidthPx(0.25), alpha: 1 },
+      { style: PALETTE.selection, width: 1, alpha: 1 },
+    ]);
+    expect(ctx.dashes[1]).toEqual([]);
+  });
+
+  test("a handle the display list does not carry marks nothing", () => {
     const ctx = draw(new Set(["99"]));
     expect(ctx.strokes).toHaveLength(1);
   });
@@ -333,7 +371,7 @@ describe("drawDisplay — the selection highlight", () => {
     expect(withEmpty.fills.length).toBe(without.fills.length);
   });
 
-  test("a selected tris primitive is filled once and outlined once", () => {
+  test("a selected tris primitive is filled once in its own colour, between a band along its edges and a dash on them", () => {
     const tris: DisplayList = {
       revision: 1,
       bounds: UNIT_RECT,
@@ -346,19 +384,31 @@ describe("drawDisplay — the selection highlight", () => {
     };
     const ctx = new RecordingContext();
     drawDisplay(ctx as unknown as CanvasRenderingContext2D, tris, VIEW, { width: 800, height: 600, dpr: 1, palette: PALETTE, grid: false, selection: new Set(["31"]) });
-    expect(ctx.fills).toHaveLength(1);
-    expect(ctx.strokes).toHaveLength(1);
-    expect(ctx.strokes[0]?.style).toBe(PALETTE.selection);
-    expect(ctx.strokes[0]?.width).toBe(SELECTION_WIDTH);
+    expect(ctx.fills).toEqual([OWN]);
+    expect(ctx.strokes).toEqual([
+      { style: PALETTE.selection, width: HALO_SPREAD, alpha: HALO_ALPHA },
+      { style: PALETTE.selection, width: 1, alpha: 1 },
+    ]);
   });
 
-  test("the highlight never touches the primitives' own colour or lineweight", () => {
-    const ctx = draw(new Set(["2F", "30"]));
-    const own = ctx.strokes.filter((s) => s.style === "rgb(212,212,212)");
-    const accent = ctx.strokes.filter((s) => s.style === PALETTE.selection);
-    expect(own).toHaveLength(1);
-    expect(accent).toHaveLength(2);
-    expect(own[0]?.width).toBeCloseTo(lineWidthPx(0.25), 6);
+  test("the mark never touches the primitives' own colour or lineweight: a mixed selection keeps every colour", () => {
+    const colours: DisplayList = {
+      ...LIST,
+      verts: [...LIST.verts, { x: 2, y: 2 }, { x: 7, y: 3 }],
+      prims: [
+        { ...prim("polyline", 0, 2, 0x2f), color: [...RED] },
+        { ...prim("polyline", 3, 2, 0x32), color: [...YELLOW], lw: 0.5 },
+      ],
+    };
+    const ctx = new RecordingContext();
+    drawDisplay(ctx as unknown as CanvasRenderingContext2D, colours, VIEW, { width: 800, height: 600, dpr: 1, palette: PALETTE, grid: false, selection: new Set(["2F", "32"]) });
+    // Both halos first, under everything; then the objects; then both dashes.
+    expect(ctx.strokes.map((stroke) => stroke.style)).toEqual([PALETTE.selection, PALETTE.selection, ink(RED), ink(YELLOW), PALETTE.selection, PALETTE.selection]);
+    expect(ctx.strokes[2]?.width).toBeCloseTo(lineWidthPx(0.25), 6);
+    expect(ctx.strokes[3]?.width).toBeCloseTo(lineWidthPx(0.5), 6);
+    // Each halo and each dash follows its own object's lineweight.
+    expect(ctx.strokes[1]?.width).toBeCloseTo(lineWidthPx(0.5) + HALO_SPREAD, 6);
+    expect(ctx.strokes[5]?.width).toBeCloseTo(lineWidthPx(0.5), 6);
   });
 });
 
@@ -416,9 +466,9 @@ describe("snapGlyph", () => {
 describe("drawOverlay", () => {
   /** The test primitives' own colour, as the drawing itself strokes it. */
   const OWN = draw().strokes[0]?.style ?? "";
-  const overlay = (parts: Partial<Pick<OverlayOptions, "hover" | "preview" | "snap" | "guide">>, view = VIEW): PathContext => {
+  const overlay = (parts: Partial<Pick<OverlayOptions, "hover" | "hoverSelected" | "preview" | "snap" | "guide" | "grips">>, view = VIEW, dpr = 1): PathContext => {
     const ctx = new PathContext();
-    drawOverlay(ctx as unknown as CanvasRenderingContext2D, LIST, view, { width: 800, height: 600, dpr: 1, palette: PALETTE, hover: null, preview: null, snap: null, ...parts });
+    drawOverlay(ctx as unknown as CanvasRenderingContext2D, LIST, view, { width: 800, height: 600, dpr, palette: PALETTE, hover: null, preview: null, snap: null, ...parts });
     return ctx;
   };
 
@@ -432,11 +482,59 @@ describe("drawOverlay", () => {
     expect(overlayIsEmpty({ hover: "2F", preview: null, snap: null })).toBe(false);
   });
 
-  test("the hover is the handle's own outline in the selection hue, quieter than the selection", () => {
+  test("the hover is a halo of the selection ink under the object, which is drawn again over it in its own colour", () => {
+    const own = lineWidthPx(0.25);
     const ctx = overlay({ hover: "2F" });
-    expect(ctx.strokes).toEqual([{ style: PALETTE.selection, width: SELECTION_WIDTH, alpha: HOVER_ALPHA }]);
-    expect(HOVER_ALPHA).toBeLessThan(1);
+    expect(ctx.strokes).toEqual([
+      { style: PALETTE.selection, width: own + HOVER_SPREAD, alpha: HOVER_ALPHA },
+      { style: OWN, width: own, alpha: 1 },
+    ]);
+    // A halo only: nothing of the hover is dashed, which is what tells it from a selected object.
+    expect(ctx.dashes).toEqual([[], []]);
+    expect(HOVER_SPREAD).toBeGreaterThanOrEqual(2);
     expect(overlay({ hover: "99" }).strokes).toHaveLength(0);
+  });
+
+  test("a hovered object that is selected has a wider halo and keeps its dash", () => {
+    const own = lineWidthPx(0.25);
+    const ctx = overlay({ hover: "2F", hoverSelected: true });
+    expect(ctx.strokes).toEqual([
+      { style: PALETTE.selection, width: own + HOVER_SPREAD + HALO_HOVER_EXTRA, alpha: HOVER_ALPHA },
+      { style: OWN, width: own, alpha: 1 },
+      { style: PALETTE.selection, width: own, alpha: 1 },
+    ]);
+    expect(ctx.dashes[2]).toEqual([...SELECTION_DASH]);
+    expect(own + HOVER_SPREAD + HALO_HOVER_EXTRA).toBeGreaterThan(own + HALO_SPREAD);
+  });
+
+  const grip = (id: string, x: number, y: number, more: Partial<GripMark> = {}): GripMark => ({ id, point: { x, y }, kind: "standard", locked: false, hot: false, dynamic: null, ...more });
+  const marks = (list: readonly GripMark[], hover: string | null = null, collected: readonly string[] = []): OverlayOptions["grips"] => ({ size: 5, list, hover, collected: new Set(collected) });
+
+  test("each grip is a square of the engine's size over a hairline of the ground, in the ink of its heat", () => {
+    const ctx = overlay({ grips: marks([grip("A:0", 1, 1), grip("A:1", 5, 5), grip("A:2", 9, 9, { hot: true })], "A:1") });
+    // Cold first, then the warm ones over them: each a ground box under its ink.
+    expect(ctx.fillRects).toEqual([PALETTE.canvas, PALETTE.selection, PALETTE.canvas, PALETTE.gripHover, PALETTE.canvas, PALETTE.gripHot]);
+    expect(ctx.strokes).toHaveLength(0);
+    expect(new Set([PALETTE.selection, PALETTE.gripHover, PALETTE.gripHot]).size).toBe(3);
+    expect(overlayIsEmpty({ hover: null, preview: null, snap: null, grips: marks([grip("A:0", 1, 1)]) })).toBe(false);
+    expect(overlayIsEmpty({ hover: null, preview: null, snap: null, grips: marks([]) })).toBe(true);
+  });
+
+  test("a locked grip is hollow, a grip off the canvas is not drawn, and a hostile point is skipped", () => {
+    const locked = overlay({ grips: marks([grip("A:0", 5, 5, { locked: true })]) });
+    expect(locked.fillRects).toEqual([PALETTE.canvas, PALETTE.selection, PALETTE.canvas]);
+    expect(overlay({ grips: marks([grip("A:0", 50, 50), grip("A:1", Number.NaN, 1), grip("A:2", -40, 5)]) }).fillRects).toHaveLength(0);
+  });
+
+  test("a dynamic block grip is a figure of its kind, filled with the ink of its heat", () => {
+    const linear = overlay({ grips: marks([grip("B:d1:end", 5, 5, { kind: "linear", dynamic: { dir: { x: 1, y: 0 } } })]) });
+    expect(linear.fills).toEqual([PALETTE.selection]);
+    expect(linear.fillRects).toHaveLength(0);
+    expect(linear.points).toHaveLength(3);
+    // The arrowhead points along the parameter, and reaches further than a square grip's half.
+    expect(linear.points[0]).toEqual({ x: 400 + (5 * DYNAMIC_GRIP_REACH) / 2, y: 300 });
+    const list = overlay({ grips: marks([grip("B:d2:at", 5, 5, { kind: "list", dynamic: { dir: { x: 0, y: 0 } } })], "B:d2:at") });
+    expect(list.fills).toEqual([PALETTE.gripHover]);
   });
 
   test("a rubber band is stroked in the selection ink, a hairline", () => {
@@ -560,5 +658,138 @@ describe("drawOverlay", () => {
   test("the ink is solid again after a guide: the snap marker over it is not dashed", () => {
     const ctx = overlay({ guide: ray(), snap: { point: { x: 5, y: 5 }, mode: 1 } });
     expect(ctx.dashes).toEqual([[...GUIDE_DASH], [], []]);
+  });
+});
+
+describe("gripHeat", () => {
+  test("hot while the engine edits it or Shift collected it, else warm under the pointer, else cold", () => {
+    const none = new Set<string>();
+    expect(gripHeat({ id: "A:0", hot: false }, null, none)).toBe("cold");
+    expect(gripHeat({ id: "A:0", hot: false }, "A:0", none)).toBe("hover");
+    expect(gripHeat({ id: "A:0", hot: false }, "A:1", none)).toBe("cold");
+    expect(gripHeat({ id: "A:0", hot: true }, null, none)).toBe("hot");
+    expect(gripHeat({ id: "A:0", hot: false }, null, new Set(["A:0"]))).toBe("hot");
+    // Hot outranks the pointer: a collected grip under the pointer stays hot.
+    expect(gripHeat({ id: "A:0", hot: false }, "A:0", new Set(["A:0"]))).toBe("hot");
+  });
+});
+
+describe("gripBox", () => {
+  test("at a ratio of 1 a 5px grip is five whole pixels, centred on the pixel its point is in", () => {
+    expect(gripBox(100.5, 50.5, 5, 1)).toEqual({ x: 98, y: 48, side: 5 });
+    // A point on a pixel boundary cannot centre an odd box: it goes to the nearer whole pixel.
+    const box = gripBox(100, 50, 5, 1);
+    expect(Number.isInteger(box.x) && Number.isInteger(box.y)).toBe(true);
+    expect(Math.abs(box.x + box.side / 2 - 100)).toBeLessThanOrEqual(0.5);
+  });
+
+  test("its edges sit on whole device pixels at every ratio, and it is a whole number of them across", () => {
+    for (const dpr of [1, 1.25, 1.5, 2, 2.625, 3]) {
+      for (const [x, y] of [[100, 50], [100.3, 50.7], [0.2, 0.2], [641.49, 333.51]] as const) {
+        const box = gripBox(x, y, 5, dpr);
+        expect(box.x * dpr).toBeCloseTo(Math.round(box.x * dpr), 9);
+        expect(box.y * dpr).toBeCloseTo(Math.round(box.y * dpr), 9);
+        expect(box.side * dpr).toBeCloseTo(Math.round(5 * dpr), 9);
+        // Never more than half a device pixel from where the engine put the grip.
+        expect(Math.abs(box.x + box.side / 2 - x) * dpr).toBeLessThanOrEqual(0.5 + 1e-9);
+        expect(Math.abs(box.y + box.side / 2 - y) * dpr).toBeLessThanOrEqual(0.5 + 1e-9);
+      }
+    }
+    expect(gripBox(10, 10, 5, 1.5).side).toBeCloseTo(8 / 1.5, 9);
+    expect(gripBox(10, 10, 5, 2).side).toBe(5);
+  });
+
+  test("a size or a ratio that is not a positive number still gives a box, never NaN", () => {
+    for (const [size, dpr] of [[0, 1], [-3, 1], [Number.NaN, 2], [5, 0], [5, Number.NaN], [Number.POSITIVE_INFINITY, 1]] as const) {
+      const box = gripBox(10, 10, size, dpr);
+      expect(Number.isFinite(box.x) && Number.isFinite(box.y) && box.side > 0).toBe(true);
+    }
+    expect(gripBox(10, 10, 0.2, 1).side).toBe(1);
+  });
+
+  test("a warm grip is drawn larger than a cold one, by a whole number of pixels each side", () => {
+    expect(GRIP_WARM_GROW % 2).toBe(0);
+    expect(gripBox(100.5, 50.5, 5 + GRIP_WARM_GROW, 1)).toEqual({ x: 97, y: 47, side: 7 });
+  });
+});
+
+describe("dynamicGripShape", () => {
+  test("a distance is an arrowhead along its direction, with y turned for the screen", () => {
+    const right = dynamicGripShape("linear", { x: 1, y: 0 });
+    expect(right[0]).toEqual([1, 0]);
+    const up = dynamicGripShape("linear", { x: 0, y: 2 });
+    expect(up[0]?.[0]).toBeCloseTo(0, 9);
+    expect(up[0]?.[1]).toBeCloseTo(-1, 9);
+    // A direction of no length, or one that is not a number, still points somewhere.
+    expect(dynamicGripShape("linear", { x: 0, y: 0 })[0]).toEqual([1, 0]);
+    expect(dynamicGripShape("linear", { x: Number.NaN, y: 1 })[0]).toEqual([1, 0]);
+  });
+
+  test("a position is a diamond and a list a triangle pointing down: each its own figure, inside its box", () => {
+    expect(dynamicGripShape("point", { x: 0, y: 0 })).toHaveLength(4);
+    const list = dynamicGripShape("list", { x: 0, y: 0 });
+    expect(list).toHaveLength(3);
+    expect(list[2]).toEqual([0, 1]);
+    for (const kind of ["linear", "point", "list"] as const) {
+      expect(dynamicGripShape(kind, { x: 0.6, y: 0.8 }).flat().every((n) => Math.abs(n) <= 1.1)).toBe(true);
+    }
+  });
+});
+
+describe("placeLabel", () => {
+  const canvas = { w: 1000, h: 600 };
+  const label = { w: 80, h: 22 };
+  /** Whether the label's box, placed at `to`, holds the point `p`. */
+  const holds = (to: { x: number; y: number }, p: { x: number; y: number }): boolean => p.x >= to.x && p.x <= to.x + label.w && p.y >= to.y && p.y <= to.y + label.h;
+
+  test("with no rubber band it stands below and to the right, clear of the marker", () => {
+    const to = placeLabel({ x: 500, y: 300 }, label, canvas, null);
+    expect(to).toEqual({ x: 500 + LABEL_GAP, y: 300 + LABEL_GAP });
+    expect(LABEL_GAP).toBeGreaterThan(SNAP_MARKER_HALF + 8);
+  });
+
+  test("it stands on the far side of where the band comes from, on both axes", () => {
+    const at = { x: 500, y: 300 };
+    // The last point is below and to the left (the screen's y grows downward): above and right.
+    expect(placeLabel(at, label, canvas, { x: 280, y: 330 })).toEqual({ x: at.x + LABEL_GAP, y: at.y - LABEL_GAP - label.h });
+    // Above and to the right: below and left.
+    expect(placeLabel(at, label, canvas, { x: 700, y: 100 })).toEqual({ x: at.x - LABEL_GAP - label.w, y: at.y + LABEL_GAP });
+    // Below and to the right: above and left.
+    expect(placeLabel(at, label, canvas, { x: 700, y: 500 })).toEqual({ x: at.x - LABEL_GAP - label.w, y: at.y - LABEL_GAP - label.h });
+  });
+
+  test("it is never over the marker, the band, or the ray that runs on past the point", () => {
+    const at = { x: 500, y: 300 };
+    for (let turn = 0; turn < 360; turn += 7) {
+      const toward = { x: at.x + 200 * Math.cos((turn * Math.PI) / 180), y: at.y + 200 * Math.sin((turn * Math.PI) / 180) };
+      const to = placeLabel(at, label, canvas, toward, true);
+      expect(holds(to, at)).toBe(false);
+      // No point of the band, or of the ray beyond the point, is inside the label's box.
+      for (let t = -1; t <= 1; t += 0.01) expect(holds(to, { x: at.x + (toward.x - at.x) * t, y: at.y + (toward.y - at.y) * t })).toBe(false);
+      // And it clears the marker's box by the gap on both axes.
+      expect(Math.min(Math.abs(to.x - at.x), Math.abs(to.x + label.w - at.x))).toBeGreaterThanOrEqual(LABEL_GAP - 1e-9);
+      expect(Math.min(Math.abs(to.y - at.y), Math.abs(to.y + label.h - at.y))).toBeGreaterThanOrEqual(LABEL_GAP - 1e-9);
+    }
+  });
+
+  test("a band along an axis does not make the label change sides with the last decimal of the point", () => {
+    const at = { x: 500, y: 300 };
+    const up = placeLabel(at, label, canvas, { x: 500, y: 500 }, true);
+    expect(placeLabel(at, label, canvas, { x: 500 + 1e-9, y: 500 }, true)).toEqual(up);
+    expect(placeLabel(at, label, canvas, { x: 500 - 1e-9, y: 500 }, true)).toEqual(up);
+    expect(up).toEqual({ x: at.x + LABEL_GAP, y: at.y - LABEL_GAP - label.h });
+  });
+
+  test("it stays inside the canvas: a corner that does not fit gives way to one that does", () => {
+    // In the bottom right corner there is no room below or to the right.
+    const to = placeLabel({ x: 990, y: 590 }, label, canvas, null);
+    expect(to).toEqual({ x: 990 - LABEL_GAP - label.w, y: 590 - LABEL_GAP - label.h });
+    // Near the right edge the far side of the band is off the canvas: the label goes to the left.
+    const edge = placeLabel({ x: 960, y: 300 }, label, canvas, { x: 700, y: 400 });
+    expect(edge.x + label.w).toBeLessThanOrEqual(canvas.w);
+    expect(edge.x).toBeLessThan(960);
+    // A canvas smaller than the label holds it at its own corner, never at a negative place or NaN.
+    const tiny = placeLabel({ x: 10, y: 10 }, label, { w: 40, h: 20 }, { x: 0, y: 0 });
+    expect(Number.isFinite(tiny.x) && Number.isFinite(tiny.y)).toBe(true);
   });
 });

@@ -282,12 +282,12 @@ export default function Expanded() {
 - `rule/icon-button-shortcut-prop`: When an icon button's action has a shortcut, pass it as `shortcut` and keep it out of `title`, because the hint draws it as 1 key cap and the button says it through `aria-keyshortcuts`, while a bracket in the title puts "(Ctrl+Z)" into the accessible name a speech-input user has to say; the parsed bracket form stays for a caller that has not moved, and no call site in the app uses it now (the tool strip's five, the title bar's three and the composer's send and stop pass `shortcut`). Evidence: app 9/31 icon buttons in the running shell carry a shortcut in brackets in their name, measured in the browser 2026-11-11. Check: test `src/ui/IconButton.test.tsx`.
   - Don't: `<IconButton icon="undo" title="Undo (Ctrl+Z)" />`
   - Do: `<IconButton icon="undo" title="Undo" shortcut="Ctrl+Z" />`
-- `rule/icon-button-disabled-reason`: When an icon button is disabled by something the user can fix, pass the reason as `description` in 1 short sentence, because the disabled key stays focusable and hoverable for exactly this, and its name alone says what it is and 0 words about why it is dead. Evidence: single use `src/components/AssistantPane.tsx:939`, the composer's send key, disabled while the message is empty with no reason given. Check: test `src/ui/IconButton.test.tsx`.
+- `rule/icon-button-disabled-reason`: When an icon button is disabled by something the user can fix, pass the reason as `description` in 1 short sentence, because the disabled key stays focusable and hoverable for exactly this, and its name alone says what it is and 0 words about why it is dead. Evidence: single use `src/components/AssistantPane.tsx:922`, the composer's send key, disabled while the message is empty with no reason given. Check: test `src/ui/IconButton.test.tsx`.
   - Don't: `<IconButton icon="send" title="Send" disabled={empty()} />`
   - Do: `<IconButton icon="send" title="Send" disabled={empty()} description={empty() ? "Type a message first" : undefined} />`
 
 ### Content
-- `rule/icon-button-title-sentence`: When `title` is written, name the action in sentence case with no full stop (Close the panel, Send, Stop), because the same string is the hint and the accessible name. Evidence: single use `src/components/AssistantPane.tsx:857`, the "Attach a picture (or paste, or drop one)" label. Check: review `src/components/AssistantPane.tsx`.
+- `rule/icon-button-title-sentence`: When `title` is written, name the action in sentence case with no full stop (Close the panel, Send, Stop), because the same string is the hint and the accessible name. Evidence: single use `src/components/AssistantPane.tsx:865`, the "Attach a picture (or paste, or drop one)" label. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `title="close panel."`
   - Do: `title="Close the panel"`
 
@@ -300,7 +300,7 @@ export default function Expanded() {
 - `rule/icon-button-row-limit`: When a toolbar row holds more than 5 icon buttons, move the rest into a menu, because the measured composer row holds 3 at 24px each with 4px gaps and the row starts crowding the input past 5. Evidence: measured 3 actions at 24px with 4px gaps, `docs/system/decisions.md`. Check: review `src/components/AssistantPane.tsx`.
   - Don't: 6 circles in the composer's toolbar row.
   - Do: 3 circles in the row and the rest inside a menu.
-- `rule/icon-button-touch-target`: When 2 `sm` icon buttons sit side by side, keep at least 4px between them, because under a coarse pointer each 20px circle keeps its drawn size and takes a 24px target from an invisible `::after` 2px past every edge, and closer circles overlap their targets. Evidence: measured 20px circle with a 24px `::after` target, `src/ui/ui.css:1393`. Check: review `src/ui/ui.css`.
+- `rule/icon-button-touch-target`: When 2 `sm` icon buttons sit side by side, keep at least 4px between them, because under a coarse pointer each 20px circle keeps its drawn size and takes a 24px target from an invisible `::after` 2px past every edge, and closer circles overlap their targets. Evidence: measured 20px circle with a 24px `::after` target, `src/ui/ui.css:1418`. Check: review `src/ui/ui.css`.
   - Don't: `.my-row .ui-icon-button--sm + .ui-icon-button--sm { margin-left: 0 }` — two 24px targets on a 20px pitch.
   - Do: `.my-row { display: flex; gap: var(--gap-4) }`
 

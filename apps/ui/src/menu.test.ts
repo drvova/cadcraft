@@ -1,13 +1,14 @@
 /**
  * The menu's pure rules: the chain of open submenus under the pointer and the click, what each key
  * on a row asks for, the walk between rows, the columns of a tall menu and the separators between
- * its groups, where an opened menu is pulled to stay on screen, and how many groups of a band fit
- * before the key that opens the rest. Pinned here so the menu bar,
+ * its groups, where an opened menu is pulled to stay on screen, where a submenu stands beside its
+ * menu and when a pointer is heading for it, which typed names a row draws, and how many groups of
+ * a band fit before the key that opens the rest. Pinned here so the menu bar,
  * the compact menu and the tool strip's overflow menu cannot drift apart.
  */
 
 import { describe, expect, test } from "bun:test";
-import { clickPath, flips, hoverPath, isOnPath, leadingFit, menuBounds, menuColumns, menuShift, ROW_TRACKS, rowKeyAction, samePath, SEPARATOR_TRACKS, stackedBlock, walkIndex } from "./menu";
+import { AIM_GRACE_MS, aimsAt, clickPath, flips, hoverPath, isOnPath, leadingFit, menuBounds, menuColumns, menuShift, NAME_SHOWN_MAX, ROW_TRACKS, rowKeyAction, samePath, SEPARATOR_TRACKS, showsName, stackedBlock, submenuPlacement, walkIndex } from "./menu";
 
 const press = (key: string) => ({ key, ctrlKey: false, metaKey: false, altKey: false });
 
@@ -250,6 +251,105 @@ describe("placement", () => {
     expect(stackedBlock(900, 600)).toBe("start");
     expect(stackedBlock(600, 600)).toBe("nearest");
     expect(stackedBlock(120, 600)).toBe("nearest");
+  });
+});
+
+describe("a submenu's place beside its menu", () => {
+  const bounds = menuBounds(1280, 778, 4);
+  // The Draw menu as measured at 1280 wide: two columns of rows inside a 4px inset and a hairline.
+  const draw = { left: 258, top: 34, right: 636, bottom: 440 };
+  const first = { left: 263, top: 267, right: 441, bottom: 291 };
+  const last = { left: 445, top: 255, right: 631, bottom: 279 };
+
+  test("a row of the first column opens its submenu past the whole menu, not over the second column", () => {
+    const place = submenuPlacement(first, draw, 168, 2, bounds);
+    expect(place).toEqual({ flipped: false, reach: 195 });
+    // Its left edge: the row's right edge, the reach, the gap. That is the menu's edge and the gap.
+    expect(first.right + place.reach + 2).toBe(draw.right + 2);
+  });
+
+  test("a row of the last column reaches only the menu's inset and hairline, as a menu of one column", () => {
+    expect(submenuPlacement(last, draw, 168, 2, bounds)).toEqual({ flipped: false, reach: 5 });
+    const one = { left: 4, top: 34, right: 312, bottom: 500 };
+    expect(submenuPlacement({ left: 9, top: 471, right: 307, bottom: 495 }, one, 200, 2, bounds)).toEqual({ flipped: false, reach: 5 });
+  });
+
+  test("with no room on the right it opens on the left of the whole menu, from either column", () => {
+    const near = { left: 880, top: 34, right: 1258, bottom: 440 };
+    const row = (box: { left: number; top: number; right: number; bottom: number }) => ({ ...box, left: box.left + 622, right: box.right + 622 });
+    // From the last column the reach is the first column's width and more: the submenu clears it.
+    expect(submenuPlacement(row(last), near, 168, 2, bounds)).toEqual({ flipped: true, reach: 187 });
+    expect(submenuPlacement(row(first), near, 168, 2, bounds)).toEqual({ flipped: true, reach: 5 });
+  });
+
+  test("it flips when its right edge would pass the bounds, not when it only touches them", () => {
+    const menu = { left: 700, top: 34, right: 1074, bottom: 440 };
+    const row = { left: 705, top: 100, right: 1069, bottom: 124 };
+    expect(submenuPlacement(row, menu, 200, 2, bounds).flipped).toBe(false);
+    expect(submenuPlacement(row, menu, 201, 2, bounds).flipped).toBe(true);
+  });
+
+  test("a row that somehow lies outside its menu reaches nothing rather than backwards", () => {
+    expect(submenuPlacement({ left: 700, top: 0, right: 900, bottom: 24 }, { left: 100, top: 0, right: 400, bottom: 300 }, 100, 2, bounds).reach).toBe(0);
+  });
+});
+
+describe("a pointer heading for an open submenu", () => {
+  // Circle's submenu, past the second column of Draw; the pointer starts on Circle's row.
+  const submenu = { left: 638, top: 262, right: 806, bottom: 416 };
+  const from = { x: 368, y: 279 };
+
+  test("a move straight across the rows between is heading for it", () => {
+    expect(aimsAt(from, { x: 460, y: 279 }, submenu)).toBe(true);
+    expect(aimsAt(from, { x: 540, y: 300 }, submenu)).toBe(true);
+  });
+
+  test("a move toward one of its far rows is, a steeper one is not", () => {
+    // Halfway there the triangle runs from y 270.5 to 347.5.
+    expect(aimsAt(from, { x: 503, y: 345 }, submenu)).toBe(true);
+    expect(aimsAt(from, { x: 503, y: 352 }, submenu)).toBe(false);
+    expect(aimsAt(from, { x: 503, y: 266 }, submenu)).toBe(false);
+  });
+
+  test("a move up or down the pointer's own column, or away, is not", () => {
+    expect(aimsAt(from, { x: 368, y: 51 }, submenu)).toBe(false);
+    expect(aimsAt(from, { x: 368, y: 303 }, submenu)).toBe(false);
+    expect(aimsAt(from, { x: 300, y: 279 }, submenu)).toBe(false);
+  });
+
+  test("a pointer already past the near edge has arrived, and one that did not move is not moving", () => {
+    expect(aimsAt(from, { x: 700, y: 300 }, submenu)).toBe(false);
+    expect(aimsAt(from, from, submenu)).toBe(false);
+  });
+
+  test("a submenu opened on the left is aimed at through its right edge", () => {
+    const left = { left: 88, top: 262, right: 256, bottom: 416 };
+    expect(aimsAt({ x: 540, y: 279 }, { x: 400, y: 290 }, left)).toBe(true);
+    expect(aimsAt({ x: 540, y: 279 }, { x: 600, y: 279 }, left)).toBe(false);
+  });
+
+  test("the wait is a third of a second", () => {
+    expect(AIM_GRACE_MS).toBe(300);
+  });
+});
+
+describe("the typed name a row draws", () => {
+  test("a name of up to eight characters is drawn, a longer one is left to the row's description", () => {
+    expect(NAME_SHOWN_MAX).toBe(8);
+    expect(showsName("L")).toBe(true);
+    expect(showsName("CLOSEALL")).toBe(true);
+    expect(showsName("EXPORTPDF")).toBe(false);
+    expect(showsName("STYLESMANAGER")).toBe(false);
+  });
+
+  test("a row with no typed name draws none", () => {
+    expect(showsName("")).toBe(false);
+  });
+
+  test("the length is counted in characters, not in code units", () => {
+    expect(showsName("PAVÉ")).toBe(true);
+    expect(showsName("𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜")).toBe(true);
+    expect(showsName("𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜𝒜")).toBe(false);
   });
 });
 

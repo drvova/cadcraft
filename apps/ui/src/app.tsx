@@ -11,7 +11,7 @@
  */
 
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { AppFacade, type CommandInfo, type DrawingState, type LayerInfo, type SettingsState } from "./facade";
+import { AppFacade, type CommandInfo, type DrawingState, type Grip, type GripOption, type LayerInfo, type SettingsState } from "./facade";
 import type { DisplayList } from "./display";
 import { padView, regionCovers, regionOf, VIEW_PAD, viewScale, type DisplayRegion } from "./display-cache";
 import { emptyPrompt, formatPoint, formatSelectBox, pointerWants, type PromptState } from "./prompt";
@@ -20,7 +20,7 @@ import { applyPick, pickAperture, type PickRule } from "./selection";
 import { parseProperties, type PropertiesReply } from "./props";
 import { chordCommand, classify, isMacPlatform, pressShortcut, shortcutLabel, UI_ITEMS } from "./commands";
 import { paletteItems, rememberCommand } from "./palette";
-import { drawingMenu, layerMenu, layoutMenu, rightClickAction, type ContextAction, type ContextMenuModel } from "./context";
+import { drawingMenu, gripMenu, layerMenu, layoutMenu, rightClickAction, type ContextAction, type ContextMenuModel } from "./context";
 import { defaultFileName, downloadBytes, pickFile } from "./files";
 import { TopBar } from "./components/TopBar";
 import { MenuBar } from "./components/MenuBar";
@@ -77,7 +77,12 @@ const OVERLAYS = `.menu-drop, dialog[open], ${SHEET}`;
 const MENU_OWNERS = ".canvas-stage, .layer-row, .editor-tabs [role='tab'], .status-toggles button";
 
 /** What a right-click menu is for. */
-type ContextTarget = { kind: "drawing" } | { kind: "layer"; name: string } | { kind: "layout"; name: string };
+type ContextTarget =
+  | { kind: "drawing" }
+  | { kind: "layer"; name: string }
+  | { kind: "layout"; name: string }
+  /** A grip's own menu: the engine's options for it, and whether the pointer's rest opened it. */
+  | { kind: "grip"; id: string; options: readonly GripOption[]; rest: boolean };
 
 /** The handles a `select` or `qselect` reply names (`{handles: [hex]}`), read with checked narrowing. */
 function replyHandles(result: unknown): string[] {
@@ -769,6 +774,20 @@ export function App(props: AppProps): JSX.Element {
     followView(before);
   };
 
+  /**
+   * A press on a grip: the engine makes the grips hot and starts their edit, which from here is
+   * the running command `grip` (the pointer previews it, a click commits it, Enter cycles its
+   * mode, Escape cancels it). Says whether an edit now runs; a refusal is said in its own words.
+   */
+  const onGripStart = (ids: readonly string[]): boolean => {
+    setNotice(null);
+    const started = props.facade.gripStart(ids, prompt());
+    setPrompt(started.state);
+    if (started.state.error !== null) setNotice(started.state.error);
+    refresh();
+    return started.edit !== null;
+  };
+
   /** What the canvas watches to ask the engine again about the pointer: the prompt and the drafting settings. */
   const engineState = createMemo(() => ({ prompt: prompt(), settings: settings() }));
 
@@ -841,6 +860,7 @@ export function App(props: AppProps): JSX.Element {
     const target = contextAt()?.target;
     if (target === undefined) return null;
     if (target.kind === "layout") return layoutMenu(commands(), target.name);
+    if (target.kind === "grip") return gripMenu(target.id, target.options);
     if (target.kind === "layer") {
       const layer = layers().find((l) => l.name === target.name);
       return layer === undefined ? null : layerMenu(commands(), layer);
@@ -877,6 +897,24 @@ export function App(props: AppProps): JSX.Element {
   const onDrawingMenu = (request: { at: MenuPoint; heldMs: number; moved: boolean }): void => {
     const enter = rightClickAction(prompt().running !== null, request.at.source, request.heldMs, request.moved) === "enter";
     if (enter || (!openContext({ kind: "drawing" }, request.at) && request.at.source === "pointer")) onCommand("");
+  };
+
+  /**
+   * A grip's menu was asked for (the pointer rested on it, a right click, a press on a list
+   * grip): the engine's options for that grip, at the grip. Null: the pointer left the grip, and
+   * the menu its rest opened goes with it, the keyboard back on the drawing.
+   */
+  const onGripMenu = (request: { grip: Grip; at: MenuPoint; rest: boolean } | null): void => {
+    if (request === null) {
+      const target = contextAt()?.target;
+      if (target?.kind !== "grip" || !target.rest) return;
+      setContextAt(null);
+      if (document.activeElement === null || document.activeElement === document.body) regionTarget({ root: ".canvas-stage", first: null })?.focus({ preventScroll: true });
+      return;
+    }
+    // A rest is not a request: it opens nothing over a menu, a dialog or a sheet that is already up.
+    if (request.rest && document.querySelector(OVERLAYS) !== null) return;
+    openContext({ kind: "grip", id: request.grip.id, options: props.facade.gripOptions(request.grip.id), rest: request.rest }, request.at);
   };
 
   /** Run a command's JSON form for a menu row: no prompt and no dialog; the canvas follows a view it moved. */
@@ -924,6 +962,16 @@ export function App(props: AppProps): JSX.Element {
           setNotice(found.error);
           refresh();
         }
+        return;
+      }
+      case "grip": {
+        // The option acts at once, or leaves a grip edit asking for a point on the drawing.
+        const before = engineView();
+        const chosen = props.facade.gripOption(action.grip, action.option, prompt());
+        setPrompt(chosen.state);
+        setNotice(chosen.state.error);
+        refresh();
+        followView(before);
         return;
       }
     }
@@ -993,6 +1041,10 @@ export function App(props: AppProps): JSX.Element {
               onPoint={onPoint}
               onMenu={onDrawingMenu}
               engineState={engineState}
+              base={() => prompt().anchor.base}
+              gripEditing={() => prompt().running === "grip"}
+              onGripStart={onGripStart}
+              onGripMenu={onGripMenu}
               onBeforeQuery={tellView}
               onCursor={setCursor}
             />

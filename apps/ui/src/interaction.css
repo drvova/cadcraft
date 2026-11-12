@@ -12,12 +12,18 @@
    rail, then it scrolls); the rail's remaining surface stays empty rather than a pane stretching
    over nothing. */
 .properties {
+  /* The room a choice's arrow takes at the end of the value column: the arrow and its gap. Every
+     value ends before it, so the values share one right edge and the arrows one column, and the
+     heading's count ends on that edge too. */
+  --prop-arrow-slot: calc(var(--gap-4) + var(--icon-size-sm));
   width: auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
   flex: 0 1 auto;
   max-height: 60%;
+  /* A whole pixel where the browser can round, as the layers' cap is (styles.css). */
+  max-height: round(down, 60%, 1px);
   background: transparent;
   border: none;
   border-top: var(--hairline) solid var(--border);
@@ -34,8 +40,11 @@
   border-bottom: var(--hairline) solid var(--border);
 }
 
+/* How much is selected, in the status bar's own words, ending on the values' edge under it (the
+   arrows hang past that edge, and so does nothing in the heading). */
 .properties-state {
   margin-left: auto;
+  margin-inline-end: var(--prop-arrow-slot);
   font-size: var(--font-chip);
   font-variant-numeric: lining-nums tabular-nums;
   color: var(--text-faint);
@@ -44,7 +53,14 @@
   text-overflow: ellipsis;
 }
 
+/* A list longer than its room scrolls, and says so at the end that hides rows: it fades out over
+   one row there, and only there (PropertiesPanel.tsx marks the hidden ends as the list scrolls,
+   resizes or changes). The list's edge used to cut a row with nothing to say there was more
+   ("Circumference", 4.7px short, in a window 600 tall). Scrolled to its end, the last row is
+   whole and unfaded. */
 .properties-body {
+  --prop-fade-top: 0px;
+  --prop-fade-bottom: 0px;
   flex: 1 1 auto;
   min-height: 0;
   overflow-x: hidden;
@@ -53,6 +69,15 @@
   display: flex;
   flex-direction: column;
   gap: 0;
+  mask-image: linear-gradient(to bottom, transparent, var(--text) var(--prop-fade-top), var(--text) calc(100% - var(--prop-fade-bottom)), transparent);
+}
+
+.properties-body[data-clip-top] {
+  --prop-fade-top: var(--control-h-row);
+}
+
+.properties-body[data-clip-bottom] {
+  --prop-fade-bottom: var(--control-h-row);
 }
 
 /* The empty line is a row like the others: the same height, on the labels' column. */
@@ -72,9 +97,6 @@
    layers' row height and the layers' type size, each text on a line as tall as the row, so the
    label and the value share the first line's baseline and a value that wraps adds whole rows. */
 .prop-row {
-  /* The room a choice's arrow takes at the end of the value column: the arrow and its gap. Every
-     value ends before it, so the values share one right edge and the arrows one column. */
-  --prop-arrow-slot: calc(var(--gap-4) + var(--icon-size-sm));
   flex: 0 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -157,8 +179,8 @@
 
 /* ---- The command line's keyword chips ---- */
 
-/* The chips start on the band's inset, the column the scrollback and the prompt mark start on,
-   and stand a chip's inner gap apart so two pills never read as one. */
+/* The chips start on the field's edge (styles.css: their words then read on the panel's text
+   column) and stand a chip's inner gap apart so two pills never read as one. */
 .cmd-chips {
   display: flex;
   flex-wrap: wrap;

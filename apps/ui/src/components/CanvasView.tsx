@@ -31,6 +31,14 @@
  * pointer leaves and when the command ends. The engine is told the canvas's size whenever it
  * changes.
  *
+ * A selection shows its grips, drawn on that second canvas too. They are listed when the
+ * selection, the drawing or the command line changes, never per frame. At rest the grip under the
+ * pointer is warm, before any object is, and a left press on it starts its edit instead of a
+ * pick or a rectangle (`onGripStart`); from there the edit is the running command, so the press
+ * that is dragged commits where it is released and the press that was a click commits at the
+ * next click. Shift on a grip collects it for the next edit. A grip with a menu shows it when the
+ * pointer has rested on it, and on a right click of it (`onGripMenu`).
+ *
  * The component owns the pointer state, the device-pixel-ratio sizing and the frame: however many
  * wheel, pointer or resize events arrive between two frames, the shell hears of one view and the
  * display list is drawn once, and nothing is drawn while nothing changes. The drawing lives in
@@ -40,7 +48,8 @@
  * whose description says how to work without a pointer: the command line is the keyboard path.
  * The wrapper takes the keyboard's focus (Tab, F6, a press on the drawing) so the drawing is a
  * place the keyboard can be: the shell sends what is typed there to the command line and cancels
- * on Escape.
+ * on Escape. It shows the focus ring only when the keyboard brought the focus (`data-focus-ring`):
+ * a key pressed while the pointer is working in the drawing frames nothing.
  *
  * The props accept the value or the accessor form (the shell may hand either); the component
  * reads both.
@@ -49,10 +58,10 @@
 import { createEffect, createUniqueId, onCleanup, onMount, type Accessor, type JSX } from "solid-js";
 import { LONG_PRESS_MS } from "../context";
 import type { DisplayList } from "../display";
-import { EMPTY_PREVIEW, type AppFacade, type CommandPreview, type SnapPoint } from "../facade";
-import { drawDisplay, drawOverlay, guideIsEmpty, overlayIsEmpty, paletteFrom, samePalette, SNAP_MARKER_HALF, type OverlayGuide, type Palette } from "../canvas";
+import { EMPTY_PREVIEW, NO_GRIPS, type AppFacade, type CommandPreview, type Grip, type GripList, type SnapPoint } from "../facade";
+import { drawDisplay, drawOverlay, guideIsEmpty, overlayIsEmpty, paletteFrom, placeLabel, samePalette, type OverlayGuide, type Palette } from "../canvas";
 import type { PointerWants } from "../prompt";
-import { clickSlop, dragKind, pickReach, sameSelection } from "../selection";
+import { clickSlop, dragKind, gripGesture, gripPress, keptGrips, pickReach, sameSelection } from "../selection";
 import { fitAspect, holdsFit, panBy, pinchOf, pinchView, resizeView, screenToWorld, wheelZoomFactor, worldToScreen, zoomAt, type Point, type Rect, type ScreenBox, type ScreenSize } from "../view";
 import type { MenuPoint } from "./ContextMenu";
 import "../canvas.css";
@@ -113,13 +122,34 @@ export interface CanvasViewProps {
    * aperture by it.
    */
   onBeforeQuery?: () => void;
+  /**
+   * Where the running command's rubber band comes from (the last point given, world), or null:
+   * the label beside the point a click will take stands on the far side of it.
+   */
+  base?: Accessor<Point | null>;
+  /** The running command is a grip edit: its mode is named beside the pointer. */
+  gripEditing?: Accessor<boolean>;
+  /**
+   * A press on a grip asks for its edit, with the grips Shift collected (the pressed one first).
+   * The shell starts it (`facade.gripStart`) and says whether an edit now runs; from then on it
+   * is the running command, and takes its points through `onPoint`.
+   */
+  onGripStart?: (ids: readonly string[]) => boolean;
+  /**
+   * A grip's menu is asked for: by the pointer resting on it (`rest`), by a right click of it or
+   * by a press on a list grip. Null: the pointer has gone from the grip whose rested menu is up.
+   */
+  onGripMenu?: (request: { grip: Grip; at: MenuPoint; rest: boolean } | null) => void;
 }
 
-const FALLBACK_PALETTE: Palette = { canvas: "#181818", gridMinor: "#202020", gridMajor: "#2a2a2a", axisX: "#552633", axisY: "#23412f", selection: "#81a1c1" };
+const FALLBACK_PALETTE: Palette = (() => {
+  const selection = "#81a1c1";
+  return { canvas: "#181818", gridMinor: "#202020", gridMajor: "#2a2a2a", axisX: "#552633", axisY: "#23412f", selection, gripHover: selection, gripHot: selection };
+})();
 
 /** What the canvas is and how to work on it without a pointer: its accessible description. */
 export const CANVAS_HELP =
-  "The drawing area. With a pointer: click an object to add it to the selection, drag a rectangle to add several (to the right for those inside it, to the left for those it touches), hold Shift to remove from the selection instead, drag with the middle button to pan, turn the wheel to zoom. While a command asks for a point, a click gives it that point; while it asks for objects, clicks and rectangles pick them. A right click, or a finger held still, opens a menu of commands for what is selected or for the running command; while a command runs a quick right click is Enter. With the keyboard: type a command, such as LINE, ZOOM or PAN, and it goes to the command line; Enter or Space repeats the last command, or accepts the running command's default; Escape cancels the running command; the menu key or Shift+F10 opens the drawing's menu; F6 moves to the next part of the window.";
+  "The drawing area. With a pointer: click an object to add it to the selection, drag a rectangle to add several (to the right for those inside it, to the left for those it touches), hold Shift to remove from the selection instead, drag with the middle button to pan, turn the wheel to zoom. A selected object shows grips: drag one, or click it and then click where it goes, to stretch the object; Space or Enter changes the edit to Move, Rotate, Scale or Mirror. While a command asks for a point, a click gives it that point; while it asks for objects, clicks and rectangles pick them. A right click, or a finger held still, opens a menu of commands for what is selected or for the running command; while a command runs a quick right click is Enter. With the keyboard: type a command, such as LINE, ZOOM or PAN, and it goes to the command line; Enter or Space repeats the last command, or accepts the running command's default; Escape cancels the running command; the menu key or Shift+F10 opens the drawing's menu; F6 moves to the next part of the window.";
 
 /** Two middle presses this close in time (ms) are a double click: zoom to the extents. */
 const DOUBLE_CLICK_MS = 400;
@@ -170,11 +200,41 @@ interface Under {
   snap: SnapPoint | null;
   /** What the drafting aids drew the point with (a ray, the grid dot, acquired points), or null. */
   guide: OverlayGuide | null;
-  /** The words beside the point the click will take (the snap's name, "Polar: 4.25 < 45°"), or null. */
-  label: { text: string; at: Point } | null;
+  /**
+   * The words beside the point the click will take, or null: a grip edit's mode ("Stretch"), and
+   * the snap's name or the constraint's measure ("Polar: 4.25 < 45°"). Either may be "".
+   */
+  label: { mode: string; text: string; at: Point } | null;
+  /** The grip under the pointer at rest, or null: it is warm, and no object is hovered with it. */
+  grip: Grip | null;
 }
 
-const NOTHING_UNDER: Under = { hover: null, preview: EMPTY_PREVIEW, snap: null, guide: null, label: null };
+const NOTHING_UNDER: Under = { hover: null, preview: EMPTY_PREVIEW, snap: null, guide: null, label: null, grip: null };
+
+/** The press that started a grip edit, while its button is down. */
+interface GripHold {
+  pointerId: number;
+  pointerType: string;
+  /** Where it went down (client px). */
+  downX: number;
+  downY: number;
+  /** It left the click slop: the edit is being dragged, and the release commits it. */
+  dragged: boolean;
+}
+
+/** How long the pointer rests on a grip that has a menu before the menu shows (ms). */
+export const GRIP_REST_MS = 1000;
+
+/** How far from a grip (CSS px) the pointer may be on the drawing before the menu its rest opened goes. */
+const GRIP_MENU_LEASH = 32;
+
+/** No grips collected: one set, so an unchanged collection is the same value. */
+const NONE_COLLECTED: ReadonlySet<string> = new Set();
+
+/** A grip edit's mode as the label beside the pointer writes it: "stretch" is "Stretch". */
+function modeName(mode: string | null): string {
+  return mode === null || mode === "" ? "" : mode.charAt(0).toUpperCase() + mode.slice(1);
+}
 
 /**
  * How long after the engine says a tracking point is being acquired the canvas asks again with
@@ -188,9 +248,6 @@ interface Asked {
   state: unknown;
   wants: PointerWants;
 }
-
-/** How far the snap's label sits from the snapped point, in CSS px: clear of the marker. */
-const SNAP_LABEL_GAP = SNAP_MARKER_HALF + 8;
 
 function sameRect(a: Rect, b: Rect): boolean {
   return a.x0 === b.x0 && a.y0 === b.y0 && a.x1 === b.x1 && a.y1 === b.y1;
@@ -212,6 +269,9 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
   let overlay: HTMLCanvasElement | undefined;
   /** The words beside the point the click will take: the snap's name, or the constraint's measure. */
   let snapLabel: HTMLDivElement | undefined;
+  /** The label's two parts: the grip edit's mode, quieter, and the snap or the constraint. */
+  let labelMode: HTMLSpanElement | undefined;
+  let labelText: HTMLSpanElement | undefined;
   let stage: HTMLDivElement | undefined;
   let marquee: HTMLDivElement | undefined;
   const helpId = createUniqueId();
@@ -244,7 +304,21 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
   /** The pending ask after a dwell (the engine is acquiring a tracking point), or 0. */
   let dwell = 0;
   /** What the overlay canvas shows; null when it is clear. */
-  let overlaid: { under: Under; list: DisplayList; rect: Rect; dpr: number; palette: Palette } | null = null;
+  let overlaid: { under: Under; list: DisplayList; rect: Rect; dpr: number; palette: Palette; grips: GripList; collected: ReadonlySet<string>; selected: boolean } | null = null;
+  /** The selection's grips, as the engine last listed them. */
+  let grips: GripList = NO_GRIPS;
+  /** What the grips were listed for: the same selection, drawing and engine state lists nothing again. */
+  let gripsFor: { selection: readonly string[]; revision: number; state: unknown; editing: boolean } | null = null;
+  /** The grips Shift+click has collected for the next edit: hot here before the engine hears of them. */
+  let collected: ReadonlySet<string> = NONE_COLLECTED;
+  /** The running grip edit's mode, as the engine last named it; null with no edit. */
+  let gripMode: string | null = null;
+  /** The press that started the running grip edit, while it is down. */
+  let gripHold: GripHold | null = null;
+  /** The grip the pointer rests on (one with a menu), the pending wait for its menu, and where the menu it opened hangs (client px). */
+  let restOn: string | null = null;
+  let rest = 0;
+  let restMenu: Point | null = null;
   /** The canvas size the engine was last told. */
   let toldSize: ScreenSize = { w: 0, h: 0 };
   /** The pending animation frame, or 0. */
@@ -339,12 +413,90 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
   };
 
   /**
+   * List the selection's grips again when what they were listed for has changed: the selection,
+   * the drawing's revision, or the engine's state (every command-line reply is a new one, which
+   * is what keeps the hot flags and the edit's mode true while an edit runs). Nothing selected
+   * and no edit running asks the engine nothing.
+   */
+  const syncGrips = (): void => {
+    const selection = read(props.selection) ?? [];
+    const revision = read(props.display)?.revision ?? 0;
+    const state = props.engineState?.();
+    const editing = props.gripEditing?.() === true;
+    if (gripsFor !== null && gripsFor.selection === selection && gripsFor.revision === revision && gripsFor.state === state && gripsFor.editing === editing) return;
+    gripsFor = { selection, revision, state, editing };
+    if (selection.length === 0 && !editing) {
+      grips = NO_GRIPS;
+      collected = NONE_COLLECTED;
+      gripMode = null;
+      return;
+    }
+    grips = props.facade.grips();
+    collected = keptGrips(collected, grips.grips);
+    gripMode = editing ? (props.facade.gripEdit()?.mode ?? gripMode) : null;
+  };
+
+  /** Whether the selection shows grips now. */
+  const gripsShown = (): boolean => grips.shown && grips.grips.length > 0;
+
+  /** The grip under a client point as the engine decides it, in the view on screen; null for none. */
+  const gripUnder = (clientX: number, clientY: number): Grip | null => {
+    const world = worldAt(clientX, clientY);
+    if (world === null) return null;
+    props.onBeforeQuery?.();
+    return props.facade.gripAt(world);
+  };
+
+  /** Where a grip's menu hangs: just past the grip's corner, so the grip stays in sight (client px). */
+  const gripMenuAt = (grip: Grip): MenuPoint | null => {
+    const box = canvas?.getBoundingClientRect();
+    if (box === undefined || !measured()) return null;
+    const at = worldToScreen(view(), size, grip.point);
+    const off = grips.size / 2 + 4;
+    return { x: box.left + at.x + off, y: box.top + at.y + off, source: "pointer" };
+  };
+
+  /** Stop waiting for the rest that shows a grip's menu; the grip stays noted, so the wait does not start again on it. */
+  const stopRest = (): void => {
+    if (rest !== 0) clearTimeout(rest);
+    rest = 0;
+  };
+
+  /**
+   * Note the grip the pointer is on, for its menu: one with a menu that can be edited starts the
+   * wait, and the wait goes on while the pointer stays on that grip, wherever on it. A menu shown
+   * is not shown again until the pointer has been off the grip, and neither is one for a grip that
+   * came under a still pointer (`arm` false: the grip an edit just left where the hand is).
+   */
+  const awaitRest = (grip: Grip | null, arm = true): void => {
+    const id = grip !== null && grip.multi && !grip.locked ? grip.id : null;
+    if (id === restOn) return;
+    stopRest();
+    restOn = id;
+    if (grip === null || id === null || !arm) return;
+    rest = window.setTimeout(() => {
+      rest = 0;
+      const at = gripMenuAt(grip);
+      if (at === null || under.grip?.id !== id || pointer === null || drag !== null || gripHold !== null || rightDown !== null || wants() !== "idle") return;
+      restMenu = { x: at.x, y: at.y };
+      props.onGripMenu?.({ grip, at, rest: true });
+    }, GRIP_REST_MS);
+  };
+
+  /** What is under the pointer at rest: the same value while it has not changed, so nothing is drawn again. */
+  const atRest = (hover: string | null, grip: Grip | null): Under => {
+    const same = under.preview === EMPTY_PREVIEW && under.snap === null && under.guide === null && under.label === null && under.hover === hover && (under.grip?.id ?? null) === (grip?.id ?? null);
+    return same ? under : { ...NOTHING_UNDER, hover, grip };
+  };
+
+  /**
    * Ask the engine what is under the pointer, at most once a frame and only when something
    * changed. While a command wants a point: the engine's resolution of the pointer, in one call
    * (the point a click takes, what bent it, the rubber band there; it tells the engine where the
    * pointer is, which direct distance entry reads). While it wants objects or only typed input:
    * where the pointer is, the rubber band, and what a click would pick. At rest: what a click
-   * would pick, as the engine's selection preview decides it. At rest the
+   * would pick, as the engine's selection preview decides it; when the selection shows grips, the
+   * grip under the pointer first, and with one there no object is hovered. At rest the
    * pick is made when the pointer moves or the engine's state changes, never because the view
    * did: a wheel zoom under a still pointer picks nothing, and the hover (which was true of the
    * pick box at the old zoom) is dropped until the pointer moves again.
@@ -355,12 +507,14 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
       under = NOTHING_UNDER;
       asked = null;
       awaitDwell(false);
+      awaitRest(null);
       return;
     }
     const rect = view();
     const want = wants();
     const state = props.engineState?.();
-    const fresh = pointerMoved || asked === null || asked.state !== state || asked.wants !== want;
+    const moved = pointerMoved;
+    const fresh = moved || asked === null || asked.state !== state || asked.wants !== want;
     const viewMoved = asked !== null && !sameRect(asked.rect, rect);
     pointerMoved = false;
     asked = { rect, state, wants: want };
@@ -371,11 +525,14 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
       const at = facade.pointer(world, { now: performance.now(), shift: held.shift, ctrl: held.ctrl });
       const guide: OverlayGuide = { paths: at.paths, dot: at.constraint === "grid" ? at.point : null, acquired: at.acquired };
       const text = at.snap !== null ? at.snap.name : at.label;
-      under = { hover: null, preview: at.preview, snap: at.snap, guide: guideIsEmpty(guide) ? null : guide, label: text === "" ? null : { text, at: at.point } };
+      const mode = props.gripEditing?.() === true ? modeName(gripMode) : "";
+      under = { hover: null, preview: at.preview, snap: at.snap, guide: guideIsEmpty(guide) ? null : guide, label: text === "" && mode === "" ? null : { mode, text, at: at.point }, grip: null };
       awaitDwell(at.wait);
+      awaitRest(null);
       return;
     }
     awaitDwell(false);
+    if (want !== "idle" || inGesture()) awaitRest(null);
     if (want !== "idle") {
       if (!fresh && !viewMoved) return;
       props.onBeforeQuery?.();
@@ -390,27 +547,35 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     }
     if (fresh) {
       props.onBeforeQuery?.();
-      under = { ...NOTHING_UNDER, hover: facade.hover(world) };
+      const grip = gripsShown() ? facade.gripAt(world) : null;
+      under = atRest(grip === null ? facade.hover(world) : null, grip);
+      awaitRest(grip, moved);
       return;
     }
-    if (viewMoved) under = NOTHING_UNDER;
+    if (viewMoved) {
+      under = NOTHING_UNDER;
+      awaitRest(null);
+    }
   };
 
-  /** Put the label beside the point it names, kept inside the canvas; hidden with nothing to say. */
-  const placeSnapLabel = (label: Under["label"], rect: Rect): void => {
-    if (snapLabel === undefined) return;
+  /**
+   * Put the label beside the point it names: clear of the marker, off the rubber band and on the
+   * far side of where the band comes from, kept inside the canvas (`placeLabel`); hidden with
+   * nothing to say.
+   */
+  const placeSnapLabel = (label: Under["label"], rect: Rect, runsOn: boolean): void => {
+    if (snapLabel === undefined || labelMode === undefined || labelText === undefined) return;
     if (label === null) {
       if (!snapLabel.hidden) snapLabel.hidden = true;
       return;
     }
-    if (snapLabel.textContent !== label.text) snapLabel.textContent = label.text;
+    if (labelMode.textContent !== label.mode) labelMode.textContent = label.mode;
+    if (labelText.textContent !== label.text) labelText.textContent = label.text;
     snapLabel.hidden = false;
-    const at = worldToScreen(rect, size, label.at);
-    const w = snapLabel.offsetWidth;
-    const h = snapLabel.offsetHeight;
-    const x = at.x + SNAP_LABEL_GAP + w <= size.w ? at.x + SNAP_LABEL_GAP : at.x - SNAP_LABEL_GAP - w;
-    const y = at.y + SNAP_LABEL_GAP + h <= size.h ? at.y + SNAP_LABEL_GAP : at.y - SNAP_LABEL_GAP - h;
-    snapLabel.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+    const base = props.base?.() ?? null;
+    const toward = base === null ? null : worldToScreen(rect, size, base);
+    const to = placeLabel(worldToScreen(rect, size, label.at), { w: snapLabel.offsetWidth, h: snapLabel.offsetHeight }, size, toward, runsOn);
+    snapLabel.style.transform = `translate(${Math.round(to.x)}px, ${Math.round(to.y)}px)`;
   };
 
   /**
@@ -423,14 +588,16 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     if (overlay === undefined || !measured() || list === undefined) return;
     const rect = view();
     const scale = dpr();
-    const empty = overlayIsEmpty(under) && under.label === null;
+    const marks = gripsShown() ? { size: grips.size, list: grips.grips, hover: under.grip?.id ?? null, collected } : null;
+    const empty = overlayIsEmpty(under) && under.label === null && marks === null;
     const sized = overlay.width === pixels.w && overlay.height === pixels.h;
     if (empty && overlaid === null && sized) return;
     const was = overlaid;
-    if (was !== null && sized && was.under === under && was.list === list && was.palette === palette && was.dpr === scale && sameRect(was.rect, rect)) return;
+    const selected = under.hover !== null && (read(props.selection) ?? []).includes(under.hover);
+    if (was !== null && sized && was.under === under && was.list === list && was.palette === palette && was.dpr === scale && was.grips === grips && was.collected === collected && was.selected === selected && sameRect(was.rect, rect)) return;
     if (overlay.width !== pixels.w) overlay.width = pixels.w;
     if (overlay.height !== pixels.h) overlay.height = pixels.h;
-    placeSnapLabel(under.label, rect);
+    placeSnapLabel(under.label, rect, under.guide !== null && under.guide.paths.prims.length > 0);
     const ctx = overlay.getContext("2d");
     if (ctx === null) return;
     if (empty) {
@@ -442,8 +609,8 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
       overlaid = null;
       return;
     }
-    drawOverlay(ctx, list, rect, { width: size.w, height: size.h, dpr: scale, palette, hover: under.hover, preview: under.preview, snap: under.snap, guide: under.guide });
-    overlaid = { under, list, rect, dpr: scale, palette };
+    drawOverlay(ctx, list, rect, { width: size.w, height: size.h, dpr: scale, palette, hover: under.hover, hoverSelected: selected, preview: under.preview, snap: under.snap, guide: under.guide, grips: marks });
+    overlaid = { under, list, rect, dpr: scale, palette, grips, collected, selected };
   };
 
   /**
@@ -468,6 +635,7 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
       frame = 0;
     }
     paint();
+    syncGrips();
     ask();
     paintOverlay();
   };
@@ -491,6 +659,8 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     read(props.selection);
     read(props.wants);
     props.engineState?.();
+    props.gripEditing?.();
+    props.base?.();
     schedule();
   });
 
@@ -498,6 +668,7 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     if (frame !== 0) cancelAnimationFrame(frame);
     frame = 0;
     awaitDwell(false);
+    awaitRest(null);
     if (longPress !== 0) clearTimeout(longPress);
   });
 
@@ -574,6 +745,47 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
       const theme = new MutationObserver(onTheme);
       theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class", "style"] });
       onCleanup(() => theme.disconnect());
+    }
+    if (stage !== undefined) {
+      const host = stage;
+      // The focus ring shows only when the keyboard brought the focus here: Tab, F6, or the
+      // panel's key handing it over. A press on the drawing brings it with no ring, and a key
+      // pressed afterwards (a function key, Escape, a letter on its way to the command line)
+      // frames nothing. A focus handed back by something that had borrowed it (a menu closing on
+      // Escape) shows what showed when it was lent.
+      let arrival: "walk" | "key" | null = null;
+      let ringWas = false;
+      const setRing = (on: boolean): void => {
+        if (on) host.dataset["focusRing"] = "";
+        else delete host.dataset["focusRing"];
+      };
+      const onKeyArrival = (e: KeyboardEvent): void => {
+        if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") return;
+        const walk = e.key === "Tab" || e.key === "F6" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "j");
+        arrival = walk ? "walk" : "key";
+      };
+      const onPressArrival = (e: PointerEvent): void => {
+        arrival = null;
+        if (e.target instanceof Node && host.contains(e.target)) setRing(false);
+      };
+      const onFocus = (e: FocusEvent): void => {
+        if (e.target === host) setRing(arrival === "walk" || (arrival === "key" && ringWas));
+      };
+      const onBlur = (e: FocusEvent): void => {
+        if (e.target !== host) return;
+        ringWas = host.dataset["focusRing"] !== undefined;
+        setRing(false);
+      };
+      window.addEventListener("keydown", onKeyArrival, true);
+      window.addEventListener("pointerdown", onPressArrival, true);
+      host.addEventListener("focus", onFocus);
+      host.addEventListener("blur", onBlur);
+      onCleanup(() => {
+        window.removeEventListener("keydown", onKeyArrival, true);
+        window.removeEventListener("pointerdown", onPressArrival, true);
+        host.removeEventListener("focus", onFocus);
+        host.removeEventListener("blur", onBlur);
+      });
     }
     // Shift and Ctrl bend the point while they are held (ortho's override, ARC's direction): a key
     // that goes down or up under a still pointer asks the engine again, without a move or a click.
@@ -697,7 +909,46 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     pointer = { x: e.clientX, y: e.clientY };
     held = { shift: e.shiftKey, ctrl: e.ctrlKey };
     pointerMoved = true;
+    // The menu a rest opened goes when the pointer has left its grip for the drawing (on its way
+    // to the menu it crosses a few pixels of drawing, and is then off the canvas).
+    if (restMenu !== null && Math.hypot(e.clientX - restMenu.x, e.clientY - restMenu.y) > GRIP_MENU_LEASH) {
+      restMenu = null;
+      props.onGripMenu?.(null);
+    }
     schedule();
+  };
+
+  /**
+   * A left press at rest while the selection shows grips: true when a grip took it, so it is no
+   * pick and starts no rectangle. A plain press starts the grip's edit and holds the press, to
+   * see whether it is dragged; Shift collects the grip; a list grip opens its choices.
+   */
+  const pressGrip = (e: PointerEvent): boolean => {
+    if (!gripsShown()) return false;
+    // The engine sizes a grip's reach by the view: hand it the view on screen first.
+    flush();
+    const grip = gripUnder(e.clientX, e.clientY);
+    const press = gripPress(grip, e.shiftKey, collected);
+    if (grip === null || press.kind === "none") return false;
+    stopRest();
+    restMenu = null;
+    if (press.kind === "collect") {
+      collected = press.collected.size === 0 ? NONE_COLLECTED : press.collected;
+      schedule();
+      return true;
+    }
+    if (press.kind === "menu") {
+      const at = gripMenuAt(grip);
+      if (at !== null) props.onGripMenu?.({ grip, at, rest: false });
+      return true;
+    }
+    collected = NONE_COLLECTED;
+    if (props.onGripStart?.(press.ids) === true) {
+      gripHold = { pointerId: e.pointerId, pointerType: e.pointerType, downX: e.clientX, downY: e.clientY, dragged: false };
+      capture(e);
+    }
+    schedule();
+    return true;
   };
 
   const onPointerDown = (e: PointerEvent): void => {
@@ -722,7 +973,7 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
       return;
     }
     // One press at a time: a second button, or a pen while a finger is down, starts nothing.
-    if (drag !== null || touches.size > 0) return;
+    if (drag !== null || gripHold !== null || touches.size > 0) return;
     if (e.button !== 0 && e.button !== 1) return;
     // A left press is left to the browser, which moves the keyboard into the drawing as a click
     // does (without the keyboard's focus ring), so what is typed next goes to the command line;
@@ -739,6 +990,8 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     }
     if (e.button === 0) {
       const want = wants();
+      // A grip under the press takes it, before a pick or a rectangle.
+      if (want === "idle" && pressGrip(e)) return;
       // A command that wants a point takes it where the button goes down, as a CAD program does:
       // there is no release to wait for, and the travel that may follow is not a rectangle.
       if (want === "point") {
@@ -791,6 +1044,9 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
         return;
       }
     }
+    if (gripHold !== null && gripHold.pointerId === e.pointerId && !gripHold.dragged) {
+      gripHold.dragged = gripGesture(e.clientX - gripHold.downX, e.clientY - gripHold.downY, gripHold.pointerType) === "drag";
+    }
     if (drag !== null && drag.pointerId === e.pointerId) moveDrag(drag, e);
   };
 
@@ -819,6 +1075,16 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
         release(e);
         return;
       }
+    }
+    // The press that started a grip edit is done. Dragged, its lift is the point that commits the
+    // edit, if the edit still runs and wants one (Escape may have ended it under the hand); a
+    // press that was a click leaves the edit following the pointer, for the next click to commit.
+    const hold = gripHold;
+    if (hold !== null && hold.pointerId === e.pointerId) {
+      gripHold = null;
+      release(e);
+      if (up && e.button === 0 && hold.dragged && wants() === "point" && measured()) givePoint(e.clientX, e.clientY);
+      return;
     }
     const d = drag;
     if (d === null || d.pointerId !== e.pointerId) return;
@@ -859,6 +1125,19 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     }
     rightDown = null;
     const moved = dragKind(e.clientX - press.x, e.clientY - press.y, clickSlop(e.pointerType)) !== "click";
+    // A right click on a grip is the grip's: its own menu when it has one, and never the
+    // selection's menu, which is for the objects.
+    if (wants() === "idle" && gripsShown()) {
+      flush();
+      const grip = gripUnder(e.clientX, e.clientY);
+      if (grip !== null) {
+        const at = grip.multi ? gripMenuAt(grip) : null;
+        stopRest();
+        restMenu = null;
+        if (at !== null) props.onGripMenu?.({ grip, at, rest: false });
+        return;
+      }
+    }
     props.onMenu?.({ at: { x: e.clientX, y: e.clientY, source: "pointer" }, heldMs: e.timeStamp - press.at, moved });
   };
 
@@ -900,7 +1179,10 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
         onPointerLeave={onPointerLeave}
       />
       <canvas ref={overlay} class="canvas-overlay" aria-hidden="true" />
-      <div class="canvas-snap-label" ref={snapLabel} hidden aria-hidden="true" />
+      <div class="canvas-snap-label" ref={snapLabel} hidden aria-hidden="true">
+        <span class="canvas-snap-mode" ref={labelMode} />
+        <span ref={labelText} />
+      </div>
       <div class="canvas-marquee" ref={marquee} hidden aria-hidden="true" />
       <p id={helpId} hidden>
         {CANVAS_HELP}

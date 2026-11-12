@@ -34,6 +34,10 @@
   /* The keyboard ring on the drawing. The canvas is the same dark surface in both themes, so its
      ring is the dark accent in both: the light --focus-ring measures 2.62 against it. */
   --canvas-focus-ring: #599CE7;
+  /* A grip under the pointer and a grip being edited: fixed inks, because the canvas under them
+     is dark in both themes (the theme's own warning and error inks drop under 3:1 on it in light). */
+  --canvas-grip-hover: #f1b467;
+  --canvas-grip-hot: #e34671;
 
   /* ---- Text and icons (text, text_dim, text_faint, icon) ---- */
   --text: #F0F0F0;

@@ -31,7 +31,9 @@ export type ContextAction =
   /** Show the sidebar's Properties, unfolding the sidebar if it is folded away. */
   | { kind: "properties" }
   /** Isolate a layer: the objects on it are found (`qselect`) and handed to `layiso`. */
-  | { kind: "isolate"; layer: string };
+  | { kind: "isolate"; layer: string }
+  /** Invoke an option of a grip's menu (`gripOption`): it acts at once, or leaves a grip edit asking for a point. */
+  | { kind: "grip"; grip: string; option: string };
 
 /** A menu: its accessible name, its rows, and each row's action by the row's id. */
 export interface ContextMenuModel {
@@ -283,5 +285,23 @@ export function layoutMenu(registry: Registry, name: string): ContextMenuModel {
   menu.command("layout.delete", { label: "Delete", allowed: layout, action: { kind: "execute", id: "layout.delete", params: { name } } });
   menu.group();
   menu.command("pagesetup", { action: { kind: "invoke", id: "pagesetup", layout: name } });
+  return menu.build();
+}
+
+/** One row of a grip's menu, as the facade lists it (`gripOptions`). */
+export interface GripChoice {
+  /** What `gripOption` takes. */
+  id: string;
+  /** The row's text ("Add Vertex"). */
+  label: string;
+}
+
+/**
+ * A multifunctional grip's menu: the engine's options for that grip, in its order, each invoked
+ * on that grip. A grip the engine lists no option for has no menu.
+ */
+export function gripMenu(grip: string, options: readonly GripChoice[]): ContextMenuModel {
+  const menu = new MenuBuilder([], "Grip");
+  for (const option of options) menu.row(`grip:${option.id}`, option.label, { kind: "grip", grip, option: option.id });
   return menu.build();
 }

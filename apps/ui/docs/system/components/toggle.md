@@ -23,7 +23,7 @@ Real uses, 4 call sites (`rg -c "<Toggle" src/components` → `src/components/La
 |---|---|---|
 | `docs/system/examples/toggle/default.tsx` | default | A glyph toggle that is off: the off glyph in the quiet ink. |
 | `docs/system/examples/toggle/variant-glyph.tsx` | variant=glyph | The glyph face: an icon for each state, the state in the glyph and its ink. |
-| `docs/system/examples/toggle/variant-text.tsx` | variant=text | The text face: a word in capitals, on as the secondary ink on a chip. |
+| `docs/system/examples/toggle/variant-text.tsx` | variant=text | The text face: a word in capitals, on as the full ink on the faintest chip. |
 | `docs/system/examples/toggle/size-sm.tsx` | size=sm | The 20 by 22 cell of a list row, with the 12px glyph. |
 | `docs/system/examples/toggle/size-md.tsx` | size=md | The 24px control, with the 14px glyph. |
 | `docs/system/examples/toggle/tone-neutral.tsx` | tone=neutral | Neutral: on is the full ink over the quiet one. |
@@ -40,14 +40,14 @@ Real uses, 4 call sites (`rg -c "<Toggle" src/components` → `src/components/La
 
 ### variant
 - `glyph`: an icon that changes with the state (`icon` off, `iconOn` on), in the ink its `tone` picks; the default. Used at 3 call sites (a layer row's on, frozen and locked keys).
-- `text`: a short word in capitals; on, the secondary ink on a chip (the selected fill at the control radius, 3px shorter than the line at each end); off, the quiet ink on nothing. Used at 1 call site (the status bar's drafting settings, 11 rendered).
+- `text`: a short word in capitals; on, the full ink on a chip (the `.08` fill at the control radius, 3px shorter than the line at each end and 3px clear of the word at each side); off, the quiet ink on nothing. The ink carries the state with the chip taken away (the on word measures 14.1 on its chip and the off word 6.5 on the bar, dark; 14.1 and 5.7, light; the two inks are 2.6 and 2.9 apart, where the secondary ink on the selected fill stood 1.6 and 1.5 from the off word), and a bar that holds a run of them keeps two chips 4px apart. Used at 1 call site (the status bar's drafting settings, 11 rendered).
 
 ### size
 - `sm`: the cell of a dense surface. A glyph is 20px wide at the 22px row height with the 12px glyph; a word is 11px type as tall as the line that holds it (`--ui-toggle-line`, the row height when nothing sets it). Used at 4 call sites (all of them).
 - `md`: the 24px control beside a field or an icon button, with the 14px glyph or 12px type; the default. Used at 0 call sites: the size for a toggle outside a list row or a bar, which no surface has yet.
 
 ### tone
-- `neutral`: on is the full ink (`--text`) over the quiet one on a glyph, and the secondary ink (`--text-dim`) on its chip on a word; the default, and the only tone of a `text` face. Used at 1 call site (the status bar's settings).
+- `neutral`: on is the full ink (`--text`) over the quiet one, on a glyph and on a word (the word on its chip); the default, and the only tone of a `text` face. Used at 1 call site (the status bar's settings).
 - `absent`: on is the ordinary state and stays at the glyph ink; off is the one to notice and takes the ink. Used at 1 call site (a layer's on key).
 - `info`: on is a fact to notice. Used at 1 call site (a layer's frozen key).
 - `caution`: on blocks something. Used at 1 call site (a layer's locked key).
@@ -56,16 +56,16 @@ Real uses, 4 call sites (`rg -c "<Toggle" src/components` → `src/components/La
 | State | Trigger | What the user can do | Shown by, besides color | Checked by |
 |---|---|---|---|---|
 | Rest (off) | `pressed` is false. | Press it, or Tab to it and press Space or Enter, to ask for on. | The off glyph (`icon`), or the word with no chip under it; `aria-pressed="false"`. | test |
-| Pressed (on) | The caller passes `pressed`. | Press it to ask for off. | The on glyph (`iconOn`) with no fill, or the chip under the word and its lighter ink; `aria-pressed="true"`. | test |
-| Hover | The pointer is over the toggle, on a device with a hover pointer. | Press it. | The `.08` fill (on a word, drawn as its chip) and the pointer cursor; a quiet face steps to the full ink. An on word keeps its `.14` chip. | by hand |
-| Held | The pointer is held down. | Release to ask for the other state. | The `.14` fill; on an on word, whose chip is already `.14`, the `.20` one. | by hand |
+| Pressed (on) | The caller passes `pressed`. | Press it to ask for off. | The on glyph (`iconOn`) with no fill, or the chip under the word and its full ink; `aria-pressed="true"`. | test |
+| Hover | The pointer is over the toggle, on a device with a hover pointer. | Press it. | The `.08` fill (on a word, drawn as its chip) and the pointer cursor; a quiet glyph steps to the full ink and a quiet word to the secondary ink, a step short of an on word's. An on word's chip steps from `.08` to `.14`. | by hand |
+| Held | The pointer is held down. | Release to ask for the other state. | The `.14` fill; on an on word, whose chip is `.14` under the pointer, the `.20` one. | by hand |
 | Focused | Keyboard focus arrives by Tab, or by an arrow key in a group that roves. | Space or Enter asks for the other state. | The 1px ring in the focus ink at offset -1, on the cell's edge. | by hand |
 | Hinted | A mouse or a pen rests on the toggle for 0.4s (at once when another hint was up within the last 0.3s), or keyboard focus arrives. Never a finger. | Read what a press does, or the full name of a terse word, and the shortcut. A press, a click or Escape puts the box away. | The layer's hint box holding `hint`, the `shortcut` as a key cap and the `description` on a second line. | test |
 | Disabled | The caller passes `disabled`. | Tab to it and read its hint and why it is blocked (`description`). No press by pointer, Enter or Space, and no fill under the pointer. | The face at the disabled ink; an on word keeps a chip at the `.08` fill; the default cursor; `aria-disabled="true"`. | test |
 
 ### State precedence
-- Pressed and Hover: both show. An on glyph keeps its ink and gains the fill; an on word keeps its chip and steps to the full ink.
-- Rest and Hover: both show. The fill arrives, and the quiet ink steps to the full ink; an `absent` toggle that is off keeps its own ink, which is the state.
+- Pressed and Hover: both show. An on glyph keeps its ink and gains the fill; an on word keeps its ink and its chip steps up to the `.14` fill.
+- Rest and Hover: both show. The fill arrives, and the quiet ink steps up (a glyph to the full ink, a word to the secondary ink, so an off word under the pointer is never drawn as an on word at rest); an `absent` toggle that is off keeps its own ink, which is the state.
 - Held and Hover: Held wins. The `.14` fill replaces the `.08` one while the pointer is down (`.20` replaces `.14` on an on word).
 - Held and Pressed: both show. The on face stays while the fill is held.
 - Focused and Hover: both show. The ring stays drawn while the fill steps.
@@ -191,12 +191,13 @@ Rests on the native `<button>` element with `aria-pressed`, the drawn glyph hidd
 | The cell (`glyph`, `sm`) | all | `--control-h-chip`, `--control-h-row`, `--radius-small` |
 | The cell (`glyph`, `md`) | all | `--control-h-input`, `--radius-small` |
 | The glyph | all | `--icon-size-sm` (`sm`), `--icon-size-md` (`md`) |
-| The word (`sm`) | all | `--font-chip`, `--font-family`, `--leading-ui` (the text's line), `--gap-4`, `--control-h-row` (the box's height, when the container sets no `--ui-toggle-line`) |
+| The word (`sm`) | all | `--font-chip`, `--font-family`, `--leading-ui` (the text's line), `--gap-3` (the word's inset in its chip), `--control-h-row` (the box's height, when the container sets no `--ui-toggle-line`) |
 | The word (`md`) | all | `--font-label`, `--gap-6`, `--control-h-input` |
 | The face | off | `--text-faint` |
-| The face | on (`neutral` glyph), and under the pointer | `--text` |
-| The word | on | `--text-dim` |
-| The word's chip | on | `--fill-active`, `--radius-control`, `--gap-3` (its inset from the line's ends; `--gap-4` under a coarse pointer) |
+| The face | on (`neutral`: a glyph or a word), and a glyph under the pointer | `--text` |
+| The word | off, under the pointer or held | `--text-dim` |
+| The word's chip | on | `--hover`, `--radius-control`, `--gap-3` (its inset from the line's ends; `--gap-4` under a coarse pointer) |
+| The word's chip | on, under the pointer | `--fill-active` |
 | The word's chip | on, held | `--fill-pressed` |
 | The word's chip | on, disabled | `--hover` |
 | The glyph (`absent`) | on | `--icon` |

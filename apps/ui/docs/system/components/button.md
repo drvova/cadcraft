@@ -12,7 +12,7 @@ Not applicable: hand-rolled — the recipe is the app's own `src/ui/ui.css`, mea
 ## Examples
 `<Button variant="primary">Save</Button>` — the one action of a dialog or a pane.
 
-Real uses, 15 call sites (`rg -c "<Button" src/components` → `src/components/AssistantPane.tsx:10`, `src/components/DraftingSettings.tsx:4`, `src/components/TopBar.tsx:1`):
+Real uses, 14 call sites (`rg -c "<Button" src/components` → `src/components/AssistantPane.tsx:9`, `src/components/DraftingSettings.tsx:4`, `src/components/TopBar.tsx:1`):
 - `src/components/DraftingSettings.tsx:337` — the Drafting Settings dialog's footer: Cancel (the default) and OK (`variant="primary" type="submit"`, so Enter in a field presses it); and Select all and Clear all over the object snap boxes (`variant="ghost" size="sm"`, `src/components/DraftingSettings.tsx:302`).
 - `src/components/AssistantPane.tsx` — the assistant's call sites: the empty state's Set up a model (`variant="primary"`, shown while no model is connected), the setup sheet's Check connection and Cancel (`variant="ghost"`) and Save (`variant="primary"`), and the stack over the composer: Stop on the run row and Undo all on the changes row (`variant="ghost" size="sm"`), and Keep beside it (`size="sm"`).
 - `src/components/TopBar.tsx:42` — the title bar's command centre (`size="sm"`): the drawing's name, opening the command palette.
@@ -34,14 +34,14 @@ Real uses, 15 call sites (`rg -c "<Button" src/components` → `src/components/A
 ## Variants
 
 ### variant
-- `primary`: the one action of the pane or dialog; the accent fill. Used at 2 call sites (the setup sheet's Save, and the empty state's Set up a model, which shows only until a model is connected).
-- `secondary`: the default action; the `.08` fill that Cursor's own default button draws. Used at 2 call sites (the title bar's command centre and the changes row's Keep).
-- `ghost`: a quiet action on a tool bar or in a list; no resting fill. Used at 6 call sites (the transcript's Show earlier, the setup sheet's Change provider, Check connection and Cancel, the run row's Stop and the changes row's Undo all).
+- `primary`: the one action of the pane or dialog; the accent fill. Used at 1 call site in the assistant (the setup sheet's Save), and the dialog's OK.
+- `secondary`: the default action; the `.08` fill that Cursor's own default button draws. Used at 3 call sites (the title bar's command centre, the setup sheet's Check connection and the changes row's Keep).
+- `ghost`: a quiet action on a tool bar or in a list; no resting fill. Used at 6 call sites (the transcript's Show earlier, the setup sheet's Change and Cancel, the two Stop buttons of a running turn and the changes row's Undo all).
 - `danger`: a destructive action; the error fill. Used at 0 call sites.
 
 ### size
 - `sm`: the 24px control, for a button beside a field or inside a row. Only the box is smaller: the label is `--font-button` (13px) in both sizes. Until 2026-11-11 `sm` drew it at `--font-chip` (11px), and the setup sheet's Change provider was the smallest text in a sheet of 12px and 13px rows; 11px is the scale's step for section labels, counts and key caps, and `typography.md` gives a button one size wherever it sits (`src/ui/recipe.test.ts` holds it). Used at 6 call sites (the title bar's command centre, the transcript's Show earlier, the setup sheet's Change provider, and the stack's Stop, Undo all and Keep).
-- `md`: the 28px default, for a dialog footer or a pane header. Used at 4 call sites (the setup sheet's Check connection, Cancel and Save, and the empty state's Set up a model).
+- `md`: the 28px default, for a dialog footer or a pane header. Used at 3 call sites in the assistant (the setup sheet's Check connection, Cancel and Save), and the dialog's footer.
 
 ## States
 | State | Trigger | What the user can do | Shown by, besides color | Checked by |
@@ -99,7 +99,7 @@ Real uses, 15 call sites (`rg -c "<Button" src/components` → `src/components/A
   - Don't: `.my-button:hover { color: var(--accent) }` — a colour change instead of a fill step.
   - Do: `.ui-button--secondary:hover { background: var(--fill-active) }`
 
-- `rule/button-disabled-reason`: When a button is disabled by something the user can fix, pass the reason as `title` in 1 short sentence, because a disabled button stays focusable and hoverable for exactly this and a dead button with 0 words leaves the user guessing what to fill in. Evidence: single use `src/components/AssistantPane.tsx:744`, the setup sheet's Save with `title={blocker() ?? undefined}`. Check: test `src/ui/Button.test.tsx`.
+- `rule/button-disabled-reason`: When a button is disabled by something the user can fix, pass the reason as `title` in 1 short sentence, because a disabled button stays focusable and hoverable for exactly this and a dead button with 0 words leaves the user guessing what to fill in. Evidence: single use `src/components/AssistantPane.tsx:754`, the setup sheet's Save with `title={blocker() ?? undefined}`. Check: test `src/ui/Button.test.tsx`.
   - Don't: `<Button variant="primary" disabled={blocker() !== null}>Save</Button>`
   - Do: `<Button variant="primary" disabled={blocker() !== null} title={blocker() ?? undefined}>Save</Button>`
 - `rule/button-title-adds`: When a button takes `title`, write what the label leaves out and 0 words that repeat it, because the label is the name and the hint is announced after it as the description: "Save, button, Save" says the same thing twice, and the layer draws no box for a repeat. Evidence: single use `src/components/TopBar.tsx:45`, the command centre's "Command palette" hint over a name that already says "Search commands". Check: test `src/ui/Button.test.tsx`.
@@ -107,7 +107,7 @@ Real uses, 15 call sites (`rg -c "<Button" src/components` → `src/components/A
   - Do: `<Button title="Check the address and the key">Check connection</Button>`
 
 ### Content
-- `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Undo all` — because the label is the action's name and the accessible name comes from it. Evidence: app 5/6 labels are verbs or verb phrases, `src/components/AssistantPane.tsx:980`, the label "Undo all" (the sixth, the command centre, is labelled with the drawing's name and names its action in its `title`). Check: review `src/components/AssistantPane.tsx`.
+- `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Undo all` — because the label is the action's name and the accessible name comes from it. Evidence: app 5/6 labels are verbs or verb phrases, `src/components/AssistantPane.tsx:990`, the label "Undo all" (the sixth, the command centre, is labelled with the drawing's name and names its action in its `title`). Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Button>SAVE</Button>`
   - Do: `<Button>Save</Button>`
 - `rule/button-aria-label-value`: When a button's visible label is a value rather than its action, pass `ariaLabel` starting with the action and holding the visible text, and pass it on 0 other buttons, because a drawing's name alone is announced as "Bracket, button" with no action in it, while an `aria-label` over a verb label hides the word a speech-input user says to press it. Evidence: single use `src/components/TopBar.tsx:40`, the command centre labelled with the drawing's name. Check: test `src/ui/Button.test.tsx`.

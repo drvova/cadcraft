@@ -179,10 +179,18 @@ body {
   overflow: hidden;
 }
 
-/* The drawing with the keyboard in it (Tab, F6): the ring inside its own box, so the regions
-   around it do not move and the ring is not clipped. It is drawn on the canvas, which is dark in
-   both themes, so it takes the canvas's own ring ink and not the theme's. */
+/* The drawing with the keyboard in it: the ring inside its own box, so the regions around it do
+   not move and the ring is not clipped. It is drawn on the canvas, which is dark in both themes,
+   so it takes the canvas's own ring ink and not the theme's. It shows when the keyboard brought
+   the focus (Tab, F6: components/CanvasView.tsx marks the stage then), and not when a key is
+   pressed while the pointer is working in the drawing: the browser reads a function key or
+   Escape there as keyboard use, and :focus-visible would frame the whole drawing in the accent. */
+.canvas-stage:focus,
 .canvas-stage:focus-visible {
+  outline: none;
+}
+
+.canvas-stage[data-focus-ring]:focus {
   outline: var(--focus-outline-w) solid var(--canvas-focus-ring);
   outline-offset: var(--focus-outline-offset);
 }
@@ -321,7 +329,10 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  flex: 0 1 auto;
+  /* The layers keep their height up to the cap and the properties give way under them. When
+     both shrank, each took a share of the shortfall: a fraction of a pixel, on which every row
+     under the first heading sat (the properties' heading at y 270.2 in a window 600 tall). */
+  flex: 0 0 auto;
   max-height: 55%;
   /* A share of the rail is rarely a whole number of pixels, and everything under the pane would
      sit on the fraction: its rows' text would fall between pixels. The cap steps down to a whole
@@ -368,23 +379,42 @@ body {
 }
 
 /* Rows are flush list lines on the heading's own columns: the swatch sits under the fold
-   chevron, the name starts where the heading's label starts, and the state keys end on the
-   count's inset. The tracks are fixed (swatch, name, "has objects", three keys), so a long name
-   clips inside its own track and never moves the keys. The current layer is marked by the
-   selected fill and an accent edge. */
+   chevron, the name starts where the heading's label starts, and the "has objects" mark stands
+   under the count, in a track the size of the properties' arrows below it, so the rail has one
+   end column. The tracks are fixed (swatch, name, three keys, mark), so a long name clips inside
+   its own track and nothing moves when the keys show. The current layer is marked by the
+   selected fill and an accent edge.
+
+   The row is one thing. The name's button (the layer's `Row`) is laid over the whole row, under
+   the swatch, the keys and the mark, so its hover fill, its focus ring and its click are the
+   row's: the fill used to stop at the name's own box (x 20 to 167) while the current row's fill
+   ran the full width. Only where the button stands is set here; the name inside it is held to
+   the name's track by its margins. */
 .layer-row {
+  /* The keys' cell: three of the small glyph toggle, and under a finger the gaps between them. */
+  --layer-keys: calc(3 * var(--control-h-chip));
+  --layer-mark: var(--icon-size-sm);
+  --layer-inset-start: var(--gap-6);
+  --layer-inset-end: var(--gap-8);
   display: grid;
-  grid-template-columns: var(--icon-size-sm) minmax(0, 1fr) var(--icon-size-lg) auto;
+  grid-template-columns: var(--icon-size-sm) minmax(0, 1fr) var(--layer-keys) var(--layer-mark);
   align-items: center;
   column-gap: var(--gap-2);
   min-height: var(--control-h-row);
-  padding: 0 var(--gap-4) 0 var(--gap-6);
+  padding: 0 var(--layer-inset-end) 0 var(--layer-inset-start);
   border-radius: 0;
   background: transparent;
 }
 
+.layer-row > * {
+  grid-row: 1;
+}
+
+/* The pointer on the swatch, a key or the mark is still on the row: the row holds the fill the
+   name's button draws everywhere else, so there is one fill, the row's width, wherever the
+   pointer is. */
 @media (hover: hover) {
-  .layer-row:hover {
+  .layer-row:hover:not(:has(.ui-row:hover)) {
     background: var(--hover);
   }
 }
@@ -394,7 +424,10 @@ body {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
+/* Over the name's button, so its own hint answers the pointer. */
 .layer-swatch {
+  grid-column: 1;
+  z-index: 1;
   justify-self: center;
   width: var(--gap-10);
   height: var(--gap-10);
@@ -402,9 +435,11 @@ body {
   border-radius: var(--radius-small);
 }
 
-/* The name's hint host fills the name track and lets it clip. */
+/* The name's hint host is the row's whole band, through the row's insets. */
 .layer-row > .ui-tooltip-host {
+  grid-column: 1 / -1;
   min-width: 0;
+  margin-inline: calc(-1 * var(--layer-inset-start)) calc(-1 * var(--layer-inset-end));
 }
 
 /* The name is set on a line as tall as the row: the line box starts on a whole pixel, so the
@@ -416,6 +451,9 @@ body {
   position: relative;
   flex: 1 1 auto;
   min-width: 0;
+  /* The name's track inside the row-wide button: from the rail's text column to the keys' cell,
+     less the button's own inset on each side. */
+  margin-inline: calc(var(--rail-text) - var(--gap-4)) calc(var(--layer-keys) + var(--layer-mark) + 2 * var(--gap-2) + var(--layer-inset-end));
   display: flex;
   overflow: hidden;
   line-height: var(--control-h-row);
@@ -451,9 +489,14 @@ body {
   color: var(--text);
 }
 
-/* The status column: a small diamond, filled when the layer has objects and hollow when it does
-   not. The two inks are one step apart, too close to tell by eye, so the fill carries the state. */
+/* The status column, at the row's end: a small diamond, filled when the layer has objects and
+   hollow when it does not. The two inks are one step apart, too close to tell by eye, so the fill
+   carries the state. It keeps its place when the keys show beside it. (Dimming an empty layer's
+   name instead was looked at and not taken: the name already has two inks, the current layer's
+   and the rest, and the quiet step below them is 1.3 from the secondary ink, a difference no eye
+   reads down a list, while the disabled step says the layer cannot be picked.) */
 .layer-used {
+  grid-column: 4;
   justify-self: center;
   width: calc(var(--gap-4) + var(--gap-3));
   height: calc(var(--gap-4) + var(--gap-3));
@@ -469,6 +512,7 @@ body {
 }
 
 .layer-toggles {
+  grid-column: 3;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -479,6 +523,10 @@ body {
    height, so the three make one even column down the list. Under a finger each cell takes a 24px
    target past its own edges, and the keys stand a gap apart so two targets do not overlap. */
 @media (pointer: coarse) {
+  .layer-row {
+    --layer-keys: calc(3 * var(--control-h-chip) + 2 * var(--gap-4));
+  }
+
   .layer-toggles {
     gap: var(--gap-4);
   }
@@ -509,31 +557,37 @@ body {
 
 /* ---- The command line ---- */
 
-/* The editor's bottom panel. Everything in it reads on one text column: the scrollback, the
-   keyword chips and the typed line all start where the field's text starts, and the prompt mark
-   stands alone in the gutter to their left. */
+/* The editor's bottom panel. Everything in it reads on one text column, and the column is the
+   editor's own: the scrollback, the keyword chips' words and the typed line all start where the
+   editor tabs' text starts (`--cmd-column` from the pane's edge; it was 21px further in, on a
+   column of the panel's own). The prompt mark stands in the gutter between the field's edge and
+   that column. */
 .cmdline {
-  --cmd-gutter: calc(var(--icon-size-sm) + var(--gap-6));
-  --cmd-column: calc(var(--cmd-gutter) + var(--hairline) + var(--field-pad-x));
+  --cmd-column: var(--gap-12);
+  --cmd-inset: var(--gap-3);
+  /* From the field's inner edge to the column: the gutter the prompt mark stands in. */
+  --cmd-gutter: calc(var(--cmd-column) - var(--cmd-inset) - var(--hairline));
   display: flex;
   flex-direction: column;
   gap: var(--gap-4);
-  padding: var(--gap-6) var(--gap-8);
+  padding: var(--gap-6) var(--gap-8) var(--gap-6) var(--cmd-inset);
   background: var(--cmd-bg);
   border-top: var(--hairline) solid var(--cmd-border);
 }
 
-/* The scrollback is part of the band, not a box inside it. */
+/* The scrollback is part of the band, not a box inside it. Its line is the layer's whole-pixel
+   one: at 1.45 a line was 17.4px, and the band and the drawing over it ended on a fraction with
+   every line of history. It holds five lines before it scrolls. */
 .cmd-output {
-  max-height: 84px;
+  max-height: calc(5 * var(--leading-ui));
   overflow-y: auto;
-  padding: 0 0 0 var(--cmd-column);
+  padding: 0 0 0 calc(var(--cmd-column) - var(--cmd-inset));
   border: none;
   border-radius: 0;
   background: transparent;
   font-family: var(--font-family-mono);
   font-size: var(--font-mono);
-  line-height: 1.45;
+  line-height: var(--leading-ui);
   color: var(--text-faint);
 }
 
@@ -570,27 +624,36 @@ body {
   color: var(--text-dim);
 }
 
-/* The chips are pills: their fill starts on the field's edge, so their text reads on the column. */
+/* The chips are pills: their fill starts inside the field's hairline and their inset is the
+   gutter's width, so their words read on the column. */
 .cmdline .cmd-chips {
-  padding-left: var(--cmd-gutter);
+  padding-left: var(--hairline);
 }
 
 .cmd-entry {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--gap-6);
 }
 
 /* The prompt mark is quiet while the line waits for a command and takes the accent while one is
-   running: the accent is a signal, and "a command wants an answer" is one. */
+   running: the accent is a signal, and "a command wants an answer" is one. It stands in the
+   gutter, inside the field's leading edge and over the field's own inset, so the typed text
+   starts on the column; a press on it lands on the field under it. */
 .cmd-caret {
-  flex: 0 0 auto;
-  width: var(--icon-size-sm);
+  position: absolute;
+  inset-block: 0;
+  left: var(--hairline);
+  width: var(--cmd-gutter);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-faint);
   font-family: var(--font-family-mono);
   font-size: var(--font-mono);
   line-height: 1;
-  text-align: center;
+  pointer-events: none;
   transition: color var(--dur-fast) var(--ease-standard);
 }
 
@@ -599,12 +662,12 @@ body {
 }
 
 /* A recessed field on the panel: an edge at rest so it reads as editable, the focus edge and
-   ring when it has the keyboard (the Field's own focus recipe). */
+   ring when it has the keyboard (the Field's own focus recipe). Its leading inset is the gutter. */
 .cmd-input {
   flex: 1 1 auto;
   min-width: 0;
   height: var(--control-h-input);
-  padding: 0 var(--field-pad-x);
+  padding: 0 var(--field-pad-x) 0 var(--cmd-gutter);
   border: var(--hairline) solid var(--border);
   border-radius: var(--radius-control);
   background: var(--surface-inset);

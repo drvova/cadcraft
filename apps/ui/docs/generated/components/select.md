@@ -15,7 +15,7 @@ Not applicable: hand-rolled — a native `<select>` under a drawn face in Field'
 
 Real uses, 2 call sites (`rg -c "<Select" src/components` → `src/components/DraftingSettings.tsx:1`, `src/components/PropertiesPanel.tsx:1`):
 - `src/components/DraftingSettings.tsx:244` — the Drafting Settings dialog's increment angle (`variant="field"`, `size="md"`): the usual angles and Custom, named by a visible `<label for>` through `id`.
-- `src/components/PropertiesPanel.tsx:208` — the palette's choice rows (layer, linetype, colour): `variant="inline" size="sm" align="end"`, `mixed` with the `*VARIES*` placeholder when the picked objects disagree.
+- `src/components/PropertiesPanel.tsx:252` — the palette's choice rows (layer, linetype, colour): `variant="inline" size="sm" align="end"`, `mixed` with the `*VARIES*` placeholder when the picked objects disagree.
 
 ### Example files
 | File | Covers | Caption |
@@ -371,7 +371,7 @@ export default function Invalid() {
   - Do: `<div class="prop-row"><span>Layer</span><Select variant="inline" size="sm" align="end" value={layer} options={options} ariaLabel="Layer" /></div>`
 
 ### Content
-- `rule/select-option-label-noun`: When an option's label is written, use the value's own name as the drawing or the setting spells it (Walls, Continuous, ByLayer), with 0 leading verbs, because the closed control shows the label alone as the current value. Evidence: single use `src/components/PropertiesPanel.tsx:191`, the palette's choices: layer and linetype names. Check: review `src/components/PropertiesPanel.tsx`.
+- `rule/select-option-label-noun`: When an option's label is written, use the value's own name as the drawing or the setting spells it (Walls, Continuous, ByLayer), with 0 leading verbs, because the closed control shows the label alone as the current value. Evidence: single use `src/components/PropertiesPanel.tsx:235`, the palette's choices: layer and linetype names. Check: review `src/components/PropertiesPanel.tsx`.
   - Don't: `{ value: "walls", label: "Move to Walls" }`
   - Do: `{ value: "walls", label: "Walls" }`
 

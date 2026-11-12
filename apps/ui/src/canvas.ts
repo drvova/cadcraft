@@ -15,13 +15,42 @@ export interface Palette {
   axisY: string;
   /** The selection highlight stroke (the `--selection` token, Cursor's accent). */
   selection: string;
+  /** The grip under the pointer (`--canvas-grip-hover`): warmer than a grip at rest. */
+  gripHover: string;
+  /** A grip being edited (`--canvas-grip-hot`): the hottest of the three. */
+  gripHot: string;
 }
 
 /** Point markers are drawn this many CSS px across (the engine's marker, not world geometry). */
 export const POINT_SIZE = 4;
 
-/** The selection highlight's stroke width, in CSS px. */
-export const SELECTION_WIDTH = 1.5;
+/**
+ * How much wider than the object a selected object's halo is, in CSS px: a band of the selection
+ * ink under the object, one pixel past each edge, so the object keeps its own colour and the
+ * mark reads on a white line as on a red one.
+ */
+export const HALO_SPREAD = 2;
+
+/**
+ * How strong a selected object's halo is. Under full strength the object's own colour stays the
+ * brighter of the two, which keeps a yellow hidden line, a cyan dimension and small text
+ * readable inside their halos when a whole drawing is selected.
+ */
+export const HALO_ALPHA = 0.7;
+
+/**
+ * The hovered object's halo, in CSS px wider than the object, and its strength: one object at a
+ * time, so it can be wider and stronger than the selection's and still read on a white line in
+ * the light theme, whose selection ink is the darker.
+ */
+export const HOVER_SPREAD = 3;
+export const HOVER_ALPHA = 0.85;
+
+/** How much wider again the halo of a hovered object that is already selected is, in CSS px. */
+export const HALO_HOVER_EXTRA = 1;
+
+/** The dash of the selection ink over a selected object, and the gap that shows its own colour, in CSS px. */
+export const SELECTION_DASH: readonly [number, number] = [2, 6];
 
 /**
  * Lineweight display: the desktop canvas draws `lw` (mm) as `lw * 3.78` CSS px, clamped to
@@ -34,7 +63,7 @@ export function lineWidthPx(lwMm: number): number {
 
 /** Whether two palettes hold the same inks (a theme change that did not touch the canvas's). */
 export function samePalette(a: Palette, b: Palette): boolean {
-  return a.canvas === b.canvas && a.gridMinor === b.gridMinor && a.gridMajor === b.gridMajor && a.axisX === b.axisX && a.axisY === b.axisY && a.selection === b.selection;
+  return a.canvas === b.canvas && a.gridMinor === b.gridMinor && a.gridMajor === b.gridMajor && a.axisX === b.axisX && a.axisY === b.axisY && a.selection === b.selection && a.gripHover === b.gripHover && a.gripHot === b.gripHot;
 }
 
 /** Read the model-space colours from the CSS custom properties (tokens.css is their source). */
@@ -44,13 +73,16 @@ export function paletteFrom(element: Element): Palette {
     const v = cs.getPropertyValue(name).trim();
     return v === "" ? fallback : v;
   };
+  const selection = get("--selection", "#81a1c1");
   return {
     canvas: get("--canvas", "#181818"),
     gridMinor: get("--grid-minor", "#202020"),
     gridMajor: get("--grid-major", "#2a2a2a"),
     axisX: get("--axis-x", "#552633"),
     axisY: get("--axis-y", "#23412f"),
-    selection: get("--selection", "#81a1c1"),
+    selection,
+    gripHover: get("--canvas-grip-hover", selection),
+    gripHot: get("--canvas-grip-hot", selection),
   };
 }
 
@@ -63,8 +95,10 @@ export interface DrawOptions {
   /** Draw the unit grid behind the primitives (helps read pan/zoom before the drawing is big). */
   grid: boolean;
   /**
-   * Handles to highlight. A primitive whose `handle` is in the set is stroked again on top with
-   * the palette's selection colour at [`SELECTION_WIDTH`]; absent or empty draws nothing extra.
+   * Handles to mark as selected. A primitive whose `handle` is in the set keeps its own colour
+   * and is marked twice: a halo of the selection ink under it ([`HALO_SPREAD`] wider than it is,
+   * at [`HALO_ALPHA`])
+   * and a dash of that ink over it ([`SELECTION_DASH`]). Absent or empty draws nothing extra.
    */
   selection?: ReadonlySet<string>;
 }
@@ -162,27 +196,21 @@ export function drawDisplay(ctx: CanvasRenderingContext2D, list: DisplayList, vi
 
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+  const shown: DisplayPrim[] = [];
   for (const prim of list.prims) {
     const b = boundsOfPrim(prim, list.verts);
-    if (b === null || !rectsOverlap(b, view)) continue;
-    drawPrim(ctx, prim, list, proj.projectX, proj.projectY);
+    if (b !== null && rectsOverlap(b, view)) shown.push(prim);
   }
 
-  // The selection highlight: the selected primitives are stroked again on top, in the accent,
-  // so the pick reads without changing the drawing's own colours.
+  // The selection's mark, in two parts around the drawing itself so every object keeps its own
+  // colour: the halo first, under everything, then (once the objects are drawn) the dash.
   const selection = options.selection;
-  if (selection !== undefined && selection.size > 0) {
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = palette.selection;
-    ctx.lineWidth = SELECTION_WIDTH;
-    ctx.setLineDash([]);
-    for (const prim of list.prims) {
-      if (!isHighlighted(handleHex(prim.handle), selection)) continue;
-      const b = boundsOfPrim(prim, list.verts);
-      if (b === null || !rectsOverlap(b, view)) continue;
-      highlightPrim(ctx, prim, list.verts, { projectX: proj.projectX, projectY: proj.projectY, m: null });
-    }
-  }
+  const still: Mapping = { projectX: proj.projectX, projectY: proj.projectY, m: null };
+  const picked = selection !== undefined && selection.size > 0 ? shown.filter((prim) => isHighlighted(handleHex(prim.handle), selection)) : [];
+  for (const prim of picked) haloPrim(ctx, prim, list.verts, still, palette.selection, HALO_SPREAD, HALO_ALPHA);
+  ctx.lineCap = "round";
+  for (const prim of shown) drawPrim(ctx, prim, list, proj.projectX, proj.projectY);
+  for (const prim of picked) dashPrim(ctx, prim, list.verts, still, palette.selection);
   ctx.globalAlpha = 1;
 }
 
@@ -251,6 +279,47 @@ function highlightPrim(ctx: CanvasRenderingContext2D, prim: DisplayPrim, verts: 
   if (tracePrim(ctx, prim, verts, map)) ctx.stroke();
 }
 
+/** The width an object is stroked at, in CSS px: a polyline's lineweight, a hairline for the rest. */
+function strokeWidthOf(prim: DisplayPrim): number {
+  return prim.kind === "polyline" ? lineWidthPx(prim.lw) : 1;
+}
+
+/**
+ * The halo of an object: its own outline in `ink` at `alpha`, `spread` CSS px wider than the
+ * object is drawn, to lie under it. A filled area's is the band along its edges and a point's a larger box.
+ */
+function haloPrim(ctx: CanvasRenderingContext2D, prim: DisplayPrim, verts: readonly Point[], map: Mapping, ink: string, spread: number, alpha: number): void {
+  ctx.globalAlpha = alpha;
+  ctx.setLineDash([]);
+  if (prim.kind === "point") {
+    const s = place(verts[prim.start], map);
+    if (s === null) return;
+    const side = POINT_SIZE + spread;
+    ctx.fillStyle = ink;
+    ctx.fillRect(s.x - side / 2, s.y - side / 2, side, side);
+    return;
+  }
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = prim.kind === "tris" ? spread : strokeWidthOf(prim) + spread;
+  ctx.beginPath();
+  if (tracePrim(ctx, prim, verts, map)) ctx.stroke();
+}
+
+/**
+ * The dash of a selected object: `ink` over the object in short dashes, the gaps showing the
+ * object's own colour. With the halo under it, selected differs from hovered by more than a hue.
+ */
+function dashPrim(ctx: CanvasRenderingContext2D, prim: DisplayPrim, verts: readonly Point[], map: Mapping, ink: string): void {
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = strokeWidthOf(prim);
+  ctx.lineCap = "butt";
+  // A point's marker is smaller than one dash: it is outlined whole.
+  ctx.setLineDash(prim.kind === "point" ? [] : [...SELECTION_DASH]);
+  highlightPrim(ctx, prim, verts, map);
+  ctx.setLineDash([]);
+}
+
 /** Draw a primitive in its own colour at [`DRAG_ALPHA`] of its opacity: an object following the pointer. */
 function ghostPrim(ctx: CanvasRenderingContext2D, prim: DisplayPrim, verts: readonly Point[], map: Mapping): void {
   ctx.globalAlpha = prim.alpha * DRAG_ALPHA;
@@ -267,9 +336,6 @@ function ghostPrim(ctx: CanvasRenderingContext2D, prim: DisplayPrim, verts: read
   if (prim.kind === "tris") ctx.fill();
   else ctx.stroke();
 }
-
-/** How strong the hover ink is against the selection's: the same hue, quieter. */
-export const HOVER_ALPHA = 0.5;
 
 /** How strong the dragged objects' own colours are while they follow the pointer. */
 export const DRAG_ALPHA = 0.55;
@@ -392,12 +458,228 @@ export interface OverlayOptions {
   snap: { point: Point; mode: number } | null;
   /** The drafting aids' feedback: the ray, the grid dot, the acquired points. */
   guide?: OverlayGuide | null;
+  /** The hovered object is selected: its halo is wider, and it keeps its dash. */
+  hoverSelected?: boolean;
+  /** The selection's grips. */
+  grips?: OverlayGrips | null;
 }
 
 /** Whether an overlay with these parts draws nothing at all. */
-export function overlayIsEmpty(options: Pick<OverlayOptions, "hover" | "preview" | "snap" | "guide">): boolean {
+export function overlayIsEmpty(options: Pick<OverlayOptions, "hover" | "preview" | "snap" | "guide" | "grips">): boolean {
   const preview = options.preview;
-  return options.hover === null && options.snap === null && guideIsEmpty(options.guide) && (preview === null || (preview.prims.length === 0 && preview.drag === null));
+  const grips = options.grips;
+  return (
+    options.hover === null &&
+    options.snap === null &&
+    guideIsEmpty(options.guide) &&
+    (preview === null || (preview.prims.length === 0 && preview.drag === null)) &&
+    (grips === null || grips === undefined || grips.list.length === 0)
+  );
+}
+
+/** How warm a grip is: at rest, under the pointer, or being edited (or collected for the edit). */
+export type GripHeat = "cold" | "hover" | "hot";
+
+/** What the overlay reads of a grip (the facade's `Grip` has all of it). */
+export interface GripMark {
+  id: string;
+  /** Where it is, in world coordinates. */
+  point: Point;
+  /** An object's own grip, or a dynamic block parameter's by its shape. */
+  kind: "standard" | "linear" | "point" | "list";
+  locked: boolean;
+  /** The engine is editing it. */
+  hot: boolean;
+  /** A dynamic grip's direction (a unit vector in world coordinates); null for an object's own. */
+  dynamic: { dir: Point } | null;
+}
+
+/** The grips to draw, and which of them are warm. */
+export interface OverlayGrips {
+  /** The grip box's side, in CSS px (the engine's GRIPSIZE). */
+  size: number;
+  list: readonly GripMark[];
+  /** The id of the grip under the pointer, or null. */
+  hover: string | null;
+  /** The ids collected for the next edit (Shift+click), hot before the engine knows of them. */
+  collected: ReadonlySet<string>;
+}
+
+/** A grip's heat: hot while it is edited or collected, else warm under the pointer, else cold. */
+export function gripHeat(grip: Pick<GripMark, "id" | "hot">, hover: string | null, collected: ReadonlySet<string>): GripHeat {
+  if (grip.hot || collected.has(grip.id)) return "hot";
+  return grip.id === hover ? "hover" : "cold";
+}
+
+/**
+ * The box of a grip centred on a screen point, in CSS px: `size` across, a whole number of device
+ * pixels (never less than one), with its edges on device pixel boundaries, so a grip is as sharp
+ * and as square at a ratio of 1.25 or 1.5 as at 1 or 2. A size or a ratio that is not a positive
+ * number is read as 1.
+ */
+export function gripBox(x: number, y: number, size: number, dpr: number): { x: number; y: number; side: number } {
+  const scale = Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
+  const device = Math.max(1, Math.round((Number.isFinite(size) && size > 0 ? size : 1) * scale));
+  return { x: Math.round(x * scale - device / 2) / scale, y: Math.round(y * scale - device / 2) / scale, side: device / scale };
+}
+
+/**
+ * The outline of a dynamic block grip, in a box from -1 to 1 with y down: an arrowhead along the
+ * parameter's direction for a distance, a diamond for a position, a triangle pointing down for a
+ * list of choices. Each is a figure of our own, told from an object's square grip at a glance.
+ * `dir` is in world coordinates (y up); a direction of no length points to the right.
+ */
+export function dynamicGripShape(kind: "linear" | "point" | "list", dir: Point): readonly (readonly [number, number])[] {
+  if (kind === "point") return [[0, -1], [1, 0], [0, 1], [-1, 0]];
+  if (kind === "list") return [[-1, -0.7], [1, -0.7], [0, 1]];
+  const length = Math.hypot(dir.x, dir.y);
+  const ux = Number.isFinite(length) && length > 0 ? dir.x / length : 1;
+  const uy = Number.isFinite(length) && length > 0 ? 0 - dir.y / length : 0;
+  return [[ux, uy], [-0.6 * ux - 0.9 * uy, -0.6 * uy + 0.9 * ux], [-0.6 * ux + 0.9 * uy, -0.6 * uy - 0.9 * ux]];
+}
+
+/** How much larger a warm grip (under the pointer, or hot) is drawn than a cold one, in CSS px: it answers the pointer by more than its ink. */
+export const GRIP_WARM_GROW = 2;
+
+/** How much larger than a square grip's half a dynamic grip's figure reaches: it has less area for its span. */
+export const DYNAMIC_GRIP_REACH = 1.6;
+
+/**
+ * Draw the grips, in screen space: each a square of the engine's size on whole device pixels
+ * (a dynamic block's by its kind), filled with the ink of its heat over a hairline of the
+ * canvas's ground, so it reads where it lies on geometry. A grip on a locked layer is hollow: the
+ * ground with a rule of the ink, quieter than one that can be edited. The warm ones are drawn
+ * last, over the cold. Grips off the canvas are skipped.
+ */
+function drawGrips(ctx: CanvasRenderingContext2D, grips: OverlayGrips, map: Mapping, w: number, h: number, dpr: number, palette: Palette): void {
+  const px = 1 / dpr;
+  const cold = Number.isFinite(grips.size) && grips.size > 0 ? grips.size : 1;
+  const reach = (cold + GRIP_WARM_GROW) * DYNAMIC_GRIP_REACH;
+  const inks: Record<GripHeat, string> = { cold: palette.selection, hover: palette.gripHover, hot: palette.gripHot };
+  ctx.globalAlpha = 1;
+  ctx.setLineDash([]);
+  ctx.lineJoin = "miter";
+  ctx.lineCap = "butt";
+  for (const warm of [false, true]) {
+    for (const grip of grips.list) {
+      const heat = gripHeat(grip, grips.hover, grips.collected);
+      if ((heat !== "cold") !== warm) continue;
+      const at = place(grip.point, map);
+      if (at === null || at.x < -reach || at.y < -reach || at.x > w + reach || at.y > h + reach) continue;
+      const ink = inks[heat];
+      const size = warm ? cold + GRIP_WARM_GROW : cold;
+      if (grip.kind === "standard" || grip.dynamic === null) {
+        const box = gripBox(at.x, at.y, size, dpr);
+        ctx.fillStyle = palette.canvas;
+        ctx.fillRect(box.x - px, box.y - px, box.side + 2 * px, box.side + 2 * px);
+        ctx.fillStyle = ink;
+        ctx.fillRect(box.x, box.y, box.side, box.side);
+        if (grip.locked && box.side > 2 * px) {
+          ctx.fillStyle = palette.canvas;
+          ctx.fillRect(box.x + px, box.y + px, box.side - 2 * px, box.side - 2 * px);
+        }
+        continue;
+      }
+      const half = (size * DYNAMIC_GRIP_REACH) / 2;
+      ctx.beginPath();
+      dynamicGripShape(grip.kind, grip.dynamic.dir).forEach(([sx, sy], i) => {
+        if (i === 0) ctx.moveTo(at.x + sx * half, at.y + sy * half);
+        else ctx.lineTo(at.x + sx * half, at.y + sy * half);
+      });
+      ctx.closePath();
+      ctx.strokeStyle = palette.canvas;
+      ctx.lineWidth = 2 + (grip.locked ? 1 : 0);
+      ctx.stroke();
+      if (grip.locked) {
+        ctx.fillStyle = palette.canvas;
+        ctx.fill();
+        ctx.strokeStyle = ink;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = ink;
+        ctx.fill();
+      }
+    }
+  }
+}
+
+/** How far the label beside the point a click will take stands from it, in CSS px: clear of the marker and of what it marks. */
+export const LABEL_GAP = SNAP_MARKER_HALF + 12;
+
+/**
+ * How far a rubber band must lean along an axis (as a fraction of its length: about one degree)
+ * before the label takes the far side on that axis. Under it the band runs along the other axis
+ * (an ortho or polar ray does, to the last decimal), and the label keeps its usual side.
+ */
+export const LABEL_LEAN = 0.02;
+
+/** Whether the segment from `a` to `b` touches the box `(x, y, w, h)` (Liang and Barsky's clip). */
+function segmentHitsBox(a: Point, b: Point, x: number, y: number, w: number, h: number): boolean {
+  let t0 = 0;
+  let t1 = 1;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const edges: readonly (readonly [number, number])[] = [
+    [-dx, a.x - x],
+    [dx, x + w - a.x],
+    [-dy, a.y - y],
+    [dy, y + h - a.y],
+  ];
+  for (const [p, q] of edges) {
+    if (p === 0) {
+      if (q < 0) return false;
+      continue;
+    }
+    const t = q / p;
+    if (p < 0) t0 = Math.max(t0, t);
+    else t1 = Math.min(t1, t);
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+
+/**
+ * Where the label beside a point stands: the top left corner of its box, in the canvas's CSS px.
+ * It takes one of the four corners around the point, [`LABEL_GAP`] clear of it both ways, so it
+ * is never over the marker. `toward` is where the rubber band comes from (the last point given):
+ * the label keeps off the band, and off the ray that runs on past the point when one is drawn
+ * (`runsOn`: an ortho or polar ray, a tracking path), and of the corners
+ * left it takes the one away from where the band comes from, so the geometry being drawn and
+ * the geometry being snapped to stay in sight. The band has a side only once it leans that way
+ * by more than [`LABEL_LEAN`], so a label beside a band along an axis does not change sides with
+ * the last decimal of the point. A corner that does not fit the canvas is taken only when none
+ * does, and the box is then held inside it. With no band, and on an axis the band does not lean
+ * along, the label stands below and to the right, as a hint beside a pointer does.
+ */
+export function placeLabel(at: Point, label: { w: number; h: number }, canvas: { w: number; h: number }, toward: Point | null, runsOn = false, gap: number = LABEL_GAP): Point {
+  const vx = toward === null ? 0 : toward.x - at.x;
+  const vy = toward === null ? 0 : toward.y - at.y;
+  const length = Math.hypot(vx, vy);
+  const banded = Number.isFinite(length) && length > 0;
+  const reach = Math.hypot(label.w, label.h) + 2 * gap;
+  const far = banded ? { x: at.x - (vx / length) * reach, y: at.y - (vy / length) * reach } : at;
+  const near = banded ? { x: at.x + (vx / length) * reach, y: at.y + (vy / length) * reach } : at;
+  const wantX = banded && Math.abs(vx) > LABEL_LEAN * length && vx > 0 ? -1 : 1;
+  const wantY = banded && Math.abs(vy) > LABEL_LEAN * length && vy > 0 ? -1 : 1;
+  let best: Point = { x: at.x + gap, y: at.y + gap };
+  let least = Number.POSITIVE_INFINITY;
+  const corners: readonly (readonly [number, number])[] = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+  corners.forEach(([sx, sy], order) => {
+    const x = sx > 0 ? at.x + gap : at.x - gap - label.w;
+    const y = sy > 0 ? at.y + gap : at.y - gap - label.h;
+    const over = Math.max(0, -x) + Math.max(0, x + label.w - canvas.w) + Math.max(0, -y) + Math.max(0, y + label.h - canvas.h);
+    let cost = over * 1000 + order * 0.01 + (sx === wantX ? 0 : 10) + (sy === wantY ? 0 : 10);
+    if (banded) {
+      if (segmentHitsBox(at, near, x, y, label.w, label.h)) cost += 200;
+      if (runsOn && segmentHitsBox(at, far, x, y, label.w, label.h)) cost += 100;
+    }
+    if (cost < least) {
+      least = cost;
+      best = { x, y };
+    }
+  });
+  return { x: Math.max(0, Math.min(best.x, canvas.w - label.w)), y: Math.max(0, Math.min(best.y, canvas.h - label.h)) };
 }
 
 /** A mark of the overlay's own, at a screen point: over a hairline of the canvas's ground, in the selection ink. */
@@ -418,7 +700,8 @@ function strokeMark(ctx: CanvasRenderingContext2D, palette: Palette, width: numb
 
 /**
  * Draw what follows the pointer, on a canvas of its own over the drawing (so a pointer move
- * repaints these few strokes and never the display list): the hover outline; the dragged objects
+ * repaints these few strokes and never the display list): the hovered object's halo, with the
+ * object drawn again over it; the selection's grips ([`drawGrips`]); the dragged objects
  * of a MOVE, COPY, ROTATE, SCALE or MIRROR, which are the primitives of `list` whose handle the
  * drag names, moved by its matrix, in their own colours at [`DRAG_ALPHA`]; the rubber band's own
  * primitives in the selection ink (pasted objects, which are not in the drawing, in their own
@@ -442,16 +725,28 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, list: DisplayList, vi
   ctx.setLineDash([]);
 
   if (hover !== null && hover !== "") {
-    ctx.globalAlpha = HOVER_ALPHA;
-    ctx.strokeStyle = palette.selection;
-    ctx.lineWidth = SELECTION_WIDTH;
+    // The halo lies under the object, and this canvas lies over the drawing: the object is drawn
+    // again over its halo, in its own colour (and under its dash, when it is selected).
+    const selected = options.hoverSelected === true;
+    const under: DisplayPrim[] = [];
     for (const prim of list.prims) {
       if (handleHex(prim.handle) !== hover) continue;
       const b = boundsOfPrim(prim, list.verts);
-      if (b === null || !rectsOverlap(b, view)) continue;
-      highlightPrim(ctx, prim, list.verts, still);
+      if (b !== null && rectsOverlap(b, view)) under.push(prim);
     }
+    for (const prim of under) haloPrim(ctx, prim, list.verts, still, palette.selection, HOVER_SPREAD + (selected ? HALO_HOVER_EXTRA : 0), HOVER_ALPHA);
+    ctx.lineCap = "round";
+    for (const prim of under) drawPrim(ctx, prim, list, proj.projectX, proj.projectY);
+    if (selected) for (const prim of under) dashPrim(ctx, prim, list.verts, still, palette.selection);
+    ctx.globalAlpha = 1;
+    ctx.lineCap = "round";
   }
+
+  const grips = options.grips ?? null;
+  if (grips !== null && grips.list.length > 0) drawGrips(ctx, grips, still, w, h, scale, palette);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.setLineDash([]);
 
   if (guide !== null && guide.paths.prims.length > 0) {
     ctx.globalAlpha = GUIDE_ALPHA;

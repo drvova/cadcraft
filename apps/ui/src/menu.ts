@@ -1,8 +1,9 @@
 /**
  * The pure rules of a menu (`components/Menu.tsx`): which submenus are open, what a key on a row
  * means, which row a key moves to, how a tall menu's rows and the separators between its groups
- * are cut into columns, where an opened menu is pulled to stay inside the window, and how many
- * leading groups of a band fit before the key that opens the rest as a menu. No DOM here: the
+ * are cut into columns, where an opened menu is pulled to stay inside the window, where a submenu
+ * stands beside its menu and when a pointer is heading for it, which typed names a row draws, and
+ * how many leading groups of a band fit before the key that opens the rest as a menu. No DOM here: the
  * component reads the rectangles and owns the focus.
  */
 
@@ -184,6 +185,75 @@ export function menuBounds(windowWidth: number, floor: number, margin: number): 
 /** Whether a submenu opened on the right of its row has no room there, and opens on the left. */
 export function flips(box: Box, bounds: Box): boolean {
   return box.right > bounds.right;
+}
+
+/** Where a submenu opens beside its parent menu. */
+export interface SubmenuPlacement {
+  /** It opens on the left of the parent menu: the right has no room for it. */
+  flipped: boolean;
+  /**
+   * How far the parent menu's edge on that side is from the row's own: the submenu starts past
+   * it, so it stands outside the whole menu and not only outside its row's column.
+   */
+  reach: number;
+}
+
+/**
+ * Where the submenu of `row` opens. A submenu never covers its parent menu's other rows: a row in
+ * the first column of a menu that stands in columns would otherwise open its submenu over the
+ * second. So it opens on the right of the whole `parent` menu, `gap` from its edge, and on the
+ * left of the whole menu when a box `width` wide has no room there (`flips`). Either way its first
+ * row stays level with the row that opened it. What still overhangs the window after that is
+ * `menuShift`'s to pull back.
+ */
+export function submenuPlacement(row: Box, parent: Box, width: number, gap: number, bounds: Box): SubmenuPlacement {
+  const left = parent.right + gap;
+  const flipped = flips({ left, top: row.top, right: left + width, bottom: row.bottom }, bounds);
+  return { flipped, reach: Math.max(0, flipped ? row.left - parent.left : parent.right - row.right) };
+}
+
+/** A point in the window's coordinates. */
+export interface Point {
+  x: number;
+  y: number;
+}
+
+/**
+ * How long a pointer heading for an open submenu may rest on a row in its way before that row
+ * answers it, in milliseconds.
+ */
+export const AIM_GRACE_MS = 300;
+
+/**
+ * Whether a pointer that moved from `from` to `to` is heading for `box`, the open submenu: `to`
+ * lies inside the triangle between `from` and the two corners of the box's near edge. A submenu
+ * that opens past the other columns of its menu is reached across their rows, and a row crossed
+ * on the way there must not close it. A pointer that did not move toward the box, or is already
+ * past its near edge, is not heading for it.
+ */
+export function aimsAt(from: Point, to: Point, box: Box): boolean {
+  const near = Math.abs(box.left - from.x) <= Math.abs(box.right - from.x) ? box.left : box.right;
+  const toward = near - from.x;
+  const moved = to.x - from.x;
+  if (toward === 0 || moved === 0 || Math.sign(moved) !== Math.sign(toward) || Math.abs(moved) > Math.abs(toward)) return false;
+  // The triangle's two edges at `to.x`: the lines from `from` to the near edge's top and bottom.
+  const along = moved / toward;
+  const top = from.y + (box.top - from.y) * along;
+  const bottom = from.y + (box.bottom - from.y) * along;
+  return to.y >= Math.min(top, bottom) && to.y <= Math.max(top, bottom);
+}
+
+/** The most characters of a typed name a menu row draws. */
+export const NAME_SHOWN_MAX = 8;
+
+/**
+ * Whether a row draws the name typed at the command line that runs it. A name of up to eight
+ * characters is a hint read at a glance beside its label; a longer one ("STYLESMANAGER") is a
+ * second label, louder than the first, and is left to the row's description, which says every
+ * name.
+ */
+export function showsName(name: string): boolean {
+  return name !== "" && [...name].length <= NAME_SHOWN_MAX;
 }
 
 /**

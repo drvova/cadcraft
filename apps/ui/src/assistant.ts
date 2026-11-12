@@ -257,6 +257,29 @@ export function saveBlocker(provider: ProviderConfig, needsKey: boolean, listed:
   return `To save, shorten the model name to ${PROVIDER_LIMITS.model} characters or fewer.`;
 }
 
+/** How the setup's one status line reads: a check that is running, how the last one ended, or what Save still needs. */
+export type SetupStatusTone = "checking" | ConnectionState | "blocked";
+
+/** The setup's one status line: its words, and the state that picks their ink. */
+export interface SetupStatus {
+  tone: SetupStatusTone;
+  text: string;
+}
+
+/**
+ * The one line the setup's foot shows, whichever message matters most now: a check that is
+ * running; else what the last check found (it is about the address and the key as they are typed:
+ * the sheet forgets it when either changes); else what Save still needs (`blocker`, from
+ * [`saveBlocker`]); else nothing. The line never holds two messages, so a reason Save is off that
+ * a check's result has taken the line from is the Save key's own hint.
+ */
+export function setupStatus(checking: boolean, note: ConnectionNote | null, blocker: string | null): SetupStatus | null {
+  if (checking) return { tone: "checking", text: "Checking the connection…" };
+  if (note !== null) return { tone: note.state, text: note.text };
+  if (blocker !== null) return { tone: "blocked", text: blocker };
+  return null;
+}
+
 /** What a provider's model list held: the names kept (at most [`MAX_LISTED_MODELS`]) and how many it listed in all. */
 export interface ModelListing {
   ids: string[];
@@ -1384,9 +1407,10 @@ export function resultNote(code: string, report: string, ok: boolean, delta: Dra
   return acting.some((s) => !s.quiet) ? "Drawing unchanged" : "";
 }
 
-/** One block of a reply's prose: a heading, a list, or a paragraph. */
+/** One block of a reply's prose: a heading, a table's line of column names, a list, or a paragraph. */
 export type ProseBlock =
   | { kind: "heading"; level: number; text: string }
+  | { kind: "caption"; text: string }
   | { kind: "list"; ordered: boolean; items: string[] }
   | { kind: "para"; text: string };
 
@@ -1398,8 +1422,6 @@ const ORDERED_RE = /^\s*\d{1,9}[.)]\s+(.*)$/;
 const TABLE_RULE_RE = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
 /** How a table's cells are joined once it is read as text. */
 const CELL_JOIN = " · ";
-/** A table's header reads as a heading under the reply's own (`###` and deeper are the minor ones). */
-const TABLE_HEADING_LEVEL = 4;
 
 /** The cells of one table row: the text between its pipes (`\|` is a pipe inside a cell). */
 function tableCells(line: string): string[] {
@@ -1435,8 +1457,8 @@ function tableItem(cells: readonly string[]): string {
  * desktop pane's `parse_markdown_lite`). Lines of one paragraph keep their breaks; a line that
  * continues a list item is folded into it. A Markdown table has no room in a panel a few hundred
  * pixels wide, and left alone it would be drawn as its pipes and dashes: it is read as text
- * instead, its header as a minor heading and each row as a list item, the cells joined by a
- * middle dot. Nothing is HTML: the pane maps blocks to elements and runs `parseInline` over each
+ * instead, its header as a caption (the columns' names: a label over the rows, never a heading
+ * of the reply) and each row as a list item, the cells joined by a middle dot. Nothing is HTML: the pane maps blocks to elements and runs `parseInline` over each
  * text.
  */
 export function parseBlocks(text: string): ProseBlock[] {
@@ -1463,7 +1485,7 @@ export function parseBlocks(text: string): ProseBlock[] {
     if (line.includes("|") && rule.includes("|") && TABLE_RULE_RE.test(rule) && tableCells(line).length === tableCells(rule).length) {
       endPara();
       endList();
-      blocks.push({ kind: "heading", level: TABLE_HEADING_LEVEL, text: tableCells(line).join(CELL_JOIN) });
+      blocks.push({ kind: "caption", text: tableCells(line).join(CELL_JOIN) });
       const rows: string[] = [];
       for (at += 2; at < lines.length && (lines[at] ?? "").includes("|"); at++) rows.push(tableItem(tableCells(lines[at] ?? "")));
       at -= 1;

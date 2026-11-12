@@ -70,11 +70,29 @@
   display: none;
 }
 
+/* A grip edit's mode before the snap's name ("Stretch Endpoint"): the quieter ink there, since
+   the mode holds for the whole edit and the snap is what changes under the pointer. With nothing
+   after it the mode is all the label says and keeps the label's own ink, and with no edit it
+   takes no room. */
+.canvas-snap-mode:has(+ span:not(:empty)) {
+  color: var(--text-faint);
+}
+
+.canvas-snap-mode:empty {
+  display: none;
+}
+
+.canvas-snap-mode:not(:empty) + span:not(:empty) {
+  margin-left: var(--gap-6);
+}
+
 /* The selection rectangle, over the canvas and outside its drawing: dragging it repaints one box,
-   not the display list. A window (left to right, objects wholly inside) is a solid rule over a
-   fuller wash; a crossing (right to left, objects touched) is a dashed rule over a fainter one.
-   The rule is the selection ink, and a hairline of the canvas's own ground outside it keeps the
-   edge readable where it runs along geometry of the same hue. */
+   not the display list. A window (left to right, objects wholly inside) has a solid rule and a
+   crossing (right to left, objects touched) a dashed one: one accent, told apart by the edge.
+   Both lie over the same faint wash, light enough that the drawing under the rectangle keeps its
+   colours while the objects are being chosen. The rule is the selection ink, and a hairline of
+   the canvas's own ground outside it keeps the edge readable where it runs along geometry of the
+   same hue. */
 .canvas-marquee {
   position: absolute;
   top: 0;
@@ -86,12 +104,11 @@
   pointer-events: none;
   border: var(--hairline) solid var(--selection);
   outline: var(--hairline) solid color-mix(in srgb, var(--canvas) 70%, transparent);
-  background: color-mix(in srgb, var(--selection) 14%, transparent);
+  background: color-mix(in srgb, var(--selection) 7%, transparent);
 }
 
 .canvas-marquee[data-kind="crossing"] {
   border-style: dashed;
-  background: color-mix(in srgb, var(--selection) 7%, transparent);
 }
 
 .canvas-marquee[hidden] {

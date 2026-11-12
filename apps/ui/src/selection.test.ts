@@ -1,7 +1,9 @@
 /**
  * The canvas selection's pure rules: the aperture mirrors `run_select`, the add and remove rule
  * mirrors the engine's `idle_click` (PICKADD and Shift), and the equality is an order-insensitive set comparison. Pinned
- * here so the shell's `select` calls cannot drift from the engine's own picking.
+ * here so the shell's `select` calls cannot drift from the engine's own picking. The grips' rules
+ * are here too: what a press on a grip does, which grips Shift has collected, and whether the
+ * press that starts an edit is a drag or a click.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -18,6 +20,10 @@ import {
   pickAperture,
   sameSelection,
   applyPick,
+  gripGesture,
+  gripPress,
+  keptGrips,
+  type PressedGrip,
 } from "./selection";
 
 describe("pickAperture", () => {
@@ -165,5 +171,92 @@ describe("sameSelection", () => {
     expect(sameSelection(["a"], ["a", "b"])).toBe(false);
     expect(sameSelection(["a", "a"], ["a", "b"])).toBe(false);
     expect(sameSelection([], ["a"])).toBe(false);
+  });
+});
+
+describe("gripPress", () => {
+  const grip = (id: string, more: Partial<PressedGrip> = {}): PressedGrip => ({ id, kind: "standard", locked: false, ...more });
+  const none: ReadonlySet<string> = new Set();
+
+  test("with no grip under it a press is the canvas's own: a pick, or a rectangle", () => {
+    expect(gripPress(null, false, none)).toEqual({ kind: "none" });
+    expect(gripPress(null, true, new Set(["A:0"]))).toEqual({ kind: "none" });
+  });
+
+  test("a plain press on a grip starts its edit, alone", () => {
+    expect(gripPress(grip("A:1"), false, none)).toEqual({ kind: "start", ids: ["A:1"] });
+  });
+
+  test("Shift on a grip collects it and starts nothing; Shift on a collected grip lets it go", () => {
+    const one = gripPress(grip("A:0"), true, none);
+    expect(one).toEqual({ kind: "collect", collected: new Set(["A:0"]) });
+    const two = gripPress(grip("B:2"), true, new Set(["A:0"]));
+    expect(two).toEqual({ kind: "collect", collected: new Set(["A:0", "B:2"]) });
+    expect(gripPress(grip("A:0"), true, new Set(["A:0", "B:2"]))).toEqual({ kind: "collect", collected: new Set(["B:2"]) });
+  });
+
+  test("the next plain press on a collected grip starts with all of them, the pressed one first", () => {
+    const collected = new Set(["A:0", "B:2", "C:1"]);
+    expect(gripPress(grip("B:2"), false, collected)).toEqual({ kind: "start", ids: ["B:2", "A:0", "C:1"] });
+    expect(gripPress(grip("A:0"), false, collected)).toEqual({ kind: "start", ids: ["A:0", "B:2", "C:1"] });
+  });
+
+  test("a plain press on a grip that was not collected starts that grip alone", () => {
+    expect(gripPress(grip("D:0"), false, new Set(["A:0", "B:2"]))).toEqual({ kind: "start", ids: ["D:0"] });
+  });
+
+  test("a locked grip is never collected, and a plain press on it still asks the engine, which refuses in its own words", () => {
+    expect(gripPress(grip("L:0", { locked: true }), true, new Set(["A:0"]))).toEqual({ kind: "collect", collected: new Set(["A:0"]) });
+    expect(gripPress(grip("L:0", { locked: true }), false, none)).toEqual({ kind: "start", ids: ["L:0"] });
+  });
+
+  test("a list grip opens its choices, with Shift or without", () => {
+    expect(gripPress(grip("B:d3:at", { kind: "list" }), false, none)).toEqual({ kind: "menu", id: "B:d3:at" });
+    expect(gripPress(grip("B:d3:at", { kind: "list" }), true, none)).toEqual({ kind: "menu", id: "B:d3:at" });
+  });
+
+  test("it never changes the collection it was given", () => {
+    const collected = new Set(["A:0"]);
+    gripPress(grip("B:2"), true, collected);
+    gripPress(grip("A:0"), true, collected);
+    gripPress(grip("A:0"), false, collected);
+    expect([...collected]).toEqual(["A:0"]);
+  });
+});
+
+describe("keptGrips", () => {
+  test("keeps the collected grips the selection still shows, and is the same set when all are", () => {
+    const collected = new Set(["A:0", "B:2"]);
+    expect(keptGrips(collected, [{ id: "A:0" }, { id: "A:1" }, { id: "B:2" }])).toBe(collected);
+    expect(keptGrips(collected, [{ id: "A:0" }, { id: "A:1" }])).toEqual(new Set(["A:0"]));
+    expect(keptGrips(collected, [])).toEqual(new Set());
+    const none: ReadonlySet<string> = new Set();
+    expect(keptGrips(none, [{ id: "A:0" }])).toBe(none);
+  });
+});
+
+describe("gripGesture", () => {
+  test("inside the click slop the press was a click: the edit follows the pointer and the next click commits", () => {
+    expect(gripGesture(0, 0, "mouse")).toBe("click");
+    expect(gripGesture(CLICK_SLOP, 0, "mouse")).toBe("click");
+    expect(gripGesture(-2, 2, "mouse")).toBe("click");
+  });
+
+  test("past it the press is a drag, in every direction: the release commits", () => {
+    expect(gripGesture(CLICK_SLOP + 0.5, 0, "mouse")).toBe("drag");
+    expect(gripGesture(-(CLICK_SLOP + 1), 0, "mouse")).toBe("drag");
+    expect(gripGesture(0, -(CLICK_SLOP + 1), "mouse")).toBe("drag");
+    expect(gripGesture(3, 3, "mouse")).toBe("drag");
+  });
+
+  test("it is the slop that tells a pick from a rectangle, so a pen has more room than a mouse", () => {
+    expect(gripGesture(5, 0, "pen")).toBe("click");
+    expect(gripGesture(5, 0, "mouse")).toBe("drag");
+    expect(gripGesture(clickSlop("pen") + 1, 0, "pen")).toBe("drag");
+  });
+
+  test("travel that is not a number is a click: nothing is committed where no point is", () => {
+    expect(gripGesture(Number.NaN, 0, "mouse")).toBe("click");
+    expect(gripGesture(0, Number.POSITIVE_INFINITY, "mouse")).toBe("click");
   });
 });

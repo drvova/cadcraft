@@ -40,12 +40,38 @@ export interface PropertiesPanelProps {
   onNotice?: (message: string) => void;
 }
 
+/** A count as the status bar writes it: grouped in threes ("1,284"). */
+const count = (n: number): string => n.toLocaleString("en-US");
+
+/**
+ * Marks the ends of a list that scrolls where rows lie past them (`data-clip-top`,
+ * `data-clip-bottom`; interaction.css fades the list there, so a row cut by the list's edge reads
+ * as one that goes on, and at either end of the scroll nothing is faded). Call it from the list's
+ * `ref`. Returns the marking function, for content that changes without the list's own box changing.
+ */
+function scrollEnds(list: HTMLElement): () => void {
+  const mark = (): void => {
+    const hidden = list.scrollHeight - list.clientHeight;
+    list.toggleAttribute("data-clip-top", list.scrollTop > 1);
+    list.toggleAttribute("data-clip-bottom", list.scrollTop < hidden - 1);
+  };
+  const observer = new ResizeObserver(mark);
+  observer.observe(list);
+  list.addEventListener("scroll", mark, { passive: true });
+  onCleanup(() => {
+    observer.disconnect();
+    list.removeEventListener("scroll", mark);
+  });
+  return mark;
+}
+
 export function PropertiesPanel(props: PropertiesPanelProps): JSX.Element {
+  // One count, one name: the heading says what the status bar says ("21 selected").
   const title = (): string => {
     const reply = props.properties;
-    if (reply === null) return props.selectionCount > 0 ? `${props.selectionCount} selected` : "No selection";
+    if (reply === null) return props.selectionCount > 0 ? `${count(props.selectionCount)} selected` : "No selection";
     if (reply.kind === "defaults") return "No selection";
-    return reply.count === 1 ? "1 object" : `${reply.count} objects`;
+    return `${count(reply.count)} selected`;
   };
 
   /** What the rows describe: a row drops its unfinished edit when this changes under it. */
@@ -59,6 +85,15 @@ export function PropertiesPanel(props: PropertiesPanelProps): JSX.Element {
   /** The section folds to its heading, as the editor's sidebar sections do. */
   const [open, setOpen] = createSignal(true);
 
+  // The rows change under a list whose own box does not (another selection, a value that wraps
+  // onto a second line, the section unfolded): the list's hidden ends are marked again.
+  let markEnds: (() => void) | undefined;
+  createEffect(() => {
+    props.properties;
+    open();
+    queueMicrotask(() => markEnds?.());
+  });
+
   return (
     <aside class={open() ? "properties" : "properties is-folded"}>
       <div class="properties-head">
@@ -68,7 +103,16 @@ export function PropertiesPanel(props: PropertiesPanelProps): JSX.Element {
           {title()}
         </span>
       </div>
-      <div class="properties-body" id="properties-body" role="list" aria-label="Properties" hidden={!open()}>
+      <div
+        class="properties-body"
+        id="properties-body"
+        role="list"
+        aria-label="Properties"
+        hidden={!open()}
+        ref={(element) => {
+          markEnds = scrollEnds(element);
+        }}
+      >
         <Index each={props.properties?.rows ?? []}>
           {(row) => (
             <PropRowView row={row} subject={subject} onSet={props.onSet} onNotice={props.onNotice} />

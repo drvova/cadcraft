@@ -18,8 +18,8 @@ Real uses, 6 call sites (`rg -c "<Row" src/components` → `src/components/Assis
 - `src/components/CommandPalette.tsx:126` — each command in the palette's list; `selected` marks the one the arrow keys are on, `disabled` the ones that cannot run now.
 - `src/components/LayersPanel.tsx:53` — each layer's name band (`is-current` marks the current one); the toggle cluster beside it stays native buttons.
 - `src/components/CommandPalette.tsx` and the assistant's slash list in `src/components/AssistantPane.tsx` — their rows are `<Row option>` inside a `role="listbox"`: out of the Tab order, lit by the list's one highlight.
-- `src/components/Menu.tsx:307` — every row of every menu in the shell (the menu bar's dropdowns and their submenus, the narrow window's Main menu, the tool strip's overflow menu) is `<Row menuitem>`: `disabled` on a command that cannot run now, `popup="menu"` and `expanded` on a row that opens a submenu, `describedBy` naming the typed command, and the menu's own walk on `onKeyDown` and `onPointerEnter`. Until 2026-11-11 each was a raw `<button class="menu-row">` with its recipe in `src/chrome.css`; the recipe moved into the layer value for value. The menu bar's titles (`src/components/MenuBar.tsx`) are not rows and stay the bar's own.
-- (planned) `src/components/PropertiesPanel.tsx:185` — `.prop-row` (1 use) moves onto `<Row>` when the palette's rows become clickable; today they are display rows with an inline editor.
+- `src/components/Menu.tsx:355` — every row of every menu in the shell (the menu bar's dropdowns and their submenus, the narrow window's Main menu, the tool strip's overflow menu) is `<Row menuitem>`: `disabled` on a command that cannot run now, `popup="menu"` and `expanded` on a row that opens a submenu, `describedBy` naming the typed command, and the menu's own walk on `onKeyDown` and `onPointerEnter`. Until 2026-11-11 each was a raw `<button class="menu-row">` with its recipe in `src/chrome.css`; the recipe moved into the layer value for value. The menu bar's titles (`src/components/MenuBar.tsx`) are not rows and stay the bar's own.
+- (planned) `src/components/PropertiesPanel.tsx:229` — `.prop-row` (1 use) moves onto `<Row>` when the palette's rows become clickable; today they are display rows with an inline editor.
 - `.layer-row` (LayersPanel) stays bespoke because its row nests a toggle cluster, and a button cannot nest buttons.
 
 ### Example files
@@ -252,7 +252,7 @@ export default function Menuitem() {
   - Do: `<Row selected>Current layer</Row>`
 
 ### Content
-- `rule/row-trailing-quiet`: When a row carries a shortcut or a value, put it after the label in the dim ink (`--text-faint`), because the label is what the user scans and the trailing text is secondary. Evidence: single use `src/components/Menu.tsx:343`, the shortcut span of a menu row (`.menu-shortcut` in `src/chrome.css`). Check: review `src/components/Menu.tsx`.
+- `rule/row-trailing-quiet`: When a row carries a shortcut or a value, put it after the label in the dim ink (`--text-faint`), because the label is what the user scans and the trailing text is secondary. Evidence: single use `src/components/Menu.tsx:394`, the shortcut span of a menu row (`.menu-shortcut` in `src/chrome.css`). Check: review `src/components/Menu.tsx`.
   - Don't: a shortcut before the label.
   - Do: `<Row>Save<span class="row-shortcut">Ctrl+S</span></Row>`
 
@@ -265,7 +265,7 @@ export default function Menuitem() {
 - `rule/row-label-limit`: When a row's label runs past 40 characters at the 252px sidebar, clip it with an ellipsis on the label's own element and leave `title` for what the hint adds, because the measured row is 22px tall and the sidebar 252px wide, and the hint already reads a clipped label in full on its first line. Evidence: measured 22px row (`docs/system/decisions.md`) and the 252px sidebar (`.sidebar` in `src/styles.css`). Check: review `src/styles.css`.
   - Don't: a 60-character layer name that overflows the row.
   - Do: `<Row><span class="row-label">{name}</span></Row>` with `overflow: hidden; text-overflow: ellipsis` on the label, and no `title` that repeats it.
-- `rule/row-touch-target`: When rows stack in a list, let the list's height follow its rows rather than fixing it to a multiple of 22px, because under a coarse pointer each row grows from 22px to the 24px control height (rows stack with 0 gap, so an overhanging target would only overlap the next row), a menu row grows from 24px to the 28px button height, and a fixed list would cut its last rows. Evidence: measured 22px row, 24px under a coarse pointer, `src/ui/ui.css:1421`. Check: review `src/ui/ui.css`.
+- `rule/row-touch-target`: When rows stack in a list, let the list's height follow its rows rather than fixing it to a multiple of 22px, because under a coarse pointer each row grows from 22px to the 24px control height (rows stack with 0 gap, so an overhanging target would only overlap the next row), a menu row grows from 24px to the 28px button height, and a fixed list would cut its last rows. Evidence: measured 22px row, 24px under a coarse pointer, `src/ui/ui.css:1446`. Check: review `src/ui/ui.css`.
   - Don't: `.my-list { height: calc(var(--control-h-row) * 8); overflow: hidden }`
   - Do: `.my-list { max-height: calc(var(--control-h-input) * 8); overflow-y: auto }`
 

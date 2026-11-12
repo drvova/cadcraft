@@ -79,7 +79,7 @@ const TEXT_ON_FILL = [["text-faint", "fill-active"], ["text-dim", "fill-active"]
 const FILL_SURFACES = SURFACES.filter((s) => s !== "control-hover");
 // The drawing is the same dark surface in both themes, so no theme ink is paired with it: these
 // are the only strokes the interface draws over it (3:1).
-const CANVAS_INK = ["selection", "canvas-focus-ring"];
+const CANVAS_INK = ["selection", "canvas-focus-ring", "canvas-grip-hover", "canvas-grip-hot"];
 const FILLS = ["hover", "fill-active", "fill-pressed", "fill-disabled", "accent-soft", "border", "border-soft", "scrollbar", "scrollbar-hover", "composer-border", "composer-border-active"];
 // The hint box is its own surface in both themes, and these are the inks drawn on it: the text, the
 // second line and the key cap (4.5:1 each).
