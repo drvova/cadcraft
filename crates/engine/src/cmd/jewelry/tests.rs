@@ -780,3 +780,450 @@ fn settings_and_pave_keep_their_place_in_an_inch_drawing() {
         assert!(at.x > 0.0 && at.x < 1.0 && (at.y - 2.0).abs() < 1e-6, "a stone on the line: {at:?}");
     }
 }
+
+// ---------------------------------------------------------------- measuring a ring (J4)
+
+fn handle_of(r: &Value) -> String {
+    r["handle"].as_str().unwrap_or_else(|| r["handles"][0].as_str().unwrap()).to_string()
+}
+
+fn circle(s: &mut Session, centre: [f64; 2], radius: f64) -> String {
+    handle_of(&s.execute("circle", &json!({"center": centre, "radius": radius})).unwrap())
+}
+
+#[test]
+fn ringsizes_measures_a_drawn_circle() {
+    let mut s = mm_drawing();
+    // US 6 is 16.51 mm inside (0.8128 × 6 + 11.63 = 16.5068).
+    let c = circle(&mut s, [5.0, 5.0], 8.255);
+    let r = s.execute("ringsizes", &json!({"handle": c})).unwrap();
+    assert_eq!(r["count"], json!(1));
+    let m = &r["measured"];
+    assert_eq!(m["from"], "circle");
+    assert_eq!(m["handle"], json!(c));
+    assert_eq!(m["diameter"], json!(16.51));
+    assert_eq!(r["sizes"][0]["usText"], "6");
+    assert_eq!(r["sizes"][0]["uk"], "L");
+    assert_eq!(r["sizes"][0]["eu"], json!(52));
+    assert_eq!(m["nearest"]["size"], "6");
+    assert_eq!(m["nearest"]["system"], "us");
+    assert_eq!(m["offBy"], json!(0.003), "16.51 less 16.5068");
+    assert_eq!(m["nearestIn"]["uk"]["size"], "L");
+    assert_eq!(m["nearestIn"]["eu"]["size"], "52");
+    assert!(m.get("wall").is_none() && m.get("outOfRound").is_none(), "{m}");
+    assert!(r["message"].as_str().unwrap().contains("nearest US 6"), "{r}");
+
+    // 16.7 mm is between sizes: (16.7 − 11.63) / 0.8128 = 6.24, so 6¼ (16.71 mm), 0.01 under.
+    let between = circle(&mut s, [40.0, 0.0], 8.35);
+    let r = s.execute("ringsizes", &json!({"handles": [between]})).unwrap();
+    assert_eq!(r["measured"]["nearest"]["size"], "6¼");
+    assert_eq!(r["measured"]["offBy"], json!(-0.01));
+    assert!(r["message"].as_str().unwrap().contains("0.01 mm under"), "{r}");
+    // In the system asked for: EU sizes are whole millimetres of circumference (52.46 → 52).
+    let eu = s.execute("ringsizes", &json!({"handle": between, "system": "eu"})).unwrap();
+    assert_eq!(eu["measured"]["nearest"]["size"], "52");
+    assert_eq!(eu["measured"]["nearest"]["system"], "eu");
+    assert!((eu["measured"]["offBy"].as_f64().unwrap() - (16.7 - 52.0 / std::f64::consts::PI)).abs() < 1e-3);
+    // The table is still the table.
+    assert_eq!(s.execute("ringsizes", &json!({})).unwrap()["count"], json!(11));
+}
+
+#[test]
+fn ringsizes_measures_in_millimetres_whatever_the_drawing_units() {
+    let mut s = Session::new();
+    assert_eq!(mm_per_unit(&s), 25.4);
+    let c = circle(&mut s, [1.0, 1.0], 8.255 / 25.4);
+    let r = s.execute("ringsizes", &json!({"handle": c})).unwrap();
+    assert_eq!(r["measured"]["diameter"], json!(16.51));
+    assert_eq!(r["measured"]["nearest"]["size"], "6");
+    // And the blank RING drew reads back: the size plus its 0.02 mm sizing allowance each side.
+    let ring = s.execute("ring", &json!({"at": [3, 0], "size": 6, "wall": 1.8})).unwrap();
+    let r = s.execute("ringsizes", &json!({"handle": ring["handle"]})).unwrap();
+    let m = &r["measured"];
+    assert_eq!(m["from"], "ring");
+    assert_eq!(m["diameter"], json!(16.547));
+    assert_eq!(m["nearest"]["size"], "6");
+    assert_eq!(m["offBy"], json!(0.04));
+    assert_eq!(m["wall"], json!(1.8), "the blank's outside circle: {m}");
+}
+
+#[test]
+fn of_two_concentric_circles_the_inside_one_is_the_finger() {
+    let mut s = mm_drawing();
+    let inner = circle(&mut s, [0.0, 0.0], 8.255);
+    let outer = circle(&mut s, [0.0, 0.0], 10.055);
+    for order in [[&outer, &inner], [&inner, &outer]] {
+        let r = s.execute("ringsizes", &json!({"handles": order})).unwrap();
+        assert_eq!(r["measured"]["handle"], json!(inner));
+        assert_eq!(r["measured"]["diameter"], json!(16.51));
+        assert_eq!(r["measured"]["wall"], json!(1.8));
+    }
+    // Two arcs that make the hole measure as it does.
+    let a = handle_of(&s.execute("arc", &json!({"center": [50, 0], "radius": 8.255, "start": 0, "end": 180})).unwrap());
+    let b = handle_of(&s.execute("arc", &json!({"center": [50, 0], "radius": 8.255, "start": 180, "end": 360})).unwrap());
+    let r = s.execute("ringsizes", &json!({"handles": [a, b]})).unwrap();
+    assert_eq!(r["measured"]["from"], "arc");
+    assert_eq!(r["measured"]["diameter"], json!(16.51));
+    assert!(r["measured"].get("wall").is_none());
+    // Circles that are not one ring are not chosen between.
+    let elsewhere = circle(&mut s, [30.0, 0.0], 9.0);
+    let e = s.execute("ringsizes", &json!({"handles": [inner, elsewhere]})).unwrap_err();
+    assert!(e.to_string().contains("do not share a centre"), "{e}");
+}
+
+#[test]
+fn a_hole_that_is_not_a_circle_is_sized_by_its_perimeter() {
+    let mut s = mm_drawing();
+    // A 64-sided hole on the 16.51 mm circle: its perimeter is 64 · 2 · 8.255 · sin(π/64) =
+    // 51.847 mm, so 16.503 mm.
+    let pts: Vec<Vec2> = (0..64).map(|i| Vec2::polar(Vec2::new(3.0, 4.0), 8.255, std::f64::consts::TAU * f64::from(i) / 64.0)).collect();
+    let poly = polyline(&mut s, &pts);
+    let r = s.execute("ringsizes", &json!({"handle": poly})).unwrap();
+    let m = &r["measured"];
+    assert_eq!(m["from"], "polyline");
+    assert!((m["diameter"].as_f64().unwrap() - 16.503).abs() < 0.002, "{m}");
+    assert_eq!(m["nearest"]["size"], "6");
+    assert!(m.get("outOfRound").is_none_or(|v| v.as_f64().unwrap() < 0.05), "{m}");
+    // A 17 × 16 mm ellipse: perimeter 51.85 mm (Ramanujan), so 16.504 mm, and 1 mm out of round.
+    let e = handle_of(&s.execute("ellipse", &json!({"center": [40, 0], "major": [8.5, 0], "ratio": 8.0 / 8.5})).unwrap());
+    let r = s.execute("ringsizes", &json!({"handle": e})).unwrap();
+    let m = &r["measured"];
+    assert_eq!(m["from"], "ellipse");
+    assert!((m["diameter"].as_f64().unwrap() - 16.504).abs() < 0.002, "{m}");
+    assert!((m["outOfRound"].as_f64().unwrap() - 1.0).abs() < 0.01, "{m}");
+    assert!(r["message"].as_str().unwrap().contains("out of round"), "{r}");
+}
+
+#[test]
+fn ringsizes_refuses_what_it_cannot_measure() {
+    let mut s = mm_drawing();
+    let fine = circle(&mut s, [0.0, 0.0], 8.255);
+    // Outside the trade's range: refused as RING refuses it, never clamped to the nearest size.
+    for radius in [3.0, 5.79, 12.51, 40.0, 1e-6, 1e12] {
+        let c = circle(&mut s, [0.0, 0.0], radius);
+        let e = s.execute("ringsizes", &json!({"handle": c})).unwrap_err();
+        assert!(e.to_string().contains("outside the ring sizes"), "{radius}: {e}");
+    }
+    // Not an object, not a handle, not a hole.
+    let line = handle_of(&s.execute("line", &json!({"points": [[0, 0], [16, 0]]})).unwrap());
+    let open = s.execute("pline", &json!({"vertices": [[0, 0], [16, 0], [16, 16]]})).unwrap();
+    let half = handle_of(&s.execute("ellipse", &json!({"center": [0, 0], "major": [8.5, 0], "ratio": 0.9, "start": 0, "end": 180})).unwrap());
+    let stone = s.execute("gem", &json!({"at": [0, 0], "diameter": 16.5})).unwrap();
+    let flat = s.execute("pline", &json!({"vertices": [[0, 0], [16, 0], [32, 0]], "closed": true})).unwrap();
+    for bad in [
+        json!({"handle": "FFFFFF"}),
+        json!({"handle": "zz"}),
+        json!({"handle": 1e308}),
+        json!({"handle": -1}),
+        json!({"handle": {}}),
+        json!({"handles": "1A"}),
+        json!({"handles": []}),
+        json!({"handles": [fine, "zz"]}),
+        json!({"handles": vec![fine.clone(); 17]}),
+        json!({"handle": line}),
+        json!({"handle": open["handle"]}),
+        json!({"handle": half}),
+        json!({"handle": stone["handle"]}),
+        json!({"handle": flat["handle"]}),
+        json!({"handle": fine, "size": 6}),
+    ] {
+        assert!(s.execute("ringsizes", &bad).is_err(), "{bad}");
+    }
+    // A RING insert scaled unevenly has no round hole, and one whose block is empty has none.
+    let ring = s.execute("ring", &json!({"at": [0, 0], "size": 6})).unwrap();
+    let h = Handle::parse_hex(ring["handle"].as_str().unwrap()).unwrap();
+    s.doc_mut()
+        .unwrap()
+        .modify_entity(h, |e| {
+            if let EntityKind::Insert(i) = &mut e.kind {
+                i.scale.x *= 2.0;
+            }
+        })
+        .unwrap();
+    assert!(s.execute("ringsizes", &json!({"handle": ring["handle"]})).is_err());
+    // The same handle sixteen times over is still one ring.
+    assert!(s.execute("ringsizes", &json!({"handles": vec![fine.clone(); 16]})).is_ok());
+}
+
+// ---------------------------------------------------------------- elongated melee (J1)
+
+/// The corners of a `length` × `width` stone inserted at `h`, in drawing units.
+fn box_corners(s: &Session, h: &Value, length: f64, width: f64) -> Vec<Vec2> {
+    let h = Handle::parse_hex(h.as_str().unwrap()).unwrap();
+    let EntityKind::Insert(ins) = &s.doc().unwrap().entity(h).unwrap().kind else { panic!("not an insert") };
+    [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)]
+        .iter()
+        .map(|(x, y)| ins.insert.xy() + Vec2::new(x * width / 2.0, y * length / 2.0).rotate(ins.rotation))
+        .collect()
+}
+
+#[test]
+fn a_marquise_is_laid_by_its_length_and_not_as_a_round() {
+    let mut s = mm_drawing();
+    let band = polyline(&mut s, &[Vec2::new(0.0, 0.0), Vec2::new(10.0, 0.0), Vec2::new(10.0, 2.0), Vec2::new(0.0, 2.0)]);
+    let stone = json!({"handles": [band], "pattern": "grid", "cut": "marquise", "length": 3.0, "stoneWidth": 1.5, "clearance": 0.15});
+    // The band is wider than tall, so the length runs along it: a quarter turn. The pitch along
+    // the row is the 3 mm length plus the clearance, and (10 − 2·1.65) / 3.15 leaves three.
+    // Taken as a round of its width, as it used to be, five would have been placed on a 1.65
+    // pitch, each overlapping the next by half its length.
+    let r = s.execute("pave", &stone).unwrap();
+    assert_eq!(r["placed"], json!(3), "{r}");
+    assert_eq!(r["rotate"], json!(90.0));
+    assert_eq!(r["pattern"], "grid");
+    assert_eq!(r["pitch"], json!({"along": 3.15, "across": 1.65}));
+    assert_eq!(r["stone"]["length"], json!(3.0));
+    let note = r["notes"].as_array().unwrap().iter().filter_map(Value::as_str).find(|n| n.contains("marquise")).unwrap_or_else(|| panic!("{r}"));
+    assert!(note.contains("90°") && note.contains("long axis") && note.contains("3.15"), "{note}");
+    assert!(!r["notes"].to_string().contains("would have fitted"), "a round melee's size says nothing of a marquise: {r}");
+    let mut xs = Vec::new();
+    for h in r["handles"].as_array().unwrap() {
+        let id = Handle::parse_hex(h.as_str().unwrap()).unwrap();
+        let EntityKind::Insert(ins) = &s.doc().unwrap().entity(id).unwrap().kind else { panic!("not an insert") };
+        assert_eq!(ins.block, "GEM-MARQUISE-3x1.5");
+        assert!((ins.rotation - std::f64::consts::FRAC_PI_2).abs() < 1e-12);
+        xs.push(ins.insert.xy().x);
+        for c in box_corners(&s, h, 3.0, 1.5) {
+            assert!(c.x > 0.15 - 1e-9 && c.x < 9.85 + 1e-9 && c.y > 0.15 - 1e-9 && c.y < 1.85 + 1e-9, "the stone's box is in the band: {c:?}");
+        }
+    }
+    assert!((xs[1] - xs[0] - 3.15).abs() < 1e-9 && (xs[1] - 5.0).abs() < 1e-9, "centred, on the pitch: {xs:?}");
+
+    // Asked to stand across the band, a 3 mm stone does not fit a 2 mm band: none is kept.
+    let mut across = stone.clone();
+    across["rotate"] = json!(0);
+    let r = s.execute("pave", &across).unwrap();
+    assert_eq!(r["placed"], json!(0), "{r}");
+    assert_eq!(r["rotate"], json!(0.0));
+    assert!(r["skipped"]["edge"].as_u64().unwrap() > 0, "{r}");
+    assert!(r["notes"].to_string().contains("as asked"), "{r}");
+    // In a band 3.3 mm tall it does, and now the 1.5 mm width sets the pitch along the row.
+    let tall = polyline(&mut s, &[Vec2::new(0.0, 10.0), Vec2::new(10.0, 10.0), Vec2::new(10.0, 13.3), Vec2::new(0.0, 13.3)]);
+    across["handles"] = json!([tall]);
+    let r = s.execute("pave", &across).unwrap();
+    assert_eq!(r["placed"], json!(5), "(10 − 2·0.9) / 1.65 leaves five: {r}");
+    assert_eq!(r["pitch"], json!({"along": 1.65, "across": 3.15}));
+}
+
+#[test]
+fn no_elongated_stone_is_kept_with_its_body_over_the_edge() {
+    let mut s = mm_drawing();
+    let disc = circle(&mut s, [0.0, 0.0], 5.0);
+    for (cut, length, width) in [("baguette", 3.0, 1.0), ("marquise", 3.0, 1.5), ("emerald", 2.8, 2.0), ("princess", 1.5, 1.5)] {
+        for rotate in [0.0, 30.0, 45.0, 90.0, 137.0] {
+            for pattern in ["grid", "brick"] {
+                let r = s
+                    .execute(
+                        "pave",
+                        &json!({"handles": [disc], "pattern": pattern, "cut": cut, "length": length, "stoneWidth": width, "rotate": rotate, "clearance": 0.15}),
+                    )
+                    .unwrap();
+                let handles = r["handles"].as_array().unwrap();
+                assert!(!handles.is_empty(), "{cut} at {rotate}° ({pattern}) fits a 10 mm disc: {r}");
+                let mut boxes: Vec<Vec<Vec2>> = Vec::new();
+                for h in handles {
+                    let corners = box_corners(&s, h, length, width);
+                    if cut == "baguette" || cut == "princess" {
+                        // A baguette's body is its box: every corner is inside the disc, the
+                        // clearance from its edge.
+                        for c in &corners {
+                            assert!(c.len() <= 5.0 - 0.15 + 1e-6, "{cut} at {rotate}°: a corner at {c:?} ({} mm out)", c.len());
+                        }
+                    }
+                    boxes.push(corners);
+                }
+                // Neighbours never overlap: no box's centre is inside another's box.
+                for (i, a) in boxes.iter().enumerate() {
+                    let centre = a.iter().fold(Vec2::ZERO, |acc, c| acc + *c) * 0.25;
+                    assert!(centre.len() < 5.0);
+                    for (j, b) in boxes.iter().enumerate() {
+                        assert!(i == j || !cadcraft_geom::point_in_polygon(b, centre), "{cut} at {rotate}°: two stones overlap");
+                    }
+                }
+                s.execute("erase", &json!({"handles": handles})).unwrap();
+            }
+        }
+    }
+}
+
+#[test]
+fn the_footprint_is_the_cut_s_own_outline() {
+    use super::pave::{Footprint, oriented_fill_for_test};
+    let square = |half: f64| {
+        let pts = vec![Vec2::new(-half, -half), Vec2::new(half, -half), Vec2::new(half, half), Vec2::new(-half, half)];
+        Region { bounds: cadcraft_geom::Bounds2::from_points(pts.iter().copied()), loops: vec![pts] }
+    };
+    let marquise = gem::cut_of("marquise").unwrap();
+    let baguette = gem::cut_of("baguette").unwrap();
+    // A stone that fits its region exactly, with no clearance, is kept; a hair larger is not.
+    let exact = square(1.5);
+    assert_eq!(oriented_fill_for_test(&exact, &Footprint::of(baguette, 3.0, 3.0, 0.0), 0.0, 0.0, false).stones.len(), 1);
+    assert_eq!(
+        oriented_fill_for_test(&exact, &Footprint::of(baguette, 3.0, 1.0, 0.0), 0.0, 0.0, false).stones.len(),
+        3,
+        "three 1 mm baguettes side by side"
+    );
+    assert_eq!(oriented_fill_for_test(&exact, &Footprint::of(baguette, 3.01, 1.0, 0.0), 0.0, 0.0, false).stones.len(), 0);
+    assert_eq!(oriented_fill_for_test(&exact, &Footprint::of(marquise, 3.0, 1.5, 0.0), 0.0, 0.0, false).stones.len(), 2, "the arcs touch the edge");
+    assert_eq!(oriented_fill_for_test(&exact, &Footprint::of(marquise, 3.01, 1.5, 0.0), 0.0, 0.0, false).stones.len(), 0);
+    // Turned 45°, a 3 × 1 baguette's corners reach 2·(1.5 + 0.5)·sin 45° = 2.83 mm across: it
+    // fits a 2.9 mm square and not a 2.8 mm one, though its centre is 1.4 mm from every edge
+    // and its width is only 1 mm.
+    let turned = Footprint::of(baguette, 3.0, 1.0, std::f64::consts::FRAC_PI_4);
+    assert_eq!(oriented_fill_for_test(&square(1.45), &turned, 0.0, 0.0, false).stones.len(), 1);
+    assert_eq!(oriented_fill_for_test(&square(1.40), &turned, 0.0, 0.0, false).stones.len(), 0);
+    // A marquise's tips are narrower than its box: on the diagonal of a square it reaches into
+    // the corners where a baguette of the same size cannot.
+    let fill = |cut| oriented_fill_for_test(&square(1.3), &Footprint::of(cut, 3.0, 1.5, std::f64::consts::FRAC_PI_4), 0.0, 0.0, false).stones.len();
+    assert_eq!((fill(marquise), fill(baguette)), (1, 0));
+    // A small hole under a stone's tip is an edge the stone crosses, though no edge of the hole
+    // crosses the stone's own outline and the stone's centre is 2 mm clear of it.
+    let mut holed = square(4.0);
+    assert_eq!(oriented_fill_for_test(&holed, &Footprint::of(marquise, 6.0, 3.0, 0.0), 0.0, 0.0, false).stones.len(), 2);
+    holed.loops.push(vec![Vec2::new(-1.55, 2.0), Vec2::new(-1.45, 2.0), Vec2::new(-1.45, 2.2), Vec2::new(-1.55, 2.2)]);
+    let over = oriented_fill_for_test(&holed, &Footprint::of(marquise, 6.0, 3.0, 0.0), 0.0, 0.0, false);
+    assert_eq!((over.stones.len(), over.dropped_edge), (1, 1), "the stone over the hole is dropped, its neighbour kept");
+}
+
+#[test]
+fn a_fill_respects_the_edge_that_closes_the_outline() {
+    // A triangle whose last edge (back to the first point) is the slanted one. The fill used to
+    // measure only the edges between listed points, so stones hung over the closing edge.
+    let pts = vec![Vec2::new(0.0, 10.0), Vec2::new(0.0, 0.0), Vec2::new(10.0, 0.0)];
+    let region = Region { bounds: cadcraft_geom::Bounds2::from_points(pts.iter().copied()), loops: vec![pts] };
+    let fill = fill_for_test(&region, 1.0, 0.15, 0.0, true);
+    assert!(fill.stones.len() > 10, "{}", fill.stones.len());
+    for (p, _) in &fill.stones {
+        let to_slant = (10.0 - p.x - p.y) / std::f64::consts::SQRT_2;
+        assert!(to_slant >= 0.65 - 1e-9, "a stone at {p:?} is {to_slant} mm from the slanted edge");
+    }
+    assert!(fill.dropped_edge > 0);
+    assert!((max_inscribed(&region) - 10.0 / (2.0 + std::f64::consts::SQRT_2)).abs() < 0.15, "the triangle's inscribed circle");
+}
+
+#[test]
+fn round_melee_is_laid_as_before_whatever_rotate_says() {
+    let mut s = mm_drawing();
+    let region = polyline(&mut s, &[Vec2::new(0.0, 0.0), Vec2::new(10.0, 0.0), Vec2::new(10.0, 6.0), Vec2::new(0.0, 6.0)]);
+    let plain = s.execute("pave", &json!({"handles": [region], "stoneWidth": 1.3, "clearance": 0.15})).unwrap();
+    assert_eq!(plain["rotate"], json!(0.0));
+    assert_eq!(plain["pitch"], json!({"along": 1.45, "across": 1.256}), "brick rows of rounds nest at 0.866 of the pitch");
+    assert!(!plain["notes"].to_string().contains("outline"), "nothing to say of a round's orientation: {plain}");
+    let turned = s.execute("pave", &json!({"handles": [region], "stoneWidth": 1.3, "clearance": 0.15, "rotate": 37})).unwrap();
+    assert_eq!(turned["placed"], plain["placed"]);
+    assert_eq!(turned["skipped"], plain["skipped"]);
+    for (a, b) in plain["handles"].as_array().unwrap().iter().zip(turned["handles"].as_array().unwrap()) {
+        assert!(insert_at(&s, a).near(insert_at(&s, b), 1e-12));
+    }
+    // An oval as long as wide is a circle too.
+    let oval = s.execute("pave", &json!({"handles": [region], "cut": "oval", "stoneWidth": 1.3, "clearance": 0.15})).unwrap();
+    assert_eq!(oval["placed"], plain["placed"]);
+    // Along a path the stones follow the path; `rotate` is said to be ignored.
+    let path = handle_of(&s.execute("pline", &json!({"vertices": [[0, 20], [10, 20]]})).unwrap());
+    let row = s.execute("pave", &json!({"along": [path], "cut": "baguette", "length": 2.0, "stoneWidth": 1.0, "rotate": 45})).unwrap();
+    assert_eq!(row["placed"], json!(8), "10 mm at a 1.15 pitch: {row}");
+    assert_eq!(row["rotate"], Value::Null);
+    assert!(row["notes"].to_string().contains("along a path"), "{row}");
+}
+
+#[test]
+fn gemfit_counts_an_elongated_cut_by_its_oriented_fit() {
+    let mut s = mm_drawing();
+    let band = polyline(&mut s, &[Vec2::new(0.0, 0.0), Vec2::new(20.0, 0.0), Vec2::new(20.0, 2.5), Vec2::new(0.0, 2.5)]);
+    // A marquise is twice as long as wide unless told otherwise, and lies along the band: its
+    // 2.2 mm width is what the 2.5 mm band limits, and (20 − 2·2.35) / 4.55 leaves four.
+    let r = s.execute("gemfit", &json!({"handles": [band], "cut": "marquise", "clearance": 0.15})).unwrap();
+    assert_eq!(r["cut"], "marquise");
+    assert_eq!(r["ratio"], json!(2.0));
+    assert_eq!(r["rotate"], json!(90.0));
+    assert_eq!(r["largestFitting"], json!(2.2), "{r}");
+    assert_eq!(r["fits"][0], json!({"mm": 2.2, "length": 4.4, "count": 4, "carat": r["fits"][0]["carat"]}));
+    assert!(r["fits"][0]["carat"].as_f64().unwrap() > 0.0);
+    assert!(r["notes"][0].as_str().unwrap().contains("long axis"), "{r}");
+    assert!(r["message"].as_str().unwrap().contains("4.4×2.2"), "{r}");
+    // Stood across the band, the length is what the band limits: 2 × 1.1 + 0.3 = 2.5.
+    let across = s.execute("gemfit", &json!({"handles": [band], "cut": "marquise", "rotate": 0})).unwrap();
+    assert_eq!(across["largestFitting"], json!(1.1), "{across}");
+    assert_eq!(across["fits"].as_array().unwrap().len(), 4, "0.8 to 1.1 mm");
+    // A longer stone: 3:1 along the band.
+    let long = s.execute("gemfit", &json!({"handles": [band], "cut": "baguette", "ratio": 3, "limit": 2})).unwrap();
+    assert_eq!(long["fits"].as_array().unwrap().len(), 2, "`limit` keeps the largest sizes");
+    assert_eq!(long["fits"][0]["length"], json!(6.6));
+    assert_eq!(long["fits"][0]["count"], json!(2), "(20 − 2·3.45) / 6.75 leaves two");
+    // What GEMFIT counts, PAVE places.
+    let placed = s.execute("pave", &json!({"handles": [band], "cut": "marquise", "length": 4.4, "stoneWidth": 2.2})).unwrap();
+    assert_eq!(placed["placed"], json!(4), "{placed}");
+    // And a round is counted as it always was.
+    let round = s.execute("gemfit", &json!({"handles": [band], "ratio": 2, "rotate": 30})).unwrap();
+    assert_eq!(round["largestFitting"], json!(2.2));
+    assert_eq!(round["fits"].as_array().unwrap().len(), 15);
+    assert!(round["fits"][0].get("length").is_none() && round["rotate"].is_null(), "{round}");
+}
+
+#[test]
+fn oriented_pave_refuses_hostile_input() {
+    let mut s = mm_drawing();
+    let band = polyline(&mut s, &[Vec2::new(0.0, 0.0), Vec2::new(10.0, 0.0), Vec2::new(10.0, 2.0), Vec2::new(0.0, 2.0)]);
+    let base = json!({"handles": [band], "cut": "marquise", "length": 3.0, "stoneWidth": 1.5});
+    let with = |key: &str, v: Value| {
+        let mut p = base.clone();
+        p[key] = v;
+        p
+    };
+    for bad in [
+        with("rotate", json!("sideways")),
+        with("rotate", json!([90])),
+        with("rotate", json!(true)),
+        with("length", json!(0)),
+        with("length", json!(-3)),
+        with("length", json!("long")),
+        with("length", json!(1.0)), // shorter than the width
+        with("stoneWidth", json!(0)),
+        with("clearance", json!(-1)),
+        with("edge", json!("wide")),
+    ] {
+        assert!(s.execute("pave", &bad).is_err(), "{bad}");
+    }
+    // Numbers JSON can carry that mean nothing as a size: refused or answered, never a panic.
+    for rotate in [1e308, -1e308, 1e-320, 360.0 * 1e15, -0.0] {
+        let r = s.execute("pave", &with("rotate", json!(rotate))).unwrap();
+        assert!(r["rotate"].as_f64().is_some_and(|d| (0.0..360.0).contains(&d)), "{rotate}: {r}");
+        assert!(r["placed"].as_u64().unwrap() <= 3, "{rotate}: {r}");
+    }
+    // A stone far too small or far too large for the region places nothing and says why.
+    let dust =
+        s.execute("pave", &json!({"handles": [band], "cut": "baguette", "length": 2e-3, "stoneWidth": 1e-3, "depth": 1e-3, "clearance": 0})).unwrap();
+    assert_eq!(dust["placed"], json!(0));
+    assert!(dust["notes"].to_string().contains("stopped early"), "{dust}");
+    let round_dust = s.execute("pave", &json!({"handles": [band], "stoneWidth": 1e-300, "depth": 1e-300, "clearance": 0})).unwrap();
+    assert_eq!(round_dust["placed"], json!(0));
+    assert!(round_dust["notes"].to_string().contains("stopped early"), "{round_dust}");
+    // A stone too small to have a depth is refused like any other stone with none.
+    assert!(s.execute("pave", &json!({"handles": [band], "cut": "baguette", "length": 2e-9, "stoneWidth": 1e-9})).is_err());
+    let boulder = s.execute("pave", &json!({"handles": [band], "cut": "marquise", "length": 1e300, "stoneWidth": 1e150})).unwrap();
+    assert_eq!(boulder["placed"], json!(0));
+    // A region with no inside, and one too vast to count sites in.
+    let flat = s.execute("pline", &json!({"vertices": [[0, 0], [10, 0], [20, 0]], "closed": true})).unwrap();
+    let r = s.execute("pave", &with("handles", json!([flat["handle"]]))).unwrap();
+    assert_eq!(r["placed"], json!(0), "{r}");
+    let vast = polyline(&mut s, &[Vec2::new(-1e200, -1e200), Vec2::new(1e200, -1e200), Vec2::new(1e200, 1e200), Vec2::new(-1e200, 1e200)]);
+    let r = s.execute("pave", &with("handles", json!([vast]))).unwrap();
+    assert_eq!(r["placed"], json!(0), "{r}");
+    assert!(r["notes"].to_string().contains("stopped early"), "{r}");
+    // GEMFIT's new parameters.
+    for bad in [
+        json!({"handles": [band], "cut": "marquise", "ratio": 0}),
+        json!({"handles": [band], "cut": "marquise", "ratio": 0.5}),
+        json!({"handles": [band], "cut": "marquise", "ratio": 1e308}),
+        json!({"handles": [band], "cut": "marquise", "ratio": "2:1"}),
+        json!({"handles": [band], "cut": "marquise", "rotate": "flat"}),
+        json!({"handles": [band], "cut": "marquise", "limit": 0}),
+        json!({"handles": [band], "cut": "marquise", "limit": -3}),
+        json!({"handles": [band], "cut": "marquise", "limit": 2.5}),
+        json!({"handles": [band], "cut": "blob"}),
+    ] {
+        assert!(s.execute("gemfit", &bad).is_err(), "{bad}");
+    }
+    assert!(s.execute("gemfit", &json!({"handles": [band], "cut": "marquise", "ratio": 20, "rotate": 1e308, "limit": u64::MAX})).is_ok());
+    let r = s.execute("gemfit", &json!({"handles": [vast], "cut": "marquise"})).unwrap();
+    assert!(r["notes"].to_string().contains("stopped early"), "{r}");
+}

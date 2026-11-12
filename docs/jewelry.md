@@ -47,6 +47,20 @@ the inside, and reports the weight of the annulus in the alloy named (`metal`, d
 gold). The block's description carries the size in every system and the metal, so a drawing
 describes itself.
 
+**Measuring a drawn ring.** Give `handle` (or `handles`) and `RINGSIZES` measures a drawn finger
+hole instead of converting a size: a circle or an arc by its diameter, a closed polyline or a full
+ellipse by its perimeter ÷ π (a finger size is a circumference), a `RING` insert by its finger
+circle as drawn. The reply carries the usual size row at the measured diameter and `measured`:
+where it came from, the diameter in millimetres whatever the drawing's units, the nearest standard
+size in the `system` asked for (a quarter size in US, a half letter in UK, a whole number in EU,
+JP and CN) with `offBy` in millimetres (+ over, − under), and the nearest in every system under
+`nearestIn`. A circle of radius 8.35 mm measures 16.7 mm; the nearest US size is 6¼ (16.71 mm),
+`offBy` −0.01. Of several concentric outlines the smallest is the finger and the largest gives
+`wall`; outlines that do not share a centre are refused. A hole that is not round reports
+`outOfRound`. A diameter outside 11.6–25 mm is refused, as `RING` refuses it. A blank drawn by
+`RING` reads back 0.04 mm over its size: that is its sizing allowance. Measuring has no prompt at
+the command line yet; it is reached from JSON, scripts, MCP and the assistant.
+
 ## Gemstones
 
 Each cut is drawn from its own construction, not as a circle: a round brilliant is a circle, a
@@ -91,6 +105,23 @@ and from the edge, plus any `edge` inset. What could not be placed is reported (
 `skipped.outside`), and so is the largest calibrated size the region would have taken
 (`largestFitting`). A size off the calibrated list is allowed and flagged (`calibrated: false`),
 because a bench buys calibrated melee and a designer should know when they have left it.
+
+**Stones that are not round.** In a region such a stone is laid at `rotate` (degrees
+counter-clockwise; 0 = its length along Y, as `GEM` draws it). With no `rotate`, a stone longer
+than wide lies with its length along the long axis of the region's bounding box. The pitch along a
+row is the stone's extent in that direction plus the clearance, and the rows are its extent across
+plus the clearance apart; a stone is kept only when its own girdle at that rotation is `clearance
++ edge` clear of every edge. A 3 × 1.5 mm marquise (`cut: marquise, length: 3, stoneWidth: 1.5`)
+in a 10 × 2 mm band with 0.15 clearance lies at 90°, pitch 3.15 along and 1.65 across, 3 stones;
+with `rotate: 0` none fits. The reply's `rotate`, `pitch` and `notes` say how it was laid. Brick
+rows of stones that are not round are half-offset but do not nest; round melee is laid as before
+and ignores `rotate`. Along a path `rotate` is ignored: each stone follows the path.
+
+For a cut that is not round, `GEMFIT` counts each calibrated width as a stone `ratio` times as
+long (default the cut's usual: marquise and baguette 2, pear 1.5, emerald and radiant 1.4, oval
+1.333), oriented by `rotate` as in `PAVE`, with the same fit. A 20 × 2.5 mm band, `cut: marquise`,
+0.15 clearance: the largest is 2.2 mm wide (4.4 long), 4 stones, lying along the band. `limit`
+keeps the largest N sizes.
 
 `GEMFIT` answers the question before anything is placed: for every calibrated size, how many
 stones fit and what they weigh, plus the largest that fits at all. A 6 mm wide band takes 3.0 mm
@@ -183,6 +214,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | minor | `RINGSIZES` measures a drawn ring (`handle`); `PAVE` and `GEMFIT` fit cuts that are not round by their own outline at their rotation (`rotate`, `ratio`); a region fill no longer ignores the edge that closes its outline (round stones could hang over it), and square cuts are no longer fitted as circles |
 | 2026-11-12 | patch | Ring and Gem dialogs in the interface; the sidebar is reachable at a phone's width |
 | 2026-11-12 | patch | A bench line selects what it counts (`TECHSHEET` groups carry `handles`, bands a `handle`); the sample is dimensioned and its layers recoloured |
 | 2026-11-12 | minor | The interface opens on a solitaire sample (`sample::solitaire`), the sidebar has a live Bench section, the tool strip has Ring, Gem, Setting and Pavé, and the assistant is briefed on the jewelry commands. `TECHSHEET` reports bands. Three faults fixed, each with a test: a stone placed with `stone: "diamond"` got a block name (`GEM-…-DIAMOND`) that did not read back, so `SETTING` refused it and the sheet did not count it (diamond is now the default block whether named or not, and a material that begins with `D` is no longer read as a depth); a halo was laid around the origin instead of around its stone; in an inch drawing prongs, halos and pavé were placed 25.4 times too far out |

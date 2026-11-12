@@ -265,7 +265,11 @@ mod tests {
         let path = images[0].as_str().unwrap().to_string();
         let bytes = std::fs::read(&path).expect("the PNG exists");
         assert!(bytes.starts_with(b"\x89PNG"), "a real PNG: {path}");
-        assert!(!r["value"].as_str().unwrap().contains(&path), "the value text escapes the path; the images list is raw");
+        // The images list is the raw path. The value text prints it as a LISP string, so a path
+        // with a backslash or a quote in it (a Windows path) reads differently there, and one
+        // without (a Unix path) reads the same.
+        let escaped = path.contains('\\') || path.contains('"');
+        assert_eq!(text.contains(&path), !escaped, "the value text escapes the path; the images list is raw: {text}");
         let _ = std::fs::remove_file(&path);
     }
 }

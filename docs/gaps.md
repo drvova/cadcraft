@@ -195,15 +195,16 @@ and MCP all reach them, and DESCRIBE reads jewelry out of any drawing.
 
 | # | Gap | Est. |
 |---|---|---|
-| J1 | Elongated melee in a pavé region: the fit test takes a stone's width, so a marquise or baguette laid in a region is placed as if it were round (along a path it is rotated correctly). Oriented fit and `taper` rows are left | 8–14 |
+| J1 | Elongated melee in a pavé region: oriented fit is done (PAVE `rotate`, GEMFIT `ratio`/`rotate`, fit by the cut's own outline). Left: `taper` rows (graduated sizes along a row), brick rows of elongated cuts do not nest, the default orientation follows the bounding box and not the region's true axis, `largestFitting` is still a round diameter, and the interactive PAVÉ prompt asks for round stones only | 4–8 |
 | J2 | Settings as solids: prongs, bezels and galleries are drawn as their 2D sections and outlines; no swept solid, no bearing cut, no under-gallery. STL/3D export of a finished piece is not there either | 20–35 |
 | J3 | A bench's own stone library: calibrated sizes, dealer girdle data and a house cut list (GEM takes any outline, but nothing imports a library file) | 6–10 |
-| J4 | Ring size measured off a drawn ring (a circle or an arc pair): RINGSIZES converts a size but does not measure one from the geometry | 3–5 |
+| J4 | RINGSIZES measures a drawn ring from JSON (`handle`: a circle, an arc, a closed outline, a RING insert); there is no pick prompt for it at the command line, and the interface has no control for it | 1–2 |
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | minor | Jewelry: RINGSIZES measures a drawn ring (`handle`); PAVE and GEMFIT fit elongated cuts by their own outline at their rotation (`rotate`, `ratio`); a pavé fill no longer ignores the edge that closes its outline. J4 narrows to its prompt, J1 to `taper`. In the interface: Ring and Gem dialogs, `@` context in the assistant, the sidebar reachable at a phone's width |
 | 2026-11-12 | patch | Jewelry in the interface: a solitaire sample the interface opens on, a live Bench section in the sidebar, Ring, Gem, Setting and Pavé in the tool strip, the assistant briefed on the jewelry commands, Ctrl+K to ask it from the drawing. Three jewelry faults fixed in the engine (a stone named `diamond` did not read back; a halo was laid at the origin; settings and pavé were misplaced in an inch drawing). No row closes: J1–J3 stand ([jewelry.md](jewelry.md#revision-history)) |
 | 2026-11-12 | minor | Read at 0ca8810: recovery copies with a recovery bar (rows 5, F4, W7 narrowed to leftovers), dynamic input at the pointer (W4), the Layer Properties Manager (W1, W11), paper under a layout (new W15), the drafting font at 362 characters (new W16, with what still boxes); top-10 row 7 reworded. Estimates unchanged and marked where they predate the work |
 | 2026-11-12 | minor | Read at 43dd130: the first dialog (Drafting Settings), grips on the drawing and right-click menus landed in the web interface. W1 narrowed to the dialogs still missing, W2 to grip leftovers (one grip shape, no touch, dynamic-block grips untried in a browser), W5 to menu leftovers (snap menu, command line and Properties menus), W11 for the layer row's menu; top-10 row 7 reworded |

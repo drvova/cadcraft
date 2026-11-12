@@ -41,6 +41,27 @@ pub struct Cut {
     style: Style,
 }
 
+impl Cut {
+    /// Whether this cut's girdle at these dimensions is a circle: a round brilliant always, and
+    /// an oval or cabochon as long as it is wide. Such a stone has no orientation.
+    pub(super) fn is_circle(&self, length: f64, width: f64) -> bool {
+        self.style == Style::Round || (self.style == Style::Oval && (length - width).abs() < 1e-9)
+    }
+
+    /// The length-to-width ratio this cut is usually bought in (a marquise or a baguette 2:1, a
+    /// pear 3:2, an emerald or a radiant 7:5, an oval 4:3; the rest as long as wide). `GEMFIT`
+    /// sizes a cut by its calibrated width and this ratio when none is given.
+    pub(super) fn usual_ratio(&self) -> f64 {
+        match self.style {
+            Style::Marquise | Style::Baguette => 2.0,
+            Style::Pear => 1.5,
+            Style::Emerald | Style::Radiant => 1.4,
+            Style::Oval => 4.0 / 3.0,
+            Style::Round | Style::Heart | Style::Triangle | Style::Square | Style::Cushion => 1.0,
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Style {
     Round,
