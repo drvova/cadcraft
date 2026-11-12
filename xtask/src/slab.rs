@@ -274,7 +274,8 @@ pub fn cargo_args(verb: &str, config: &str, rest: &[&str]) -> Result<Vec<String>
         }
         "run" => {
             push(&["run", "--config", config, "-p", "cadcraft-cli", "--features", "surfaces", "--"]);
-            push(rest);
+            // `cargo xtask surfaces run -- run …` is how the documents write it: one `--` only.
+            push(rest.strip_prefix(&["--"]).unwrap_or(rest));
         }
         other => return Err(format!("surfaces: unknown verb `{other}` (test, check, clippy, build, run)")),
     }
@@ -424,6 +425,8 @@ mod tests {
         assert!(clippy.ends_with(&["--".to_string(), "-D".to_string(), "warnings".to_string()]));
         let run = cargo_args("run", "cfg.toml", &["tui", "--sample"]).unwrap();
         assert!(run.ends_with(&["--".to_string(), "tui".to_string(), "--sample".to_string()]));
+        let dashed = cargo_args("run", "cfg.toml", &["--", "run", "--sample"]).unwrap();
+        assert_eq!(dashed.iter().filter(|a| *a == "--").count(), 1);
         assert!(cargo_args("publish", "cfg.toml", &[]).is_err());
         // The one warning that is counted instead of printed, and nothing else.
         let lines = [
