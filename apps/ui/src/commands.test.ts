@@ -368,7 +368,7 @@ describe("the menus' groups", () => {
     }
     expect(groups[0]).toEqual(["Line", "Construction Line", "Ray", "Multiline", "Polyline", "3D Polyline", "Rectangle", "Polygon"]);
     expect(groups[1]).toEqual(["Arc", "Circle", "Donut", "Ellipse", "Spline", "Helix", "Revision Cloud"]);
-    expect(groups.map((g) => g.length)).toEqual([8, 7, 3, 5, 3, 4]);
+    expect(groups.map((g) => g.length)).toEqual([8, 7, 3, 5, 3, 5]);
   });
 });
 
