@@ -14,7 +14,7 @@
 import type { CommandInfo } from "./facade";
 
 /** What the shell does with an invoked id. */
-export type CommandAction = "engine" | "open" | "save" | "sample" | "visibility" | "theme" | "animations" | "palette" | "focus" | "drafting" | "layers" | "none";
+export type CommandAction = "engine" | "open" | "save" | "sample" | "visibility" | "theme" | "animations" | "palette" | "ask" | "focus" | "drafting" | "layers" | "none";
 
 /** One `ui.*` command the web shell can honour, transcribed from `menus.rs`'s `UI_COMMANDS`. */
 export interface UiItem {
@@ -34,11 +34,16 @@ export const UI_ITEMS: readonly UiItem[] = [
   { id: "ui.open", label: "Open...", menu: [], shortcut: "Cmd+O" },
   { id: "ui.saveas", label: "Save As...", menu: [] },
   { id: "ui.sample", label: "Open Sample Drawing", menu: ["Help", "Open Sample Drawing"] },
+  { id: "ui.sample.bracket", label: "Open Sample Bracket", menu: ["Help", "Open Sample Bracket"] },
   { id: "ui.dialog.commands", label: "Command Palette...", menu: ["Help", "Command Palette..."], shortcut: "Cmd+Shift+P" },
   { id: "ui.toggle.sidebar", label: "Sidebar", menu: ["Window", "Sidebar"], shortcut: "Cmd+B" },
   { id: "ui.panel.properties", label: "Properties Inspector", menu: ["Window", "Properties Inspector"], shortcut: "Cmd+1" },
   { id: "ui.toggle.assistant", label: "Assistant", menu: ["Window", "Assistant"], shortcut: "Cmd+7" },
+  // The web shell's own: one line over the drawing that asks the assistant, the editor's inline key.
+  { id: "ui.assistant.ask", label: "Ask the Assistant...", menu: ["Window", "Ask the Assistant..."], shortcut: "Cmd+K" },
   { id: "ui.panel.layers", label: "Layers Palette", menu: ["Window", "Layers Palette"] },
+  // The web shell's own: the piece's stones and metal beside the drawing.
+  { id: "ui.panel.bench", label: "Bench Sheet", menu: ["Window", "Bench Sheet"] },
   { id: "ui.animations.system", label: "Use System Setting", menu: ["View", "Accessibility", "Animation Effects", "Use System Setting"] },
   { id: "ui.animations.on", label: "On", menu: ["View", "Accessibility", "Animation Effects", "On"] },
   { id: "ui.animations.off", label: "Off", menu: ["View", "Accessibility", "Animation Effects", "Off"] },
@@ -60,12 +65,13 @@ export const UI_ITEMS: readonly UiItem[] = [
 export function classify(id: string): CommandAction {
   if (id === "ui.open") return "open";
   if (id === "ui.saveas") return "save";
-  if (id === "ui.sample") return "sample";
+  if (id === "ui.sample" || id === "ui.sample.bracket") return "sample";
   if (id.startsWith("ui.panel.") || id.startsWith("ui.toggle.")) return "visibility";
   if (id.startsWith("ui.theme.")) return "theme";
   if (id.startsWith("ui.animations.")) return "animations";
   if (id.startsWith("ui.focus.")) return "focus";
   if (id === "ui.dialog.commands") return "palette";
+  if (id === "ui.assistant.ask") return "ask";
   // Drafting Settings is the interface's dialog over the engine's settings, not a prompt sequence.
   if (id === "dsettings") return "drafting";
   // Layers is the Layer Properties Manager; `-layer` stays the command line's prompt sequence.
@@ -189,8 +195,8 @@ export const MENU_GROUPS: Readonly<Record<string, readonly (readonly string[])[]
   ],
   // The parts of the window; the palettes; where the keyboard goes.
   Window: [
-    ["ui.toggle.sidebar", "ui.toggle.assistant", "ui.toggle.cmdline", "ui.toggle.toolbar", "ui.toggle.statusbar", "ui.toggle.menubar"],
-    ["ui.panel.properties", "ui.panel.layers", "xref"],
+    ["ui.toggle.sidebar", "ui.toggle.assistant", "ui.assistant.ask", "ui.toggle.cmdline", "ui.toggle.toolbar", "ui.toggle.statusbar", "ui.toggle.menubar"],
+    ["ui.panel.properties", "ui.panel.layers", "ui.panel.bench", "xref"],
     ["ui.focus.cmdline", "ui.focus.next", "ui.focus.previous"],
   ],
 };

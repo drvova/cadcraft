@@ -102,6 +102,8 @@ pub(super) fn gem_block_name(cut: &str, length: f64, width: f64, material: Optio
     let size = if (length - width).abs() < 1e-6 { fmt_mm(width) } else { format!("{}x{}", fmt_mm(length), fmt_mm(width)) };
     let mut name = format!("GEM-{cut}-{size}");
     match material {
+        // Diamond is the default: named or not, it is the same stone and the same block.
+        Some(m) if m.eq_ignore_ascii_case("diamond") => {}
         Some(m) => {
             let m: String = m.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
             if !m.is_empty() {
@@ -156,11 +158,12 @@ pub(super) fn parse_gem_block(name: &str) -> Option<GemName> {
         if token.is_empty() {
             return None;
         }
+        // `D4.1` is a depth; a stone's name that begins with the same letter (`DIAMOND`,
+        // `DIOPSIDE`) is a material.
+        let number = |v: &str| v.parse::<f64>().ok().filter(|x| x.is_finite() && *x > 0.0);
         if let Some(v) = token.strip_prefix("SG") {
-            let v = v.parse::<f64>().ok().filter(|x| x.is_finite() && *x > 0.0)?;
-            sg = Some(v);
-        } else if let Some(v) = token.strip_prefix('D') {
-            let v = v.parse::<f64>().ok().filter(|x| x.is_finite() && *x > 0.0)?;
+            sg = Some(number(v)?);
+        } else if let Some(v) = token.strip_prefix('D').and_then(number) {
             depth = Some(v);
         } else {
             material = Some(token.to_ascii_lowercase());

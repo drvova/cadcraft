@@ -300,6 +300,8 @@ fn run_pave(s: &mut Session, p: &Value) -> Result<Value> {
             if n > MAX_STONES {
                 notes.push(format!("a path asked for {n} stones; only the first {MAX_STONES} are placed"));
             }
+            // Paths and regions are read in millimetres; a stone is placed in the drawing's units.
+            let k = mm_per_unit(s);
             let row_offsets: Vec<f64> = (0..rows).map(|r| (f64::from(r) - f64::from(rows - 1) / 2.0) * (width + clearance)).collect();
             for i in 0..n.min(MAX_STONES) {
                 // Stones sit at the middle of their slot, so a row is centred on the path.
@@ -308,7 +310,7 @@ fn run_pave(s: &mut Session, p: &Value) -> Result<Value> {
                 let normal = Vec2::new(-tangent.y, tangent.x);
                 for off in &row_offsets {
                     let site = at + normal * *off;
-                    placed.push(gem::place_stone(s, &stone, site, tangent.y.atan2(tangent.x), layer.as_deref())?);
+                    placed.push(gem::place_stone(s, &stone, site / k, tangent.y.atan2(tangent.x), layer.as_deref())?);
                 }
             }
         }
@@ -322,8 +324,9 @@ fn run_pave(s: &mut Session, p: &Value) -> Result<Value> {
             // The largest calibrated melee this region would take: the widest that still fits
             // between the edges at its own pitch.
             largest = super::largest_fitting(2.0 * max_inscribed(region), clearance + edge);
+            let k = mm_per_unit(s);
             for (at, _) in fill.stones.iter().take(MAX_STONES) {
-                placed.push(gem::place_stone(s, &stone, *at, 0.0, layer.as_deref())?);
+                placed.push(gem::place_stone(s, &stone, *at / k, 0.0, layer.as_deref())?);
             }
         }
     }
@@ -499,8 +502,8 @@ impl PaveM {
     }
 }
 
-/// Lay stones of `stone` along `path` on a fixed pitch, each rotated to the path's tangent
-/// (a halo, a channel of melee, a stone run). Returns the inserts.
+/// Lay stones of `stone` along `path` (in millimetres of the drawing) on a fixed pitch, each
+/// rotated to the path's tangent (a halo, a channel of melee, a stone run). Returns the inserts.
 pub(super) fn lay_along(s: &mut Session, path: &Path, stone: &gem::Stone, pitch: f64, layer: Option<&str>) -> Result<Vec<Handle>> {
     let len = path.length();
     if len <= 1e-9 || pitch <= 0.0 {
@@ -508,11 +511,12 @@ pub(super) fn lay_along(s: &mut Session, path: &Path, stone: &gem::Stone, pitch:
     }
     let n = ((len / pitch).round() as usize).clamp(1, MAX_STONES);
     let step = len / n as f64;
+    let k = mm_per_unit(s);
     let mut out = Vec::with_capacity(n);
     for i in 0..n {
         let d = (i as f64 + 0.5) * step;
         let Some((at, tangent)) = path.at(d) else { continue };
-        out.push(gem::place_stone(s, stone, at, tangent.y.atan2(tangent.x), layer)?);
+        out.push(gem::place_stone(s, stone, at / k, tangent.y.atan2(tangent.x), layer)?);
     }
     Ok(out)
 }

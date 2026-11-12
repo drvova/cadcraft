@@ -20,6 +20,9 @@ import { asBool, asNumber, asString, isRecord } from "./json";
 import { parseRect, rectIsDegenerate, type Point, type Rect } from "./view";
 
 /** The raw wasm-bindgen handle: exactly the facade's methods, JSON strings in and out. */
+/** The sample drawings the engine builds in code. */
+export type SampleName = "bracket" | "solitaire";
+
 export interface RawFacade {
   execute(command: string, paramsJson: string): string;
   cmdline(text: string): string;
@@ -68,7 +71,8 @@ export interface RawFacade {
   /** Invoke one of those options by its `id`. Replies as `cmdline`. */
   grip_option(id: string, option: string): string;
   open_bytes(name: string, bytes: Uint8Array): string;
-  load_sample(): string;
+  /** Replace what is open with a sample: `bracket` (the default) or `solitaire`. */
+  load_sample(name?: string): string;
   save_bytes(): Uint8Array;
   digest(): string;
 }
@@ -1154,9 +1158,9 @@ export class AppFacade {
     return parseEnvelope(raw) ?? { ok: false, error: "unreadable reply from open_bytes" };
   }
 
-  /** Replace what is open with the sample drawing (File ▸ Open Sample Drawing). */
-  loadSample(): Envelope {
-    const raw = this.call(() => this.raw.load_sample());
+  /** Replace what is open with a sample drawing (Help ▸ Open Sample Drawing, the ring; Open Sample Bracket). */
+  loadSample(name: SampleName = "bracket"): Envelope {
+    const raw = this.call(() => this.raw.load_sample(name));
     return parseEnvelope(raw) ?? { ok: false, error: "unreadable reply from load_sample" };
   }
 

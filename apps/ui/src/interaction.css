@@ -30,6 +30,32 @@
   border-radius: 0;
 }
 
+/* The bench sheet under it is a shorter reading: a third of the rail at most, then it scrolls. */
+.bench {
+  max-height: 40%;
+  max-height: round(down, 40%, 1px);
+}
+
+/* A bench line's value is short and whole ("14 pc · 0.18 ct"): it takes the room it needs on one
+   line and the label gives way, where a property's two columns are equal. */
+.bench .prop-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.bench .prop-readonly {
+  white-space: nowrap;
+}
+
+/* What the engine found wrong with a stone's record: a line of the list in the warning ink, which
+   wraps (it is a sentence, not a value). */
+.bench-warning {
+  align-items: start;
+  padding-block: var(--gap-2);
+  color: var(--warn);
+  font-size: var(--font-chip);
+  line-height: var(--leading-ui);
+}
+
 .properties-head {
   flex: 0 0 auto;
   display: flex;

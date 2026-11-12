@@ -651,3 +651,121 @@ fn describe_reads_the_drawing_as_jewelry() {
     assert!(message.contains("stone(s)"), "{message}");
     assert!(message.contains("size US 6 band"), "{message}");
 }
+
+// ---------------------------------------------------------------- the sample
+
+#[test]
+fn the_solitaire_sample_reads_back_on_the_bench_sheet() {
+    let mut s = Session::empty();
+    s.open_drawing(crate::sample::solitaire(), "Solitaire", None);
+    let sheet = s.execute("techsheet", &json!({})).unwrap();
+    let count = sheet["stones"]["count"].as_u64().unwrap();
+    // The centre stone, its halo and the shank's row.
+    assert!(count > 20, "stones on the sheet: {sheet}");
+    let groups = sheet["stones"]["groups"].as_array().unwrap();
+    assert!(
+        groups.iter().any(|g| g["mm"].as_str().is_some_and(|m| m.contains("6.5")) || g["width"].as_f64() == Some(6.5)),
+        "the centre stone is on the sheet: {sheet}"
+    );
+    assert!(sheet["stones"]["carat"].as_f64().unwrap() > 1.0, "the centre stone alone is over a carat: {sheet}");
+    // The band RING drew is on the sheet with its weight.
+    let bands = sheet["bands"].as_array().unwrap();
+    assert_eq!(bands.len(), 1, "one band: {sheet}");
+    assert_eq!(bands[0]["size"].as_str(), Some("US 6"));
+    assert!((bands[0]["grams"].as_f64().unwrap() - 3.86).abs() < 0.01, "the band's weight: {sheet}");
+    assert!(sheet["message"].as_str().unwrap().contains("band US 6"), "{sheet}");
+    assert_eq!(s.doc().unwrap().header.i64("INSUNITS", 0), 4);
+}
+#[test]
+fn a_stone_named_diamond_is_still_a_stone() {
+    // `DIAMOND` begins with the depth token's letter: it read as a depth that would not parse,
+    // so SETTING refused the stone and the bench sheet did not count it.
+    assert_eq!(parse_gem_block("GEM-ROUND-6.5-DIAMOND").unwrap().material.as_deref(), Some("diamond"));
+    assert_eq!(parse_gem_block("GEM-ROUND-6.5-DIOPSIDE-D4.1").unwrap().depth, Some(4.1));
+    let mut s = mm_drawing();
+    let named = s.execute("gem", &json!({"at": [0, 0], "diameter": 6.5, "stone": "diamond"})).unwrap();
+    let plain = s.execute("gem", &json!({"at": [20, 0], "diameter": 6.5})).unwrap();
+    assert_eq!(named["block"], plain["block"], "diamond is the default: one block either way");
+    let h = named["handle"].as_str().unwrap();
+    let prongs = s.execute("setting", &json!({"handle": h, "style": "prong"})).unwrap();
+    assert!(prongs["handles"].as_array().is_some_and(|a| !a.is_empty()), "prongs on the stone: {prongs}");
+    let sheet = s.execute("techsheet", &json!({})).unwrap();
+    assert_eq!(sheet["stones"]["count"].as_u64(), Some(2), "both stones are counted: {sheet}");
+}
+
+#[test]
+fn an_empty_bench_sheet_has_no_negative_zero() {
+    let mut s = mm_drawing();
+    let sheet = s.execute("techsheet", &json!({})).unwrap();
+    assert!(!sheet["message"].as_str().unwrap().contains("-0"), "{sheet}");
+}
+
+// ---------------------------------------------------------------- settings and pavé in place
+
+/// The centre of an insert, in drawing units.
+fn insert_at(s: &Session, handle: &Value) -> Vec2 {
+    let h = Handle::parse_hex(handle.as_str().unwrap()).unwrap();
+    match &s.doc().unwrap().entity(h).unwrap().kind {
+        EntityKind::Insert(ins) => ins.insert.xy(),
+        EntityKind::Circle(c) => c.center.xy(),
+        other => panic!("not an insert or a circle: {other:?}"),
+    }
+}
+
+#[test]
+fn a_halo_and_prongs_follow_a_stone_that_is_not_at_the_origin() {
+    // The halo was laid around the origin whatever the stone's place: a stone at 30,0 got its
+    // melee 30 mm away.
+    let mut s = mm_drawing();
+    let g = s.execute("gem", &json!({"at": [30, 10], "cut": "round", "width": 6.5, "rotate": 30})).unwrap();
+    let centre = Vec2::new(30.0, 10.0);
+    let halo = s.execute("setting", &json!({"handle": g["handle"], "style": "halo", "stoneWidth": 1.3, "gap": 0.2})).unwrap();
+    assert!(halo["stones"].as_u64().unwrap() >= 16, "{halo}");
+    for h in halo["handles"].as_array().unwrap() {
+        let d = (insert_at(&s, h) - centre).len();
+        assert!((d - 4.1).abs() < 0.05, "a halo stone sits 4.1 mm from the stone's centre, not {d}");
+    }
+    let prongs = s.execute("setting", &json!({"handle": g["handle"], "style": "prong", "prongs": 6})).unwrap();
+    for h in prongs["handles"].as_array().unwrap() {
+        let d = (insert_at(&s, h) - centre).len();
+        assert!((d - 3.25).abs() < 0.05, "a prong sits on the girdle, not {d} mm out");
+    }
+}
+
+#[test]
+fn settings_and_pave_keep_their_place_in_an_inch_drawing() {
+    let mut s = Session::new();
+    assert_eq!(mm_per_unit(&s), 25.4);
+    let k = 25.4;
+    // A 6.5 mm stone one inch right of the origin.
+    let g = s.execute("gem", &json!({"at": [1, 0], "cut": "round", "width": 6.5})).unwrap();
+    let centre = Vec2::new(1.0, 0.0);
+    let prongs = s.execute("setting", &json!({"handle": g["handle"], "style": "prong", "prongs": 4})).unwrap();
+    for h in prongs["handles"].as_array().unwrap() {
+        let d = (insert_at(&s, h) - centre).len() * k;
+        assert!((d - 3.25).abs() < 0.05, "a prong sits on the girdle: {d} mm out");
+    }
+    let halo = s.execute("setting", &json!({"handle": g["handle"], "style": "halo", "stoneWidth": 1.3, "gap": 0.2})).unwrap();
+    for h in halo["handles"].as_array().unwrap() {
+        let d = (insert_at(&s, h) - centre).len() * k;
+        assert!((d - 4.1).abs() < 0.05, "a halo stone sits 4.1 mm out: {d}");
+    }
+    // A strip 24 × 2.4 mm, drawn in inches, takes its row of melee inside itself.
+    let (w, h) = (24.0 / k, 2.4 / k);
+    let strip = polyline(&mut s, &[Vec2::new(3.0, 0.0), Vec2::new(3.0 + w, 0.0), Vec2::new(3.0 + w, h), Vec2::new(3.0, h)]);
+    let pave = s.execute("pave", &json!({"handles": [strip], "pattern": "grid", "stoneWidth": 1.5})).unwrap();
+    assert!(pave["placed"].as_u64().unwrap() >= 10, "{pave}");
+    for st in pave["handles"].as_array().unwrap() {
+        let at = insert_at(&s, st);
+        assert!(at.x > 3.0 && at.x < 3.0 + w && at.y > 0.0 && at.y < h, "a stone inside the strip: {at:?}");
+    }
+    // And a row along a line one inch long.
+    let line = s.execute("line", &json!({"points": [[0, 2], [1, 2]]})).unwrap();
+    let path = line["handle"].as_str().or_else(|| line["handles"][0].as_str()).unwrap().to_string();
+    let row = s.execute("pave", &json!({"along": [path], "stoneWidth": 1.5})).unwrap();
+    assert!(row["placed"].as_u64().unwrap() >= 10, "{row}");
+    for st in row["handles"].as_array().unwrap() {
+        let at = insert_at(&s, st);
+        assert!(at.x > 0.0 && at.x < 1.0 && (at.y - 2.0).abs() < 1e-6, "a stone on the line: {at:?}");
+    }
+}

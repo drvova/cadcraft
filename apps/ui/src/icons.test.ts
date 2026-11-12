@@ -19,11 +19,12 @@ const PATH_RE = /^[MmLlHhVvCcSsQqTtAaZz0-9 .,+-]+$/;
 const entries = TOOLBAR.flat();
 
 describe("the toolbar table", () => {
-  test("has eight groups, each non-empty, the drafting tools ahead of the ones the overflow may take", () => {
+  test("has nine groups, each non-empty, the drafting and jewelry tools ahead of the ones the overflow may take", () => {
     expect(TOOLBAR.map((group) => group.map((e) => e.id))).toEqual([
       ["new", "open", "qsave"],
       ["u", "redo"],
       ["line", "pline", "circle", "arc", "rectang", "hatch", "mtext"],
+      ["ring", "gem", "setting", "pave"],
       ["move", "copy", "rotate", "mirror", "offset", "trim", "fillet", "erase"],
       ["dimlinear"],
       ["zoom.extents", "zoom.window", "pan"],

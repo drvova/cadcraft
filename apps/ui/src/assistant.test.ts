@@ -258,6 +258,15 @@ describe("the tool surface", () => {
     expect(p).not.toContain("; 0 selected");
   });
 
+  test("the system prompt names the jewelry commands and the trade's units", () => {
+    const p = systemPrompt(BRIEFING);
+    for (const id of ["ringsizes", "ring", "gem", "gemlist", "setting", "pave", "gemfit", "techsheet"]) expect(p).toContain(`\`${id}\``);
+    expect(p).toContain("finger sizes, millimetres, carats and grams");
+    // The jewelry section stands between how the tool works and how to report.
+    expect(p.indexOf("Fine jewelry is drafted")).toBeGreaterThan(p.indexOf("You have exactly one tool"));
+    expect(p.indexOf("Fine jewelry is drafted")).toBeLessThan(p.indexOf("How to report what you did"));
+  });
+
   test("a selection is named; a blank briefing still reads", () => {
     expect(systemPrompt({ ...BRIEFING, selection: 3 })).toContain("46; 3 selected");
     const blank = systemPrompt({ app: "", drawing: "", units: "", objects: 0, selection: 0, extents: null });

@@ -136,6 +136,9 @@ describe("classify", () => {
     expect(classify("layer")).toBe("layers");
     expect(classify("ui.saveas")).toBe("save");
     expect(classify("ui.sample")).toBe("sample");
+    expect(classify("ui.sample.bracket")).toBe("sample");
+    expect(classify("ui.assistant.ask")).toBe("ask");
+    expect(classify("ui.panel.bench")).toBe("visibility");
     expect(classify("ui.panel.layers")).toBe("visibility");
     expect(classify("ui.panel.properties")).toBe("visibility");
     expect(classify("ui.toggle.cmdline")).toBe("visibility");
@@ -184,6 +187,9 @@ describe("UI_ITEMS", () => {
         "ui.open",
         "ui.saveas",
         "ui.sample",
+        "ui.sample.bracket",
+        "ui.assistant.ask",
+        "ui.panel.bench",
         "ui.panel.layers",
         "ui.panel.properties",
         "ui.toggle.assistant",
@@ -315,7 +321,7 @@ describe("the menus' groups", () => {
 
   test("a menu without groups keeps its registered order, and no row leads a group", () => {
     const help = menu("Help", [], UI_ITEMS);
-    expect(help?.children.map((n) => n.label)).toEqual(["Open Sample Drawing", "Command Palette..."]);
+    expect(help?.children.map((n) => n.label)).toEqual(["Open Sample Drawing", "Open Sample Bracket", "Command Palette..."]);
     expect(help?.children.some((n) => n.group)).toBe(false);
   });
 

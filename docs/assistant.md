@@ -15,6 +15,10 @@ them.
 - **Window ▸ Assistant**, Ctrl+7 (⌘7 on macOS), or the assistant key at the end of the title bar.
   The same three close it. The chats outlive the panel: closing it hides them, it does not end
   them.
+- **Ctrl+K** (⌘K), or Window ▸ Ask the Assistant…, opens one line over the top of the drawing.
+  It holds the same draft as the panel's composer. Enter sends it and opens the panel, where the
+  turn is read; Escape closes the line and gives the keyboard back to the drawing. What is
+  selected goes with the message, and the line says how many objects that is.
 - The first time, the composer itself is the way in: its model slot reads "Set up a model" and
   opens the setup sheet. So does Send: a message typed before setup is kept and sent once the
   setup is saved.
@@ -245,6 +249,7 @@ a provider's output, the queue and the changes row.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | minor | Ctrl+K opens a line over the drawing that shares the composer's draft and sends to the chat in front. The system prompt names the jewelry commands (`ringsizes`, `ring`, `gem`, `gemlist`, `setting`, `pave`, `gemfit`, `techsheet`) and asks for answers in finger sizes, millimetres, carats and grams, in the interface and in `crates/ai`. The empty panel's suggestions are jewelry requests |
 | 2026-11-12 | minor | First run and setup as they are at 43dd130: the composer's "Set up a model" slot is the way in and a message typed before setup is sent after Save; step two is one form with one status line and Cancel, Check connection, Save; the composer rests on one line |
 | 2026-11-11 | minor | Replies draw links (http and https only) and turn a Markdown table into readable rows; the turn's status and Stop stay in view while the setup sheet is open |
 | 2026-11-11 | major | Rewritten for the web interface after the egui interface was removed: how to open the panel, the panel, setup in two steps with a connection check, where the key is kept and what protects it, the bounds on a provider, what the WebAssembly build changes. Removed: the `assistant {…}` command and the `options` assistant keys (both were the egui interface's), the `--connect` configuration as the default, `crates/ui-egui/src/assistant.rs` |

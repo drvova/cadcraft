@@ -10,8 +10,8 @@
  * local signals; anything else classified "none" does nothing.
  */
 
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { AppFacade, type CommandInfo, type DrawingState, type Grip, type GripOption, type LayerInfo, type SettingsState } from "./facade";
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, untrack, type JSX } from "solid-js";
+import { AppFacade, type CommandInfo, type DrawingState, type Grip, type GripOption, type LayerInfo, type SampleName, type SettingsState } from "./facade";
 import type { DisplayList } from "./display";
 import { padView, regionCovers, regionOf, VIEW_PAD, viewScale, type DisplayRegion } from "./display-cache";
 import { emptyPrompt, formatPoint, formatSelectBox, pointerWants, type PromptState } from "./prompt";
@@ -35,6 +35,9 @@ import { createAssistantSession, type AssistantSession } from "./assistant-sessi
 import { CanvasView } from "./components/CanvasView";
 import { LayersPanel } from "./components/LayersPanel";
 import { PropertiesPanel } from "./components/PropertiesPanel";
+import { BenchPanel } from "./components/BenchPanel";
+import { InlineAsk } from "./components/InlineAsk";
+import { parseBench, type BenchSheet } from "./bench";
 import { CommandLine } from "./components/CommandLine";
 import { createRecovery, RecoveryBar } from "./components/RecoveryBar";
 import { LayerManager } from "./components/LayerManager";
@@ -48,7 +51,7 @@ type ThemeChoice = "dark" | "light" | "system";
 type AnimChoice = "on" | "off" | "system";
 
 /** The engine's file ids (and their `ui.*` twins) the browser handles itself. */
-const FILE_IDS: Readonly<Record<string, "open" | "save" | "new" | "sample">> = {
+const FILE_IDS: Readonly<Record<string, "open" | "save" | "new" | "sample" | "bracket">> = {
   open: "open",
   "ui.open": "open",
   qsave: "save",
@@ -56,6 +59,7 @@ const FILE_IDS: Readonly<Record<string, "open" | "save" | "new" | "sample">> = {
   "ui.saveas": "save",
   new: "new",
   "ui.sample": "sample",
+  "ui.sample.bracket": "bracket",
 };
 
 /** What takes the keyboard's focus inside a region when nothing names a better control. */
@@ -191,8 +195,15 @@ export function App(props: AppProps): JSX.Element {
   /** The left sidebar as a whole (its palettes keep their own switches inside it). */
   const [showSidebar, setShowSidebar] = createSignal(true);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
+  /** The line over the drawing that asks the assistant (Ctrl+K). */
+  const [askOpen, setAskOpen] = createSignal(false);
   const [recentCommands, setRecentCommands] = createSignal<readonly string[]>(loadRecent());
   const [showProperties, setShowProperties] = createSignal(true);
+  const [showBench, setShowBench] = createSignal(true);
+  /** The piece's stones and metal, as the engine last counted them. */
+  const [bench, setBench] = createSignal<BenchSheet | null>(null);
+  /** The revision and space the bench sheet was counted at: a refresh that changed nothing counts nothing. */
+  let benchAt: string | null = null;
   const [theme, setTheme] = createSignal<ThemeChoice>("dark");
   const [animations, setAnimations] = createSignal<AnimChoice>("on");
 
@@ -320,8 +331,24 @@ export function App(props: AppProps): JSX.Element {
     setLayouts(props.facade.layouts().map((l) => l.name));
     setSpace(state?.space ?? "Model");
     setCommands(props.facade.commands());
+    readBench(state);
     syncDisplay();
   };
+
+  /** Count the piece again when the drawing changed under the sheet (or the panel came back). */
+  const readBench = (state: DrawingState | null): void => {
+    if (!showBench() || !showSidebar()) return;
+    const at = state === null ? "" : `${state.revision}/${state.entityCount}/${state.title}`;
+    if (at === benchAt) return;
+    benchAt = at;
+    const env = props.facade.execute("techsheet", {});
+    setBench(env.ok ? parseBench(env.result) : null);
+  };
+
+  // The sheet is not counted while its panel is away; it is counted when the panel comes back.
+  createEffect(() => {
+    if (showBench() && showSidebar()) readBench(untrack(drawing));
+  });
 
   // Recovery copies of unsaved work, and the bar that offers one after an unclean close.
   const recovery = createRecovery({
@@ -490,6 +517,29 @@ export function App(props: AppProps): JSX.Element {
       window.removeEventListener("keydown", onKey);
     });
   });
+
+  /** Open the line that asks the assistant, or close it and give the keyboard back to the drawing. */
+  const toggleAsk = (): void => {
+    if (askOpen()) closeAsk();
+    else setAskOpen(true);
+  };
+  const closeAsk = (): void => {
+    setAskOpen(false);
+    regionTarget({ root: ".canvas-stage", first: null })?.focus({ preventScroll: true });
+  };
+  /**
+   * Send the line's draft to the chat in front and show its panel, where the turn is read. With
+   * no model set up the draft stays in the composer, and the panel is where one is set up.
+   */
+  const sendAsk = (): void => {
+    const chat = assistant();
+    if (chat === undefined) return;
+    const outcome = chat.send();
+    if (outcome === "empty") return;
+    setAskOpen(false);
+    setShowAssistant(true);
+    if (outcome === "too-long") setNotice("the message is too long to send; shorten it in the assistant's panel");
+  };
 
   /** Show the command line if it is folded away and put the keyboard in its field. */
   const focusCommandLine = (): void => {
@@ -664,10 +714,10 @@ export function App(props: AppProps): JSX.Element {
     refresh();
   };
 
-  const loadSample = (): void => {
+  const loadSample = (name: SampleName): void => {
     setNotice(null);
     recovery.flush();
-    const env = props.facade.loadSample();
+    const env = props.facade.loadSample(name);
     if (!env.ok) {
       setNotice(env.error);
       return;
@@ -703,8 +753,8 @@ export function App(props: AppProps): JSX.Element {
       newDrawing();
       return;
     }
-    if (file === "sample") {
-      loadSample();
+    if (file === "sample" || file === "bracket") {
+      loadSample(file === "sample" ? "solitaire" : "bracket");
       return;
     }
     switch (classify(id)) {
@@ -722,6 +772,9 @@ export function App(props: AppProps): JSX.Element {
         return;
       case "palette":
         setPaletteOpen(true);
+        return;
+      case "ask":
+        toggleAsk();
         return;
       case "layers":
         setLayerManager(true);
@@ -745,6 +798,9 @@ export function App(props: AppProps): JSX.Element {
         return;
       case "ui.panel.properties":
         setShowProperties((v) => !v);
+        return;
+      case "ui.panel.bench":
+        setShowBench((v) => !v);
         return;
       case "ui.toggle.assistant":
         setShowAssistant((v) => !v);
@@ -1058,13 +1114,16 @@ export function App(props: AppProps): JSX.Element {
         <ToolStrip onInvoke={onInvoke} commands={commands()} />
       </Show>
       <div class={showAssistant() ? "workspace has-assistant" : "workspace"}>
-        <Show when={showSidebar() && (showLayers() || showProperties())}>
+        <Show when={showSidebar() && (showLayers() || showProperties() || showBench())}>
           <aside class="sidebar" aria-label="Drawing">
             <Show when={showLayers()}>
               <LayersPanel layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} onMenu={(name, at) => openContext({ kind: "layer", name }, at)} />
             </Show>
             <Show when={showProperties()}>
               <PropertiesPanel properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={onPropertyNotice} />
+            </Show>
+            <Show when={showBench()}>
+              <BenchPanel sheet={bench()} />
             </Show>
           </aside>
         </Show>
@@ -1092,6 +1151,15 @@ export function App(props: AppProps): JSX.Element {
               onGripMenu={onGripMenu}
               onBeforeQuery={tellView}
               onCursor={setCursor}
+            />
+            <InlineAsk
+              open={askOpen()}
+              draft={assistant()?.input() ?? ""}
+              onDraft={(text) => assistant()?.setInput(text)}
+              selected={selection().length}
+              ready={assistant()?.ready() ?? false}
+              onSend={sendAsk}
+              onClose={closeAsk}
             />
           </main>
           <Show when={showCmdline()}>

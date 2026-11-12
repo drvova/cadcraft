@@ -90,7 +90,9 @@ pub(super) fn target_of(s: &Session, cmd: &str, p: &Value) -> Result<Target> {
             .iter()
             .find_map(|be| entity_loop(be, 1.0).map(|(pts, _)| pts))
             .ok_or_else(|| bad(cmd, format!("the block {} has no outline", ins.block)))?;
-        let scale = ins.scale.x.abs().max(1e-12) * k;
+        // The block is millimetres and the insert scales it into the drawing, so the insert's
+        // scale is the drawing's units per millimetre at this stone.
+        let scale = ins.scale.x.abs().max(1e-12);
         return Ok(Target { outline, at: ins.insert.xy(), rotation: ins.rotation, scale, cut: parse_gem_block(&ins.block).map(|g| g.cut) });
     }
     // A plain outline in the drawing: it is already where the setting goes.
@@ -169,7 +171,10 @@ fn run_setting(s: &mut Session, p: &Value) -> Result<Value> {
             let clearance = mm_zero_or(cmd, p, "clearance", DEFAULT_CLEARANCE)?;
             let stone = gem::stone_params(cmd, &json!({"cut": str_param(p, "cut").unwrap_or("round"), "width": width}))?;
             // The melee runs around the girdle, offset so its bodies clear the stone.
-            let ring = offset_loop(&target.outline, gap + width / 2.0)?;
+            // The ring is built on the girdle, in the stone's own millimetres, and laid where
+            // the stone sits and as it is turned: millimetres of the drawing, as every path is.
+            let k = mm_per_unit(s);
+            let ring = offset_loop(&target.outline, gap + width / 2.0)?.into_iter().map(|p| target.to_drawing(p) * k).collect();
             let path = super::pave::Path { pts: ring, closed: true };
             let handles = super::pave::lay_along(s, &path, &stone, width + clearance, layer.as_deref())?;
             let carat = gem::carat(stone.cut, stone.length, stone.width, stone.depth, stone.sg) * handles.len() as f64;

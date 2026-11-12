@@ -120,7 +120,7 @@ export interface ToolbarEntry {
 
 /**
  * The toolbar groups, the most used first, so the overflow menu takes the least used: file,
- * history, draw, modify, annotate, view, inspect, print. Every id is a command the engine
+ * history, draw, jewelry, modify, annotate, view, inspect, print. Every id is a command the engine
  * registers (`crates/engine/src/cmd/*`) or one the shell runs itself (`UI_ITEMS`, `../commands`),
  * and each label, shortcut and alias is that command's own.
  */
@@ -142,6 +142,13 @@ export const TOOLBAR: readonly (readonly ToolbarEntry[])[] = [
     { icon: "rectangle", id: "rectang", label: "Rectangle", shortcut: "", alias: "REC" },
     { icon: "hatch", id: "hatch", label: "Hatch", shortcut: "", alias: "H" },
     { icon: "text", id: "mtext", label: "Multiline Text", shortcut: "", alias: "T" },
+  ],
+  // The jeweler's own: the blank, a stone, the metal that holds it, and melee.
+  [
+    { icon: "ring", id: "ring", label: "Ring", shortcut: "", alias: "" },
+    { icon: "gem", id: "gem", label: "Gem", shortcut: "", alias: "" },
+    { icon: "setting", id: "setting", label: "Setting", shortcut: "", alias: "" },
+    { icon: "pave", id: "pave", label: "Pavé", shortcut: "", alias: "" },
   ],
   [
     { icon: "move", id: "move", label: "Move", shortcut: "", alias: "M" },

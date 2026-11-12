@@ -58,6 +58,14 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
   "ui.toggle.palettes": "M4 5h16v14H4z M9 5v14",
   /** Three stacked sheets. */
   "ui.dialog.layers": "M12 3l8 5-8 5-8-5z M4 13l8 5 8-5 M4 17l8 5 8-5",
+  /** A band seen from the front with its stone on top: the ring blank. */
+  ring: "M12 7.5a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13 M12 2.5l3 2.5-3 2.5-3-2.5z",
+  /** A brilliant from the side: the table, the girdle, and the pavilion's facets to the culet. */
+  gem: "M7.5 5.25h9l4.5 4.5-9 10.5-9-10.5z M3 9.75h18 M9 9.75l3 10.5 M15 9.75l-3 10.5",
+  /** Five small stones in two offset rows: melee laid as a brick pavé. */
+  pave: "M6 6a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M12 6a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M18 6a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M9 13a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M15 13a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5",
+  /** A stone from above with a prong at each corner. */
+  setting: "M12 5.5a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13 M6 4a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M18 4a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M6 16a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M18 16a2 2 0 1 0 0 4a2 2 0 1 0 0-4",
   /** A ruler laid on the diagonal, with ticks. */
   dist: "M3 17L17 3l4 4L7 21z M8 12l2 2 M11 9l2 2 M14 6l2 2",
   /** Three bullets with three lines: the Main menu key. */

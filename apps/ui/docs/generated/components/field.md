@@ -13,7 +13,8 @@ Not applicable: hand-rolled — the 24px height, the hairline stroke and the foc
 ## Examples
 `<Field value={name} ariaLabel="Layer name" onInput={setName} />` — the layer name, owned by the panel.
 
-Real uses, 11 call sites (`rg -c "<Field" src` → `src/components/AssistantPane.tsx:3`, `src/components/CommandLine.tsx:1`, `src/components/CommandPalette.tsx:1`, `src/components/DraftingSettings.tsx:2`, `src/components/DynamicInput.tsx:1`, `src/components/LayerManager.tsx:2`, `src/components/PropertiesPanel.tsx:1`):
+Real uses, 12 call sites (`rg -c "<Field" src` → `src/components/AssistantPane.tsx:3`, `src/components/CommandLine.tsx:1`, `src/components/CommandPalette.tsx:1`, `src/components/DraftingSettings.tsx:2`, `src/components/DynamicInput.tsx:1`, `src/components/InlineAsk.tsx:1`, `src/components/LayerManager.tsx:2`, `src/components/PropertiesPanel.tsx:1`):
+- `src/components/InlineAsk.tsx` — the line over the drawing that asks the assistant (Ctrl+K): `variant="bare"` in the box the surface draws (the palette's box), the assistant's mark as its `start` adornment, the chat's own draft as its value, Enter and Escape on `onKeyDown`. Added 2026-11-12.
 - `src/components/DraftingSettings.tsx:178` — the dialog's typed numbers (`align="end"`, `inputMode="decimal"`, `selectOnFocus`), each named by a visible `<label for>` through `id`, marked `invalid` with its refusal tied by `describedBy`.
 - `src/components/DraftingSettings.tsx:270` — the dialog's additional angles, a list typed in one field under its label, with a line of help tied by `describedBy`.
 - `src/components/AssistantPane.tsx` — the setup sheet's Base URL, API key and Model. The API key carries the show and hide key as its `end` adornment (`<IconButton size="sm">`): until 2026-11-12 a wrapper of the sheet's own placed that key over the field on a patch of the field's fill, and the last characters of a long key, and the caret after them, lay under the patch.

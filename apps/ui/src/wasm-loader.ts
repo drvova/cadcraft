@@ -68,6 +68,12 @@ const POINTER: readonly (readonly string[])[] = [
  */
 const GRIPS: readonly (readonly string[])[] = [["grips"], ["grip_at", "gripAt"], ["grip_start", "gripStart"], ["grip_options", "gripOptions"], ["grip_option", "gripOption"]];
 
+/**
+ * The named samples, added with the jewelry sample. A package without the call has the one
+ * sample it always had, and answers every name with it.
+ */
+const SAMPLES: readonly (readonly string[])[] = [["load_sample_named", "loadSampleNamed"]];
+
 const STALE_MESSAGE = "the wasm package is older than this interface: run `bun run build:wasm`";
 
 const STALE_REFUSAL = JSON.stringify({ ok: false, error: STALE_MESSAGE });
@@ -130,7 +136,7 @@ export function wrapWasmFacade(instance: WasmModule): RawFacade | null {
     if (method === null) return null;
     resolved.set(names[0] as string, method);
   }
-  for (const names of [...POINTER, ...GRIPS]) {
+  for (const names of [...POINTER, ...GRIPS, ...SAMPLES]) {
     const method = resolveMethod(instance, names);
     if (method !== null) resolved.set(names[0] as string, method);
   }
@@ -212,7 +218,7 @@ export function wrapWasmFacade(instance: WasmModule): RawFacade | null {
     grip_options: (id) => pointer("grip_options", [id]),
     grip_option: (id, option) => (resolved.has("grip_option") ? text("grip_option", [id, option]) : withError(text("prompt", []), STALE_MESSAGE)),
     open_bytes: (name, bytes) => text("open_bytes", [name, bytes]),
-    load_sample: () => text("load_sample", []),
+    load_sample: (name) => (name !== undefined && resolved.has("load_sample_named") ? text("load_sample_named", [name]) : text("load_sample", [])),
     save_bytes: () => {
       const out = call("save_bytes", []);
       return out instanceof Uint8Array ? out : new Uint8Array(out as ArrayBufferLike);
@@ -237,8 +243,12 @@ export async function loadWasmFacade(): Promise<RawFacade | null> {
   const ctor = findConstructor(mod);
   if (ctor === null) return null;
   // The facade offers `new CadFacade()` (empty) and `CadFacade.sample()` (the sample drawing);
-  // the UI opens on the sample so the canvas has something to show, as the mock does.
+  // the UI opens on a sample so the canvas has something to show, as the mock does.
   const sample = (ctor as unknown as Record<string, unknown>)["sample"];
   const instance = (typeof sample === "function" ? (sample as () => unknown)() : new ctor()) as WasmModule;
-  return wrapWasmFacade(instance);
+  const facade = wrapWasmFacade(instance);
+  // The interface opens on the ring: jewelry is what it is for. A package from before the named
+  // samples answers with the bracket it has.
+  facade?.load_sample("solitaire");
+  return facade;
 }

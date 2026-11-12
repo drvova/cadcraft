@@ -24,7 +24,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("techsheet", "Tech Sheet", run_techsheet)
             .menu(&["Inquiry", "Tech Sheet"])
             .alias(&["bom", "stonesheet"])
-            .params("{handles?: [objects to count; default: the whole drawing], metal?: gold24|22|18|14|10|9|platinum|palladium|silver|steel|titanium|brass|copper|wax (default gold18), section?: a closed polyline cross-section (x = distance from the finger's surface, outward; y = along the finger), size?: ring size (with `system`), radius?: mm (inner radius instead of a size), system?: us|uk|eu|jp|cn, table?: bool (default false; draws the sheet as a table at `at`), at?: [x,y] (the table's position, default 0,0), layer?} → {stones: {groups, count, carat}, metal?, message, table?}")
+            .params("{handles?: [objects to count; default: the whole drawing], metal?: gold24|22|18|14|10|9|platinum|palladium|silver|steel|titanium|brass|copper|wax (default gold18), section?: a closed polyline cross-section (x = distance from the finger's surface, outward; y = along the finger), size?: ring size (with `system`), radius?: mm (inner radius instead of a size), system?: us|uk|eu|jp|cn, table?: bool (default false; draws the sheet as a table at `at`), at?: [x,y] (the table's position, default 0,0), layer?} → {stones: {groups, count, carat}, bands: [{block, size, mm, metal, grams, width, wall}], metal?, message, table?}")
             .noundo(),
     ]
 }
@@ -215,7 +215,8 @@ fn run_techsheet(s: &mut Session, p: &Value) -> Result<Value> {
         None => d.model.iter().collect(),
     };
     let facts = jewelry_facts(d, &entities);
-    let (groups, total_stones, total_carat, warnings) = (&facts.groups, facts.stones, facts.carat, facts.warnings.clone());
+    // An empty sum of floats is negative zero; adding zero makes it the zero a sheet prints.
+    let (groups, total_stones, total_carat, warnings) = (&facts.groups, facts.stones, facts.carat + 0.0, facts.warnings.clone());
 
     // The metal, from the band's cross-section.
     let mut metal_json = Value::Null;
@@ -277,6 +278,15 @@ fn run_techsheet(s: &mut Session, p: &Value) -> Result<Value> {
     if let Some(m) = &metal_line {
         lines.push(m.clone());
     }
+    // The bands RING drew, each with the weight its block records.
+    for b in &facts.bands {
+        lines.push(format!(
+            "band {} — {}, {:.2} g",
+            b["size"].as_str().unwrap_or("?"),
+            b["metal"].as_str().unwrap_or("?"),
+            b["grams"].as_f64().unwrap_or(0.0)
+        ));
+    }
     let message = lines.join("\n");
 
     // The sheet as a table in the drawing, when asked for.
@@ -316,6 +326,7 @@ fn run_techsheet(s: &mut Session, p: &Value) -> Result<Value> {
     }
     Ok(json!({
         "stones": { "groups": groups, "count": total_stones, "carat": total_carat },
+        "bands": facts.bands,
         "warnings": warnings,
         "metal": metal_json,
         "table": table_handle,

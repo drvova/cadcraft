@@ -798,8 +798,9 @@ export class MockFacade implements RawFacade {
     return envelope(true, { entities: this.entities.length });
   }
 
-  load_sample(): string {
+  load_sample(name?: string): string {
     this.reset();
+    this.title = name === "solitaire" ? "Solitaire" : "sample.dxf";
     this.touch();
     return envelope(true, { title: this.title, entityCount: this.entities.length });
   }

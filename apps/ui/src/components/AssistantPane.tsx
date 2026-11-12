@@ -75,14 +75,14 @@ const MODEL_CHIPS = 12;
 const MIN_LIST_ROWS = 3;
 
 /** The empty transcript's one line: what the assistant does in this product. */
-const EMPTY_LINE = "Ask it to draw, measure or change this drawing.";
+const EMPTY_LINE = "Ask it to design, measure or change this piece.";
 
 /** The empty state's suggestions, once a model is set up: one click fills the composer and sends
- *  nothing (each is one of the system's list rows). Each works on whatever drawing is open. */
+ *  nothing (each is one of the system's list rows). Each is a jeweler's sentence for any drawing. */
 const EXAMPLES: readonly { icon: string; text: string }[] = [
-  { icon: "circle", text: "Draw a 20 mm circle at 0,0" },
-  { icon: "dist", text: "What is the total length of the lines?" },
-  { icon: "ui.dialog.layers", text: "List the layers and what is on them" },
+  { icon: "ring", text: "Draw a size 7 band, 2.5 mm wide, in platinum" },
+  { icon: "gem", text: "Set a 6 mm oval sapphire in four prongs with a halo" },
+  { icon: "dist", text: "Write up the bench sheet: stones, carats and grams" },
 ];
 
 /** How many pictures one message may carry, and how large each may be. */

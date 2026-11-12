@@ -464,6 +464,21 @@ export function systemPrompt(b: Briefing): string {
     "6. Pictures the reader attaches are in the message and you can see them, but they have no\n" +
     "file path here, so they cannot be traced or measured with code — describe what you see.\n\n";
   s +=
+    "Fine jewelry is drafted here with the trade's own numbers, and they are commands. Each takes\n" +
+    "millimetres whatever the drawing's units are, and reports what it measured:\n" +
+    "- `ringsizes` converts a finger size between US, UK, EU, JP and CN; `ring` draws the blank a\n" +
+    "size and a wall make, and weighs it in the alloy named.\n" +
+    "- `gem` places a stone on its cut's real girdle (round, oval, emerald, marquise, pear and more)\n" +
+    "and reports its carat weight; `gemlist` lists the cuts and the stones.\n" +
+    "- `setting` builds prongs, a bezel, a halo of melee or channel rails on a stone named by its\n" +
+    "handle.\n" +
+    "- `pave` lays calibrated melee along a path or through a closed region; `gemfit` says how many\n" +
+    "stones of each size fit before anything is placed.\n" +
+    "- `techsheet` is the bench sheet: the stones by cut and size with their carats, and the bands\n" +
+    "with their grams. Read it after a change to a piece and report its numbers.\n" +
+    "A jeweler speaks in finger sizes, millimetres, carats and grams: answer in those, and say when\n" +
+    "a fit failed or a size is off the calibrated list.\n\n";
+  s +=
     "How to report what you did:\n" +
     "- Say what you changed and **the numbers that came out of it**: how many objects, which handles or " +
     "layers, the size, the measured length, area or weight the tools reported. A report of a drawing is a " +

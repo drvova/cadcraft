@@ -136,6 +136,25 @@ a stone's name is reported as a warning instead of being silently believed.
 Set `table: true` to draw the sheet as a table in the drawing at `at`, which is what goes on a job
 bag with the piece.
 
+## In the interface
+
+The interface opens on a jewelry drawing: a size 6 solitaire in 18k gold (Help ▸ Open Sample
+Drawing brings it back; Help ▸ Open Sample Bracket opens the mechanical sample). It is built by the
+commands on this page, so its bench sheet reads back: 33 stones, 1.36 ct, a 3.86 g band.
+
+- **The Bench section of the sidebar** is the bench sheet, live: every stone by cut and size with
+  its count and carats, every band `RING` drew with its size, alloy and grams, and the totals in
+  the heading. The engine counts it again when the drawing changes. A stone off the calibrated
+  melee list says so in the hint on its row. Window ▸ Bench Sheet shows and hides it.
+- **The tool strip** has the four drawing commands after the drafting tools: Ring, Gem, Setting,
+  Pavé. Draw ▸ holds the same four.
+- **The assistant** is told these commands and the trade's units at the start of every turn, and
+  its first suggestions are a jeweler's sentences. Ctrl+K asks it from the drawing
+  ([assistant.md](assistant.md#open-it)).
+
+`TECHSHEET` replies with the bands as well as the stones (`bands: [{block, size, mm, metal, grams,
+width, wall}]`), and its message carries a line for each.
+
 ## Where the numbers come from
 
 The formulas are the trade's published ones, and the tests check them against known stones: a
@@ -143,3 +162,9 @@ The formulas are the trade's published ones, and the tests check them against kn
 0.74 ct, a 5×5 princess 0.70 ct; US 6 is 16.51 mm inside and UK L, EU 52, JP 12, CN 12; a 6 mm
 band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold weighs 3.2 g. See
 `crates/engine/src/cmd/jewelry/tests.rs`.
+
+## Revision history
+
+| Date | Change | Summary |
+|---|---|---|
+| 2026-11-12 | minor | The interface opens on a solitaire sample (`sample::solitaire`), the sidebar has a live Bench section, the tool strip has Ring, Gem, Setting and Pavé, and the assistant is briefed on the jewelry commands. `TECHSHEET` reports bands. Three faults fixed, each with a test: a stone placed with `stone: "diamond"` got a block name (`GEM-…-DIAMOND`) that did not read back, so `SETTING` refused it and the sheet did not count it (diamond is now the default block whether named or not, and a material that begins with `D` is no longer read as a depth); a halo was laid around the origin instead of around its stone; in an inch drawing prongs, halos and pavé were placed 25.4 times too far out |
