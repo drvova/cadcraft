@@ -4,23 +4,30 @@
  *   - the part title: `height: 35px; padding-left/right: 8px`, flex, label 11px/700 uppercase
  *     (§2, `.monaco-workbench .part>.title` + `.title-label h2`);
  *   - the composer box: the glass recipe
- *     (`.design-system/research/cursor-recipes-2026-10-28.md` §2): the elevated surface, radius
- *     12 (docked; a floating card would take 20), no shadow, a 1px border that turns active on focus, the editor at `--composer-font`/`--composer-leading` with a 64px
- *     min-height and 8px/12px padding, a 40px toolbar row (padding 8px, `gap: 4px`);
- *   - the model chip: the pill (radius 9999px, 24px, `padding: 0 8px`, 13px), transparent at
- *     rest, the `.08` hover fill (§2);
+ *     (`.design-system/research/cursor-recipes-2026-10-28.md` §2), re-proportioned for the
+ *     shell's type: the elevated surface at `--assistant-radius`, no shadow, a hairline that turns
+ *     active on focus, the editor at `--composer-font`/`--composer-leading` (two lines at least)
+ *     inset `--gap-8`/`--gap-12`, and a toolbar row of `--control-h-input` controls with
+ *     `--gap-6` over and under them (`gap: --gap-4`);
+ *   - the model chip: the pill (`--radius-round`, `--control-h-input`, `padding: 0 --gap-8`,
+ *     `--font-body`), transparent at rest, the `.08` hover fill (§2);
  *   - send and stop: the inverted circle (fill `--text`, glyph `--on-accent`) (§2);
  *   - the stack over the composer: flat rows on the recessed surface, flush on the card — the
  *     queue, the unresolved changes, and the run's status, whose dot carries
  *     `ripple 1.2s cubic-bezier(.25,.8,.25,1)` to `scale(1.7)` (§1.14);
  *   - the provider popover: the elevated surface, the hairline stroke, radius 8, the shadow; its
  *     preset rows are the system's `Row`, its inputs `Field`, its actions `Button`.
- * The transcript follows the measured glass transcript (research §7): the prompt is the human
- * bubble (the elevated surface, radius 12, the .08 hairline, 8px/12px, `--composer-font`/`--composer-leading`), the model's
- * prose runs at the same size on the surface, an activity row is the 24px flat line (label .6,
- * detail .36, trailing chevron, no hover fill) that opens 14px above its detail, a code block is
- * the recessed surface at radius 12 with the .12 hairline and 12/18 mono, and a turn ends with
- * the 24px action row and the 13px timestamp.
+ * The transcript follows the measured glass transcript (research §7) at the shell's type: the
+ * prompt is the human bubble (the elevated surface, `--assistant-radius`, the .08 hairline,
+ * `--gap-6`/`--gap-12`, `--composer-font`/`--composer-leading`), the model's prose runs at the
+ * same size on the surface, an activity row is one flat line of `--control-h-row` (the sentence,
+ * the quiet note, a trailing chevron, no hover fill) that opens `--gap-4` above its detail, a
+ * code block is the recessed surface at `--assistant-radius` with the .12 hairline and the mono
+ * face, and a turn ends with the `--control-h-chip` action row and its `--font-label` timestamp.
+ *
+ * Every vertical measure here is counted from `--composer-leading` (the 20px line of 13px type)
+ * and the gap scale. The recipe was measured at 15px on a 24px line; its measures are kept in
+ * proportion, not in pixels, so the panel is as dense as the sidebar beside it.
  */
 
 .assistant-panel {
@@ -32,6 +39,10 @@
      card or out of one, starts on the same column. */
   --assistant-gutter: var(--gap-8);
   --assistant-inset: calc(var(--gap-12) + var(--hairline));
+  /* The corner of every card in the panel (the prompt bubble, a code block, a failure, the
+     composer and the stack on it): the block corner brought in by one step, in proportion to a
+     one-line bubble of 13px type as the block corner is to one of 15px. */
+  --assistant-radius: calc(var(--radius-block) - var(--gap-2));
   position: relative;
   width: var(--assistant-width);
   flex: 0 0 auto;
@@ -98,8 +109,8 @@
   flex: 0 0 auto;
   height: 35px;
   /* The right inset is the composer's, edge for edge (the gutter, the card's hairline, the toolbar
-     row's 8px), so the close key stands over the send key and their glyphs share a centre line. */
-  padding: 0 calc(var(--assistant-gutter) + var(--hairline) + var(--gap-8)) 0 calc(var(--assistant-gutter) + var(--assistant-inset));
+     row's `--gap-6`), so the close key stands over the send key and their glyphs share a centre line. */
+  padding: 0 calc(var(--assistant-gutter) + var(--hairline) + var(--gap-6)) 0 calc(var(--assistant-gutter) + var(--assistant-inset));
   border-bottom: var(--hairline) solid var(--border);
 }
 
@@ -163,7 +174,7 @@
   padding: var(--gap-12) var(--assistant-gutter);
   display: flex;
   flex-direction: column;
-  gap: var(--gap-14);
+  gap: var(--gap-12);
 }
 
 /* A long chat opens on its newest rows; the ones before them are one key away. The key is a
@@ -229,50 +240,25 @@
   margin: 0 0 var(--gap-6);
   padding: 0 var(--assistant-inset);
   color: var(--text-dim);
-  font-size: var(--font-body);
-  line-height: 1.5;
+  font-size: var(--composer-font);
+  line-height: var(--composer-leading);
   text-wrap: pretty;
 }
 
-/* A suggestion is the measured 32px empty-state row (research §7b): the 14px icon at .66, the
-   13px label at full ink, the trailing chevron, and the .08 fill at radius 8 on hover. */
-.assistant-example {
+/* The suggestions are a list of the system's `Row`, the band the sidebar's lists are made of:
+   the same height, hover fill and focus ring as a layer or a property beside the drawing. A row
+   carries `--gap-4` of its own inset: the list steps out by it, so the icons stand on the text
+   column and the fill reaches a little past them, as a list's highlight does. */
+.assistant-examples {
   display: flex;
-  align-items: center;
-  gap: var(--gap-8);
-  width: 100%;
-  height: var(--control-h-suggestion);
-  padding: 0 var(--assistant-inset);
-  border: none;
-  border-radius: var(--radius-popover);
-  background: transparent;
-  color: var(--text);
-  font-family: var(--font-family);
-  font-size: var(--font-body);
-  text-align: left;
-  cursor: pointer;
-  transition: background-color var(--dur-fast) var(--ease-out);
-}
-
-@media (hover: hover) {
-  .assistant-example:hover {
-    background: var(--hover);
-  }
-}
-
-/* Pressed: one rung up the fill ladder, as the layer's ghost controls take. */
-.assistant-example:active {
-  background: var(--fill-active);
-}
-
-.assistant-example:focus-visible {
-  outline: var(--focus-outline-w) solid var(--focus-ring);
-  outline-offset: var(--focus-outline-offset);
+  flex-direction: column;
+  margin: 0 calc(var(--assistant-inset) - var(--gap-4));
 }
 
 .assistant-example-icon {
   flex: 0 0 auto;
   display: inline-flex;
+  margin-right: var(--gap-8);
   color: var(--icon);
 }
 
@@ -281,12 +267,14 @@
   height: var(--icon-size-md);
 }
 
+/* What a press puts in the composer: the reader's own next words, so the full ink. */
 .assistant-example-text {
   flex: 1 1 auto;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--text);
 }
 
 .assistant-example-chevron {
@@ -300,15 +288,16 @@
   height: var(--icon-size-sm);
 }
 
-/* The human message: the measured glass bubble — the elevated surface, radius 12, the .08
-   hairline, 8px/12px inside, the composer's `--composer-font`/`--composer-leading` type (research §2). */
+/* The human message: the glass bubble (research §2) — the elevated surface, the panel's card
+   corner, the .08 hairline, `--gap-6`/`--gap-12` inside, the composer's
+   `--composer-font`/`--composer-leading` type. */
 .assistant-prompt {
   align-self: stretch;
   max-width: none;
-  padding: var(--gap-8) var(--gap-12);
+  padding: var(--gap-6) var(--gap-12);
   background: var(--surface-elevated);
   border: var(--hairline) solid var(--border-soft);
-  border-radius: var(--radius-block);
+  border-radius: var(--assistant-radius);
   color: var(--text);
   font-size: var(--composer-font);
   line-height: var(--composer-leading);
@@ -317,11 +306,11 @@
   overflow-wrap: anywhere;
 }
 
-/* The transcript's rhythm: the rows of one turn sit 14px apart (the body's gap), what belongs
-   together sits closer (a step under a step, a row's opened detail, the actions under a reply),
-   and a new prompt stands 24px clear of the turn before it. */
+/* The transcript's rhythm: the rows of one turn sit `--gap-12` apart (the body's gap), what
+   belongs together sits closer (a step under a step, a row's opened detail, the actions under a
+   reply), and a new prompt stands one line (`--gap-12` and `--gap-8`) clear of the turn before it. */
 .assistant-prompt:not(:first-child) {
-  margin-top: var(--gap-10);
+  margin-top: var(--gap-8);
 }
 
 .assistant-prompt-pics {
@@ -339,8 +328,10 @@
   word-break: break-word;
 }
 
-/* A reply's headings: the same size as its prose, set apart by weight and a little air above
-   (more above than below, so a heading belongs to what follows it). */
+/* A reply's headings: the size of its prose, never larger, set apart by weight and by air (the
+   body's gap and `--gap-4` above, `--gap-6` below, so a heading belongs to what follows it). A
+   title or a section (`#`, `##`) takes the full ink; a heading under one (`###` and deeper) the
+   dim ink, so two levels read apart without a second size. */
 .assistant-heading {
   margin: var(--gap-4) 0 calc(-1 * var(--gap-6));
   padding: 0 var(--assistant-inset);
@@ -349,28 +340,51 @@
   font-weight: 600;
   line-height: var(--composer-leading);
   text-wrap: balance;
+  overflow-wrap: anywhere;
 }
 
 .assistant-heading--minor {
-  font-size: var(--font-body);
+  color: var(--text-dim);
 }
 
-/* A reply's lists: the prose's own type, hung on quiet markers. */
+/* A reply's lists: the prose's own type. The markers are drawn here and stand on the panel's text
+   column, where every other line starts; an item's words hang one step in from them. `role="list"`
+   on the element keeps it a list to a screen reader with the platform's marker gone. */
 .assistant-list {
   margin: 0;
-  padding: 0 var(--assistant-inset) 0 calc(var(--assistant-inset) + var(--gap-16));
+  padding: 0 var(--assistant-inset);
+  list-style: none;
+  counter-reset: assistant-item;
   display: flex;
   flex-direction: column;
-  gap: var(--gap-4);
+  gap: var(--gap-2);
   color: var(--text);
   font-size: var(--composer-font);
   line-height: var(--composer-leading);
   word-break: break-word;
 }
 
-.assistant-list li::marker {
-  color: var(--text-disabled);
+.assistant-list li {
+  position: relative;
+  padding-left: var(--gap-14);
+  counter-increment: assistant-item;
+}
+
+/* A numbered item's indent holds two figures and the stop ("10."). */
+ol.assistant-list li {
+  padding-left: calc(var(--gap-16) + var(--gap-4));
+}
+
+.assistant-list li::before {
+  content: "\2022";
+  position: absolute;
+  left: 0;
+  color: var(--text-faint);
   font-variant-numeric: tabular-nums;
+}
+
+ol.assistant-list li::before {
+  content: counter(assistant-item) ".";
 }
 
 .assistant-text code,
@@ -382,6 +396,8 @@
   color: var(--text);
   font-family: var(--font-family-mono);
   font-size: var(--font-mono);
+  /* A long name breaks inside its chip instead of pushing the line past the panel. */
+  overflow-wrap: anywhere;
 }
 
 .assistant-text strong,
@@ -390,32 +406,63 @@
   font-weight: 600;
 }
 
+/* A link in a reply: the accent's text ink and an underline, so it reads as a link without colour
+   alone. Only an http or https address is ever a link (`parseInline`); it opens outside the app. */
+.assistant-link {
+  color: var(--text-accent);
+  text-decoration: underline;
+  text-decoration-thickness: var(--hairline);
+  text-underline-offset: var(--gap-2);
+  border-radius: var(--radius-control);
+  overflow-wrap: anywhere;
+}
+
+@media (hover: hover) {
+  .assistant-link:hover {
+    text-decoration-thickness: var(--gap-2);
+  }
+}
+
+.assistant-link:focus-visible {
+  outline: var(--focus-outline-w) solid var(--focus-ring);
+  outline-offset: var(--hairline);
+}
+
 /* A turn that failed: the recessed block the transcript's code takes (same corner, same
    hairline, the text on the column), with only the words in the error ink. */
 .assistant-failed {
-  padding: var(--gap-8) var(--gap-12);
+  padding: var(--gap-6) var(--gap-12);
   border: var(--hairline) solid var(--border-soft);
-  border-radius: var(--radius-block);
+  border-radius: var(--assistant-radius);
   background: var(--surface-inset);
   color: var(--error);
   font-size: var(--font-body);
-  line-height: 1.5;
+  line-height: var(--composer-leading);
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
 }
 
-/* An activity row: the measured 24px line that opens on click, with no fill on hover (the flat
-   row, research §2). It says what ran as a sentence, then what that changed, then the chevron.
-   One line of the prose's leading inside the row's 24px; a sentence too long for the panel takes
-   a second line (the note and the chevron stay on the first) before it is cut. */
+/* An activity row: the flat line that opens on click, with no fill on hover (research §2). It
+   says what ran as a sentence, then what that changed, with the chevron at the line's end.
+   The sentence is one line of the prose's leading inside the list row's height
+   (`--control-h-row`) and never wraps: where the panel is too narrow for it, it is cut with an
+   ellipsis (the hint has it whole, and so does the row once it is opened). The note follows the
+   sentence on its line where both fit, and drops under it where they do not, so nothing is cut
+   at the panel's default width that need not be; the row is one line or two, never more. Its
+   height depends only on its own words and the panel's width, so it does not move while the
+   reply under it is written. */
 .assistant-tool {
+  position: relative;
   display: flex;
-  align-items: flex-start;
-  gap: var(--gap-6);
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--gap-8);
   width: 100%;
-  min-height: var(--control-h-input);
-  padding: calc((var(--control-h-input) - var(--composer-leading)) / 2) var(--assistant-inset);
+  min-height: var(--control-h-row);
+  /* The right inset keeps the chevron's place (its glyph and the gap before it) clear of the words. */
+  padding: calc((var(--control-h-row) - var(--composer-leading)) / 2) calc(var(--assistant-inset) + var(--icon-size-sm) + var(--gap-6))
+    calc((var(--control-h-row) - var(--composer-leading)) / 2) var(--assistant-inset);
   border: none;
   border-radius: 0;
   background: transparent;
@@ -428,9 +475,9 @@
   transition: color var(--dur-fast) var(--ease-standard);
 }
 
-/* A run of steps reads as one list: 4px between them, not the body's 14. */
+/* A run of steps reads as one list: `--gap-2` between them, not the body's gap. */
 .assistant-tool + .assistant-tool {
-  margin-top: calc(-1 * var(--gap-10));
+  margin-top: calc(var(--gap-2) - var(--gap-12));
 }
 
 @media (hover: hover) {
@@ -450,9 +497,10 @@
 }
 
 .assistant-tool-chevron {
-  flex: 0 0 auto;
-  /* At the row's end, whatever the sentence and the note before it take, centred on the first line. */
-  margin-left: auto;
+  /* At the end of the first line, whatever the sentence and the note take, centred on that line. */
+  position: absolute;
+  top: calc((var(--control-h-row) - var(--composer-leading)) / 2);
+  right: var(--assistant-inset);
   height: var(--composer-leading);
   align-items: center;
   display: inline-flex;
@@ -490,80 +538,55 @@
   animation: transcript-reveal var(--dur-med) var(--ease-out-quint);
 }
 
-/* What the step did, as a sentence in the prose's own face, a step under its ink: it is the part
-   of the row that gives way. It wraps to a second line and is cut after that (the hint has it
-   whole). */
+/* What the step did, as a sentence in the prose's own face, a step under its ink: one line, cut
+   with an ellipsis where the row is narrower than it. */
 .assistant-tool-name {
   flex: 0 1 auto;
   min-width: 0;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
-
-/* One argument ("radius 0.6") holds together on a line; one wider than the row is cut by itself. */
-.assistant-tool-arg {
-  display: inline-block;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  vertical-align: bottom;
 }
 
 /* Only a command's name is set in the mono face: it is the one word that is the engine's. */
 .assistant-tool-name code {
   font-family: var(--font-family-mono);
   font-size: var(--font-mono);
+  /* The mono face sits on the sentence's baseline without making its line any taller. */
+  line-height: 1;
 }
 
-/* What the result changed: a few quiet words after the sentence. It keeps its width up to half
-   the row, so a short note is never the part that is cut. */
+/* What the result changed: a few quiet words, a size under the sentence. Beside it they share its
+   baseline; under it they take the small text's own line. */
 .assistant-tool-note {
-  flex: 0 0 auto;
-  max-width: 50%;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
   color: var(--text-faint);
   font-size: var(--font-label);
   font-variant-numeric: tabular-nums;
+  line-height: var(--gap-16);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* A failure is the row's news: its words take a line of their own under the sentence, on the text
-   column, two lines at most (the hint and the opened row have them whole), instead of being cut
-   at half the row. */
-.assistant-tool--failed {
-  flex-wrap: wrap;
-  row-gap: 0;
-}
-
-.assistant-tool--failed .assistant-tool-name {
-  flex: 1 1 0;
-}
-
+/* A failure is the row's news: its words always take the line under the sentence, on the text
+   column, in the error ink (the hint and the opened row have them whole). */
 .assistant-tool--failed .assistant-tool-note {
-  order: 1;
-  flex: 0 0 100%;
-  max-width: none;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  line-height: var(--composer-leading);
-}
-
-/* A step that failed says so in the error ink. */
-.assistant-tool--failed .assistant-tool-note {
+  flex-basis: 100%;
   color: var(--error);
 }
 
-/* The opened row: the content sits 6px under its header, closer than anything else in the
+/* Opened, the row has room for all of its words: the sentence and the note wrap instead of being cut. */
+.assistant-tool[aria-expanded="true"] .assistant-tool-name,
+.assistant-tool[aria-expanded="true"] .assistant-tool-note {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* The opened row: the content sits `--gap-4` under its header, closer than anything else in the
    transcript, so it reads as that row's own; it has no fill of its own. */
 .assistant-detail {
   margin: calc(-1 * var(--gap-8)) 0 0;
@@ -573,19 +596,30 @@
   gap: var(--gap-8);
 }
 
-/* A code block: the measured recipe — the recessed surface, radius 12, the .12 hairline,
-   12px/18px mono (research §2). Its side inset is the bubble's 12px, not the measured 10, so the
-   code starts on the panel's text column. Code keeps its lines: a long one scrolls sideways
-   inside the block (a wrapped line of code reads as two), and the block never widens the panel. */
-.assistant-code {
-  margin: 0;
-  padding: var(--gap-6) var(--gap-12);
-  max-width: 100%;
-  max-height: var(--block-max-height);
-  overflow: auto;
+/* A code block (research §2): the recessed surface, the panel's card corner, the .12 hairline,
+   the mono face on a line of one and a half. The block is the frame; inside it the code and the
+   copy key stand side by side, so the key has a place of its own and never lies over a line of
+   code, however long the line or far it is scrolled. The frame gives way with the panel, so the
+   block is as wide as the panel and not as its longest line. */
+.assistant-code-wrap {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  overflow: hidden;
   background: var(--surface-inset);
   border: var(--hairline) solid var(--border);
-  border-radius: var(--radius-block);
+  border-radius: var(--assistant-radius);
+}
+
+/* The code starts on the panel's text column (the bubble's inset). It keeps its lines: a long
+   one scrolls sideways inside the block (a wrapped line of code reads as two). */
+.assistant-code {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: var(--gap-6) var(--gap-4) var(--gap-6) var(--gap-12);
+  max-height: var(--block-max-height);
+  overflow: auto;
   color: var(--text);
   font-family: var(--font-family-mono);
   font-size: var(--font-mono);
@@ -594,36 +628,12 @@
   tab-size: 2;
 }
 
-/* The wrap gives way with the panel, so the block's own width is the panel's and not its longest line's. */
-.assistant-code-wrap {
-  min-width: 0;
-}
-
-/* The copy affordance: the measured 20px overlay at the block's top-right, shown on hover. It is
-   backed by the block's own surface, so the key never sits on top of a line of code. */
-.assistant-code-wrap {
-  position: relative;
-}
-
+/* The copy key: the small circle at the block's top right, level with the first line of code. It
+   is always there (a key that shows only under a pointer does not exist for a finger). */
 .assistant-code-copy {
-  position: absolute;
-  top: var(--gap-4);
-  right: var(--gap-4);
+  flex: 0 0 auto;
   display: inline-flex;
-  border-radius: var(--radius-round);
-  background: var(--surface-inset);
-  opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease-out);
-}
-
-@media (hover: hover) {
-  .assistant-code-wrap:hover .assistant-code-copy {
-    opacity: 1;
-  }
-}
-
-.assistant-code-wrap:focus-within .assistant-code-copy {
-  opacity: 1;
+  padding: var(--gap-4) var(--gap-4) var(--gap-4) 0;
 }
 
 /* What the step reported: plain mono on the panel, on the text column, a step quieter than the
@@ -641,24 +651,26 @@
   word-break: break-word;
 }
 
-/* The turn's actions: the measured 24px icon row, the 13px timestamp at .36 (research §2). */
-/* The row's first key is a 20px circle around a 12px glyph: pulling it left by the glyph's own
-   margin puts the glyph, not the circle's edge, on the text column. */
+/* The turn's actions (research §2): a row as tall as its small key, with the timestamp in the
+   small text beside it. The row's first key is a small circle around a `--icon-size-sm` glyph:
+   pulling it left by the glyph's own margin puts the glyph, not the circle's edge, on the text
+   column. */
 .assistant-turn-actions {
   display: flex;
   align-items: center;
   gap: var(--gap-6);
   padding: 0 var(--assistant-inset) 0 calc(var(--assistant-inset) - var(--gap-4));
-  min-height: var(--control-h-input);
-  /* The actions belong to the reply (or the failure) above them: 6px under it. */
+  min-height: var(--control-h-chip);
+  /* The actions belong to the reply (or the failure) above them: `--gap-4` under it. */
   margin-top: calc(-1 * var(--gap-8));
 }
 
+/* The age of a turn is read, if rarely: the quiet ink, not the disabled one. */
 .assistant-time {
-  color: var(--text-disabled);
+  color: var(--text-faint);
   font-size: var(--font-label);
   font-variant-numeric: tabular-nums;
-  line-height: var(--composer-leading);
+  line-height: var(--gap-16);
 }
 
 /* ---- The composer (the glass composer's recipe, research §2) ---- */
@@ -680,12 +692,14 @@
 .assistant-stack {
   display: flex;
   flex-direction: column;
+  /* A row is as tall as the small button it may hold; this keeps two such buttons a step apart. */
+  gap: var(--gap-2);
   margin: 0 var(--gap-8);
   padding: var(--gap-2) 0;
   background: var(--surface-inset);
   border: var(--hairline) solid var(--composer-border);
   border-bottom: none;
-  border-radius: var(--radius-block) var(--radius-block) 0 0;
+  border-radius: var(--assistant-radius) var(--assistant-radius) 0 0;
   max-height: var(--block-max-height);
   overflow-y: auto;
 }
@@ -693,14 +707,14 @@
 /* The queue's heading is its fold key and its count on one line. It is a row of the stack like
    the others (the same height, type, gap and inset as the changes row, the other row that opens
    with a chevron), so the two chevrons and the two labels share their columns and every row of
-   the stack is one pitch from the next. The key is a 20px circle around a 12px glyph, so it steps
-   out by the glyph's margin and the glyph sits on the rows' text column. */
+   the stack is one pitch from the next. The key is a small circle around a `--icon-size-sm`
+   glyph, so it steps out by the glyph's margin and the glyph sits on the rows' text column. */
 .assistant-stack-head {
   display: flex;
   align-items: center;
   gap: var(--gap-6);
   flex-shrink: 0;
-  min-height: var(--control-h-button);
+  min-height: var(--control-h-input);
   padding: 0 var(--gap-8) 0 var(--gap-4);
   color: var(--text-faint);
   font-size: var(--font-body);
@@ -731,7 +745,15 @@
 .assistant-stack-queue {
   display: flex;
   flex-direction: column;
+  gap: var(--gap-2);
   flex-shrink: 0;
+}
+
+/* What waits is listed under the heading's words, not under its fold key: a queued message
+   starts on the column "2 in queue" starts on (the key's circle and the gap after it). */
+.assistant-stack-queue .assistant-stack-row,
+.assistant-stack-list {
+  padding-left: calc(var(--control-h-chip) + var(--gap-6));
 }
 
 .assistant-stack-queue[hidden],
@@ -744,15 +766,17 @@
   align-items: center;
   gap: var(--gap-6);
   flex-shrink: 0;
-  min-height: var(--control-h-button);
-  /* The stack is inset from the card by the gutter; 4px more puts its text on the column. */
+  /* The height of the small button a row may end with, on the 20px line of its text. */
+  min-height: var(--control-h-input);
+  line-height: var(--composer-leading);
+  /* The stack is inset from the card by the gutter; `--gap-4` more puts its text on the column. */
   padding: 0 var(--gap-8) 0 var(--gap-4);
   color: var(--text-faint);
   font-size: var(--font-body);
 }
 
 /* The text is the only part of a row that gives way: its keys keep their size however long the
-   queued message is (a long one used to squeeze the 20px keys to 12). */
+   queued message is (a long one used to squeeze the small keys). */
 .assistant-stack-text {
   flex: 1 1 0;
   min-width: 0;
@@ -765,13 +789,26 @@
   flex-shrink: 0;
 }
 
+/* A label in two parts ("1 change" and "to the drawing"): where the row has no room for both
+   beside its buttons, the second part wraps under the first, out of this one-line box, and the
+   label reads short instead of ending in an ellipsis. */
+.assistant-stack-text--parts {
+  height: var(--composer-leading);
+  white-space: normal;
+}
+
+.assistant-stack-text--parts > span {
+  display: inline-block;
+  white-space: pre;
+}
+
 /* What waits in the queue is the reader's own words: a step above the rows that only report. */
 .assistant-stack-queue .assistant-stack-text {
   color: var(--text-dim);
 }
 
-/* The running dot stands where a row's chevron glyph stands (3px into the glyph's 12px box, the
-   row's 6px gap after it), so the status starts on the column the labels beside a chevron start on. */
+/* The running dot stands where a row's chevron glyph stands (`--gap-3` into the glyph's box, the
+   row's `--gap-6` after it), so the status starts on the column the labels beside a chevron start on. */
 .assistant-stack-row > .assistant-ripple {
   margin: 0 var(--gap-6) 0 var(--gap-3);
 }
@@ -783,8 +820,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* A row that opens with a key (the changes row's chevron): the key is a 20px circle around a
-   12px glyph, so it steps out by the glyph's margin and the glyph sits on the text column. */
+/* A row that opens with a key (the changes row's chevron): the key is a small circle around a
+   `--icon-size-sm` glyph, so it steps out by the glyph's margin and the glyph sits on the text column. */
 .assistant-stack-row > .ui-icon-button:first-child {
   margin-left: calc(-1 * var(--gap-4));
 }
@@ -795,10 +832,12 @@
   padding-right: var(--gap-4);
 }
 
-/* The opened changes row: what the assistant ran to make them, oldest first, one line each. */
+/* The opened changes row: what the assistant ran to make them, oldest first, one line each, under
+   the row's words. */
 .assistant-stack-list {
   margin: 0;
-  padding: var(--gap-4) var(--gap-8) var(--gap-2) var(--gap-4);
+  padding-top: var(--gap-4);
+  padding-right: var(--gap-8);
   list-style: none;
   color: var(--text-faint);
   /* The transcript's own sentences, so they take its face. */
@@ -818,10 +857,9 @@
   flex-direction: column;
   background: var(--surface-elevated);
   border: var(--hairline) solid var(--composer-border);
-  /* Docked in the panel, the card takes the block radius, the same corner as the prompt bubble
-     and the stack above it (the reference board's docked composers); the 20px corner is for a
-     surface that floats. */
-  border-radius: var(--radius-block);
+  /* Docked in the panel, the card takes the panel's card corner, the same as the prompt bubble
+     and the stack above it (the reference board's docked composers draw a tight corner). */
+  border-radius: var(--assistant-radius);
   transition: border-color var(--dur-fast) var(--ease-out);
 }
 
@@ -830,28 +868,12 @@
 }
 
 /* What the message carries (the canvas selection, pictures) sits in the card, over the words, as
-   on the reference board's composers. The card grows upward by this row, and the growth is drawn:
-   the row opens from nothing over the popover's pace instead of arriving whole in one frame (the
-   grid track runs 0fr to 1fr, the one way a box of unknown height can be eased open). */
-.assistant-attachments {
-  display: grid;
-  grid-template-rows: 1fr;
-  animation: assistant-attachments-in var(--dur-med) var(--ease-out-quint);
-}
-
-@keyframes assistant-attachments-in {
-  from {
-    grid-template-rows: 0fr;
-    opacity: 0;
-  }
-  to {
-    grid-template-rows: 1fr;
-    opacity: 1;
-  }
-}
-
+   on the reference board's composers. The card grows and shrinks by this row, and every change of
+   its height is drawn: the first chip, a chip that starts a second line, a line that empties and
+   the last chip leaving all ease the box from the height it had to the height it needs (the panel
+   measures the row and animates this box, at the popover's pace: a height that follows wrapped
+   content cannot be eased by the stylesheet alone). */
 .assistant-attachments-clip {
-  min-height: 0;
   overflow: hidden;
 }
 
@@ -862,17 +884,43 @@
   padding: var(--gap-8) var(--gap-12) 0;
 }
 
+/* A chip fades in as it arrives, and fades out before it is taken away (faster than it came: the
+   reader has already decided). Only then do the chips after it move up. */
 .assistant-attachment {
   display: inline-flex;
   align-items: center;
   gap: var(--gap-4);
+  min-width: 0;
+  max-width: 100%;
   padding: var(--gap-2) var(--gap-4);
   border: var(--hairline) solid var(--border-soft);
   border-radius: var(--radius-small);
   background: var(--control);
+  animation: assistant-attachment-in var(--dur-med) var(--ease-out-quint);
 }
 
+@keyframes assistant-attachment-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.assistant-attachment.is-leaving {
+  animation: assistant-attachment-out var(--dur-fast) var(--ease-out) forwards;
+}
+
+@keyframes assistant-attachment-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* The thumbnail is decoration beside the picture's name (its `alt` is empty: the name is read once). */
 .assistant-attachment img {
+  flex: 0 0 auto;
   width: 20px;
   height: 20px;
   object-fit: cover;
@@ -903,6 +951,7 @@
 }
 
 .assistant-attachment-name {
+  min-width: 0;
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -942,11 +991,14 @@
 }
 
 /* The editor is the system's bare TextArea, which draws no box and sets its own height (two lines
-   to nine, then it scrolls). This label around it is the card's inset and the composer's type,
-   which the editor inherits; a press on the inset lands in the editor, as a press on a label does. */
+   of `--composer-leading` to nine, then it scrolls). This label around it is the card's inset and
+   the composer's type, which the editor inherits; a press on the inset lands in the editor, as a
+   press on a label does. The inset is `--gap-8` over the words and `--gap-4` under them: the
+   toolbar's own `--gap-6` follows, so the last line stands a little further from the keys than
+   the first stands from the card's edge. */
 .assistant-input {
   display: block;
-  padding: var(--gap-8) var(--gap-12);
+  padding: var(--gap-8) var(--gap-12) var(--gap-4);
   font-family: var(--font-family);
   font-size: var(--composer-font);
   line-height: var(--composer-leading);
@@ -954,31 +1006,50 @@
   cursor: text;
 }
 
+/* The toolbar: the card's controls on one line of `--control-h-input`, `--gap-6` clear of the
+   card's foot and its right edge (the send key sits in the corner at one distance from both), and
+   of the words above. The model pill carries `--gap-8` of its own inset: `--gap-4` here puts its
+   label on the text column. */
 .assistant-row {
   display: flex;
   align-items: center;
   gap: var(--gap-4);
-  height: var(--composer-toolbar-height);
-  /* The model pill carries 8px of its own inset: 4px here puts its label on the text column. */
-  padding: var(--gap-8) var(--gap-8) var(--gap-8) var(--gap-4);
+  height: calc(var(--control-h-input) + 2 * var(--gap-6));
+  padding: var(--gap-6) var(--gap-6) var(--gap-6) var(--gap-4);
+}
+
+/* What gives way in a narrow panel, in order. The attach and send keys never do. The context
+   meter goes first: it shares this one-line box with the model pill, and when the two do not fit
+   side by side it wraps to a second line, which the box does not show (it is still there for a
+   screen reader). Only then does the model's name give way, to an ellipsis. */
+.assistant-row-model {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--control-h-input);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--gap-8);
+  overflow: hidden;
 }
 
 .assistant-actions {
   flex: 0 0 auto;
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: var(--gap-4);
 }
 
-/* The model chip: the pill (research §2): transparent at rest, the `.08` hover fill. */
+/* The model chip: the pill (research §2): transparent at rest, the `.08` hover fill. It is as
+   wide as the model's name wherever the line has room for it, and gives way inside the line
+   (the name to an ellipsis, the hint has it whole) only once the meter has gone. */
 .assistant-ghost {
   display: inline-flex;
   align-items: center;
   gap: var(--gap-2);
   flex: 0 1 auto;
   min-width: 0;
-  max-width: 160px;
+  max-width: 100%;
   height: var(--control-h-input);
   padding: 0 var(--gap-8);
   border: none;
@@ -1028,9 +1099,13 @@
   height: var(--icon-size-sm);
 }
 
-/* The context meter: figures that do not jiggle as they grow, a little clear of the keys. */
+/* The context meter: figures that do not jiggle as they grow, at the end of the pill's line and a
+   little clear of the keys. Its line is the box's whole height, so wrapped it is wholly out of sight. */
 .assistant-context {
+  flex: 0 0 auto;
+  margin-left: auto;
   margin-right: var(--gap-4);
+  line-height: var(--control-h-input);
   color: var(--text-faint);
   font-family: var(--font-family-mono);
   font-size: var(--font-chip);
@@ -1209,36 +1284,41 @@
 }
 
 /* A labelled field of the sheet: the name, the system's `Field`, and a quiet line of help. The
-   name's line is 16px, the hint's lines too, so every field block is built from the same rows. */
+   name's line is `--gap-16`, the hint's lines too, so every field block is built from the same
+   rows. The name is the secondary text's size and ink, a step over the help under the field, so
+   the three names are what the eye finds first down the column. */
 .assistant-field {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--gap-4);
   color: var(--text-dim);
-  font-size: var(--font-chip);
+  font-size: var(--font-label);
   line-height: var(--gap-16);
 }
 
-/* A field and what follows it in the group stand 4px further apart than a field and its own
+/* The field and its help take the whole width: every field of the sheet starts and ends on the
+   same two edges. */
+.assistant-field > .ui-field,
+.assistant-field > .assistant-field-hint {
+  grid-column: 1 / -1;
+}
+
+/* A field and what follows it in the group stand `--gap-4` further apart than a field and its own
    name and hint, so each name reads with the field under it and not the hint above it. */
 .assistant-field + .assistant-field {
   margin-top: var(--gap-4);
 }
 
-/* The key and its show/hide key share one row: the field gives way, the key keeps its width. */
-.assistant-key {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-4);
-}
-
-.assistant-key .ui-field {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.assistant-key .ui-icon-button {
-  flex: 0 0 auto;
+/* The key's show/hide key stands on the name's line, at the field's right edge, so the key field
+   is as wide as the two around it (beside the field, it made that one field narrower). It comes
+   after the field in the page and in the Tab order; the grid puts it on the first row. Its small
+   circle is taller than the name's line and overhangs it evenly, and steps out by its glyph's
+   margin so the glyph ends on the fields' edge. */
+.assistant-field > .ui-icon-button {
+  grid-row: 1;
+  grid-column: 2;
+  align-self: center;
+  margin: calc((var(--gap-16) - var(--control-h-chip)) / 2) calc(-1 * var(--gap-4)) calc((var(--gap-16) - var(--control-h-chip)) / 2) 0;
 }
 
 /* Help is read, so it takes the quiet ink, not the disabled one (11px at .36 is below reading
@@ -1280,6 +1360,17 @@
   gap: var(--gap-6);
   padding: var(--gap-8) var(--assistant-gutter);
   border-top: var(--hairline) solid var(--border);
+}
+
+/* A turn that is still running while the sheet is open (the stack that says so is in the composer,
+   which the sheet has taken out of the page): its status and Stop stay in view here, as the
+   stack's own row draws them, with the dot on the text column. */
+.assistant-setup-run {
+  padding: 0 calc(var(--assistant-inset) - var(--gap-6)) 0 var(--assistant-inset);
+}
+
+.assistant-setup-run > .assistant-ripple {
+  margin-left: 0;
 }
 
 /* The foot's two lines: what the connection check found, and why Save is off (said here once, in

@@ -1,39 +1,47 @@
 # CADCraft roadmap
 
-**Stage: pre-alpha** · next: alpha, ~2 points (38% → 40% ready for real work) and ~125–190 Opus 5.5 hours away (the four failing core workflows of the [alpha gate](docs/roadmap.md#alpha-gate))
+**Stage: pre-alpha** · next: alpha, ~4 points (36% → 40% ready for real work) and the four failing core workflows of the [alpha gate](docs/roadmap.md#alpha-gate): ~125–190 Opus 5.5 hours as estimated before the interface was replaced, plus the new interface's own gaps, not estimated yet
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-26 · **Change:** minor (one tool for agents: the assistant and MCP both advertise exactly `run`, which executes AutoLISP in the open drawing and keeps the definitions a model writes; the tool catalog is gone and MCP resources with it; [docs/assistant.md](docs/assistant.md); previously minor: the in-app assistant pane) · **Target:** Autodesk AutoCAD 2027
+> **Last reviewed:** 2026-10-10 (features, files, hours) · 2026-11-11 (interface) · **Last updated:** 2026-11-11 · **Change:** major (the egui interface was removed; the interface is the web interface in `apps/ui` and the desktop app is that interface in a native webview: UI/UX fidelity 43% → ≈ 31%, ready for real work ≈ 38% → ≈ 36%; menu breadth restated from the generated checklist; previously minor: one tool for agents) · **Target:** Autodesk AutoCAD 2027
 
 CADCraft targets full parity with AutoCAD (2D drafting first, then annotation, layouts and
 plotting, DWG, parametrics and 3D), plus what AutoCAD doesn't have: agent control over MCP, a
 scriptable CLI, a web build, Linux and FreeBSD builds, and a free licence.
 
 **Why pre-alpha:** four of AutoCAD's five core workflows fail the [alpha gate](docs/roadmap.md#alpha-gate).
-Precise drafting lacks object snap tracking and has stubbed TRIM/EXTEND/OFFSET options; blocks
-can't be edited in a block editor (REFEDIT edits them in place, xrefs not yet); plots ignore plot styles; and a DWG saved by
-CADCraft drops everything it doesn't model and has never been checked in
-AutoCAD. Dimensioning passes. Ready for real work (≈ 38%) is also under the ~40% alpha bar. Beta
-is ≈ 600–930 h away.
+Precise drafting: the new interface draws with the pointer, snaps to objects and follows ortho,
+polar, grid snap and object snap tracking, but there are no grips and no dynamic input. Blocks, plotting and every other
+command with a dialog run as command-line prompts only. The app opens and saves DXF, not DWG, and
+a DWG saved by the CLI drops what CADCraft doesn't model and has never been checked in AutoCAD.
+Dimensioning passes, by typing. Ready for real work (≈ 36%) is under the ~40% alpha bar. Beta was
+≈ 600–930 h away before the interface change.
+
+**The interface, 2026-11-11.** The egui interface is gone. The interface is a SolidJS app over
+the engine compiled to WebAssembly, laid out as an editor: menus and a command centre in the
+title bar, a drawing toolbar, Layers and Properties in a sidebar, layout tabs, the command line
+as the panel, an assistant, a status bar of drafting toggles and a command palette. It has been
+exercised in Chromium and, as the desktop app, on Windows. What it lacks is in
+[docs/gaps.md](docs/gaps.md#uiux) (W1–W14).
 
 ## Headline numbers
 
 | Number | Value | Kind |
 |---|---|---|
-| Feature breadth (AutoCAD for Mac menu items with a live command) | **50%** (245 / 491; 2D menus only ≈ 65%) | measured ([parity-checklist.md](docs/parity-checklist.md) + UI-only commands) |
-| Ready for real work | **≈ 38%** | estimated ([target-app-parity.md](docs/target-app-parity.md)) |
-| Mainstream practitioner (2D drafter) | **≈ 28%** (lower than the full number: file exchange, stability and interaction discounts multiply) | estimated ([target-app-parity.md](docs/target-app-parity.md#mainstream-practitioner)) |
-| Essentials user | **≈ 46%** | estimated ([target-app-parity.md](docs/target-app-parity.md#essentials-user)) |
-| Remaining to alpha | **≈ 125–190 h** (the gate rows) | estimated |
-| Remaining to beta | **≈ 600–930 h** (≈ 150–250 h elapsed with 4–6 agents) | estimated |
-| Remaining to full parity | **≈ 1,300–2,100 h** (≈ 330–550 h elapsed) | estimated |
+| Feature breadth (AutoCAD for Mac menu items with a live command) | **62%** (304 / 491: 300 engine commands in the checklist generated 2026-10-26, plus 4 interface-only items hand-counted 2026-11-11; 2D menus only ≈ 65% as of 2026-10-10, not recounted) | measured ([parity-checklist.md](docs/parity-checklist.md) + interface-only items); `cargo xtask parity` not re-run |
+| Ready for real work | **≈ 36%** (38% with the egui interface) | estimated ([target-app-parity.md](docs/target-app-parity.md)); weighted sum hand-computed 2026-11-11 |
+| Mainstream practitioner (2D drafter) | **≈ 28%** on the egui interface; not re-measured, lower now (lower than the full number: file exchange, stability and interaction discounts multiply) | estimated ([target-app-parity.md](docs/target-app-parity.md#mainstream-practitioner)) |
+| Essentials user | **≈ 46%** on the egui interface; not re-measured, lower now | estimated ([target-app-parity.md](docs/target-app-parity.md#essentials-user)) |
+| Remaining to alpha | **≈ 125–190 h** (the gate rows), plus the interface's gaps, not estimated | estimated before the interface change |
+| Remaining to beta | **≈ 600–930 h** (≈ 150–250 h elapsed with 4–6 agents) | estimated before the interface change |
+| Remaining to full parity | **≈ 1,300–2,100 h** (≈ 330–550 h elapsed) | estimated before the interface change |
 
 ### Readiness by audience
 
 | Audience | Ready % | Opus 5.5 agent wall-clock hours to ~95% | Work that dominates |
 |---|---:|---|---|
-| Full target (ready for real work) | ≈ 38% | ≈ 1,150–1,850 h (≈ 70% parallelises across 4–6 agents: ≈ 300–480 h elapsed) | 3D kernel (300–450 h), DWG/DXF and other formats, AutoLISP and ecosystem, blocks/xrefs/dynamic blocks, localization |
-| Mainstream practitioner (2D drafter) | ≈ 28% | ≈ 570–880 h (≈ 70% parallelises: ≈ 150–240 h elapsed) | lossless DWG exchange and a real-file corpus, precision input (tracking, dynamic input), 2D geometry precision, blocks/xrefs, annotation depth, stability backlog |
-| Essentials user | ≈ 46% | ≈ 140–225 h (≈ 50% parallelises across 3 agents: ≈ 60–110 h elapsed) | stubbed options in basic draw/modify commands, opening DWGs people send, launch/stability fixes, plot dialog, context menus and dynamic input |
+| Full target (ready for real work) | ≈ 36% | ≈ 1,150–1,850 h (≈ 70% parallelises across 4–6 agents: ≈ 300–480 h elapsed) | 3D kernel (300–450 h), DWG/DXF and other formats, AutoLISP and ecosystem, blocks/xrefs/dynamic blocks, localization |
+| Mainstream practitioner (2D drafter) | ≈ 28% (egui; not re-measured) | ≈ 570–880 h (≈ 70% parallelises: ≈ 150–240 h elapsed) | lossless DWG exchange and a real-file corpus, precision input (tracking, dynamic input), 2D geometry precision, blocks/xrefs, annotation depth, stability backlog |
+| Essentials user | ≈ 46% (egui; not re-measured) | ≈ 140–225 h (≈ 50% parallelises across 3 agents: ≈ 60–110 h elapsed) | stubbed options in basic draw/modify commands, opening DWGs people send, launch/stability fixes, plot dialog, context menus and dynamic input |
 
 Hours are subsets (essentials ⊂ mainstream ⊂ full) and use the calibration in [target-app-parity.md](docs/target-app-parity.md#remaining-effort-and-how-it-was-calibrated): ≈ 25 commands
 per agent-hour at presence quality in the first build (≈ 11.5 agent-hours), 0.3–0.7 h per option
@@ -49,10 +57,10 @@ Hours are Opus 5.5 agent wall-clock hours, calibrated on this repo's own build: 
 | Dimension | Parity | Remaining (h) | Doc |
 |---|---:|---|---|
 | Features (depth, weighted by use) | 41% | 735–1,115 | [target-app-parity.md](docs/target-app-parity.md#by-feature-area-the-features-dimension) |
-| UI/UX fidelity | 43% | 100–160 | [ui-parity.md](docs/ui-parity.md) |
+| UI/UX fidelity | 31% (web interface, re-scored 2026-11-11; 43% here for egui) | 100–160 (not re-estimated; too low) | [ui-parity.md](docs/ui-parity.md) |
 | File formats | 30% | 170–280 | [file-format-parity.md](docs/file-format-parity.md) |
 | Hardware | 45% | 15–25 | [hardware-parity.md](docs/hardware-parity.md) |
-| Localization | 5% | 60–100 | [localization-parity.md](docs/localization-parity.md) |
+| Localization | 5% (egui catalogs, since removed; not re-measured) | 60–100 | [localization-parity.md](docs/localization-parity.md) |
 | Performance | 60% | 20–40 | [hardware-parity.md](docs/hardware-parity.md#performance-on-hardware-internal-numbers-only) |
 | Stability | 35% | 30–50 | [gaps.md](docs/gaps.md#stability) |
 | Platforms | 75% | 15–25 | [gaps.md](docs/gaps.md#platforms) |
@@ -80,30 +88,24 @@ Hours are Opus 5.5 agent wall-clock hours, calibrated on this repo's own build: 
 
 ## Languages
 
-AutoCAD 2027 for Mac ships 8 interface languages; CADCraft ships English plus partial
-Ukrainian and German. Detail: [localization-parity.md](docs/localization-parity.md).
+AutoCAD 2027 for Mac ships 8 interface languages. CADCraft's interface is English only since
+2026-11-11: the string catalogs (Ukrainian, German, Brazilian Portuguese, Spanish, Czech, Russian,
+French, Simplified Chinese, Italian, Greek, Korean, Swedish, Arabic, Hungarian and Turkish) were
+part of the egui interface and were removed with it. The web interface has no catalog yet.
+Detail: [localization-parity.md](docs/localization-parity.md), which still describes the removed
+catalogs.
 
 | Language | Status | UI translated |
 |---|---|---:|
 | English | full | 100% |
-| Simplified Chinese | none | 0% |
-| Spanish | none | 0% |
-| Hindi | none | 0% |
-| Arabic | none | 0% |
-| French | none | 0% |
-| Portuguese | none | 0% |
-| Indonesian | none | 0% |
-| Japanese | none | 0% |
-| Greek | complete current catalog | 1,330 current source keys; independent proofreading pending |
-| German | partial | ≈ 100% of the catalog (989 rows) |
-| Korean | none | 0% |
-| Vietnamese | none | 0% |
-
-Other languages shipped: Ukrainian and German (989 catalog rows each; Ukrainian landed with #36), Brazilian Portuguese, Spanish, Czech, Russian, French, Simplified Chinese and Italian (1,227 rows, 2026-10-12); engine messages stay English.
+| Every other language | none in the interface (catalogs removed with egui) | 0% |
 
 ## Upcoming
 
-Ranked; detail and the full beta checklist in [docs/roadmap.md](docs/roadmap.md).
+Ranked; detail and the full beta checklist in [docs/roadmap.md](docs/roadmap.md). The list was
+ranked before the interface was replaced; the interface's gaps (W1–W14 in
+[docs/gaps.md](docs/gaps.md#uiux)) are not ranked into it yet, and item 4's tracking and dynamic
+input: tracking is done and reaches the pointer; dynamic input is engine-side only.
 
 1. Gate and land: fix fmt on main, run `cargo xtask ci` on every PR, land the 47 open PRs (15–25 h).
 2. Stop losing data on save; native MULTILEADER; save DWG/DXF at a chosen version (30–45 h).
@@ -119,6 +121,7 @@ Ranked; detail and the full beta checklist in [docs/roadmap.md](docs/roadmap.md)
 
 | Date | Entry |
 |---|---|
+| 2026-11-11 | The interface is rebuilt on the web stack and the egui interface is removed. The desktop app is the web interface in a native window (the system webview), embedding the build of `apps/ui`. The shell is laid out as an editor: title bar with the menus and a command centre, a drawing toolbar (draw, modify, annotate), a sidebar with Layers and Properties, layout tabs over the drawing, the command line as the bottom panel, the assistant, a status bar of drafting toggles, and a command palette (Ctrl+Shift+P). Drawing with the pointer: a click gives a running command its point, with the engine's rubber band, the object-snap marker and a snapped click, and the engine's snapped cursor behind it, so ortho, polar tracking, grid snap and object snap tracking constrain the click with a label and the rays drawn; hover highlight, window and crossing selection, right click as Enter, middle-button pan, wheel zoom, touch pan and pinch (touch not tried on a device). The wasm facade gained `cancel`, `preview`, `pick`, `snap`, `pointer`, `click`, `set_viewport` and `set_cursor`, and `properties.set` refuses bad values. Keyboard patterns through the whole shell (menubar, toolbar, tabs, F6 between parts, function keys for the toggles, command chords). The assistant: setup in two steps with a connection check, chats as tabs, a queue, a changes row with undo, tool rows as sentences, bounds on a provider's output. A design system of thirteen components with specs, a checker and generated docs; dark and light themes with measured contrast. Not carried over from egui: dialogs, grips, dynamic input, context menus, DWG in the app, autosave, the translations, the control channel. UI/UX 43% → ≈ 31%, ready for real work ≈ 38% → ≈ 36%. Exercised in Chromium, on Windows for the desktop shell, and with a local stand-in for a model provider. Docs: [ui-parity.md](docs/ui-parity.md), [apps/ui/README.md](apps/ui/README.md). |
 | 2026-10-26 | One tool, and the model builds its own: the assistant and MCP advertise exactly `run`, which executes AutoLISP **inside the open drawing** — `(cmd "circle" '((CENTER . (0 0)) (RADIUS . 5)))` draws, `(cmdline "line" "0,0" "10,0")` types at the command line, `(commands)`/`(describe "id")` discover, `(cmd "describe")` measures, `(render)` shows a picture — and a `defun` the model writes is kept in `%APPDATA%\CADCraft\definitions` and reloaded next session (`(kept)`, `(forget)`). The per-capability tool catalog is gone, MCP resources with it, and there is no enable/disable flag: running code is what the server does, and sandboxing is the boundary. The same tool in the pane (`assistant {ask}`) and over `cadcraft-cli mcp`. Docs: [assistant.md](docs/assistant.md), [mcp.md](docs/mcp.md). |
 | 2026-10-26 | The assistant: Window ▸ Assistant (⌘7), `assistant {ask, attach, stop, clear}`, an OpenAI-compatible provider saved with the profile. Streamed answers, collapsed activity rows, render cards, attachments the model sees and can trace, queued/steering messages, per-request drawing checkpoints, context meter, 12-round cap, Stop. |
 | 2026-10-25 | Jewelry: the trade's numbers as commands — RINGSIZES and RING (US/UK/ISO/JP/CN ring sizes from the published formula, the blank a size and wall make, metal weight), GEM and GEMLIST (each cut's real girdle as geometry, carat weight from the trade's per-cut formula, stones as one block per cut, size and material), PAVE and GEMFIT (calibrated melee along a path or through a region, with the fit checked and the largest fitting size reported), SETTING (prongs on the stone's own tips and shoulders, bezel, halo, channel), TECHSHEET (a bench sheet: stones by cut and size with carats, metal by Pappus's theorem); DESCRIBE reads jewelry out of any drawing and MCP gains `bench_sheet`. Docs: [jewelry.md](docs/jewelry.md). |
@@ -139,6 +142,7 @@ Ranked; detail and the full beta checklist in [docs/roadmap.md](docs/roadmap.md)
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-11 | major | The web interface replaced the egui interface: banner, why, headline numbers (UI/UX 43% → 31%, ready 38% → 36%; 25% and 35% before the pointer followed the engine's snapped cursor; breadth restated as 304/491 from the generated checklist plus hand-counted interface items), languages (English only), progress log. Hours are unchanged and predate the change; mainstream and essentials numbers not re-measured |
 | 2026-10-25 | minor | Progress log: the jewelry layer (ring sizes, gem cuts, pavé and fit, settings, bench sheet) and [docs/jewelry.md](docs/jewelry.md) |
 | 2026-10-21 | trivial | Progress log: proxy objects keep their class through a save (#1812) |
 | 2026-10-14 | minor | Progress log: HATCHEDIT boundary add/remove |
@@ -151,6 +155,9 @@ Ranked; detail and the full beta checklist in [docs/roadmap.md](docs/roadmap.md)
 | 2026-10-10 | major | Restructured to the progress-docs standard (stage, two numbers, dimensions, features, languages, upcoming, log); full re-measure; milestone detail moved to docs/roadmap.md, parity assessment to docs/target-app-parity.md |
 | 2026-10-07 | major | Alpha checklist, milestone table, ≈ 29% weighted parity estimate |
 
-## Shared UI workspace integration
+## Interface
 
-Tool Sets, Layers and Properties use shared docking with persisted layouts, keyboard focus and compact toolbar overflow. No milestone percentage change.
+One interface everywhere: the SolidJS app in `apps/ui` over the engine's WebAssembly facade, in
+a browser tab and in the desktop app's native webview. How to run it, its keys and its
+components: [apps/ui/README.md](apps/ui/README.md). (This section used to describe the egui
+interface's shared docking, which was removed with it.)

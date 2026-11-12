@@ -13,7 +13,7 @@ Not applicable: hand-rolled — the recipe is the app's own `src/ui/ui.css`, mea
 ## Examples
 `<Button variant="primary">Save</Button>` — the one action of a dialog or a pane.
 
-Real uses, 10 call sites (`rg -c "<Button" src/components` → `src/components/AssistantPane.tsx:12`, `src/components/TopBar.tsx:1`):
+Real uses, 11 call sites (`rg -c "<Button" src/components` → `src/components/AssistantPane.tsx:10`, `src/components/TopBar.tsx:1`):
 - `src/components/AssistantPane.tsx` — the assistant's call sites: the empty state's Set up a model (`variant="primary"`, shown while no model is connected), the setup sheet's Check connection and Cancel (`variant="ghost"`) and Save (`variant="primary"`), and the stack over the composer: Stop on the run row and Undo all on the changes row (`variant="ghost" size="sm"`), and Keep beside it (`size="sm"`).
 - `src/components/TopBar.tsx:42` — the title bar's command centre (`size="sm"`): the drawing's name, opening the command palette.
 
@@ -130,7 +130,7 @@ export default function VariantDanger() {
 ```
 
 ### size
-- `sm`: the 24px control, for a button beside a field or inside a row. Used at 6 call sites (the title bar's command centre, the transcript's Show earlier, the setup sheet's Change provider, and the stack's Stop, Undo all and Keep).
+- `sm`: the 24px control, for a button beside a field or inside a row. Only the box is smaller: the label is `--font-button` (13px) in both sizes. Until 2026-11-11 `sm` drew it at `--font-chip` (11px), and the setup sheet's Change provider was the smallest text in a sheet of 12px and 13px rows; 11px is the scale's step for section labels, counts and key caps, and `typography.md` gives a button one size wherever it sits (`src/ui/recipe.test.ts` holds it). Used at 6 call sites (the title bar's command centre, the transcript's Show earlier, the setup sheet's Change provider, and the stack's Stop, Undo all and Keep).
 - `md`: the 28px default, for a dialog footer or a pane header. Used at 4 call sites (the setup sheet's Check connection, Cancel and Save, and the empty state's Set up a model).
 
 Example: The 24px button that sits beside a field. (`docs/system/examples/button/size-sm.tsx`)
@@ -211,7 +211,7 @@ export default function Disabled() {
 | `variant?` | `ButtonVariant` |  | The purpose of the action. |
 
 - `variant`: the purpose of the action; the token layer picks the look. Defaults to `secondary`.
-- `size`: the control height; `md` is 28px and `sm` is 24px.
+- `size`: the control height; `md` is 28px and `sm` is 24px. It never changes the label's size.
 - `type`: defaults to `button` so a button inside a form never submits by accident.
 - `disabled`: blocks the click and drops the ink to the disabled step. It sets `aria-disabled="true"`, never the native `disabled`, so the button stays in the Tab order and under the pointer and its hint can say why.
 - `title`: the hint, shown in the layer's hint box and tied to the button as its accessible description (`aria-describedby`). It is what the label leaves out, or why the button is disabled; it is never the name, and no native `title` attribute is rendered. A `title` equal to the label draws no hint and adds no description.
@@ -286,8 +286,8 @@ Rests on the native `<button>` element: role, Enter and Space, and form behaviou
 ## Tokens
 | Part | State | Token |
 |---|---|---|
-| The box | all | `--control-h-button`, `--radius-control`, `--button-pad-x`, `--button-pad-y`, `--gap-4`, `--font-button` |
-| The box (`sm`) | all | `--control-h-input`, `--gap-6`, `--gap-2`, `--font-chip` |
+| The box | all | `--control-h-button`, `--radius-control`, `--button-pad-x`, `--button-pad-y`, `--gap-4`, `--font-button`, `--leading-ui` |
+| The box (`sm`) | all | `--control-h-input`, `--gap-6`, `--gap-2`; the label stays `--font-button` |
 | The fill (`secondary`) | rest | `--hover` |
 | The fill (`secondary`) | hover | `--fill-active` |
 | The fill (`secondary`) | pressed | `--fill-active` (measured: no third step) |

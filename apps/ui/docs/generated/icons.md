@@ -19,7 +19,7 @@ Every icon is drawn in code as an SVG path on a 24×24 grid and takes its colour
 
 | Token | Value | Role |
 | --- | --- | --- |
-| `--icon` | dark `rgba(240,240,240,.66)` / light `rgba(20,20,20,.66)` | The default glyph ink. |
+| `--icon` | `var(--text-dim)`: dark `rgba(240,240,240,.74)` / light `rgba(20,20,20,.74)` | The default glyph ink: the secondary text ink. Cursor's measured `.66` sat between `.74` and `.60`, three steps no eye told apart, and folded into `.74` (`src/tokens.css`). |
 | `--icon-layer-off` | `#8a8a5a` | A layer switched off. |
 | `--icon-layer-frozen` | `#9fd4ff` | A frozen layer. |
 | `--icon-locked` | `#e6b43c` | A locked layer. |
@@ -72,7 +72,7 @@ The masked value's pair (`eye`: a pointed lens of two arcs with a ring for the p
 
 - A glyph is `currentColor`; its container sets the ink (`--icon` at rest, `--text` hovered or selected, `--text-disabled` blocked, `--text-accent` or `--warn` for a signal), because an icon must follow the state its control is in.
 - Three sizes only (`12/14/16`), matched to the control ladder, because a fourth size is a different control. The tool strip's keys draw at 16 in the 24px key, because the drafting glyphs carry grips, dashes and arrowheads that close up at 14; every other icon button draws at 14, and the strip's overflow menu rows with it.
-- One stroke weight at every size: `1.25px` on the screen at 12, 14 and 16 (`vector-effect: non-scaling-stroke` on the path, `STROKE` in `src/icons.ts`), because a width on the 24 grid thins with the glyph (the old `1.5` drew 0.75px at 12, 0.875px at 14 and 1px at 16) and a sub-pixel stroke at the `.66` ink reads faint.
+- One stroke weight at every size: `1.25px` on the screen at 12, 14 and 16 (`vector-effect: non-scaling-stroke` on the path, `STROKE` in `src/icons.ts`), because a width on the 24 grid thins with the glyph (the old `1.5` drew 0.75px at 12, 0.875px at 14 and 1px at 16) and a sub-pixel stroke at the glyph ink reads faint.
 - Icons are drawn, never imported: every path is original code on the 24×24 grid, because third-party icon sets carry licences and a foreign stroke grammar.
 - A glyph that means the same thing keeps its id everywhere (`save` is the floppy, `zoom.extents` the four corners), because two drawings for one action is a bug a reader reads as two actions. The three eyes are three meanings, so their own ids: `layer.on` and `layer.off` are a layer's visibility, `eye` and `eye-off` a masked value shown and hidden. The two copies are two meanings too: `copy` is the clipboard's, `copy-objects` the drafting tool's.
 - A new glyph keeps the set's grammar: it fills the box from about 3 to 21, lines end and meet round, nothing is filled, a point the tool takes is a ring of radius 2, and what the tool removes or reflects about is dashed, because a glyph in another grammar reads as a foreign control.
@@ -82,7 +82,7 @@ The masked value's pair (`eye`: a pointed lens of two arcs with a ring for the p
 ## Accessibility
 
 - Icons are never the only label: an icon-only control carries `aria-label` in its component (`src/ui/IconButton.tsx`), and the check cannot see the rendered accessibility tree, so the browser review covers it.
-- Contrast: `--icon` measures 7.5:1 over `--chrome` in dark and 5.8:1 in light; the layer inks are exempt as state markers on the canvas. The Colors page carries the full measured grid from `scripts/contrast-report.mjs`.
+- Contrast: `--icon` measures 9.2:1 over `--chrome` in dark and 7.7:1 in light, and never under 8.2:1 (dark, `--control-hover`) or 7.1:1 (light, `--control-hover`) over any surface (`node scripts/contrast-report.mjs`, 2026-11-11); the layer inks are exempt as state markers on the canvas. The Colors page carries the full measured grid from `scripts/contrast-report.mjs`.
 - The 1.25px stroke is the same on the screen at 12, 14 and 16, so a glyph does not thin as it shrinks; the densest glyphs (`save`, `attach`) keep their counters open at 12.
 
 ## Not tokens

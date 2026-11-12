@@ -98,7 +98,7 @@ describe("wrapWasmFacade", () => {
 
   test("the pointer calls forward every argument, in order, in either spelling", () => {
     const { instance, calls } = fakeInstance();
-    const pointer = ["set_viewport", "set_cursor", "preview", "pick", "snap", "click"];
+    const pointer = ["set_viewport", "set_cursor", "preview", "pick", "snap", "click", "pointer"];
     for (const name of pointer) instance[name] = (...args: unknown[]): string => { calls.push({ name, args }); return "{}"; };
     const raw = wrapWasmFacade(instance);
     raw?.set_viewport(1280, 800);
@@ -107,6 +107,7 @@ describe("wrapWasmFacade", () => {
     raw?.pick(5, 6, 0.25);
     raw?.snap(7, 8, 0);
     raw?.click(9, 10, 0.5);
+    raw?.pointer(11, 12, 0.75, 1234.5, 3);
     expect(calls).toEqual([
       { name: "set_viewport", args: [1280, 800] },
       { name: "set_cursor", args: [1.5, -2] },
@@ -114,6 +115,7 @@ describe("wrapWasmFacade", () => {
       { name: "pick", args: [5, 6, 0.25] },
       { name: "snap", args: [7, 8, 0] },
       { name: "click", args: [9, 10, 0.5] },
+      { name: "pointer", args: [11, 12, 0.75, 1234.5, 3] },
     ]);
     // wasm-bindgen's `js_name` spellings reach the same methods.
     instance["setViewport"] = instance["set_viewport"];
@@ -147,7 +149,58 @@ describe("wrapWasmFacade", () => {
       expect(parsed).toMatchObject({ ok: false });
       expect(JSON.stringify(parsed)).toContain("build:wasm");
     }
+    // `pointer` on such a package is the free pointer, in the real reply's whole shape.
+    expect(JSON.parse(raw.pointer(1, 2, 0, 16, 1))).toEqual({
+      point: [1, 2],
+      constraint: "none",
+      snap: null,
+      from: null,
+      distance: null,
+      angle: null,
+      label: "",
+      paths: { verts: [], prims: [] },
+      acquired: [],
+      wait: false,
+      preview: { verts: [], prims: [], drag: null },
+    });
+    expect(JSON.parse(raw.pointer(Number.NaN, 2, 0, 16, 0))).toMatchObject({ point: null, constraint: "none" });
     expect(calls).toEqual([]);
+  });
+
+  /**
+   * A package built after `snap` and `preview` but before `pointer`: the pointer is resolved from
+   * those, as the canvas did then. Object snap works; ortho, polar and grid snap do nothing.
+   */
+  test("a package without `pointer` resolves it from the object snap and the rubber band it has", () => {
+    const { instance, calls } = fakeInstance();
+    const band = { verts: [[0, 0], [10, 0]], prims: [{ kind: "polyline", start: 0, len: 2 }], drag: null };
+    const reply: Record<string, (args: unknown[]) => string> = {
+      set_cursor: () => '{"ok":true}',
+      snap: (args) => (args[0] === 9.9 ? '{"snap":{"point":[10,0],"mode":1,"name":"Endpoint","deferred":false}}' : '{"snap":null}'),
+      preview: () => JSON.stringify(band),
+      click: () => "{}",
+    };
+    for (const name of Object.keys(reply)) instance[name] = (...args: unknown[]): string => { calls.push({ name, args }); return reply[name]?.(args) ?? "{}"; };
+    const raw = wrapWasmFacade(instance);
+    expect(raw).not.toBeNull();
+    if (raw === null) return;
+    const snapped: unknown = JSON.parse(raw.pointer(9.9, 0.1, 0.5, 16, 3));
+    expect(snapped).toMatchObject({ point: [10, 0], constraint: "osnap", snap: { name: "Endpoint", mode: 1 }, label: "", wait: false, preview: band });
+    // The cursor told, the snap asked, the rubber band drawn at the snapped point: nothing else.
+    expect(calls).toEqual([
+      { name: "set_cursor", args: [9.9, 0.1] },
+      { name: "snap", args: [9.9, 0.1, 0.5] },
+      { name: "preview", args: [10, 0] },
+    ]);
+    calls.length = 0;
+    const free: unknown = JSON.parse(raw.pointer(3, 4, 0, 32, 0));
+    expect(free).toMatchObject({ point: [3, 4], constraint: "none", snap: null });
+    expect(calls.at(-1)).toEqual({ name: "preview", args: [3, 4] });
+    // A snap or a preview that is not JSON is the free pointer with no rubber band.
+    instance["snap"] = (): string => "not json";
+    instance["preview"] = (): string => "[]";
+    const junk: unknown = JSON.parse(wrapWasmFacade(instance)?.pointer(5, 6, 0, 48, 0) ?? "null");
+    expect(junk).toMatchObject({ point: [5, 6], constraint: "none", snap: null, preview: { verts: [], prims: [], drag: null } });
   });
 
   test("a click on a package without `click` types its point, as a click did before", () => {

@@ -56,8 +56,7 @@
   color: var(--text);
 }
 
-.menubar-title:focus-visible,
-.menu-row:focus-visible {
+.menubar-title:focus-visible {
   outline: var(--focus-outline-w) solid var(--focus-ring);
   outline-offset: var(--focus-outline-offset);
 }
@@ -95,8 +94,10 @@
 }
 
 /* A menu is the system's popover: the elevated surface on the hairline, the popover's radius and
-   its three-layer shadow (the command palette's box wears the same surface). The rows' corner is
-   the box's less its inset, so the two curves stay concentric. */
+   its three-layer shadow (the command palette's box wears the same surface). The rows are the
+   layer's `Row` in its `menuitem` form (ui.css): their corner is the box's less its inset, so the
+   two curves stay concentric, and `--menu-row-h` is their height, restated here for what is laid
+   out around them (the grid's tracks, the separators, the typed name's one-line box). */
 .menu-drop {
   --menu-inset: var(--gap-4);
   --menu-row-h: var(--control-h-input);
@@ -109,14 +110,19 @@
   position: absolute;
   top: 100%;
   left: 0;
+  /* As wide as its longest row: the box hangs from a title far narrower than it is, which would
+     otherwise hold it to its least width and cut the labels short. */
+  width: max-content;
   min-width: 30ch;
   /* A menu longer than the window's height (Draw and Modify hold thirty rows) runs on into a
      second column instead of off the screen. It is a grid, not a scrolling box: a box that
      scrolls would clip the submenus that open beside its rows. The columns read, and the arrow
-     keys walk, down the first and then down the next. */
+     keys walk, down the first and then down the next. A track is half a row: a row takes two and
+     the separator between two groups one. Menu.tsx says which rows start a column
+     (`data-column-start`), so the columns break between groups and come out even. */
   display: grid;
   grid-auto-flow: column;
-  grid-template-rows: repeat(auto-fit, var(--menu-row-h));
+  grid-template-rows: repeat(auto-fit, calc(var(--menu-row-h) / 2));
   grid-auto-columns: minmax(30ch, max-content);
   column-gap: var(--menu-inset);
   /* A menu ends above the status bar: Menu.tsx measures the bar and sets `--menu-floor` (the
@@ -145,8 +151,38 @@
   right: calc(100% + var(--menu-inset) + var(--hairline) + var(--gap-2));
 }
 
+.menu-item {
+  grid-row-end: span 2;
+}
+
+.menu-item[data-column-start] {
+  grid-row-start: 1;
+}
+
 .menu-sub {
   position: relative;
+}
+
+/* The separator between two groups of rows: a hairline in the middle of half a row, as long as
+   the rows' own text runs (it starts where the labels do and ends where the shortcuts do). The
+   one that would lead or end a column is not drawn (Menu.tsx hides it). */
+.menu-separator {
+  grid-row-end: span 1;
+  display: flex;
+  align-items: center;
+  height: calc(var(--menu-row-h) / 2);
+  padding: 0 var(--gap-8);
+}
+
+.menu-separator::before {
+  content: "";
+  flex: 1 1 auto;
+  height: var(--hairline);
+  background: var(--border);
+}
+
+.menu-separator[hidden] {
+  display: none;
 }
 
 /* The compact menu in a window with no room for a submenu beside its parent (Menu.tsx sets
@@ -165,6 +201,7 @@
   position: static;
   display: block;
   translate: none;
+  width: auto;
   min-width: 0;
   max-height: none;
   margin-inline-start: var(--gap-12);
@@ -177,32 +214,16 @@
   box-shadow: none;
 }
 
-.menu-drop.is-stacked .menu-row[aria-expanded="true"] .menu-arrow {
+.menu-drop.is-stacked [role="menuitem"][aria-expanded="true"] .menu-arrow {
   rotate: 90deg;
 }
 
-/* One row height for every item; the label first, then the shortcut or the submenu's chevron
-   against the same right edge. */
-.menu-row {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-16);
-  width: 100%;
-  height: var(--menu-row-h);
-  padding: 0 var(--gap-8);
-  border: none;
-  border-radius: calc(var(--radius-popover) - var(--menu-inset) - var(--hairline));
-  background: transparent;
-  color: var(--text);
-  font-family: var(--font-family);
-  font-size: var(--font-body);
-  text-align: left;
-  cursor: pointer;
-  touch-action: manipulation;
-}
+/* A row is the layer's (`Row menuitem`, ui.css: its height, corner, inks, fills and ring). What
+   follows is what the menu puts in one: the label first, then the name typed at the command line,
+   then the shortcut or the submenu's chevron against the same right edge. */
 
-/* Under a finger the titles and the rows take the button's height: a row is still a row, with
-   room to land on it. */
+/* Under a finger the titles take the button's height, and the rows do in the layer: the menu's
+   tracks follow them. */
 @media (pointer: coarse) {
   .menubar-title {
     height: var(--control-h-button);
@@ -211,24 +232,6 @@
   .menu-drop {
     --menu-row-h: var(--control-h-button);
   }
-}
-
-@media (hover: hover) {
-  .menu-row:hover:not(.is-disabled) {
-    background: var(--hover);
-  }
-}
-
-/* The keyboard's row (the focus itself is on it) and the row whose submenu is open hold the same
-   fill as the pointer's. A row that is not available takes the focus ring and no fill. */
-.menu-row:focus-visible:not(.is-disabled),
-.menu-row[aria-expanded="true"] {
-  background: var(--hover);
-}
-
-.menu-row.is-disabled {
-  color: var(--text-disabled);
-  cursor: default;
 }
 
 .menu-label {
@@ -253,7 +256,48 @@
   height: var(--icon-size-md);
 }
 
-.menu-row.is-disabled .menu-icon {
+.menu-item > [aria-disabled="true"] .menu-icon {
+  color: inherit;
+}
+
+/* The name typed at the command line that runs the row: read, not skipped, so the quiet ink and
+   never the disabled one, in the mono face the command line writes it in. It stands before the
+   shortcut, which keeps the row's end. A menu is as wide as its longest row, so the name always
+   has room there; in a menu of a fixed width (the stacked one) it is the first thing in a row to
+   give way, before the label is cut and with the shortcut untouched, and it is whole or gone,
+   never cut: a name cut short would be another name. It is gone the way the status bar's facts
+   are: it stands in a one-line box that wraps, so in a box narrower than the name the name is on
+   the second line, which the box does not show. */
+.menu-name {
+  flex: 0 1000000 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  height: var(--menu-row-h);
+  min-width: 0;
+  overflow: clip;
+  color: var(--text-faint);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-mono);
+  line-height: var(--menu-row-h);
+  white-space: nowrap;
+}
+
+.menu-name::before {
+  content: "";
+  height: var(--menu-row-h);
+}
+
+.menu-name::after {
+  content: "";
+  flex: 0 0 var(--hairline);
+}
+
+.menu-name > span {
+  flex: 0 0 auto;
+}
+
+.menu-item > [aria-disabled="true"] .menu-name {
   color: inherit;
 }
 
@@ -264,7 +308,7 @@
   white-space: nowrap;
 }
 
-.menu-row.is-disabled .menu-shortcut {
+.menu-item > [aria-disabled="true"] .menu-shortcut {
   color: inherit;
 }
 
@@ -406,17 +450,19 @@
      3. the object count goes
      4. the engine's badge goes
      5. the coordinates go, with their rule
-     6. the selection count goes
-     7. the eleven drafting toggles wrap onto a second line (and a third), and the bar grows by it
+     6. the eleven drafting toggles wrap onto a second line (and a third), and the bar grows by it
 
-   The layer's name at its floor never goes: with the sidebar closed the bar is the one place that
-   names it. The toggles are never clipped and never scroll.
+   The layer's name at its floor never goes, and neither does the selection count: with the
+   sidebar closed, or folded away as it is in a window of a phone's width, the bar is the one
+   place that names the layer and says how much is selected. So a selection made in a bar with no
+   room left for its count takes the room from the toggles' line, which wraps a toggle or two
+   earlier. The toggles are never clipped and never scroll.
 
    The bar is three parts and the middle one stands still: the facts at the start (what the
    window is working on, the selection count last among them), the toggles' run, and the
    coordinates at the end in a box of a reserved width. Nothing that comes and goes sits between
-   the toggles and the bar's end, so a selection made or a pointer entering the drawing moves no
-   toggle: the selection count used to stand after the coordinates and pushed the whole run 60px
+   the toggles and the bar's end, so in a bar with room a selection made or a pointer entering the
+   drawing moves no toggle: the selection count used to stand after the coordinates and pushed the whole run 60px
    sideways each time something was selected.
 
    How: the bar is one flex row and the order is its items' `flex-shrink`, each step a million
@@ -494,8 +540,9 @@
   flex-shrink: 1e12;
 }
 
+/* The selection count keeps its box: it is whole at every width. */
 .status-fit-selection {
-  flex-shrink: 1e6;
+  flex-shrink: 0;
 }
 
 /* What the window is working on: a quiet run of small items at the start of the bar. An item's

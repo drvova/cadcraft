@@ -13,8 +13,8 @@
  *    `wasm-loader.ts`, which only Vite evaluates) and wrapped.
  */
 
-import { EMPTY_DISPLAY, parseDisplayList, type DisplayList, type DisplayPrim } from "./display";
-import { emptyPrompt, reducePrompt, type PromptState } from "./prompt";
+import { displayListOf, EMPTY_DISPLAY, MAX_DISPLAY_REPLY_BYTES, parseDisplayList, type DisplayList, type DisplayPrim } from "./display";
+import { anchorOf, emptyPrompt, NO_ANCHOR, reducePrompt, type PromptAnchor, type PromptState } from "./prompt";
 import { MockFacade } from "./mock";
 import { asBool, asNumber, asString, isRecord } from "./json";
 import { parseRect, rectIsDegenerate, type Point, type Rect } from "./view";
@@ -48,7 +48,14 @@ export interface RawFacade {
   pick(x: number, y: number, aperture: number): string;
   /** The object snap a world point takes, or `{"snap":null}`. */
   snap(x: number, y: number, aperture: number): string;
-  /** A pointer click given to the running command, snapped as `snap` reports. */
+  /**
+   * The pointer resolved for the running command: the point a click takes (object snap, grid
+   * snap, polar and object-snap tracking, ortho), what bent it, the rays to draw and the rubber
+   * band there. `nowMs` is a steady clock in milliseconds; `modifiers` is 1 for Shift plus 2 for
+   * Ctrl.
+   */
+  pointer(x: number, y: number, aperture: number, nowMs: number, modifiers: number): string;
+  /** A pointer click given to the running command, resolved as `pointer` reports. */
   click(x: number, y: number, aperture: number): string;
   open_bytes(name: string, bytes: Uint8Array): string;
   load_sample(): string;
@@ -200,19 +207,24 @@ function parsePreviewDrag(value: unknown): PreviewDrag | null {
   return { handles, matrix: [a, b, c, d, e, f], clipboard: asBool(value["clipboard"]) ?? false };
 }
 
-/** Parse a `preview` reply; anything unreadable, or a refusal, is the empty preview. */
-export function parsePreview(raw: string): CommandPreview {
-  const list = parseDisplayList(raw);
-  if (list === null) return EMPTY_PREVIEW;
-  // Most previews are not drags: the reply says so in so many bytes, and is not parsed twice.
-  const parsed = raw.includes('"drag":null') ? null : parseJson(raw);
-  const drag = isRecord(parsed) ? parsePreviewDrag(parsed["drag"]) : null;
+/**
+ * A preview out of a value that is already parsed (a `preview` reply, or the `preview` of a
+ * `pointer` reply): its display list and its drag, read from the one parse.
+ */
+function previewOf(value: unknown): CommandPreview {
+  const list = displayListOf(value);
+  if (list === null || !isRecord(value)) return EMPTY_PREVIEW;
+  const drag = parsePreviewDrag(value["drag"]);
   return list.prims.length === 0 && drag === null ? EMPTY_PREVIEW : { verts: list.verts, prims: list.prims, drag };
 }
 
-/** Parse a `pick` reply into the engine's hex handles, nearest first; unreadable is none. */
-export function parsePick(raw: string): string[] {
-  const parsed = parseJson(raw);
+/** Parse a `preview` reply, once; anything unreadable, or a refusal, is the empty preview. */
+export function parsePreview(raw: string): CommandPreview {
+  if (typeof raw !== "string" || raw.length === 0 || raw.length > MAX_DISPLAY_REPLY_BYTES) return EMPTY_PREVIEW;
+  return previewOf(parseJson(raw));
+}
+
+function pickHandles(parsed: unknown): string[] {
   if (!isRecord(parsed) || !Array.isArray(parsed["handles"])) return [];
   const out: string[] = [];
   for (const h of parsed["handles"]) {
@@ -220,6 +232,25 @@ export function parsePick(raw: string): string[] {
     if (typeof h === "string" && h.length > 0) out.push(h);
   }
   return out;
+}
+
+/** Parse a `pick` reply into the engine's hex handles, nearest first; unreadable is none. */
+export function parsePick(raw: string): string[] {
+  return pickHandles(parseJson(raw));
+}
+
+/**
+ * The handle a `pick` reply says to highlight under the pointer, or null. The engine names it
+ * (`hover`: what a click there selects, unless the selection preview is off or its filter keeps
+ * the object dark, as one on a locked layer). A reply without the field (an older engine, a
+ * canned facade) falls back to the nearest handle, which is what the hover was before.
+ */
+export function parseHover(raw: string): string | null {
+  const parsed = parseJson(raw);
+  if (!isRecord(parsed)) return null;
+  const hover = parsed["hover"];
+  if (hover === undefined) return pickHandles(parsed)[0] ?? null;
+  return typeof hover === "string" && hover.length > 0 ? hover : null;
 }
 
 /** An object snap (`Facade::snap`): where the pointer snaps to, and why. */
@@ -257,31 +288,120 @@ export function parseSnap(raw: string): SnapPoint | null {
   return isRecord(parsed) ? parseSnapValue(parsed["snap"]) : null;
 }
 
-/** What the pointer needs of the running command's prompt (`Prompt` in the engine). */
-export interface PromptAnchor {
-  /** The rubber band's origin (the last point given), or null when the prompt has none. */
-  base: Point | null;
-  /** The base is a window's first corner (RECTANG, ZOOM Window): ortho does not bend the other. */
-  corner: boolean;
-  /** A point answers with its distance from the base (a radius, a length). */
-  distance: boolean;
-  /** The prompt resolves deferred tangent and perpendicular snaps (LINE's first point). */
-  deferred: boolean;
-}
+export { NO_ANCHOR, type PromptAnchor } from "./prompt";
 
-export const NO_ANCHOR: PromptAnchor = { base: null, corner: false, distance: false, deferred: false };
-
-/** Read the anchor out of a command-line reply (`prompt`, `cmdline`, `start`, `click`). */
+/**
+ * Read the anchor out of a command-line reply (`prompt`, `cmdline`, `start`, `click`). The shell
+ * does not call this: `PromptState.anchor` holds the same thing, read from the reply the state
+ * itself was folded from.
+ */
 export function parsePromptAnchor(raw: string): PromptAnchor {
   const parsed = parseJson(raw);
-  if (!isRecord(parsed)) return NO_ANCHOR;
-  return { base: parseXy(parsed["base"]), corner: parsed["corner"] === true, distance: parsed["distance"] === true, deferred: parsed["deferred"] === true };
+  return isRecord(parsed) ? anchorOf(parsed) : NO_ANCHOR;
 }
 
-/** What a `click` did: the command line after it, and the object snap the point took. */
+/** What bent the pointer on its way to the point a click takes (`Facade::pointer`). */
+export type PointerConstraint = "none" | "osnap" | "ortho" | "polar" | "grid" | "track";
+
+const CONSTRAINTS: readonly PointerConstraint[] = ["none", "osnap", "ortho", "polar", "grid", "track"];
+
+/** A constraint's rays, in the display list's own form (world coordinates). */
+export interface PointerPaths {
+  verts: readonly Point[];
+  prims: readonly DisplayPrim[];
+}
+
+const NO_PATHS: PointerPaths = { verts: [], prims: [] };
+
+/** The pointer resolved for the running command (`Facade::pointer`). */
+export interface ResolvedPointer {
+  /** The point the next click takes: what the rubber band is drawn to. */
+  point: Point;
+  constraint: PointerConstraint;
+  /** The object snap that took the point, when one did. */
+  snap: SnapPoint | null;
+  /** What an ortho, polar or tracking constraint is measured from; null without one. */
+  from: Point | null;
+  /** The distance from `from` to the point, in world units; null without a constraint. */
+  distance: number | null;
+  /** The direction from `from`, in degrees as the drawing counts them; null without a constraint. */
+  angle: number | null;
+  /** The constraint in words, in the drawing's units ("Polar: 4.2500 < 45°"); "" for none. */
+  label: string;
+  /** The ortho or polar ray and the tracking paths the point lies on. */
+  paths: PointerPaths;
+  /** The points object-snap tracking holds. */
+  acquired: readonly Point[];
+  /** A tracking point is being acquired: ask again after the dwell even if the pointer rests. */
+  wait: boolean;
+  /** The running command's rubber band at `point`. */
+  preview: CommandPreview;
+}
+
+/** The most acquired tracking points a reply is read for (the engine keeps seven). */
+const MAX_ACQUIRED = 16;
+
+/** The longest constraint label shown (the engine's is a few words). */
+const MAX_LABEL_CHARS = 120;
+
+/** A pointer nothing bends: the point is the pointer, with the given rubber band. */
+export function freePointer(point: Point, preview: CommandPreview = EMPTY_PREVIEW): ResolvedPointer {
+  return { point, constraint: "none", snap: null, from: null, distance: null, angle: null, label: "", paths: NO_PATHS, acquired: [], wait: false, preview };
+}
+
+/**
+ * Parse a `pointer` reply, once. `fallback` is the pointer itself: a refusal (a `null` point), a
+ * malformed reply or anything unreadable is the free pointer there, with no rubber band, so the
+ * canvas never draws to a point the engine did not give.
+ */
+export function parsePointer(raw: string, fallback: Point): ResolvedPointer {
+  if (typeof raw !== "string" || raw.length === 0 || raw.length > MAX_DISPLAY_REPLY_BYTES) return freePointer(fallback);
+  const parsed = parseJson(raw);
+  if (!isRecord(parsed)) return freePointer(fallback);
+  const point = parseXy(parsed["point"]);
+  if (point === null) return freePointer(fallback);
+  const named = parsed["constraint"];
+  const constraint = CONSTRAINTS.find((c) => c === named) ?? "none";
+  const paths = displayListOf(parsed["paths"]);
+  const acquired: Point[] = [];
+  for (const a of Array.isArray(parsed["acquired"]) ? parsed["acquired"] : []) {
+    if (acquired.length >= MAX_ACQUIRED) break;
+    const p = parseXy(a);
+    if (p !== null) acquired.push(p);
+  }
+  return {
+    point,
+    constraint,
+    snap: parseSnapValue(parsed["snap"]),
+    from: parseXy(parsed["from"]),
+    distance: asNumber(parsed["distance"]),
+    angle: asNumber(parsed["angle"]),
+    label: (asString(parsed["label"]) ?? "").slice(0, MAX_LABEL_CHARS),
+    paths: paths === null || paths.prims.length === 0 ? NO_PATHS : { verts: paths.verts, prims: paths.prims },
+    acquired,
+    wait: parsed["wait"] === true,
+    preview: previewOf(parsed["preview"]),
+  };
+}
+
+/** The keys held with the pointer, and its clock (`Facade::pointer`). */
+export interface PointerInput {
+  /** The reach in world units; 0 (the default) is the engine's own aperture at the view. */
+  aperture?: number;
+  /** A steady clock in milliseconds (`performance.now()`): resting on a snap acquires it. */
+  now: number;
+  /** Shift flips ortho while it is held. */
+  shift?: boolean;
+  /** Ctrl switches ARC's direction while it is held. */
+  ctrl?: boolean;
+}
+
+/** What a `click` did: the command line after it, the object snap the point took, and the point. */
 export interface ClickResult {
   state: PromptState;
   snap: SnapPoint | null;
+  /** The point the command was given (snapped, on the grid, along a ray); null when refused. */
+  point: Point | null;
 }
 
 /** One layout tab from `execute("layout.list", {})`. `current` is true when the layout's name
@@ -644,6 +764,33 @@ export class AppFacade {
   }
 
   /**
+   * The handle to highlight under `point`, or null: what a click there would select, as the
+   * engine decides it. Nothing lights while the running command wants a point, while the
+   * selection preview is off, or over an object its filter keeps dark (one on a locked layer);
+   * objects on frozen layers are never under the pointer. One call, and it changes nothing.
+   */
+  hover(point: Point, aperture = 0): string | null {
+    if (!usablePoint(point) || !usableAperture(aperture)) return null;
+    return parseHover(this.call(() => this.raw.pick(point.x, point.y, aperture)));
+  }
+
+  /**
+   * The pointer resolved for the running command, in one call per frame: the point the next
+   * click takes under the engine's whole drafting state (running object snaps, grid snap, polar
+   * and object-snap tracking, ortho), what bent it, the rays to draw, and the rubber band at that
+   * point. It tells the engine where the cursor is (so `setCursor` is not needed with it) and
+   * which keys are held; the drawing and the prompt are untouched. With no command wanting a
+   * point the pointer is free. Input the engine would refuse answers the free pointer too.
+   */
+  pointer(point: Point, input: PointerInput): ResolvedPointer {
+    const aperture = input.aperture ?? 0;
+    if (!usablePoint(point) || !usableAperture(aperture)) return freePointer(point);
+    const now = Number.isFinite(input.now) && input.now >= 0 ? input.now : 0;
+    const modifiers = (input.shift === true ? 1 : 0) + (input.ctrl === true ? 2 : 0);
+    return parsePointer(this.call(() => this.raw.pointer(point.x, point.y, aperture, now, modifiers)), point);
+  }
+
+  /**
    * The object snap `point` takes under the engine's running snap modes, or null: nothing
    * within reach, object snap off, or the running command is not asking for a point. `aperture`
    * is the reach in world units; 0 is the engine's own aperture at the current view (needs
@@ -655,27 +802,25 @@ export class AppFacade {
   }
 
   /**
-   * A pointer click at `point` given to the running command, snapped exactly as `snap(point,
-   * aperture)` reports (so the marker shown is the point taken), else the point itself; at
-   * "Select objects" it picks. Unlike typing the coordinates, it carries a deferred tangent or
-   * perpendicular. Folded like `cmdline`; `echo` is the line to show for it in the output. With
-   * no command running it does nothing.
+   * A pointer click at `point` given to the running command, resolved exactly as `pointer`
+   * reported it there (so the point shown is the point taken: the object snap, the grid, the
+   * polar or ortho ray), else the point itself; at "Select objects" it picks. Unlike typing the
+   * coordinates, it carries a deferred tangent or perpendicular. Folded like `cmdline`; `echo`
+   * writes the line to show for it in the output from the point the command took. With no
+   * command running it does nothing.
    */
-  click(point: Point, aperture = 0, prev: PromptState = emptyPrompt(), echo?: string): ClickResult {
+  click(point: Point, aperture = 0, prev: PromptState = emptyPrompt(), echo?: (taken: Point) => string | undefined): ClickResult {
     if (!usablePoint(point) || !usableAperture(aperture)) {
-      return { state: { ...prev, error: "refused a click that is not a usable point" }, snap: null };
+      return { state: { ...prev, error: "refused a click that is not a usable point" }, snap: null, point: null };
     }
     const raw = this.call(() => this.raw.click(point.x, point.y, aperture));
-    return { state: reducePrompt(prev, raw, echo), snap: parseSnap(raw) };
-  }
-
-  /**
-   * The running prompt's base point and kind: where the rubber band starts, and whether it is a
-   * window's corner or a distance. Read it when the prompt changes (after `cmdline`, `start`,
-   * `cancel`, `click`), not on every pointer frame.
-   */
-  promptAnchor(): PromptAnchor {
-    return parsePromptAnchor(this.call(() => this.raw.prompt()));
+    const parsed = parseJson(raw);
+    const reply = isRecord(parsed) ? parsed : {};
+    const snap = parseSnapValue(reply["snap"]);
+    // An engine that does not say the point it took (an older package) took the snap or the pointer.
+    const refused = typeof reply["error"] === "string" && reply["point"] === null;
+    const taken = refused ? null : (parseXy(reply["point"]) ?? snap?.point ?? point);
+    return { state: reducePrompt(prev, raw, taken === null ? undefined : echo?.(taken)), snap, point: taken };
   }
 
   layers(): LayerInfo[] {

@@ -178,13 +178,13 @@ export default function Selected() {
   - Do: `<Tab selected>Model</Tab>`
 
 ### Limits
-- `rule/tab-label-limit`: When an `sm` tab's label runs past 18 characters, pass the whole label as the children and leave the shortening to the tab, because the tab clips at `max-width: 18ch` with an ellipsis (the 20-character "Summarise the layers" shows as "Summarise the la…") and shows the full label in its hint by itself, while a label cut by the caller has no full text anywhere. Evidence: measured 111.6px clipped `sm` tab at 1280px, `src/ui/ui.css:1020`. Check: test `src/ui/Tab.test.tsx`.
+- `rule/tab-label-limit`: When an `sm` tab's label runs past 18 characters, pass the whole label as the children and leave the shortening to the tab, because the tab clips at `max-width: 18ch` with an ellipsis (the 20-character "Summarise the layers" shows as "Summarise the la…") and shows the full label in its hint by itself, while a label cut by the caller has no full text anywhere. Evidence: measured 111.6px clipped `sm` tab at 1280px, `src/ui/ui.css:1059`. Check: test `src/ui/Tab.test.tsx`.
   - Don't: `<Tab size="sm">{title.slice(0, 16) + "…"}</Tab>` — the cut label has no full text anywhere.
   - Do: `<Tab size="sm">Summarise the layers</Tab>`
-- `rule/tab-md-label-limit`: When an `md` tab's label runs past 24 characters, pass the whole label as the children and leave the shortening to the tab, because the tab clips at `max-width: 24ch` with an ellipsis and shows the full label in its hint by itself, and uncapped the 56-character "A1 Ground floor general arrangement plan, sheet 12 of 40" draws a 357.8px tab that pushes the other layouts out of the strip. Evidence: measured 168.2px clipped `md` tab at 1280px, `src/ui/ui.css:1009`. Check: test `src/ui/Tab.test.tsx`.
+- `rule/tab-md-label-limit`: When an `md` tab's label runs past 24 characters, pass the whole label as the children and leave the shortening to the tab, because the tab clips at `max-width: 24ch` with an ellipsis and shows the full label in its hint by itself, and uncapped the 56-character "A1 Ground floor general arrangement plan, sheet 12 of 40" draws a 357.8px tab that pushes the other layouts out of the strip. Evidence: measured 168.2px clipped `md` tab at 1280px, `src/ui/ui.css:1048`. Check: test `src/ui/Tab.test.tsx`.
   - Don't: `<Tab title="A1 Ground floor general arrangement plan, sheet 12 of 40">A1 Ground floor…</Tab>` — the label a screen reader hears is the cut one.
   - Do: `<Tab>A1 Ground floor general arrangement plan, sheet 12 of 40</Tab>`
-- `rule/tab-touch-target`: When `sm` tabs are laid out in a pane header, leave the header room for a 24px tab, because under a coarse pointer the 22px tab grows to the 24px control height (it clips its own overflow for the ellipsis, so it cannot take an overhanging target) and a header fixed at 22px would cut it. Evidence: measured 22px `sm` tab, 24px under a coarse pointer, `src/ui/ui.css:1204`. Check: review `src/ui/ui.css`.
+- `rule/tab-touch-target`: When `sm` tabs are laid out in a pane header, leave the header room for a 24px tab, because under a coarse pointer the 22px tab grows to the 24px control height (it clips its own overflow for the ellipsis, so it cannot take an overhanging target) and a header fixed at 22px would cut it. Evidence: measured 22px `sm` tab, 24px under a coarse pointer, `src/ui/ui.css:1246`. Check: review `src/ui/ui.css`.
   - Don't: `.my-head { height: var(--control-h-row); overflow: hidden }`
   - Do: `.my-head { min-height: var(--control-h-button); align-items: center }`
 
@@ -210,7 +210,7 @@ Rests on the native `<button>` element with `role="tab"`: Enter and Space and fo
 ## Tokens
 | Part | State | Token |
 |---|---|---|
-| The label | rest | `--text-faint`, `--font-family` |
+| The label | rest | `--text-faint`, `--font-family`, `--leading-ui` |
 | The tab | md | `--control-h-tab`, `--gap-12`, `--font-body`, `--hairline`, `--border-soft` |
 | The tab | sm | `--control-h-row`, `--gap-6`, `--font-small`, `--radius-card` |
 | The fill | hover | `--hover` |

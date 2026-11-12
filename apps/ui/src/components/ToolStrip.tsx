@@ -9,7 +9,8 @@
  *
  * A window narrower than the strip keeps the leading groups that fit, whole, and folds the rest
  * behind one overflow key at the strip's end, which opens them as a menu (`MenuKey`, `./Menu.tsx`):
- * each row is the tool's glyph, its label and its shortcut, walked by the keys of every menu. The
+ * each row is the tool's glyph, its label, its typed name and its shortcut, in the strip's own
+ * groups with a separator between them, walked by the keys of every menu. The
  * strip never scrolls. The keys drawn and the overflow key are one Tab stop (`rovingBand`); a
  * tool run from the menu returns the focus to the overflow key.
  */
@@ -240,10 +241,12 @@ export function ToolStrip(props: ToolStripProps): JSX.Element {
   const [moreOpen, setMoreOpen] = createSignal(false);
   const moreKey = (): HTMLElement | null => strip?.querySelector<HTMLElement>(":scope > .tool-more > button") ?? null;
 
+  // The menu keeps the strip's groups (a separator where the strip has a divider), and each row
+  // carries what its key's hint does: the name typed at the command line.
   const folded = createMemo((): MenuItem[] =>
-    TOOLBAR.slice(shown())
-      .flat()
-      .map((entry) => ({ label: entry.label, id: entry.id, shortcut: entry.shortcut, enabled: toolEnabled(entry.id, props.commands), children: [], icon: entry.icon })),
+    TOOLBAR.slice(shown()).flatMap((group) =>
+      group.map((entry, at) => ({ label: entry.label, id: entry.id, shortcut: entry.shortcut, enabled: toolEnabled(entry.id, props.commands), children: [], icon: entry.icon, name: entry.alias, group: at === 0 })),
+    ),
   );
 
   const fit = (count: number): void => {

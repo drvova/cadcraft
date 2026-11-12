@@ -27,14 +27,40 @@
 //! | [`Facade::set_viewport`] | `{"ok":true,"viewport":[w,h]}` (the canvas's CSS pixel size the engine sizes its pick box by) or `{"ok":false,"error":"…"}` |
 //! | [`Facade::set_cursor`] | `{"ok":true}` or `{"ok":false,"error":"…"}` — where the pointer is, the direction of direct distance entry |
 //! | [`Facade::preview`] | the running command's rubber band: `{"verts","prims","drag"}` (the display list's `verts`/`prims`; `drag` is `null` or `{"handles":[18,…],"matrix":[a,b,c,d,e,f],"clipboard":false}`), plus `error` when refused |
-//! | [`Facade::pick`] | `{"handles":["1A",…]}` — what is under the pointer, nearest first; the selection is untouched; plus `error` when refused |
+//! | [`Facade::pick`] | `{"handles":["1A",…],"hover":"1A"}` — what is under the pointer, nearest first, and the one of them a hover highlights (`null` when a click there selects nothing, or SELECTIONPREVIEW / PREVIEWFILTER keep it dark); the selection is untouched; plus `error` when refused |
 //! | [`Facade::snap`] | `{"snap":null}` or `{"snap":{"point":[x,y],"mode":1,"name":"Endpoint","deferred":false}}`; plus `error` when refused |
-//! | [`Facade::click`] | the command-line state plus `output`, `snap` (the object snap the point took, or `null`) and `error` when refused: a pointer click given to the running command |
+//! | [`Facade::click`] | the command-line state plus `output`, `snap` (the object snap the point took, or `null`), `point` (the point the command was given, or `null`) and `error` when refused: a pointer click given to the running command, resolved as [`Facade::pointer`] resolves it |
+//! | [`Facade::pointer`] | the pointer resolved for the running command (below), plus `error` when refused |
+//!
+//! # The resolved pointer
+//!
+//! [`Facade::pointer`] is the one call a canvas makes per frame while a command wants a point. It
+//! runs the engine's own cursor resolution ([`Session::snap_cursor`]: running object snaps, grid
+//! snap, polar and object-snap tracking, ortho) and replies
+//!
+//! ```json
+//! {"point":[x,y],"constraint":"none"|"osnap"|"ortho"|"polar"|"grid"|"track",
+//!  "snap":null|{"point":[x,y],"mode":1,"name":"Endpoint","deferred":false},
+//!  "from":null|[x,y],"distance":null|4.25,"angle":null|45.0,"label":"Polar: 4.2500 < 45°",
+//!  "paths":{"verts":[[x,y],…],"prims":[{"kind":"polyline","start":0,"len":2,…}]},
+//!  "acquired":[[x,y],…],"wait":false,
+//!  "preview":{"verts":[…],"prims":[…],"drag":null}}
+//! ```
+//!
+//! * `point` is what the next [`Facade::click`] at the same place gives the command; `preview` is
+//!   the rubber band drawn to it (the reply of [`Facade::preview`] at `point`).
+//! * `from`, `distance` and `angle` say what an ortho, polar or tracking constraint is measured
+//!   from and by (`angle` in degrees, in the drawing's own sense: from ANGBASE, by ANGDIR), and
+//!   `label` is that sentence in the drawing's units, empty when there is nothing to say.
+//! * `paths` are the constraint's rays (the ortho or polar ray from the base point, the alignment
+//!   paths from acquired points) in the display list's `verts`/`prims` form, cut to the view.
+//! * `acquired` are the points object-snap tracking holds, and `wait` asks for another call after
+//!   the dwell even if the pointer rests (a point is being acquired).
 //!
 //! # Points and apertures
 //!
-//! [`Facade::preview`], [`Facade::pick`], [`Facade::snap`], [`Facade::click`] and
-//! [`Facade::set_cursor`] take a world point, refused unless both ordinates are finite and within
+//! [`Facade::preview`], [`Facade::pick`], [`Facade::snap`], [`Facade::click`], [`Facade::pointer`]
+//! and [`Facade::set_cursor`] take a world point, refused unless both ordinates are finite and within
 //! [`MAX_COORD`]. An aperture is a world distance: `0` means the engine's own box (PICKBOX or
 //! APERTURE pixels at the current view and [`Facade::set_viewport`] size), a negative or
 //! non-finite one is refused, and a larger one than a view may span is clamped.
@@ -72,8 +98,9 @@
 use cadcraft_color::Rgb;
 use cadcraft_doc::Space;
 use cadcraft_engine::snap::SnapHit;
+use cadcraft_engine::snap::tracking::{CursorQuery, PathKind, PathShape, Track};
 use cadcraft_engine::{Input, Session};
-use cadcraft_geom::{Bounds2, Vec2};
+use cadcraft_geom::{Bounds2, Ellipse, TAU, Vec2};
 use cadcraft_render::{DPrim, DisplayList, Kind, Options};
 use serde_json::{Value, json};
 
@@ -119,6 +146,23 @@ const MAX_VIEWPORT_PX: f64 = 32_768.0;
 /// Handles a [`Facade::pick`] reply carries: what is under a pointer is a handful of objects, and
 /// a hostile aperture that covers the whole drawing must not serialize all of it every frame.
 const MAX_PICK_HANDLES: usize = 64;
+
+/// The latest time [`Facade::pointer`] accepts, in milliseconds: far past any page's lifetime, and
+/// still a whole number of milliseconds in a double.
+pub const MAX_TIME_MS: f64 = 1e15;
+
+/// [`Facade::pointer`]'s `modifiers` bit for Shift held: it flips ortho while held, and acquires
+/// tracking points when POLARMODE says Shift does.
+pub const MODIFIER_SHIFT: u32 = 1;
+
+/// [`Facade::pointer`]'s `modifiers` bit for Ctrl held: ARC's direction switch.
+pub const MODIFIER_CTRL: u32 = 2;
+
+/// Segments a tracking path along a circle (an arc's extension) is drawn with.
+const TRACK_CIRCLE_SEGMENTS: u32 = 96;
+
+/// Points a tracking path along an ellipse is drawn with, at most.
+const MAX_TRACK_POINTS: usize = 2048;
 
 /// Clipboard objects [`Facade::preview`] draws under the pointer while pasting. A larger
 /// clipboard shows no objects (cloning and transforming it every frame would stall the pointer).
@@ -304,9 +348,136 @@ fn snap_json(hit: &SnapHit) -> Value {
     json!({"point": [finite(hit.point.x), finite(hit.point.y)], "mode": hit.mode, "name": hit.name, "deferred": hit.deferred.is_some()})
 }
 
+/// The keys held during a pointer call.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Modifiers {
+    shift: bool,
+    ctrl: bool,
+}
+
+/// [`Facade::pointer`]'s `modifiers` argument: a whole number made only of [`MODIFIER_SHIFT`] and
+/// [`MODIFIER_CTRL`]. Anything else (a fraction, a negative, an unknown bit, not a number) is
+/// refused rather than guessed at.
+fn usable_modifiers(bits: f64) -> Result<Modifiers, String> {
+    let (shift, ctrl) = (f64::from(MODIFIER_SHIFT), f64::from(MODIFIER_CTRL));
+    let both = shift + ctrl;
+    if !(bits.is_finite() && (0.0..=both).contains(&bits) && bits.fract() == 0.0) {
+        return Err("the modifiers must be 0 to 3: 1 for Shift, 2 for Ctrl".into());
+    }
+    Ok(Modifiers { shift: bits == shift || bits == both, ctrl: bits == ctrl || bits == both })
+}
+
+/// [`Facade::pointer`]'s clock, in seconds: the caller's milliseconds, refused unless finite, not
+/// negative and within [`MAX_TIME_MS`].
+fn usable_time(now_ms: f64) -> Result<f64, String> {
+    if now_ms.is_finite() && (0.0..=MAX_TIME_MS).contains(&now_ms) {
+        Ok(now_ms / 1000.0)
+    } else {
+        Err("the time must be finite milliseconds, 0 or more".into())
+    }
+}
+
+/// What bent the pointer on its way to the point a click takes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Constraint {
+    /// Nothing: the point is where the pointer is.
+    None,
+    /// A running object snap.
+    Osnap,
+    /// Ortho: along the snap axes from the base point.
+    Ortho,
+    /// Polar tracking from the base point.
+    Polar,
+    /// Grid snap.
+    Grid,
+    /// Object-snap tracking: an alignment path, an extension, a parallel or a crossing of paths.
+    Track,
+}
+
+impl Constraint {
+    fn name(self) -> &'static str {
+        match self {
+            Constraint::None => "none",
+            Constraint::Osnap => "osnap",
+            Constraint::Ortho => "ortho",
+            Constraint::Polar => "polar",
+            Constraint::Grid => "grid",
+            Constraint::Track => "track",
+        }
+    }
+}
+
+/// The pointer resolved for the running command: the point a click takes and why.
+#[derive(Clone, Debug)]
+struct Resolved {
+    point: Vec2,
+    constraint: Constraint,
+    snap: Option<SnapHit>,
+    track: Option<Track>,
+    /// The prompt's base point, when it has one.
+    base: Option<Vec2>,
+    wait: bool,
+}
+
+impl Resolved {
+    /// The pointer where it is: no command wants a point there.
+    fn free(point: Vec2) -> Self {
+        Resolved { point, constraint: Constraint::None, snap: None, track: None, base: None, wait: false }
+    }
+
+    /// The point a constraint is measured from, and the shapes to draw for it: the ortho ray from
+    /// the base point, or each tracking path the point lies on.
+    fn feedback(&self) -> Option<(Vec2, Vec<PathShape>)> {
+        match self.constraint {
+            Constraint::Ortho => {
+                let base = self.base?;
+                let dir = (self.point - base).normalized();
+                let ray = (dir != Vec2::ZERO && dir.is_finite()).then_some(PathShape::Ray { origin: base, dir });
+                Some((base, ray.into_iter().collect()))
+            }
+            Constraint::Polar | Constraint::Track => {
+                let track = self.track.as_ref()?;
+                let from = track.paths.first()?.from;
+                Some((from, track.paths.iter().map(|p| p.shape).collect()))
+            }
+            Constraint::None | Constraint::Osnap | Constraint::Grid => None,
+        }
+    }
+}
+
+/// The points a tracking path is drawn through, cut to `view`: a ray or a line as the two points
+/// of [`infinite_points`], a circle or an ellipse as a closed run. Empty when it cannot be drawn.
+fn path_points(shape: &PathShape, view: Bounds2) -> Vec<Vec2> {
+    if view.is_empty() {
+        return Vec::new();
+    }
+    let pts: Vec<Vec2> = match *shape {
+        PathShape::Ray { origin, dir } => infinite_points(&[origin, dir], view, true).to_vec(),
+        PathShape::Line { origin, dir } => infinite_points(&[origin, dir], view, false).to_vec(),
+        PathShape::Circle { center, radius, .. } => {
+            (0..=TRACK_CIRCLE_SEGMENTS).map(|i| center + Vec2::from_angle(TAU * f64::from(i) / f64::from(TRACK_CIRCLE_SEGMENTS)) * radius).collect()
+        }
+        PathShape::Ellipse { center, major, ratio, .. } => {
+            let mut pts = Vec::new();
+            let tolerance = major.len() * 1e-3;
+            if tolerance.is_finite() && tolerance > 0.0 {
+                Ellipse::full(center, major, ratio).tessellate(tolerance, &mut pts);
+                pts.truncate(MAX_TRACK_POINTS);
+            }
+            pts
+        }
+    };
+    if pts.len() >= 2 && pts.iter().all(|p| p.is_finite()) { pts } else { Vec::new() }
+}
+
 /// The facade a JavaScript interface calls: one session, one view, JSON replies.
 pub struct Facade {
     session: Session,
+    /// The latest time [`Facade::pointer`] was given, in seconds. It only moves forward, so a
+    /// caller whose clock steps back cannot un-rest a pointer that is acquiring a tracking point.
+    clock: f64,
+    /// The keys held at the last [`Facade::pointer`] call: a [`Facade::click`] resolves with them.
+    modifiers: Modifiers,
     /// The world rectangle the canvas shows. `display` culls to it; `view`/`set_view` read and
     /// write it, and a command that moves the engine's session view (ZOOM, PAN, a view restore)
     /// is mirrored into it (see [`Facade::refresh`]).
@@ -332,7 +503,7 @@ impl Facade {
         install_host_hooks();
         let session = Session::new();
         let engine_view = session.state().map(|st| st.view()).unwrap_or_default();
-        Facade { session, view: default_view(), space: Space::Model, engine_view }
+        Facade { session, clock: 0.0, modifiers: Modifiers::default(), view: default_view(), space: Space::Model, engine_view }
     }
 
     /// The sample drawing `--sample` opens: the mechanical bracket, in model space, fitted.
@@ -341,7 +512,7 @@ impl Facade {
         let mut session = Session::empty();
         session.open_drawing(cadcraft_engine::sample::default_sample(), "Bracket", None);
         let engine_view = session.state().map(|st| st.view()).unwrap_or_default();
-        let mut facade = Facade { session, view: default_view(), space: Space::Model, engine_view };
+        let mut facade = Facade { session, clock: 0.0, modifiers: Modifiers::default(), view: default_view(), space: Space::Model, engine_view };
         facade.fit_view();
         facade
     }
@@ -395,6 +566,13 @@ impl Facade {
     /// [`Facade::cmdline_reply`] before it is written out, for a reply that adds a field.
     fn cmdline_value(&mut self, before: usize, error: Option<String>) -> Value {
         self.refresh();
+        // The prompt may have changed under the pointer: the deferred snap it hovered belongs to
+        // the old one, and tracking points are a command's, forgotten when none runs.
+        self.session.cursor_deferred = None;
+        if self.session.running.is_none() {
+            self.session.tracking.clear();
+            self.session.ctrl_down = false;
+        }
         let mut v = cmdline_state(&self.session);
         let out: Vec<String> = self.session.log.iter().skip(before).take(MAX_OUTPUT).cloned().collect();
         if let Some(o) = v.as_object_mut() {
@@ -683,15 +861,17 @@ impl Facade {
     /// With no command running, or one that draws nothing, `verts` and `prims` are empty. A
     /// point that is not usable, or a preview past [`MAX_DISPLAY_BYTES`], replies the empty
     /// preview with `error`. Nothing changes in the session.
+    ///
+    /// A deferred tangent or perpendicular under the pointer, and Ctrl held, are what the last
+    /// [`Facade::pointer`] call saw: that call replies this preview at the point it resolved.
     pub fn preview(&self, x: f64, y: f64) -> String {
-        match self.preview_value(x, y) {
+        match world_point(x, y).and_then(|cursor| self.preview_at(cursor)) {
             Ok(v) => v.to_string(),
             Err(e) => json!({"verts": [], "prims": [], "drag": null, "error": e}).to_string(),
         }
     }
 
-    fn preview_value(&self, x: f64, y: f64) -> Result<Value, String> {
-        let cursor = world_point(x, y)?;
+    fn preview_at(&self, cursor: Vec2) -> Result<Value, String> {
         let empty = || json!({"verts": [], "prims": [], "drag": null});
         let Ok(st) = self.session.state() else { return Ok(empty()) };
         let (entities, drag) = match self.session.drag(cursor) {
@@ -737,20 +917,32 @@ impl Facade {
     /// pick box, PICKBOX pixels at the current view and canvas size). No drawing, or nothing
     /// there, replies no handles; a point or aperture that is not usable replies none with
     /// `error`.
+    ///
+    /// `hover` is the one of them to highlight under the pointer, or `null`: the first handle
+    /// (what a click selects) while a click there selects at all (at rest with PICKFIRST on, or
+    /// at a prompt that picks objects: [`Session::previews_selection`], which also reads
+    /// SELECTIONPREVIEW), unless PREVIEWFILTER keeps that object dark (by default one on a locked
+    /// layer, or an external reference). Objects on frozen or off layers are never in `handles`.
     pub fn pick(&self, x: f64, y: f64, aperture: f64) -> String {
         match self.pick_handles(x, y, aperture) {
-            Ok(handles) => json!({"handles": handles}).to_string(),
-            Err(e) => json!({"handles": [], "error": e}).to_string(),
+            Ok((handles, hover)) => json!({"handles": handles, "hover": hover}).to_string(),
+            Err(e) => json!({"handles": [], "hover": null, "error": e}).to_string(),
         }
     }
 
-    fn pick_handles(&self, x: f64, y: f64, aperture: f64) -> Result<Vec<String>, String> {
+    /// The handles under a point, nearest first, and the one a hover highlights.
+    fn pick_handles(&self, x: f64, y: f64, aperture: f64) -> Result<(Vec<String>, Option<String>), String> {
         let p = world_point(x, y)?;
         let s = &self.session;
         let reach = usable_aperture(aperture, s.pixel_size() * s.settings.pickbox.max(1.0) * 1.5)?;
-        let Ok(st) = s.state() else { return Ok(Vec::new()) };
+        let Ok(st) = s.state() else { return Ok((Vec::new(), None)) };
         let hits = cadcraft_engine::select::pick_all(&st.doc, &st.edit_space(), p, reach);
-        Ok(hits.into_iter().take(MAX_PICK_HANDLES).map(|h| h.hex()).collect())
+        let hover = hits
+            .first()
+            .filter(|_| s.previews_selection())
+            .filter(|h| st.doc.entity(**h).is_some_and(|e| !cadcraft_engine::select::preview_filtered(&st.doc, e, s.settings.previewfilter)))
+            .map(|h| h.hex());
+        Ok((hits.into_iter().take(MAX_PICK_HANDLES).map(|h| h.hex()).collect(), hover))
     }
 
     /// The object snap the pointer takes at a world point, by the engine's own `osnap` with its
@@ -760,7 +952,8 @@ impl Facade {
     /// running command's prompt is not asking for a point. `mode` is the OSMODE bit. `aperture`
     /// is the reach in world units (`0`: the engine's own, APERTURE pixels at the current view and
     /// canvas size). A point or aperture that is not usable replies `null` with `error`. Nothing
-    /// changes in the session; [`Facade::click`] gives the same point to the command.
+    /// changes in the session. It is the object-snap part alone of what [`Facade::pointer`]
+    /// resolves (no grid snap, tracking or ortho), kept for a caller that only marks snaps.
     pub fn snap(&self, x: f64, y: f64, aperture: f64) -> String {
         match self.snap_hit(x, y, aperture) {
             Ok(hit) => json!({"snap": hit.as_ref().map(snap_json)}).to_string(),
@@ -768,12 +961,11 @@ impl Facade {
         }
     }
 
-    /// The one snap query [`Facade::snap`] reports and [`Facade::click`] feeds, so the marker a
-    /// person sees is the point the command gets.
+    /// The snap query [`Facade::snap`] reports.
     fn snap_hit(&self, x: f64, y: f64, aperture: f64) -> Result<Option<SnapHit>, String> {
         let p = world_point(x, y)?;
         let s = &self.session;
-        let reach = usable_aperture(aperture, s.pixel_size() * s.settings.aperture.max(1.0))?;
+        let reach = self.snap_reach(aperture)?;
         let Ok(st) = s.state() else { return Ok(None) };
         let prompt = s.current_prompt();
         // A prompt that selects objects, or takes only typed input, does not snap its clicks.
@@ -786,28 +978,186 @@ impl Facade {
         Ok(cadcraft_engine::snap::osnap(&st.doc, &st.edit_space(), p, reach, s.settings.osmode | hatch, base, deferred))
     }
 
-    /// A pointer click at a world point, given to the running command as the desktop gives it:
-    /// snapped as [`Facade::snap`] reports (through [`Session::input_snapped`], which is what
-    /// carries a deferred tangent or perpendicular and a layout viewport's own coordinates:
-    /// typed coordinates cannot), else the point itself. At "Select objects" the point picks or
-    /// opens a window, as a click does. The engine's cursor moves there too. With no command
-    /// running the click does nothing (selecting at rest is the `select` command).
+    /// Resolve the pointer for the running command, as the engine's own canvas does each frame
+    /// ([`Session::snap_cursor`]): running object snaps first, then grid snap, then polar and
+    /// object-snap tracking paths, then ortho. The reply (the module documentation, "The resolved
+    /// pointer") carries the point the next [`Facade::click`] there takes, what bent it, the
+    /// constraint's rays to draw, and the rubber band at that point.
     ///
-    /// The reply has the shape `cmdline` replies, plus `snap`: the object snap the point took, or
-    /// `null`. A point or aperture that is not usable is refused with `error` and nothing is fed.
+    /// `aperture` is the reach in world units, of the object snap and of a tracking path alike
+    /// (`0`: the engine's own, APERTURE pixels at the current view and canvas size). `now_ms` is
+    /// any steady clock in milliseconds (`performance.now()`): resting on a snap point for the
+    /// engine's dwell acquires it for tracking. `modifiers` is [`MODIFIER_SHIFT`] and
+    /// [`MODIFIER_CTRL`] added together: Shift flips ortho while held, Ctrl switches ARC's
+    /// direction.
+    ///
+    /// It moves the engine's cursor to the resolved point (the direction of direct distance
+    /// entry) and keeps the tracking points; the drawing, the selection and the prompt are
+    /// untouched. With no command running, or one whose prompt does not take a point, the pointer
+    /// is free: `point` is the pointer itself. A point, aperture, time or modifiers that is not
+    /// usable is refused with `error` and a `null` point, and nothing changes.
+    pub fn pointer(&mut self, x: f64, y: f64, aperture: f64, now_ms: f64, modifiers: f64) -> String {
+        match self.pointer_value(x, y, aperture, now_ms, modifiers) {
+            Ok(v) => v.to_string(),
+            Err(e) => json!({
+                "point": null, "constraint": Constraint::None.name(), "snap": null, "from": null, "distance": null, "angle": null,
+                "label": "", "paths": {"verts": [], "prims": []}, "acquired": [], "wait": false,
+                "preview": {"verts": [], "prims": [], "drag": null}, "error": e,
+            })
+            .to_string(),
+        }
+    }
+
+    fn pointer_value(&mut self, x: f64, y: f64, aperture: f64, now_ms: f64, modifiers: f64) -> Result<Value, String> {
+        let raw = world_point(x, y)?;
+        let reach = self.snap_reach(aperture)?;
+        let now = usable_time(now_ms)?;
+        let held = usable_modifiers(modifiers)?;
+        self.clock = self.clock.max(now);
+        self.modifiers = held;
+        let r = self.resolve(raw, reach);
+        let feedback = r.feedback();
+        let (mut verts, mut prims): (Vec<Value>, Vec<Value>) = (Vec::new(), Vec::new());
+        for shape in feedback.iter().flat_map(|(_, shapes)| shapes) {
+            let pts = path_points(shape, self.view);
+            if pts.is_empty() {
+                continue;
+            }
+            prims.push(
+                json!({"kind": "polyline", "start": verts.len(), "len": pts.len(), "color": [255, 255, 255], "lw": 0.0, "alpha": 255, "handle": 0}),
+            );
+            verts.extend(pts.iter().map(|q| json!([q.x, q.y])));
+        }
+        let from = feedback.as_ref().map(|(from, _)| *from).filter(|f| f.is_finite());
+        let measure = from.map(|f| (f.dist(r.point), self.user_angle(f.angle_to(r.point)))).filter(|(d, a)| d.is_finite() && a.is_finite());
+        let acquired: Vec<Value> =
+            self.session.tracking.acquired.iter().map(|a| a.at()).filter(|p| p.is_finite()).map(|p| json!([p.x, p.y])).collect();
+        // A rubber band too large to send is not drawn; the point is still the point.
+        let preview = self.preview_at(r.point).unwrap_or_else(|_| json!({"verts": [], "prims": [], "drag": null}));
+        Ok(json!({
+            "point": [r.point.x, r.point.y],
+            "constraint": r.constraint.name(),
+            "snap": r.snap.as_ref().map(snap_json),
+            "from": from.map(|f| [f.x, f.y]),
+            "distance": measure.map(|(d, _)| d),
+            "angle": measure.map(|(_, a)| a.to_degrees()),
+            "label": self.constraint_label(&r),
+            "paths": {"verts": verts, "prims": prims},
+            "acquired": acquired,
+            "wait": r.wait,
+            "preview": preview,
+        }))
+    }
+
+    /// The reach of an object snap or a tracking path, in world units ([`usable_aperture`] over
+    /// the engine's APERTURE pixels at the current view).
+    fn snap_reach(&self, aperture: f64) -> Result<f64, String> {
+        let s = &self.session;
+        usable_aperture(aperture, s.pixel_size() * s.settings.aperture.max(1.0))
+    }
+
+    /// A world direction (radians) as the drawing counts angles: from ANGBASE, clockwise when
+    /// ANGDIR says so, in `0..2π`.
+    fn user_angle(&self, world: f64) -> f64 {
+        let a = self.session.angle_settings();
+        let turned = world - if a.angbase.is_finite() { a.angbase } else { 0.0 };
+        cadcraft_geom::norm_angle(if a.clockwise { -turned } else { turned })
+    }
+
+    /// What a constraint says beside the pointer, in the drawing's own units: `Polar: 4.2500 <
+    /// 45°` for one path (ortho, polar, an alignment path), the paths' names and angles where two
+    /// cross, the crossing's name where a path meets an object. Empty for a free pointer, an
+    /// object snap (its own name is the label) and grid snap.
+    fn constraint_label(&self, r: &Resolved) -> String {
+        let header = self.session.doc().ok().map(|d| &d.header);
+        let (lunits, luprec) = header.map_or((2, 4), |h| (h.i64("LUNITS", 2), h.i64("LUPREC", 4)));
+        let (aunits, auprec) = header.map_or((0, 0), |h| (h.i64("AUNITS", 0), h.i64("AUPREC", 0)));
+        let angle = |from: Vec2| {
+            let text = cadcraft_engine::units::format_angle(self.user_angle(from.angle_to(r.point)), aunits, auprec);
+            if aunits == 0 { format!("{text}°") } else { text }
+        };
+        let one = |name: &str, from: Vec2| {
+            let distance = cadcraft_engine::units::format_distance(finite(from.dist(r.point)), lunits, luprec);
+            format!("{name}: {distance} < {}", angle(from))
+        };
+        match (r.constraint, &r.track, r.base) {
+            (Constraint::Ortho, _, Some(base)) => one("Ortho", base),
+            (Constraint::Polar | Constraint::Track, Some(track), _) => match (track.object, track.paths.as_slice()) {
+                (Some(object), [path, ..]) => format!("{}: {object}", path.name),
+                (None, [path]) => one(path.name, path.from),
+                (_, paths) => paths.iter().map(|p| format!("{}: < {}", p.name, angle(p.from))).collect::<Vec<_>>().join(", "),
+            },
+            _ => String::new(),
+        }
+    }
+
+    /// The one resolution [`Facade::pointer`] reports and [`Facade::click`] feeds, so the point a
+    /// person is shown is the point the command gets: the engine's [`Session::snap_cursor`] at the
+    /// prompt's base point, with the last clock and modifiers [`Facade::pointer`] was given. It
+    /// moves the engine's cursor to the point, and tells it the deferred snap under the pointer
+    /// and whether Ctrl is held (what a rubber band reads). A prompt that selects objects or takes
+    /// only typed input, and no prompt at all, leave the pointer free and forget tracking points.
+    fn resolve(&mut self, raw: Vec2, reach: f64) -> Resolved {
+        let prompt = self.session.current_prompt().filter(|p| p.accept.point && !p.picks_objects());
+        self.session.ctrl_down = self.modifiers.ctrl;
+        let Some(prompt) = prompt.filter(|_| self.session.state().is_ok()) else {
+            self.session.tracking.clear();
+            self.session.cursor_deferred = None;
+            self.session.cursor = raw;
+            return Resolved::free(raw);
+        };
+        let base = prompt.base.filter(|b| b.is_finite());
+        let shift = self.modifiers.shift;
+        let query = CursorQuery { base, deferred: prompt.deferred, corner: prompt.corner, aperture: reach, tol: reach, now: self.clock, shift };
+        let cursor = self.session.snap_cursor(raw, &query);
+        // A resolved point no pointer call would take (a hostile drawing's geometry) is not used.
+        if world_point(cursor.point.x, cursor.point.y).is_err() {
+            self.session.cursor_deferred = None;
+            self.session.cursor = raw;
+            return Resolved { base, wait: cursor.wait, ..Resolved::free(raw) };
+        }
+        let settings = &self.session.settings;
+        let constraint = match (&cursor.snap, &cursor.track) {
+            (Some(_), _) => Constraint::Osnap,
+            (None, Some(track)) if track.paths.iter().all(|p| p.kind == PathKind::Polar) => Constraint::Polar,
+            (None, Some(_)) => Constraint::Track,
+            // What `snap_cursor` does past its tracking paths: ortho from a base point that is not
+            // a window's corner (Shift flips it), over grid snap.
+            (None, None) if (settings.orthomode ^ shift) && base.is_some() && !prompt.corner => Constraint::Ortho,
+            (None, None) if settings.snapmode && !settings.polarsnap => Constraint::Grid,
+            (None, None) => Constraint::None,
+        };
+        self.session.cursor = cursor.point;
+        self.session.cursor_deferred = cursor.snap.and_then(|h| h.deferred);
+        Resolved { point: cursor.point, constraint, snap: cursor.snap, track: cursor.track, base, wait: cursor.wait }
+    }
+
+    /// A pointer click at a world point, given to the running command as the desktop gives it:
+    /// resolved as [`Facade::pointer`] reports it (object snap, grid snap, tracking, ortho, with
+    /// the clock and modifiers of the last such call), then fed through
+    /// [`Session::input_snapped`] when an object snap took it (which is what carries a deferred
+    /// tangent or perpendicular and a layout viewport's own coordinates: typed coordinates
+    /// cannot), else as the point. At "Select objects" the point picks or opens a window, as a
+    /// click does. The engine's cursor moves there too. With no command running the click does
+    /// nothing (selecting at rest is the `select` command).
+    ///
+    /// The reply has the shape `cmdline` replies, plus `snap` (the object snap the point took, or
+    /// `null`) and `point` (the point given, or `null`). A point or aperture that is not usable is
+    /// refused with `error` and nothing is fed.
     pub fn click(&mut self, x: f64, y: f64, aperture: f64) -> String {
         let before = self.session.log.len();
         let mut error = None;
-        let mut snapped = Value::Null;
-        match (world_point(x, y), self.snap_hit(x, y, aperture)) {
-            (Ok(p), Ok(hit)) => {
-                self.session.cursor = hit.map_or(p, |h| h.point);
-                let fed = match hit {
+        let (mut snapped, mut taken) = (Value::Null, Value::Null);
+        match (world_point(x, y), self.snap_reach(aperture)) {
+            (Ok(p), Ok(reach)) => {
+                let r = self.resolve(p, reach);
+                taken = json!([r.point.x, r.point.y]);
+                let fed = match r.snap {
                     Some(h) => {
                         snapped = snap_json(&h);
                         self.session.input_snapped(h)
                     }
-                    None => self.session.input(Input::Point(p)),
+                    None => self.session.input(Input::Point(r.point)),
                 };
                 if let Err(e) = fed {
                     let m = e.to_string();
@@ -820,6 +1170,7 @@ impl Facade {
         let mut v = self.cmdline_value(before, error);
         if let Some(o) = v.as_object_mut() {
             o.insert("snap".into(), snapped);
+            o.insert("point".into(), taken);
         }
         v.to_string()
     }
@@ -1136,6 +1487,11 @@ mod bindings {
         #[wasm_bindgen(js_name = snap)]
         pub fn snap(&self, x: f64, y: f64, aperture: f64) -> String {
             self.0.snap(x, y, aperture)
+        }
+
+        #[wasm_bindgen(js_name = pointer)]
+        pub fn pointer(&mut self, x: f64, y: f64, aperture: f64, now_ms: f64, modifiers: f64) -> String {
+            self.0.pointer(x, y, aperture, now_ms, modifiers)
         }
 
         #[wasm_bindgen(js_name = click)]
@@ -1466,7 +1822,14 @@ mod tests {
 
     /// A facade with no drawing at all (the tolerant replies of `selection`/`format_point`).
     fn empty_facade() -> Facade {
-        Facade { session: Session::empty(), view: default_view(), space: Space::Model, engine_view: cadcraft_engine::View::default() }
+        Facade {
+            session: Session::empty(),
+            clock: 0.0,
+            modifiers: Modifiers::default(),
+            view: default_view(),
+            space: Space::Model,
+            engine_view: cadcraft_engine::View::default(),
+        }
     }
 
     #[test]
@@ -1678,7 +2041,7 @@ mod tests {
         assert_eq!(parse(&f.pick(2.0, 0.0, 0.5))["handles"].as_array().unwrap().len(), 1);
         assert_eq!(fingerprint(&f), asking, "nothing was picked into the command");
         // No drawing: nothing, quietly.
-        assert_eq!(parse(&empty_facade().pick(0.0, 0.0, 1.0)), json!({"handles": []}));
+        assert_eq!(parse(&empty_facade().pick(0.0, 0.0, 1.0)), json!({"handles": [], "hover": null}));
     }
 
     #[test]
@@ -1771,6 +2134,250 @@ mod tests {
         );
     }
 
+    /// [`line_facade`] with object snap off and LINE started from `first`.
+    fn drawing_line_from(first: &str) -> Facade {
+        let mut f = line_facade();
+        f.session.settings.osmode = 0;
+        f.start("line");
+        assert_eq!(parse(&f.cmdline(first))["running"], json!("line"));
+        f
+    }
+
+    fn setvar(f: &mut Facade, name: &str, value: Value) {
+        let r = parse(&f.execute("setvar", &json!({"name": name, "value": value}).to_string()));
+        assert_eq!(r["ok"], json!(true), "setvar {name}: {r}");
+    }
+
+    fn verts_of(v: &Value) -> Vec<(f64, f64)> {
+        v["verts"].as_array().unwrap().iter().map(point_of).collect()
+    }
+
+    #[test]
+    fn pointer_is_free_without_a_point_prompt_and_reports_every_field() {
+        let mut f = line_facade();
+        let before = fingerprint(&f);
+        let idle = parse(&f.pointer(0.1, 0.1, 0.0, 0.0, 0.0));
+        assert_eq!(idle["point"], json!([0.1, 0.1]), "at rest the pointer is free, even on an endpoint: {idle}");
+        assert_eq!(
+            idle,
+            json!({
+                "point": [0.1, 0.1], "constraint": "none", "snap": null, "from": null, "distance": null, "angle": null, "label": "",
+                "paths": {"verts": [], "prims": []}, "acquired": [], "wait": false, "preview": {"verts": [], "prims": [], "drag": null},
+            })
+        );
+        assert_eq!(fingerprint(&f), before, "resolving the pointer changes nothing a person sees");
+        // A prompt that picks objects leaves the pointer free too.
+        f.start("erase");
+        assert_eq!(parse(&f.pointer(0.1, 0.1, 0.0, 0.0, 0.0))["constraint"], json!("none"));
+        // No drawing at all: free, quietly.
+        let none = parse(&empty_facade().pointer(1.0, 2.0, 1.0, 0.0, 0.0));
+        assert_eq!((&none["point"], none.get("error")), (&json!([1.0, 2.0]), None), "{none}");
+    }
+
+    #[test]
+    fn pointer_takes_the_object_snap_first_as_snap_does() {
+        let mut f = line_facade();
+        f.start("line");
+        let hover = parse(&f.pointer(9.9, 0.1, 0.5, 0.0, 0.0));
+        assert_eq!(hover["constraint"], json!("osnap"), "{hover}");
+        assert_eq!(hover["point"], json!([10.0, 0.0]), "{hover}");
+        assert_eq!(hover["snap"], parse(&f.snap(9.9, 0.1, 0.5))["snap"], "the same hit `snap` reports");
+        assert_eq!(hover["label"], json!(""), "the snap's own name is its label: {hover}");
+        assert_eq!(f.session.cursor, Vec2::new(10.0, 0.0), "the engine's cursor is the resolved point");
+    }
+
+    #[test]
+    fn ortho_bends_the_pointer_and_click_takes_the_same_point() {
+        let mut f = drawing_line_from("2,2");
+        setvar(&mut f, "ORTHOMODE", json!(1));
+        let across = parse(&f.pointer(6.0, 3.0, 0.0, 0.0, 0.0));
+        assert_eq!(across["point"], json!([6.0, 2.0]), "the larger travel wins: horizontal: {across}");
+        assert_eq!((&across["constraint"], &across["label"]), (&json!("ortho"), &json!("Ortho: 4.0000 < 0°")), "{across}");
+        assert_eq!((&across["from"], &across["distance"], &across["angle"]), (&json!([2.0, 2.0]), &json!(4.0), &json!(0.0)), "{across}");
+        // The ray is the display list's own shape, from the base point through the point.
+        let ray = &across["paths"];
+        let verts = verts_of(ray);
+        assert_eq!(
+            ray["prims"],
+            json!([{"kind": "polyline", "start": 0, "len": 2, "color": [255, 255, 255], "lw": 0.0, "alpha": 255, "handle": 0}]),
+            "{across}"
+        );
+        assert_eq!(verts[0], (2.0, 2.0), "{across}");
+        assert!(verts[1].0 > 15.0 && verts[1].1 == 2.0, "the ray runs past the view's edge: {across}");
+        // The rubber band is drawn to the resolved point, not to the pointer.
+        let band = verts_of(&across["preview"]);
+        assert!(band.contains(&(6.0, 2.0)) && !band.contains(&(6.0, 3.0)), "{across}");
+        let up = parse(&f.pointer(2.3, 9.0, 0.0, 0.0, 0.0));
+        assert_eq!((&up["point"], &up["angle"], &up["label"]), (&json!([2.0, 9.0]), &json!(90.0), &json!("Ortho: 7.0000 < 90°")), "{up}");
+        // Shift flips ortho while it is held, for the resolution and for the click after it.
+        let held = parse(&f.pointer(6.0, 3.0, 0.0, 0.0, f64::from(MODIFIER_SHIFT)));
+        assert_eq!((&held["point"], &held["constraint"]), (&json!([6.0, 3.0]), &json!("none")), "{held}");
+        f.pointer(6.0, 3.0, 0.0, 0.0, 0.0);
+        let taken = parse(&f.click(6.0, 3.0, 0.0));
+        assert_eq!((&taken["point"], &taken["base"]), (&json!([6.0, 2.0]), &json!([6.0, 2.0])), "what was shown is what was taken: {taken}");
+        // Toggled off mid-command, the next resolution is free: no click in between.
+        setvar(&mut f, "ORTHOMODE", json!(0));
+        assert_eq!(parse(&f.pointer(8.0, 3.0, 0.0, 0.0, 0.0))["point"], json!([8.0, 3.0]));
+        // A window's second corner ignores ortho.
+        f.cancel();
+        setvar(&mut f, "ORTHOMODE", json!(1));
+        f.start("rectang");
+        f.cmdline("0,0");
+        let corner = parse(&f.pointer(4.0, 3.0, 0.0, 0.0, 0.0));
+        assert_eq!((&corner["point"], &corner["constraint"]), (&json!([4.0, 3.0]), &json!("none")), "{corner}");
+    }
+
+    #[test]
+    fn polar_snaps_near_its_increments_and_is_free_elsewhere() {
+        let mut f = drawing_line_from("1,1");
+        setvar(&mut f, "POLARANG", json!(45));
+        assert!(f.session.settings.polarmode, "polar tracking is on by default");
+        // 0.05 off the 45° ray (the reach is 10 px at 0.02 units per pixel: 0.2).
+        let near = parse(&f.pointer(4.05, 4.0, 0.0, 0.0, 0.0));
+        assert_eq!(near["constraint"], json!("polar"), "{near}");
+        let (x, y) = point_of(&near["point"]);
+        assert!((x - 4.025).abs() < 1e-9 && (y - 4.025).abs() < 1e-9, "the foot on the 45° ray: {near}");
+        assert!((near["angle"].as_f64().unwrap() - 45.0).abs() < 1e-9, "{near}");
+        let label = near["label"].as_str().unwrap();
+        assert!(label.starts_with("Polar: 4.27") && label.ends_with(" < 45°"), "{label}");
+        assert_eq!(verts_of(&near["paths"])[0], (1.0, 1.0), "the polar ray starts at the base point: {near}");
+        // Between two increments the pointer is where it is.
+        let free = parse(&f.pointer(5.0, 2.5, 0.0, 0.0, 0.0));
+        assert_eq!((&free["point"], &free["constraint"], &free["label"]), (&json!([5.0, 2.5]), &json!("none"), &json!("")), "{free}");
+        assert_eq!(free["paths"], json!({"verts": [], "prims": []}), "{free}");
+        // The click takes the snapped point.
+        f.pointer(4.05, 4.0, 0.0, 0.0, 0.0);
+        let (bx, by) = point_of(&parse(&f.click(4.05, 4.0, 0.0))["base"]);
+        assert!((bx - 4.025).abs() < 1e-9 && (by - 4.025).abs() < 1e-9, "{bx},{by}");
+        // Polar off (F10): free on the ray too.
+        f.session.settings.polarmode = false;
+        assert_eq!(parse(&f.pointer(7.05, 7.0, 0.0, 0.0, 0.0))["constraint"], json!("none"));
+    }
+
+    #[test]
+    fn grid_snap_lands_clicks_on_the_spacing() {
+        let mut f = line_facade();
+        f.session.settings.osmode = 0;
+        f.session.settings.polarmode = false;
+        setvar(&mut f, "SNAPUNIT", json!([1, 1]));
+        setvar(&mut f, "SNAPMODE", json!(1));
+        f.start("line");
+        let first = parse(&f.pointer(2.3, 3.6, 0.0, 0.0, 0.0));
+        assert_eq!((&first["point"], &first["constraint"], &first["label"]), (&json!([2.0, 4.0]), &json!("grid"), &json!("")), "{first}");
+        assert_eq!(parse(&f.click(2.3, 3.6, 0.0))["base"], json!([2.0, 4.0]));
+        let next = parse(&f.click(5.4, 6.6, 0.0));
+        assert_eq!((&next["point"], &next["base"]), (&json!([5.0, 7.0]), &json!([5.0, 7.0])), "{next}");
+        // Snap off mid-command (F9): the next pointer is free.
+        setvar(&mut f, "SNAPMODE", json!(0));
+        assert_eq!(parse(&f.pointer(5.4, 6.6, 0.0, 0.0, 0.0))["point"], json!([5.4, 6.6]));
+    }
+
+    #[test]
+    fn resting_on_a_snap_point_acquires_it_and_its_paths_bend_the_pointer() {
+        let mut f = line_facade();
+        f.session.settings.osmode = cadcraft_engine::snap::mode::END;
+        assert!(f.session.settings.otrack, "object snap tracking is on by default");
+        f.start("line");
+        f.cmdline("5,5");
+        let arriving = parse(&f.pointer(10.05, 0.05, 0.0, 1_000.0, 0.0));
+        assert_eq!((&arriving["constraint"], &arriving["wait"], &arriving["acquired"]), (&json!("osnap"), &json!(true), &json!([])), "{arriving}");
+        // A clock that steps back does not restart the dwell; half a second on, the point is held.
+        f.pointer(10.05, 0.05, 0.0, 10.0, 0.0);
+        let rested = parse(&f.pointer(10.05, 0.05, 0.0, 1_500.0, 0.0));
+        assert_eq!((&rested["acquired"], &rested["wait"]), (&json!([[10.0, 0.0]]), &json!(false)), "{rested}");
+        // Straight above the acquired end: its vertical alignment path.
+        let above = parse(&f.pointer(10.03, 4.0, 0.0, 1_600.0, 0.0));
+        assert_eq!(
+            (&above["point"], &above["constraint"], &above["label"]),
+            (&json!([10.0, 4.0]), &json!("track"), &json!("Endpoint: 4.0000 < 90°")),
+            "{above}"
+        );
+        assert_eq!(above["from"], json!([10.0, 0.0]), "{above}");
+        assert_eq!(verts_of(&above["paths"])[0], (10.0, 0.0), "the ray starts at the acquired point: {above}");
+        // Where that path crosses the polar ray from the base point: both rays, one point.
+        let crossing = parse(&f.pointer(10.05, 5.05, 0.0, 1_700.0, 0.0));
+        assert_eq!((&crossing["point"], &crossing["constraint"]), (&json!([10.0, 5.0]), &json!("track")), "{crossing}");
+        assert_eq!(crossing["paths"]["prims"].as_array().map(Vec::len), Some(2), "{crossing}");
+        assert_eq!(parse(&f.click(10.05, 5.05, 0.0))["base"], json!([10.0, 5.0]));
+        // A command's tracking points are forgotten with it.
+        f.cancel();
+        assert!(f.session.tracking.acquired.is_empty());
+        assert_eq!(parse(&f.pointer(10.03, 4.0, 0.0, 1_800.0, 0.0))["acquired"], json!([]));
+    }
+
+    #[test]
+    fn pointer_shows_a_deferred_tangents_resolved_line_and_tells_ctrl() {
+        let mut f = Facade::new();
+        for circle in [r#"{"center":[0,0],"radius":10}"#, r#"{"center":[30,0],"radius":4}"#] {
+            assert_eq!(parse(&f.execute("circle", circle))["ok"], json!(true));
+        }
+        assert_eq!(parse(&f.set_view(-20.0, -20.0, 40.0, 20.0))["ok"], json!(true));
+        f.session.settings.osmode = cadcraft_engine::snap::mode::TAN;
+        f.start("line");
+        assert_eq!(parse(&f.click(-1.0, 10.1, 0.5))["snap"]["deferred"], json!(true));
+        // Hovering the other circle: the band is the belt tangent the click will draw, not a
+        // line to the point under the pointer.
+        let hover = parse(&f.pointer(31.0, 4.1, 0.5, 0.0, 0.0));
+        assert_eq!(hover["snap"]["deferred"], json!(true), "{hover}");
+        assert!(f.session.cursor_deferred.is_some(), "the engine is told the deferred snap under the pointer");
+        let band = verts_of(&hover["preview"]);
+        assert_eq!(band.len(), 2, "{hover}");
+        let hovered = point_of(&hover["point"]);
+        assert!(!band.contains(&hovered), "the band ends at the tangent point, not the hovered one: {hover}");
+        f.click(31.0, 4.1, 0.5);
+        assert!(f.session.cursor_deferred.is_none(), "a click settles the deferred snap");
+        f.cmdline("");
+        let drawn = verts_of(&parse(&f.display(0.0)));
+        for end in &band {
+            assert!(drawn.iter().any(|v| (v.0 - end.0).abs() < 1e-9 && (v.1 - end.1).abs() < 1e-9), "the previewed end {end:?} was drawn");
+        }
+        // Ctrl reaches the engine while it is held, and ARC's rubber band turns with it.
+        f.session.settings.osmode = 0;
+        f.cmdline("arc c 0,0 5,0");
+        let plain = parse(&f.pointer(0.0, 5.0, 0.5, 0.0, 0.0));
+        assert!(!f.session.ctrl_down);
+        let turned = parse(&f.pointer(0.0, 5.0, 0.5, 0.0, f64::from(MODIFIER_CTRL)));
+        assert!(f.session.ctrl_down);
+        assert_ne!(plain["preview"], turned["preview"], "Ctrl switches the arc's direction");
+        f.pointer(0.0, 5.0, 0.5, 0.0, f64::from(MODIFIER_SHIFT | MODIFIER_CTRL));
+        assert!(f.session.ctrl_down, "both keys at once");
+        f.cancel();
+        assert!(!f.session.ctrl_down, "no command, no modifier left behind");
+    }
+
+    #[test]
+    fn hover_is_what_a_click_selects_and_obeys_the_preview_filter() {
+        let mut f = line_facade();
+        let at_rest = parse(&f.pick(5.0, 0.05, 0.0));
+        let handle = at_rest["handles"][0].clone();
+        assert!(handle.is_string(), "{at_rest}");
+        assert_eq!(at_rest["hover"], handle, "at rest a click selects it, so it lights: {at_rest}");
+        // A locked layer: a click still takes the object, but PREVIEWFILTER bit 1 keeps it dark.
+        f.session.doc_mut().unwrap().layer_mut("0").unwrap().locked = true;
+        let locked = parse(&f.pick(5.0, 0.05, 0.0));
+        assert_eq!((&locked["handles"][0], &locked["hover"]), (&handle, &Value::Null), "{locked}");
+        f.session.settings.previewfilter = 0;
+        assert_eq!(parse(&f.pick(5.0, 0.05, 0.0))["hover"], handle, "with the filter off it lights again");
+        f.session.doc_mut().unwrap().layer_mut("0").unwrap().locked = false;
+        // SELECTIONPREVIEW off for "no command": nothing lights at rest.
+        f.session.settings.selectionpreview = 2;
+        assert!(parse(&f.pick(5.0, 0.05, 0.0))["hover"].is_null());
+        // A prompt that picks objects lights what its click picks; one that wants a point lights nothing.
+        f.start("erase");
+        assert_eq!(parse(&f.pick(5.0, 0.05, 0.0))["hover"], handle);
+        f.cancel();
+        f.session.settings.selectionpreview = 3;
+        f.start("line");
+        let pointing = parse(&f.pick(5.0, 0.05, 0.0));
+        assert_eq!((&pointing["handles"][0], &pointing["hover"]), (&handle, &Value::Null), "{pointing}");
+        f.cancel();
+        // A frozen layer's objects are not under the pointer at all: a click cannot select them.
+        f.session.doc_mut().unwrap().layer_mut("0").unwrap().frozen = true;
+        assert_eq!(parse(&f.pick(5.0, 0.05, 0.0)), json!({"handles": [], "hover": null}));
+        let selected = parse(&f.execute("select", r#"{"at":[5,0.05],"aperture":0.5}"#));
+        assert_eq!(selected["result"]["handles"], json!([]), "and a click there selects nothing: {selected}");
+    }
+
     #[test]
     fn set_viewport_sizes_the_engine_pick_box() {
         let mut f = Facade::new();
@@ -1835,6 +2442,11 @@ mod tests {
                         let s = parse(&f.snap(x, y, 1.0));
                         assert!(s["snap"].is_null() && s["error"].is_string(), "snap {x},{y}: {s}");
                         assert_eq!(parse(&f.set_cursor(x, y))["ok"], json!(false), "set_cursor {x},{y}");
+                        let r = parse(&f.pointer(x, y, 1.0, 0.0, 0.0));
+                        assert!(
+                            r["point"].is_null() && r["error"].is_string() && r["preview"]["prims"].as_array().is_some_and(Vec::is_empty),
+                            "pointer {x},{y}: {r}"
+                        );
                         assert_eq!(fingerprint(&f), before, "a refused read changed something: {x},{y}");
                         let c = parse(&f.click(x, y, 1.0));
                         assert!(c["error"].is_string() && c["snap"].is_null(), "click {x},{y}: {c}");
@@ -1848,12 +2460,29 @@ mod tests {
                     assert!(k["handles"].as_array().is_some_and(|h| h.len() <= MAX_PICK_HANDLES), "pick aperture {aperture}: {k}");
                     let s = parse(&f.snap(1.0, 1.0, aperture));
                     assert!(s.get("snap").is_some(), "snap aperture {aperture}: {s}");
+                    let r = parse(&f.pointer(1.0, 1.0, aperture, 0.0, 0.0));
+                    assert!(r["paths"]["prims"].is_array() && r["preview"]["prims"].is_array(), "pointer aperture {aperture}: {r}");
                     if !aperture.is_finite() || aperture < 0.0 {
+                        assert!(r["point"].is_null() && r["error"].is_string(), "pointer aperture {aperture}: {r}");
                         assert!(k["error"].is_string() && s["error"].is_string(), "aperture {aperture}: {k} {s}");
                         let c = parse(&f.click(1.0, 1.0, aperture));
                         assert!(c["error"].is_string(), "click aperture {aperture}: {c}");
                     }
                 }
+                // A hostile clock or modifiers on a good point: refused, and the session's own
+                // clock and keys stay what they were.
+                let (clock, keys) = (f.clock, f.modifiers);
+                for (now, held) in [(a, 0.0), (-a.abs(), 0.0), (0.0, a), (0.0, -a.abs())] {
+                    let r = parse(&f.pointer(1.0, 1.0, 0.0, now, held));
+                    assert!(r["point"].is_null() && r["error"].is_string(), "pointer at {now} ms with keys {held}: {r}");
+                }
+                for (now, held) in
+                    [(-1.0, 0.0), (-f64::MIN_POSITIVE, 0.0), (MAX_TIME_MS * 2.0, 0.0), (0.0, -1.0), (0.0, 4.0), (0.0, 1.5), (0.0, 0.25)]
+                {
+                    let r = parse(&f.pointer(1.0, 1.0, 0.0, now, held));
+                    assert!(r["point"].is_null() && r["error"].is_string(), "pointer at {now} ms with keys {held}: {r}");
+                }
+                assert_eq!((f.clock, f.modifiers), (clock, keys), "a refused pointer call moved the clock or the keys");
                 assert_eq!(parse(&f.set_viewport(a, a))["ok"].as_bool(), Some(a.is_finite() && a > 0.0), "set_viewport {a}");
                 let size = f.session.viewport_px;
                 assert!(size.0 >= MIN_VIEWPORT_PX && size.0 <= MAX_VIEWPORT_PX && size.1 >= MIN_VIEWPORT_PX && size.1 <= MAX_VIEWPORT_PX, "{size:?}");
@@ -1862,6 +2491,32 @@ mod tests {
             assert!(parse(&f.preview(1.0, 1.0))["prims"].is_array());
             assert!(parse(&f.pick(1.0, 1.0, 0.0)).get("error").is_none());
             assert!(parse(&f.snap(1.0, 1.0, 0.0)).get("error").is_none());
+            // The latest time and every key at once are still good input.
+            let last = parse(&f.pointer(1.0, 1.0, 0.0, MAX_TIME_MS, 3.0));
+            assert!(last.get("error").is_none() && last["point"].is_array(), "{last}");
+        }
+    }
+
+    /// Hostile drafting settings under a pointer: spacings and angles no dialog would set.
+    #[test]
+    fn pointer_survives_hostile_drafting_settings() {
+        for hostile in HOSTILE {
+            let mut f = drawing_line_from("1,1");
+            let st = &mut f.session.settings;
+            (st.snapmode, st.orthomode, st.polarmode, st.otrack) = (true, false, true, true);
+            (st.polarang, st.polardist, st.aperture) = (hostile, hostile, hostile);
+            st.polaraddang = vec![hostile, 1e-300];
+            st.osmode = cadcraft_engine::snap::mode::END | cadcraft_engine::snap::mode::EXT | cadcraft_engine::snap::mode::PAR;
+            for (x, y) in [(4.0, 4.0), (9.95, 0.05), (1.0, 1.0)] {
+                for held in [0.0, 1.0, 2.0, 3.0] {
+                    let r = parse(&f.pointer(x, y, 0.0, 5_000.0, held));
+                    // A point, or a refusal (an aperture setting that gives no usable reach): never a panic or a `NaN`.
+                    assert!(r["point"].is_array() || r["error"].is_string(), "{hostile} at {x},{y}: {r}");
+                }
+            }
+            f.session.settings.orthomode = true;
+            assert!(parse(&f.pointer(4.0, 3.0, 0.5, 6_000.0, 0.0))["point"].is_array());
+            assert!(parse(&f.click(4.0, 3.0, 0.5)).get("point").is_some());
         }
     }
 
@@ -1912,6 +2567,22 @@ mod tests {
         f.cmdline("0,0");
         let preview_line = time("preview (LINE rubber band)", &mut |x, y| f.preview(x, y).len());
         let snap_line = time("snap (LINE, with a base point)", &mut |x, y| f.snap(x, y, 0.0).len());
+        // The one call a canvas makes per frame at a point prompt: the engine's whole cursor
+        // resolution and the rubber band at the resolved point. Polar and object snap are on by
+        // default; then with ortho, then with grid snap and a rested-on tracking point as well.
+        let mut tick = 0.0;
+        let mut resolve = |f: &mut Facade, x: f64, y: f64| {
+            tick += 16.0;
+            f.pointer(x, y, 0.0, tick, 0.0).len()
+        };
+        let pointer_polar = time("pointer (LINE: object snap, polar, tracking)", &mut |x, y| resolve(&mut f, x, y));
+        f.session.settings.orthomode = true;
+        let pointer_ortho = time("pointer (LINE: object snap, ortho)", &mut |x, y| resolve(&mut f, x, y));
+        f.session.settings.orthomode = false;
+        f.session.settings.snapmode = true;
+        let pointer_grid = time("pointer (LINE: object snap, polar, tracking, grid snap)", &mut |x, y| resolve(&mut f, x, y));
+        f.session.settings.snapmode = false;
+        println!("tracking points acquired along the sweep: {}", f.session.tracking.acquired.len());
         f.cancel();
         f.start("circle");
         f.cmdline("0,0");
@@ -1927,6 +2598,7 @@ mod tests {
             ("pick", pick.max(pick_wide)),
             ("snap", snap_idle.max(snap_wide).max(snap_line)),
             ("preview", preview_idle.max(preview_line).max(preview_circle).max(preview_move)),
+            ("pointer", pointer_polar.max(pointer_ortho).max(pointer_grid)),
         ] {
             assert!(micros < 8_000.0, "{label} takes {micros:.0} us: half a frame");
         }

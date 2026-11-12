@@ -57,7 +57,8 @@ export interface IconButtonProps {
   /** Blocks the click and drops the glyph to the disabled ink. The key stays focusable
    *  (`aria-disabled`), so its hint still shows. */
   disabled?: boolean;
-  /** A toggle-style icon button: sets `aria-pressed` and the faint selected fill. */
+  /** A toggle-style icon button: sets `aria-pressed`, and while on draws the full ink on the `.08`
+   *  fill, squared to the control radius (not the round `.14` disc it was until 2026-11-11). */
   selected?: boolean;
   /** A fold key: sets `aria-expanded` to whether the region it folds is showing now. */
   expanded?: boolean;

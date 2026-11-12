@@ -19,7 +19,7 @@ is a one-off with no shared API and no states.
 - **Select** — pick `ui/Select.tsx` (a native `<select>` under a drawn face: keyboard, type-ahead, a phone's picker and every system webview's own list are the platform's; no hand-built listbox). Variants `field | inline`, sizes `md` (24px) and `sm` (20px), `align` `start | end`. The value is drawn in a `<span>` over the control, which is what lets it end in an ellipsis before the arrow, end on the arrow's side and read quieter while `mixed` the same way in all three webviews. Loses: `.prop-select` (PropertiesPanel — `appearance: none` with no arrow drawn in its place, a long value cut with no ellipsis, the off-list option and the `*VARIES*` ink done by hand).
 - **Checkbox** — pick `ui/Checkbox.tsx` (a native `<input type="checkbox">` inside its `<label>`, the box and the mark drawn from tokens). No variants; states `checked`, `mixed`, `disabled`. Loses: `.prop-check` (PropertiesPanel — the platform's own box tinted with `accent-color`, a different shape and tick in each webview, 13px with no touch target).
 - **TextArea** — pick `ui/TextArea.tsx` (a native `<textarea>` that measures its own height between `rows` and `maxRows`). Variants `field | bare`. Loses: `.assistant-input` with its `grow` function (AssistantPane — the limits fixed at 64px and 240px beside a type size that can change).
-- **Row** — pick `ui/Row.tsx` (native `<button>`, the full-width clickable band). Loses: `.prop-row`, `.menu-row`, `.assistant-row`, `.assistant-tool` (each repeats hover/selected padding by hand). A grid row carrying nested controls of its own (`.layer-row` with its toggle cluster) stays bespoke — a button cannot nest buttons. The pilot kept `.assistant-row` (the composer's toolbar is a container with nested buttons) and `.assistant-tool` (a transcript disclosure row, not a menu band) bespoke for the same reason; `row.md` records it. Inside a `role="listbox"` that keeps the keyboard in its own field, the row is `<Row option>`: the `role="option"` element itself, with no Tab stop and no hover fill of its own ("A row in a listbox" below). Loses there: `.palette-option` (CommandPalette — a wrapper `div` carrying the option role around a `Row` button).
+- **Row** — pick `ui/Row.tsx` (native `<button>`, the full-width clickable band). Loses: `.prop-row`, `.menu-row` (moved on 2026-11-11: "A row in a menu" below), `.assistant-row`, `.assistant-tool` (each repeats hover/selected padding by hand). A grid row carrying nested controls of its own (`.layer-row` with its toggle cluster) stays bespoke — a button cannot nest buttons. The pilot kept `.assistant-row` (the composer's toolbar is a container with nested buttons) and `.assistant-tool` (a transcript disclosure row, not a menu band) bespoke for the same reason; `row.md` records it. Inside a `role="listbox"` that keeps the keyboard in its own field, the row is `<Row option>`: the `role="option"` element itself, with no Tab stop and no hover fill of its own ("A row in a listbox" below). Loses there: `.palette-option` (CommandPalette — a wrapper `div` carrying the option role around a `Row` button).
 - **SectionLabel** — pick `ui/SectionLabel.tsx` (native `<h2>` — a heading, so a screen reader can jump between panels). Loses: `.section-label` (already shared but untyped — the pick is its typed home), `.properties-head` / `.layers-head` (the surrounding bar, not the label), `.assistant-title` (a pane title, a different role).
 - **Tooltip** — pick `ui/Tooltip.tsx`: the layer's one hint, a single box on `<body>` placed beside whichever control carries `data-hint`. Every layer component that takes `title` carries it; the `<Tooltip>` wrapper (a `<span>` host; the child keeps its own element and its own accessible name) and the bare `data-hint` attribute give it to a surface's own element. Placements `bottom | top`, flipped and held inside the window by itself; it never takes the pointer. Loses: the native `title` attribute as an icon key's hint (it arrives on the platform's own delay, in the platform's own box, and never on keyboard focus), and any per-surface hover label a panel would draw for itself. The reasons are under "The hint" below.
 - **Tab** — pick `ui/Tab.tsx` (native `<button>` with `role="tab"`, `aria-selected` on the one in front; an optional close key as a sibling button). Sizes `md` (the editor tab, selected at `--tab-active`) and `sm` (the compact tab of a pane header, selected at `--fill-active`). Loses: `.layout-tab` (StatusBar's layout strip — a raw button with its own class), the chat tabs' `Row` workaround (AssistantPane — a `Row` in a width cell beside a close `IconButton`).
@@ -36,7 +36,7 @@ is a one-off with no shared API and no states.
 - `title` is the layer's hint on every component that takes it, and no component renders a native `title` attribute. What it is to assistive tech depends on whether the control has a visible label: on IconButton (a glyph, no label) it is the name (`aria-label`); on Button, Chip, Tab, Row, Field, Select and TextArea (a label, or `ariaLabel`) it is the description (`aria-describedby`), never the name. "The hint" below has the reasons.
 - Button and IconButton `shortcut`: the shortcut as the user reads it (`Ctrl+Z`), drawn as a key cap in the hint and said through `aria-keyshortcuts`. `data-hint-keys` is the same thing on an element outside the layer.
 - IconButton `description`: the second line of the hint and the key's accessible description (`aria-describedby`): why it is disabled, what it will do. Button needs no such prop: its `title` already is its description.
-- `disabled` on Button and IconButton is `aria-disabled="true"`, never the native attribute ("Disabled controls" below). Field, Select, Checkbox, TextArea and Row keep the native `disabled`; a `Row option` is not a native control and says `aria-disabled="true"`.
+- `disabled` on Button and IconButton is `aria-disabled="true"`, never the native attribute ("Disabled controls" below). Field, Select, Checkbox, TextArea and Row keep the native `disabled`; a `Row option` is not a native control and says `aria-disabled="true"`, and a `Row menuitem` says it too, because a menu's arrow keys must still reach a command that cannot run ("A row in a menu" below).
 - Field `autocomplete` and `spellcheck`: the native attributes, passed through; unset leaves each to the platform, except that a `password` field is never spell-checked. A secret passes `autocomplete="off"` and `spellcheck={false}` whatever `type` it shows at the moment.
 - Field `invalid` and `describedBy`: a refused value says so (`aria-invalid="true"`, the error stroke), and the help line or the error line under a field is tied to it by `id` (`aria-describedby`). `describedBy` is the layer's name for that tie on any component that grows one, as `ariaLabel` is for the name.
 - Button `ariaLabel` (the name Field already uses for the same job): the accessible name, only where the visible label is a value rather than the action; it starts with the action and holds the visible text.
@@ -53,7 +53,8 @@ is a one-off with no shared API and no states.
 - TextArea `rows` and `maxRows`: the fewest lines shown and the most before it scrolls; the height between is measured, and no stylesheet sets one.
 - TextArea `onKeyDown`, `onPaste`, `ref`: the pass-throughs a composer needs. `onKeyDown` never hears a key an input method is using.
 - Row `option`, with `id` and `onPointerMove`: the row is one option of a listbox that owns the focus and the highlight.
-- Row `title`: the hint and the row's description in both forms, as on Button; the name stays the row's text.
+- Row `menuitem`, with `popup`, `expanded`, `describedBy`, `onKeyDown` and `onPointerEnter`: the row is one item of a menu that moves the focus itself. `popup` and `expanded` mean what they mean on IconButton (`popup` takes only `menu` here), and `describedBy` what it means on Field.
+- Row `title`: the hint and the row's description in every form, as on Button; the name stays the row's text.
 - Chip `tone`: `neutral | accent`.
 - Toggle `pressed` and `onChange(pressed)`: the state and the state a press asks for, as `checked` and `onChange` on Checkbox; the caller owns it. `selected` stays IconButton's word for a key that is lit while on.
 - Toggle `ariaLabel` and `hint`: the fixed name and the hint are two props because they are two strings ("Outline frozen", "Thaw"). `title` is not taken: on every other component it is the hint and also the name or the description, and a toggle's hint is neither. `description`, `shortcut` and `disabled` mean what they mean on IconButton, and `placement` what it means on Tooltip.
@@ -97,6 +98,9 @@ Each change and the gate that decided it (cursor-recipes §1 / §5):
 | motion: `--dur-instant .05s`, `--dur-fast .1s`, `--dur-slow .2s`, `--ease-out-quint cubic-bezier(0.16,1,0.3,1)`. History: `--dur-instant` was removed on 2026-11-11; `--dur-press` holds the same 50ms for the one channel that uses it | G-10 | §1 motion |
 | `--text-accent` (new): the accent as a text ink, `#599CE7` dark (the accent itself), `#005DA4` light (the accent's hue and chroma at OKLCH L .47); Chip `tone="accent"` takes it | WCAG 1.4.3: the light accent chip measured 3.37:1 at 11px over the command line, 4.93 now; dark is unchanged at 5.01 | measured in the browser 2026-11-11, `colors.md` "The layer's pairs" |
 | `--focus-ring` (new): `var(--accent)` dark, `#005DA4` light; every ring in `src/ui/ui.css` takes it | WCAG 1.4.11: the light accent ring measured 2.83:1 against the `.14` selected fill over `--control`, 4.14 now | the same table |
+| `--leading-ui` (new): `16px`, the line of every component in `src/ui/ui.css`; it replaces `1`, `var(--gap-16)` and the face's `normal` there | the coordinator's brief of 2026-11-11 ("leading is not one system"); no box height changed, measured before and after | `typography.md` "Leading", `src/ui/recipe.test.ts` |
+| `--swatch-border`: `#191919` in both themes to `var(--text-faint)` | WCAG 1.4.11: the edge is what tells a swatch from its row, and it measured 1.05 on the dark sidebar, 1.39 on the current row; 6.4 and 5.1 now (light 5.9 and 5.2) | `colors.md` "Layers", `src/ui/recipe.test.ts` |
+| `Button size="sm"`: the label from `--font-chip` (11px) to `--font-button` (13px); the 24px box is unchanged | `typography.md`: one size per role, and 11px is for labels, counts and key caps. The setup sheet's Change provider read as the smallest text in its sheet | `button.md`, `src/ui/recipe.test.ts` |
 | `--on-error` (new): `#121418` dark, `#FCFCFC` light; the danger button's label | WCAG 1.4.3: `--on-accent` measured 4.37:1 on the dark `--error` fill, 4.72 now | the same table |
 | light `--accent-hover #226CAE`, `--accent-pressed #1E609A`, `--error-hover #AB153D`, `--error-pressed #981236`: the action fills step 10% and 20% toward black on light surfaces (they stepped toward white, as dark does) | WCAG 1.4.3: the `--on-accent` label measured 3.77 and 3.20 on the old accent steps and 4.46 on the old error press; 5.35, 6.41 and 8.27 now | the same table |
 
@@ -104,9 +108,11 @@ Each change and the gate that decided it (cursor-recipes §1 / §5):
 
 Tokens left untouched because they describe the document, not the chrome: `--canvas`,
 `--grid-minor`, `--grid-major`, `--axis-x`, `--axis-y`, `--icon-layer-*`,
-`--icon-locked`, `--swatch-border`, `--control`, `--control-hover`, `--cmd-bg`, `--cmd-border`,
+`--icon-locked`, `--control`, `--control-hover`, `--cmd-bg`, `--cmd-border`,
 and the dark `--warn` / `--error` / `--toggle-on` (already Cursor's, §1). History: `--layer-current`
-stood in this list until 2026-11-11 ("The quiet pass" below removed it), and the light `--control`,
+stood in this list until 2026-11-11 ("The quiet pass" below removed it), `--swatch-border` stood in
+it until the same day (it frames a colour of the document but is itself chrome: "Token decisions"
+above), and the light `--control`,
 `--control-hover`, `--cmd-bg` and `--cmd-border` were retuned in the same pass. Geometry that was not
 re-measured also stays: `--dur-med`, `--ease-out`, the other radii, the gaps, control heights,
 fonts. `src/canvas.ts` reads the model-space colours (`--canvas`, `--grid-*`, `--axis-*`,
@@ -132,6 +138,7 @@ invites a second way to do a thing the layer already does.
 | `--gap-5`, `--gap-default`, `--card-padding` | an odd step, an alias of `--gap-4`, an alias of `--gap-16` | `--gap-4`, `--gap-6`, `--gap-16` |
 | `--dur-instant`, `--ease-collapse`, `--hover-opacity` | a 50ms state, the chevron's curve, a hover fade | `--dur-press` (the same 50ms); hover is a fill (`--hover`), never a fade, and no chevron rotates |
 | `--layer-current` | the current layer's name in green (dark `#4cc25a`; in light it held a pale fill no rule painted, and the name took `--toggle-on` mixed toward the ink) | `--text` on the selected fill beside the accent bar ("The quiet pass" below) |
+| `--composer-min-height` | the composer editor's floor, 64px: two of Cursor's 24px lines and their padding | the text area's `rows` on `--composer-leading` (two 20px lines, 40px), measured by `TextArea`; removed later on 2026-11-11, when no rule read it |
 
 Kept, though nothing draws them yet:
 
@@ -372,6 +379,39 @@ its option.
   `.ui-row[aria-disabled="true"][aria-selected="true"]` keeps `--fill-active`.
   `src/ui/recipe.test.ts` holds both.
 
+## A row in a menu
+
+Decided 2026-11-11. The menus (the bar's dropdowns and submenus, the narrow window's Main menu,
+the tool strip's overflow menu) are one component, `src/components/Menu.tsx`, and each of its rows
+was the last raw `<button>` drawn by hand in the shell (`.menu-row`, with its hover, focus and
+disabled rules in `src/chrome.css`).
+
+- **The pick.** `Row` takes `menuitem`: a native button that is the `role="menuitem"` element
+  itself, with `tabindex="-1"` (the menu moves the focus), `aria-disabled` from `disabled`,
+  `aria-haspopup` and `aria-expanded` from `popup` and `expanded`, and the caller's description
+  line from `describedBy`. `onKeyDown` and `onPointerEnter` hand the menu its walk and its hover.
+- **Why `aria-disabled`.** A natively disabled button takes no focus: Down would skip Paste, and a
+  screen reader would never hear that the command exists. The row stays in the walk, shows the
+  ring without the fill, and refuses the click.
+- **Why a mode of Row.** The band is the same band and so are its ring and its disabled ink. What
+  a menu changes is stated in one rule (`.ui-row--menuitem`): the control height (24px, 28px under
+  a finger) instead of the list row's 22px, the full ink (no row of a menu is the current one),
+  a corner concentric with the popover's, and the hover fill held on the keyboard's row and on
+  the row whose submenu is open.
+- **No visual or behavioural change.** The recipe moved value for value. Measured before and
+  after in both themes: every row's box, ink, fill, radius and ring in the resting, hovered,
+  focused, expanded and disabled states, the accessibility tree with a submenu open at 1280, 800
+  and 390, and the menus' behaviour table of real keys and pointer moves. One thing differs by
+  design: the fill's transition is the layer's (`background-color`, `--ease-standard`), where the
+  shell's blanket `button` rule also eased `color` and `border-color` on `--ease-out`.
+- **The hook.** `Menu.tsx` finds its rows by `[role="menuitem"]` under a `.menu-item`, the role
+  `Row` renders, not by a class: the layer's class names are the layer's to change. The slots
+  inside a row (`.menu-label`, `.menu-icon`, `.menu-name`, `.menu-shortcut`, `.menu-arrow`) are
+  the menu's own children and stay in `src/chrome.css`, with `--menu-row-h` restating the row's
+  height for the grid's tracks and the separators.
+- **A clipped label shows in the hint**, as on every row: the stacked Main menu at 390px cuts
+  long labels, and the layer's hint reads them in full. A menu row has no other hint.
+
 ## A value in a dense row
 
 Decided 2026-11-11 (the audit's open gate on the properties palette's typed values). The palette
@@ -476,7 +516,8 @@ did not agree. Before and after captures are `.design-system/review/wE10-*.png`.
 ### One type scale
 
 - **Four sizes on screen: 11, 12, 13 and the 12px mono.** 11 is `--font-chip` (section labels,
-  counts, key caps, chips, the status bar's toggles, the small button). 12 is `--font-label`
+  counts, key caps, chips, the status bar's toggles; the small button stood here until later
+  that day and is 13: "Token decisions" above). 12 is `--font-label`
   (secondary text: menu titles, the command centre, the status bar's facts, a hint, the palette's
   menu path). 13 is `--font-body` (everything read or typed). The mono is `--font-mono`.
 - **The shell's scale won over Cursor's composer.** The tokens were measured from Cursor 3.27.22,

@@ -1,19 +1,20 @@
 /**
  * The assistant panel: the agent docked to the right of the workspace. The part title is the
- * classic recipe's (35px, padding 8px); the composer is the glass one measured on Cursor 3.27's
- * composer (`.design-system/research/cursor-recipes-2026-10-28.md` §2): the elevated surface at
- * radius 12 (docked; a floating card would take 20), no shadow, a 1px border that turns active on focus, an editor at `--composer-font`/`--composer-leading` with a
- * 64px min-height and 8px/12px padding, and a 40px toolbar row (padding 8px, `gap: 4px`) that
- * holds 24px circles and the pill model chip; send and stop are the inverted circle. Its controls
- * are the system's own: `ui/TextArea` (the editor, bare: the card draws its box and its focus),
- * `ui/IconButton` (attach, remove-attachment, stop, send), `ui/Row` (the preset rows, and the
- * slash list's options), `ui/Field` (the provider inputs) and `ui/Button` (Cancel, Save). The running dot
- * carries §1.14's `ripple 1.2s` to `scale(1.7)`.
+ * classic recipe's (the editor tabs' band); the composer is the glass one measured on Cursor
+ * 3.27's composer (`.design-system/research/cursor-recipes-2026-10-28.md` §2), re-proportioned
+ * for the shell's type (`../assistant.css` names each measure by its token): the elevated surface
+ * at the panel's card corner, no shadow, a hairline that turns active on focus, an editor at
+ * `--composer-font`/`--composer-leading` of two lines at least, and a toolbar row that holds
+ * `--control-h-input` circles and the pill model chip; send and stop are the inverted circle. Its
+ * controls are the system's own: `ui/TextArea` (the editor, bare: the card draws its box and its
+ * focus), `ui/IconButton` (attach, remove-attachment, stop, send), `ui/Row` (the preset rows, the
+ * empty state's suggestions and the slash list's options), `ui/Field` (the provider inputs) and
+ * `ui/Button` (Cancel, Save). The running dot carries §1.14's `ripple 1.2s` to `scale(1.7)`.
  *
  * The transcript is the agent-panel grammar: a prompt in a quiet inset block, the model's words
- * plain on the surface (with inline `code` and **bold** runs), and each tool call one quiet row
- * that says what ran as a sentence (`activityParts`) and what it changed, and opens on click to
- * its code and report.
+ * plain on the surface (with inline `code`, **bold** runs and links to http and https addresses),
+ * and each tool call one quiet row that says what ran as a sentence (`activityParts`) and what it
+ * changed, and opens on click to its code and report.
  *
  * Setting a model up is a sheet over the panel (the composer is out of the page meanwhile): the
  * provider list alone first, then the connection that provider filled in.
@@ -72,7 +73,7 @@ const MODEL_CHIPS = 12;
 const MIN_LIST_ROWS = 3;
 
 /** The empty state's suggestions, once a model is set up: one click fills the composer and sends
- *  nothing (the measured 32px suggestion row). Each works on whatever drawing is open. */
+ *  nothing (each is one of the system's list rows). Each works on whatever drawing is open. */
 const EXAMPLES: readonly { icon: string; text: string }[] = [
   { icon: "circle", text: "Draw a 20 mm circle at 0,0" },
   { icon: "dist", text: "What is the total length of the lines?" },
@@ -93,8 +94,8 @@ function readAsDataUrl(file: File): Promise<string> {
   return promise;
 }
 
-/** The composer's editor is never shorter than two lines, and scrolls past nine (the recipe's
- *  64px floor with the card's inset; nine whole lines where the old 240px cap cut the tenth). */
+/** The composer's editor is never shorter than two lines of `--composer-leading`, and scrolls
+ *  past nine (whole lines, counted by the editor itself: no pixel floor or cap to drift from the type). */
 const COMPOSER_ROWS = 2;
 const COMPOSER_MAX_ROWS = 9;
 
@@ -242,6 +243,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     if (!s.ready()) return "No model is set up yet: this opens the setup";
     return s.running() ? "A turn is running: this waits for it to end" : undefined;
   };
+  /** What the turn is doing now, or the last notice: the status row's words, over the composer and in the setup sheet. */
+  const runStatus = (): string => (s.status() === "" ? "Working…" : sentence(s.status()));
   /** The model chip's hint: what a press does, and under it where the requests go. */
   const chipHint = (): string => (menuOpen() ? "Close the setup" : s.ready() ? "Change the model" : "Choose a provider and model");
   const chipNote = (): string | undefined => (s.ready() && !menuOpen() ? s.provider().baseUrl : undefined);
@@ -289,7 +292,53 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     void addFiles(files);
   };
 
+  /** What is on its way out of the card (the canvas selection, a picture): drawn closing, then
+   *  taken out of the message when that has played. */
+  const [leaving, setLeaving] = createSignal<readonly (ChatImage | "selection")[]>([]);
+  const takeOut = (item: ChatImage | "selection"): void => {
+    if (!leaving().includes(item)) return;
+    setLeaving(leaving().filter((other) => other !== item));
+    if (item === "selection") s.setSelectionIncluded(false);
+    else s.setAttached(s.attached().filter((picture) => picture !== item));
+  };
+  const remove = (item: ChatImage | "selection"): void => {
+    if (leaving().includes(item)) return;
+    setLeaving([...leaving(), item]);
+    // With the interface's motion off nothing plays, so nothing would end: it goes at once.
+    if (document.documentElement.dataset["animations"] === "off") takeOut(item);
+  };
+  const chipClass = (item: ChatImage | "selection", base: string): string => (leaving().includes(item) ? `${base} is-leaving` : base);
+
+  /** The box the chips sit in, the row inside it, and the height the row last had. */
+  let chipsBox: HTMLDivElement | undefined;
+  let chipsRow: HTMLDivElement | undefined;
+  let chipsHeight = 0;
+  /** Ease the chips' box from the height it had to the height the row needs now: a chip that
+   *  starts or empties a line, the first chip and the last one all move the card smoothly. */
+  const easeChips = (): void => {
+    if (chipsBox === undefined) return;
+    // Two chips can go in one frame: mid-move, the box starts again from where it is drawn now,
+    // not from where it was going.
+    const moving = chipsBox.getAnimations();
+    const from = moving.length > 0 ? chipsBox.offsetHeight : chipsHeight;
+    for (const move of moving) move.cancel();
+    chipsHeight = chipsRow?.isConnected === true ? chipsRow.offsetHeight : 0;
+    if (from === chipsHeight || document.documentElement.dataset["animations"] === "off") return;
+    const tokens = getComputedStyle(chipsBox);
+    const seconds = Number.parseFloat(tokens.getPropertyValue("--dur-med"));
+    chipsBox.animate([{ height: `${from}px` }, { height: `${chipsHeight}px` }], {
+      duration: Number.isFinite(seconds) ? seconds * 1000 : 0,
+      easing: tokens.getPropertyValue("--ease-out-quint").trim() || "ease-out",
+    });
+  };
+  onMount(() => {
+    chipsHeight = chipsRow?.isConnected === true ? chipsRow.offsetHeight : 0;
+  });
+  createEffect(on([s.attached, selectionShown], () => queueMicrotask(easeChips), { defer: true }));
+
   const send = (): void => {
+    // What the reader took out a moment ago is out, whether or not its chip has finished closing.
+    for (const item of leaving()) takeOut(item);
     const outcome = s.send();
     if (outcome === "unconfigured") {
       openSetup();
@@ -597,10 +646,25 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     closeSetup();
   };
 
-  /** The model's words, with inline `code` and **bold** runs rendered as elements. */
+  /** The model's words, with inline `code`, **bold** runs and links rendered as elements. A link
+   *  is only ever an http or https address (`parseInline` keeps anything else as text); it opens
+   *  outside the app, cut off from this page, and its hint is the address itself, whatever its
+   *  label says. */
   const richText = (text: string): JSX.Element => (
     <For each={parseInline(text)}>
-      {(part) => (part.kind === "bold" ? <strong>{part.text}</strong> : part.kind === "code" ? <code>{part.text}</code> : part.text)}
+      {(part) =>
+        part.kind === "bold" ? (
+          <strong>{part.text}</strong>
+        ) : part.kind === "code" ? (
+          <code>{part.text}</code>
+        ) : part.kind === "link" && part.href !== undefined ? (
+          <a class="assistant-link" href={part.href} target="_blank" rel="noopener noreferrer" data-hint={part.href === part.text ? "Opens in the browser" : part.href}>
+            {part.text}
+          </a>
+        ) : (
+          part.text
+        )
+      }
     </For>
   );
 
@@ -620,7 +684,16 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     if (block.kind === "heading") return <h3 class={block.level <= 2 ? "assistant-heading" : "assistant-heading assistant-heading--minor"}>{richText(block.text)}</h3>;
     if (block.kind === "para") return <div class="assistant-text">{richText(block.text)}</div>;
     const items = <For each={block.items}>{(item) => <li>{richText(item)}</li>}</For>;
-    return block.ordered ? <ol class="assistant-list">{items}</ol> : <ul class="assistant-list">{items}</ul>;
+    // The markers are the stylesheet's own; the role keeps the list a list where that would drop it.
+    return block.ordered ? (
+      <ol class="assistant-list" role="list">
+        {items}
+      </ol>
+    ) : (
+      <ul class="assistant-list" role="list">
+        {items}
+      </ul>
+    );
   };
 
   /**
@@ -732,27 +805,28 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 </Button>
               </div>
             </Show>
-            <For each={s.ready() ? EXAMPLES : []}>
-              {(example) => (
-                <button
-                  class="assistant-example"
-                  type="button"
-                  data-hint=""
-                  onClick={() => {
-                    s.setInput(example.text);
-                    inputEl?.focus();
-                  }}
-                >
-                  <span class="assistant-example-icon">
-                    <ToolIcon id={example.icon} />
-                  </span>
-                  <span class="assistant-example-text">{example.text}</span>
-                  <span class="assistant-example-chevron">
-                    <ToolIcon id="chevron-right" />
-                  </span>
-                </button>
-              )}
-            </For>
+            <Show when={s.ready()}>
+              <div class="assistant-examples">
+                <For each={EXAMPLES}>
+                  {(example) => (
+                    <Row
+                      onClick={() => {
+                        s.setInput(example.text);
+                        inputEl?.focus();
+                      }}
+                    >
+                      <span class="assistant-example-icon">
+                        <ToolIcon id={example.icon} />
+                      </span>
+                      <span class="assistant-example-text">{example.text}</span>
+                      <span class="assistant-example-chevron">
+                        <ToolIcon id="chevron-right" />
+                      </span>
+                    </Row>
+                  )}
+                </For>
+              </div>
+            </Show>
           </div>
         </Show>
         <For each={shown()}>
@@ -786,24 +860,18 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 <button
                   class={entry.kind === "tool" && !entry.ok ? "assistant-tool assistant-tool--failed" : "assistant-tool"}
                   type="button"
+                  // The row is its own hint's host: a sentence or a note the panel cuts shows whole
+                  // under the pointer and under the keyboard's focus alike.
+                  data-hint=""
                   onClick={() => s.toggleTool(index())}
                   aria-expanded={entry.kind === "tool" && entry.open}
                 >
-                  {/* What ran, as a sentence: plain words, with only a command's name in the mono face. */}
-                  <span class="assistant-tool-name" data-hint="">
-                    <For each={entry.kind === "tool" ? activityParts(entry.code, entry.report) : []}>
-                      {(part) =>
-                        part.kind === "code" ? (
-                          <code>{part.text}</code>
-                        ) : (
-                          // Each argument after a middle dot holds together: the sentence breaks between arguments, never inside one.
-                          <For each={part.text.split(" · ")}>{(piece, at) => (at() === 0 ? piece : <> · <span class="assistant-tool-arg">{piece}</span></>)}</For>
-                        )
-                      }
-                    </For>
+                  {/* What ran, as a sentence on one line: plain words, with only a command's name in the mono face. */}
+                  <span class="assistant-tool-name">
+                    <For each={entry.kind === "tool" ? activityParts(entry.code, entry.report) : []}>{(part) => (part.kind === "code" ? <code>{part.text}</code> : part.text)}</For>
                   </span>
                   <Show when={entry.kind === "tool" && entry.note !== ""}>
-                    <span class="assistant-tool-note" data-hint="">{entry.kind === "tool" ? entry.note : ""}</span>
+                    <span class="assistant-tool-note">{entry.kind === "tool" ? entry.note : ""}</span>
                   </Show>
                   <span class="assistant-tool-chevron">
                     <ToolIcon id="chevron-right" />
@@ -920,28 +988,22 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 <Show when={keyWanted()}>
                   <div class="assistant-field">
                     <span>API key</span>
-                    <div class="assistant-key">
-                      <Field
-                        type={keyVisible() ? "text" : "password"}
-                        value={draft().apiKey}
-                        ariaLabel="API key"
-                        autocomplete="off"
-                        spellcheck={false}
-                        describedBy="assistant-key-hint"
-                        title="Sent only to the base URL above"
-                        placeholder="e.g. sk-..."
-                        onInput={(v) => {
-                          setDraft({ ...draft(), apiKey: v });
-                          forgetCheck();
-                        }}
-                      />
-                      <IconButton
-                        icon={keyVisible() ? "eye" : "eye-off"}
-                        size="sm"
-                        title={keyVisible() ? "Hide the key" : "Show the key"}
-                        onClick={() => setKeyVisible(!keyVisible())}
-                      />
-                    </div>
+                    <Field
+                      type={keyVisible() ? "text" : "password"}
+                      value={draft().apiKey}
+                      ariaLabel="API key"
+                      autocomplete="off"
+                      spellcheck={false}
+                      describedBy="assistant-key-hint"
+                      title="Sent only to the base URL above"
+                      placeholder="e.g. sk-..."
+                      onInput={(v) => {
+                        setDraft({ ...draft(), apiKey: v });
+                        forgetCheck();
+                      }}
+                    />
+                    {/* After the field in the Tab order; the stylesheet stands it on the name's line. */}
+                    <IconButton icon={keyVisible() ? "eye" : "eye-off"} size="sm" title={keyVisible() ? "Hide the key" : "Show the key"} onClick={() => setKeyVisible(!keyVisible())} />
                     <span class="assistant-field-hint" id="assistant-key-hint">Stored in this browser, not encrypted.</span>
                   </div>
                 </Show>
@@ -978,6 +1040,18 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               </Show>
             </div>
             <div class="assistant-setup-foot">
+              {/* A turn may still be running under the sheet, and the row that says so is in the
+                  composer the sheet took out of the page: its status and Stop stay in view here.
+                  Escape closes the sheet first, so this row shows no key cap. */}
+              <Show when={s.running()}>
+                <div class="assistant-stack-row assistant-setup-run" role="status">
+                  <span class="assistant-ripple" />
+                  <span class="assistant-stack-text" data-hint="">{runStatus()}</span>
+                  <Button variant="ghost" size="sm" onClick={s.stop}>
+                    Stop
+                  </Button>
+                </div>
+              </Show>
               {/* The check, its line, the reason and Save come with the fields they are about;
                   before a provider is chosen the foot is the one way out. */}
               <Show when={presetId() !== null}>
@@ -1051,7 +1125,11 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                       onClick={() => setChangesOpen(!changesOpen())}
                     />
                   </Show>
-                  <span class="assistant-stack-text" data-hint="">{c().steps === 1 ? "1 change to the drawing" : `${c().steps} changes to the drawing`}</span>
+                  {/* In two parts: a narrow panel keeps the count and lets "to the drawing" go, where an ellipsis would cut mid-word. */}
+                  <span class="assistant-stack-text assistant-stack-text--parts">
+                    <span>{c().steps === 1 ? "1 change" : `${c().steps} changes`}</span>
+                    <span> to the drawing</span>
+                  </span>
                   <Button variant="ghost" size="sm" disabled={s.running()} title={s.running() ? "Wait for this turn to end" : undefined} onClick={s.undoChanges}>
                     Undo all
                   </Button>
@@ -1067,7 +1145,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 <Show when={s.running()}>
                   <span class="assistant-ripple" />
                 </Show>
-                <span class="assistant-stack-text" data-hint="">{s.status() === "" ? "Working…" : sentence(s.status())}</span>
+                <span class="assistant-stack-text" data-hint="">{runStatus()}</span>
                 <Show when={s.running()}>
                   <Button variant="ghost" size="sm" onClick={s.stop}>
                     Stop
@@ -1110,34 +1188,36 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
           </div>
         </Show>
         <div class="assistant-box">
-          <Show when={selectionShown() || s.attached().length > 0}>
-            <div class="assistant-attachments">
-              <div class="assistant-attachments-clip">
-                <div class="assistant-attachments-row">
-                  <Show when={selectionShown()}>
-                    <span class="assistant-attachment assistant-attachment--context">
-                      <span class="assistant-attachment-icon">
-                        <ToolIcon id="pick" />
-                      </span>
-                      <span class="assistant-attachment-name">{props.selection().length === 1 ? "1 selected" : `${props.selection().length} selected`}</span>
-                      <IconButton icon="close" size="sm" title="Leave the selection out" onClick={() => s.setSelectionIncluded(false)} />
+          {/* The chips' box is always there, so the card eases to and from the height of its row
+              (`easeChips`). A chip that is taken away fades first (`is-leaving`) and leaves the
+              message when that has played. */}
+          <div class="assistant-attachments-clip" ref={chipsBox}>
+            <Show when={selectionShown() || s.attached().length > 0}>
+              <div class="assistant-attachments-row" ref={chipsRow}>
+                <Show when={selectionShown()}>
+                  <span class={chipClass("selection", "assistant-attachment assistant-attachment--context")} onAnimationEnd={(e) => e.animationName === "assistant-attachment-out" && takeOut("selection")}>
+                    <span class="assistant-attachment-icon">
+                      <ToolIcon id="pick" />
                     </span>
-                  </Show>
-                  <For each={s.attached()}>
-                    {(picture, index) => (
-                      <span class="assistant-attachment">
-                        <img src={picture.dataUrl} alt={picture.name} />
-                        <span class="assistant-attachment-name" data-hint="">
-                          {picture.name}
-                        </span>
-                        <IconButton icon="close" size="sm" title={`Remove ${picture.name}`} onClick={() => s.setAttached(s.attached().filter((_, i) => i !== index()))} />
+                    <span class="assistant-attachment-name">{props.selection().length === 1 ? "1 selected" : `${props.selection().length} selected`}</span>
+                    <IconButton icon="close" size="sm" title="Leave the selection out" onClick={() => remove("selection")} />
+                  </span>
+                </Show>
+                <For each={s.attached()}>
+                  {(picture) => (
+                    <span class={chipClass(picture, "assistant-attachment")} onAnimationEnd={(e) => e.animationName === "assistant-attachment-out" && takeOut(picture)}>
+                      {/* The name is printed beside the thumbnail: an `alt` that repeated it would be read twice. */}
+                      <img src={picture.dataUrl} alt="" />
+                      <span class="assistant-attachment-name" data-hint="">
+                        {picture.name}
                       </span>
-                    )}
-                  </For>
-                </div>
+                      <IconButton icon="close" size="sm" title={`Remove ${picture.name}`} onClick={() => remove(picture)} />
+                    </span>
+                  )}
+                </For>
               </div>
-            </div>
-          </Show>
+            </Show>
+          </div>
           <label class="assistant-input" for={COMPOSER_ID}>
             <TextArea
               variant="bare"
@@ -1168,22 +1248,24 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             />
           </label>
           <div class="assistant-row">
-            <button
-              class="assistant-ghost"
-              type="button"
-              ref={(el) => describeByHint(el, () => [chipHint(), chipNote()].filter((line) => line !== undefined).join(". "))}
-              data-hint={chipHint()}
-              data-hint-note={chipNote()}
-              aria-expanded={menuOpen()}
-              aria-controls="assistant-setup"
-              onClick={() => (menuOpen() ? closeSetup() : openSetup())}
-            >
-              <span class={s.ready() ? "assistant-ghost-label" : "assistant-ghost-label is-unset"}>{s.ready() ? s.provider().model : "No model"}</span>
-              <span class="assistant-ghost-caret">
-                <ToolIcon id="chevron-down" />
-              </span>
-            </button>
-            <div class="assistant-actions">
+            {/* The model chip and the context meter share one line: in a narrow panel the meter
+                is the first to go, and only then does the model's name give way. */}
+            <div class="assistant-row-model">
+              <button
+                class="assistant-ghost"
+                type="button"
+                ref={(el) => describeByHint(el, () => [chipHint(), chipNote()].filter((line) => line !== undefined).join(". "))}
+                data-hint={chipHint()}
+                data-hint-note={chipNote()}
+                aria-expanded={menuOpen()}
+                aria-controls="assistant-setup"
+                onClick={() => (menuOpen() ? closeSetup() : openSetup())}
+              >
+                <span class={s.ready() ? "assistant-ghost-label" : "assistant-ghost-label is-unset"}>{s.ready() ? s.provider().model : "No model"}</span>
+                <span class="assistant-ghost-caret">
+                  <ToolIcon id="chevron-down" />
+                </span>
+              </button>
               <Show when={meter() !== ""}>
                 <span
                   class="assistant-context"
@@ -1195,7 +1277,9 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                   {meter()}
                 </span>
               </Show>
-              <IconButton icon="attach" title="Attach a picture (or paste, or drop one)" onClick={() => fileInput?.click()} />
+            </div>
+            <div class="assistant-actions">
+              <IconButton icon="attach" title="Attach a picture" description="Or paste one, or drop one on the panel" onClick={() => fileInput?.click()} />
               <Show
                 when={s.running() && s.input().trim() === ""}
                 fallback={
@@ -1210,7 +1294,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                   />
                 }
               >
-                <IconButton icon="stop" variant="inverted" title="Stop" shortcut="Esc" onClick={s.stop} />
+                {/* The status row over the card has the button named "Stop"; this key says what it stops, so a screen reader hears two controls with two names. */}
+                <IconButton icon="stop" variant="inverted" title="Stop the turn" shortcut="Esc" onClick={s.stop} />
               </Show>
             </div>
           </div>

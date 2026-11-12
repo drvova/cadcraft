@@ -10,13 +10,18 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  ACQUIRED_HALF,
   crispRule,
   DRAG_ALPHA,
   drawDisplay,
   drawOverlay,
+  GRID_DOT_RADIUS,
   GRID_FULL_PX,
   GRID_MIN_PX,
   gridLevels,
+  GUIDE_ALPHA,
+  GUIDE_DASH,
+  guideIsEmpty,
   handleHex,
   HOVER_ALPHA,
   isHighlighted,
@@ -28,6 +33,7 @@ import {
   SNAP_MARKER_HALF,
   SNAP_MARKER_WIDTH,
   snapGlyph,
+  type OverlayGuide,
   type OverlayOptions,
   type Palette,
 } from "./canvas";
@@ -155,13 +161,19 @@ class RecordingContext {
   lineJoin: CanvasLineJoin = "miter";
   setTransform(): void {}
   clearRect(): void {}
-  setLineDash(): void {}
+  /** The dash each stroke was made with (`[]` is solid), in the order of `strokes`. */
+  readonly dashes: number[][] = [];
+  private dash: number[] = [];
+  setLineDash(segments?: number[]): void {
+    this.dash = [...(segments ?? [])];
+  }
   beginPath(): void {}
   moveTo(): void {}
   lineTo(): void {}
   closePath(): void {}
   stroke(): void {
     this.strokes.push({ style: this.strokeStyle, width: this.lineWidth, alpha: this.globalAlpha });
+    this.dashes.push(this.dash);
   }
   fill(): void {
     this.fills.push(this.fillStyle);
@@ -404,7 +416,7 @@ describe("snapGlyph", () => {
 describe("drawOverlay", () => {
   /** The test primitives' own colour, as the drawing itself strokes it. */
   const OWN = draw().strokes[0]?.style ?? "";
-  const overlay = (parts: Partial<Pick<OverlayOptions, "hover" | "preview" | "snap">>, view = VIEW): PathContext => {
+  const overlay = (parts: Partial<Pick<OverlayOptions, "hover" | "preview" | "snap" | "guide">>, view = VIEW): PathContext => {
     const ctx = new PathContext();
     drawOverlay(ctx as unknown as CanvasRenderingContext2D, LIST, view, { width: 800, height: 600, dpr: 1, palette: PALETTE, hover: null, preview: null, snap: null, ...parts });
     return ctx;
@@ -482,5 +494,71 @@ describe("drawOverlay", () => {
     const centre = overlay({ snap: { point: { x: 5, y: 5 }, mode: 4 } });
     expect(centre.arcs).toEqual([{ x: 400, y: 300, r: SNAP_MARKER_HALF }]);
     expect(overlay({ snap: { point: { x: Number.NaN, y: 5 }, mode: 1 } }).strokes).toHaveLength(0);
+  });
+
+  /** A guide with one ray from (1,1) to (9,9), as the engine's `pointer` reply carries it. */
+  const ray = (): OverlayGuide => ({ paths: { verts: [{ x: 1, y: 1 }, { x: 9, y: 9 }], prims: [prim("polyline", 0, 2, 0)] }, dot: null, acquired: [] });
+
+  test("an ortho or polar ray is dashed, in the selection ink, quieter than the rubber band over it", () => {
+    const preview = { verts: [{ x: 1, y: 1 }, { x: 5, y: 5 }], prims: [prim("polyline", 0, 2, 0)], drag: null };
+    const ctx = overlay({ guide: ray(), preview });
+    expect(ctx.strokes).toEqual([
+      { style: PALETTE.selection, width: RUBBER_WIDTH, alpha: GUIDE_ALPHA },
+      { style: PALETTE.selection, width: RUBBER_WIDTH, alpha: 1 },
+    ]);
+    // The ray is the dashed one and is drawn first, under the band; the band is solid.
+    expect(ctx.dashes).toEqual([[...GUIDE_DASH], []]);
+    expect(ctx.points.slice(0, 2)).toEqual([
+      { x: 80, y: 540 },
+      { x: 720, y: 60 },
+    ]);
+    expect(GUIDE_ALPHA).toBeLessThan(1);
+    expect(ctx.fills).toHaveLength(0);
+  });
+
+  test("grid snap is a dot at the point, over a ring of the ground, and nothing else", () => {
+    const ctx = overlay({ guide: { paths: { verts: [], prims: [] }, dot: { x: 5, y: 5 }, acquired: [] } });
+    expect(ctx.strokes).toHaveLength(0);
+    expect(ctx.fills).toEqual([PALETTE.canvas, PALETTE.selection]);
+    expect(ctx.arcs).toEqual([
+      { x: 400, y: 300, r: GRID_DOT_RADIUS + 1 },
+      { x: 400, y: 300, r: GRID_DOT_RADIUS },
+    ]);
+  });
+
+  test("each acquired tracking point is a small upright cross, the same size at any zoom", () => {
+    for (const view of [VIEW, { x0: 4.9, y0: 4.9, x1: 5.1, y1: 5.1 }]) {
+      const ctx = overlay({ guide: { paths: { verts: [], prims: [] }, dot: null, acquired: [{ x: 5, y: 5 }] } }, view);
+      expect(ctx.strokes).toEqual([
+        { style: PALETTE.canvas, width: RUBBER_WIDTH + 2, alpha: 1 },
+        { style: PALETTE.selection, width: RUBBER_WIDTH, alpha: 1 },
+      ]);
+      expect(ctx.dashes).toEqual([[], []]);
+      const xs = ctx.points.map((p) => p.x);
+      const ys = ctx.points.map((p) => p.y);
+      expect(Math.max(...xs) - Math.min(...xs)).toBe(ACQUIRED_HALF * 2);
+      expect(Math.max(...ys) - Math.min(...ys)).toBe(ACQUIRED_HALF * 2);
+    }
+  });
+
+  test("a guide with nothing in it draws nothing, and hostile points are skipped", () => {
+    const nothing: OverlayGuide = { paths: { verts: [], prims: [] }, dot: null, acquired: [] };
+    expect(guideIsEmpty(nothing)).toBe(true);
+    expect(guideIsEmpty(null)).toBe(true);
+    expect(guideIsEmpty(undefined)).toBe(true);
+    expect(guideIsEmpty(ray())).toBe(false);
+    expect(overlayIsEmpty({ hover: null, preview: null, snap: null, guide: nothing })).toBe(true);
+    expect(overlayIsEmpty({ hover: null, preview: null, snap: null, guide: { ...nothing, dot: { x: 1, y: 1 } } })).toBe(false);
+    expect(overlayIsEmpty({ hover: null, preview: null, snap: null, guide: { ...nothing, acquired: [{ x: 1, y: 1 }] } })).toBe(false);
+    expect(overlay({ guide: nothing }).strokes).toHaveLength(0);
+    const hostile = overlay({ guide: { paths: { verts: [{ x: Number.NaN, y: 1 }, { x: Number.POSITIVE_INFINITY, y: 2 }], prims: [prim("polyline", 0, 2, 0)] }, dot: { x: Number.NaN, y: 0 }, acquired: [{ x: 0, y: Number.NEGATIVE_INFINITY }] } });
+    expect(hostile.strokes).toHaveLength(0);
+    expect(hostile.fills).toHaveLength(0);
+    expect(hostile.points).toHaveLength(0);
+  });
+
+  test("the ink is solid again after a guide: the snap marker over it is not dashed", () => {
+    const ctx = overlay({ guide: ray(), snap: { point: { x: 5, y: 5 }, mode: 1 } });
+    expect(ctx.dashes).toEqual([[...GUIDE_DASH], [], []]);
   });
 });

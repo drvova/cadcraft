@@ -233,7 +233,7 @@ export default function Expanded() {
 | `expanded?` | `boolean` |  | A fold key: sets `aria-expanded` to whether the region it folds is showing now. |
 | `onClick?` | `((event: MouseEvent) => void)` |  | Runs on click. |
 | `popup?` | `IconButtonPopup` |  | The key opens a popup of this kind: sets `aria-haspopup`. |
-| `selected?` | `boolean` |  | A toggle-style icon button: sets `aria-pressed` and the faint selected fill. |
+| `selected?` | `boolean` |  | A toggle-style icon button: sets `aria-pressed`, and while on draws the full ink on the `.08` fill, squared to the control radius (not the round `.14` disc it was until 2026-11-11). |
 | `shortcut?` | `string` |  | The shortcut that runs the same action, as the user reads it ("Ctrl+Z", "F9"): a key cap in the hint and `aria-keyshortcuts` on the button. |
 | `size?` | `IconButtonSize` |  | The box size. |
 | `variant?` | `IconButtonVariant` |  | The look. |
@@ -300,7 +300,7 @@ export default function Expanded() {
 - `rule/icon-button-row-limit`: When a toolbar row holds more than 5 icon buttons, move the rest into a menu, because the measured composer row holds 3 at 24px each with 4px gaps and the row starts crowding the input past 5. Evidence: measured 3 actions at 24px with 4px gaps, `docs/system/decisions.md`. Check: review `src/components/AssistantPane.tsx`.
   - Don't: 6 circles in the composer's toolbar row.
   - Do: 3 circles in the row and the rest inside a menu.
-- `rule/icon-button-touch-target`: When 2 `sm` icon buttons sit side by side, keep at least 4px between them, because under a coarse pointer each 20px circle keeps its drawn size and takes a 24px target from an invisible `::after` 2px past every edge, and closer circles overlap their targets. Evidence: measured 20px circle with a 24px `::after` target, `src/ui/ui.css:1137`. Check: review `src/ui/ui.css`.
+- `rule/icon-button-touch-target`: When 2 `sm` icon buttons sit side by side, keep at least 4px between them, because under a coarse pointer each 20px circle keeps its drawn size and takes a 24px target from an invisible `::after` 2px past every edge, and closer circles overlap their targets. Evidence: measured 20px circle with a 24px `::after` target, `src/ui/ui.css:1218`. Check: review `src/ui/ui.css`.
   - Don't: `.my-row .ui-icon-button--sm + .ui-icon-button--sm { margin-left: 0 }` — two 24px targets on a 20px pitch.
   - Do: `.my-row { display: flex; gap: var(--gap-4) }`
 

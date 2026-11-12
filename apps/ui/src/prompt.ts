@@ -18,11 +18,48 @@ export interface PromptAccept {
   enter: boolean;
 }
 
+/** A world point, as `view.ts` writes one (this module imports nothing). */
+interface AnchorPoint {
+  x: number;
+  y: number;
+}
+
+/** What the pointer needs of the running command's prompt (`Prompt` in the engine). */
+export interface PromptAnchor {
+  /** The rubber band's origin (the last point given), or null when the prompt has none. */
+  base: AnchorPoint | null;
+  /** The base is a window's first corner (RECTANG, ZOOM Window): ortho does not bend the other. */
+  corner: boolean;
+  /** A point answers with its distance from the base (a radius, a length). */
+  distance: boolean;
+  /** The prompt resolves deferred tangent and perpendicular snaps (LINE's first point). */
+  deferred: boolean;
+}
+
+export const NO_ANCHOR: PromptAnchor = { base: null, corner: false, distance: false, deferred: false };
+
+/**
+ * Read the anchor out of a parsed command-line reply (`prompt`, `cmdline`, `start`, `cancel`,
+ * `click` all carry `base`, `corner`, `distance` and `deferred`). A reply that names none of them
+ * (a canned facade, an older engine) is `NO_ANCHOR` itself, so a caller can compare by identity.
+ */
+export function anchorOf(reply: Record<string, unknown>): PromptAnchor {
+  const b = reply["base"];
+  const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+  const base = Array.isArray(b) && finite(b[0]) && finite(b[1]) ? { x: b[0], y: b[1] } : null;
+  const corner = reply["corner"] === true;
+  const distance = reply["distance"] === true;
+  const deferred = reply["deferred"] === true;
+  return base === null && !corner && !distance && !deferred ? NO_ANCHOR : { base, corner, distance, deferred };
+}
+
 export interface CmdlineReply {
   prompt: string | null;
   running: string | null;
   keywords: readonly string[];
   accept: PromptAccept | null;
+  /** The prompt's base point and kind, as the same reply carries them. */
+  anchor: PromptAnchor;
   output: readonly string[];
   error: string | null;
 }
@@ -35,6 +72,11 @@ export interface PromptState {
   running: string | null;
   /** What the prompt accepts, if the engine says; null with no prompt up. */
   accept: PromptAccept | null;
+  /**
+   * Where the prompt's rubber band starts and what kind of prompt it is, from the same reply the
+   * rest of this state came from: nothing reads the prompt a second time for it.
+   */
+  anchor: PromptAnchor;
   /** The visible output tail, oldest first, capped at [`MAX_OUTPUT_LINES`]. */
   output: readonly string[];
   /** The last refused input, if any; cleared by the next readable reply. */
@@ -48,7 +90,7 @@ export const MAX_KEYWORDS = 24;
 const MAX_REPLY_BYTES = 4 * 1024 * 1024;
 
 export function emptyPrompt(): PromptState {
-  return { prompt: "", keywords: [], running: null, accept: null, output: [], error: null };
+  return { prompt: "", keywords: [], running: null, accept: null, anchor: NO_ANCHOR, output: [], error: null };
 }
 
 /**
@@ -93,6 +135,7 @@ export function parseCmdlineReply(raw: string): CmdlineReply | null {
     running: str("running"),
     keywords: list("keywords").slice(0, MAX_KEYWORDS),
     accept: parseAccept(o["accept"]),
+    anchor: anchorOf(o),
     output: list("output"),
     error: str("error"),
   };
@@ -120,6 +163,7 @@ export function reducePrompt(prev: PromptState, raw: string, echo?: string): Pro
     keywords: reply.keywords,
     running: reply.running,
     accept: reply.accept,
+    anchor: reply.anchor,
     output: capLines([...prev.output, ...added], MAX_OUTPUT_LINES),
     error: reply.error,
   };

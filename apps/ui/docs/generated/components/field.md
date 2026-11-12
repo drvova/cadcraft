@@ -500,7 +500,7 @@ Rests on the native `<input>` element: typing, selection, IME and autofill come 
 ## Tokens
 | Part | State | Token |
 |---|---|---|
-| The box | all | `--control-h-input`, `--radius-control`, `--field-pad-y`, `--field-pad-x`, `--font-body` |
+| The box | all | `--control-h-input`, `--radius-control`, `--field-pad-y`, `--field-pad-x`, `--font-body`, `--leading-ui` |
 | The fill | all | `--control` |
 | The stroke | rest | `--border-soft`, `--hairline` |
 | The stroke | focus | `--focus-ring` |

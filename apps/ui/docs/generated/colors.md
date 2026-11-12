@@ -91,7 +91,7 @@ Dark is the default (`:root`); light restates only the roles that change, under 
 | `--icon-layer-off` | `#8a8a5a` | `#8a8a5a` | A layer switched off. |
 | `--icon-layer-frozen` | `#9fd4ff` | `#9fd4ff` | A frozen layer. |
 | `--icon-locked` | `#e6b43c` | `#e6b43c` | A locked layer. |
-| `--swatch-border` | `#191919` | `#191919` | The hairline around a colour swatch. |
+| `--swatch-border` | `var(--text-faint)`: `rgba(240,240,240,.60)` | `rgba(20,20,20,.66)` | The edge of a layer's colour swatch: what tells the swatch from its row when the layer's colour is near the surface's. It measures 6.4 on the sidebar, 5.8 on a hovered row, 5.1 on the current row and 4.4 on the current row hovered (dark); 5.9, 5.5, 5.2 and 4.8 (light). Until 2026-11-11 it was `#191919` in both themes: 1.05, 1.16, 1.39 and 1.75 on the dark ones, so a dark layer colour had no edge. |
 
 ### Elevation, scrollbars, borders, misc
 

@@ -1,16 +1,19 @@
 /**
  * The chrome's menu logic: the tree rules (top-level order, nesting, dedup, the leaf rule),
- * `classify` for every action class, the `UI_ITEMS` subset, the shortcut labels, the keyboard
- * walk order, and the file-name helper.
+ * `classify` for every action class, the `UI_ITEMS` subset, the shortcut labels, the menus'
+ * groups and typed names, and the file-name helper.
  *
  * `UI_ITEMS` was transcribed by hand from `crates/ui-egui/src/menus.rs`'s `UI_COMMANDS` (the ids,
- * labels, menu paths and shortcuts there); this test pins the subset's shape and uniqueness, it
- * does not read the Rust source (that would not be portable).
+ * labels, menu paths and shortcuts there); this test pins the subset's shape and uniqueness.
+ * The menus' groups (`MENU_GROUPS`) name the engine's own commands, so that table is checked
+ * against the registry as the engine's sources write it (`crates/engine/src/cmd`).
  */
 
 import { describe, expect, test } from "bun:test";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { CommandInfo } from "./facade";
-import { chordCommand, pressShortcut, buildMenu, classify, hoverPath, isMacPlatform, menuEntries, MENU_TITLES, shortcutLabel, submenuIsOpen, UI_ITEMS } from "./commands";
+import { chordCommand, pressShortcut, buildMenu, classify, groupRows, isMacPlatform, MENU_GROUPS, MENU_TITLES, shortcutLabel, typedName, UI_ITEMS, type MenuNode } from "./commands";
 import { defaultFileName } from "./files";
 
 /** One engine command row, with its menu path joined the way `facade.ts` does. */
@@ -259,31 +262,128 @@ describe("shortcutLabel", () => {
   });
 });
 
-describe("menuEntries and submenuIsOpen", () => {
-  const nodes = [
-    { label: "Theme", id: null, shortcut: "", enabled: true, children: [
-      { label: "Dark", id: "ui.theme.dark", shortcut: "", enabled: true, children: [] },
-      { label: "Light", id: "ui.theme.light", shortcut: "", enabled: true, children: [] },
-    ] },
-    { label: "Status Bar", id: "ui.toggle.statusbar", shortcut: "", enabled: true, children: [] },
-  ];
+/**
+ * The engine's registry as its sources write it: every `CommandSpec::new("id", "Label", ..)` under
+ * `crates/engine/src/cmd`, with the path of the `.menu(&[..])` that follows it. The built wasm is
+ * not in the checkout, the sources always are.
+ */
+function engineRegistry(): CommandInfo[] {
+  const root = join(import.meta.dir, "..", "..", "..", "crates", "engine", "src", "cmd");
+  const text = (dir: string): string =>
+    readdirSync(dir, { withFileTypes: true })
+      .map((entry) => (entry.isDirectory() ? text(join(dir, entry.name)) : entry.name.endsWith(".rs") ? readFileSync(join(dir, entry.name), "utf8") : ""))
+      .join("\n");
+  const specs = text(root).split("CommandSpec::new(").slice(1);
+  const out: CommandInfo[] = [];
+  for (const spec of specs) {
+    const head = /^\s*"([^"]+)"\s*,\s*"((?:[^"\\]|\\.)*)"/.exec(spec);
+    if (head === null) continue;
+    const path = /\.menu\(&\[([^\]]*)\]\)/.exec(spec)?.[1] ?? "";
+    const segments = Array.from(path.matchAll(/"((?:[^"\\]|\\.)*)"/g), (match) => match[1] ?? "");
+    out.push(cmd(head[1] ?? "", head[2] ?? "", segments));
+  }
+  return out;
+}
 
-  test("with nothing open, only the visible rows", () => {
-    expect(menuEntries(nodes, []).map((e) => e.node.label)).toEqual(["Theme", "Status Bar"]);
-    expect(menuEntries(nodes, []).map((e) => e.depth)).toEqual([0, 0]);
+describe("the menus' groups", () => {
+  const row = (label: string, id: string | null, children: MenuNode[] = []): MenuNode => ({ label, id, shortcut: "", enabled: true, children, name: "", group: false });
+
+  test("rows stand in the groups' order, the first of each marked; a key may name a submenu by a command in it", () => {
+    const rows = [row("Text", null, [row("Single Line", "text"), row("Multiline", "mtext")]), row("Line", "line"), row("Arc", null, [row("3 Points", "arc")]), row("Ray", "ray")];
+    const out = groupRows(rows, [["line", "ray"], ["arc"], ["mtext"]]);
+    expect(out.map((r) => [r.label, r.group])).toEqual([
+      ["Line", true],
+      ["Ray", false],
+      ["Arc", true],
+      ["Text", true],
+    ]);
   });
 
-  test("an open submenu's children join the walk in place, one level down", () => {
-    const entries = menuEntries(nodes, ["Theme"]);
-    expect(entries.map((e) => e.node.label)).toEqual(["Theme", "Dark", "Light", "Status Bar"]);
-    expect(entries.map((e) => e.depth)).toEqual([0, 1, 1, 0]);
-    expect(entries[1]?.path).toEqual(["Theme"]);
+  test("rows no key names follow as one more group, in the order they came; a key with no row is passed over", () => {
+    const out = groupRows([row("Gem", "gem"), row("Line", "line"), row("Ring", "ring")], [["gone", "line"]]);
+    expect(out.map((r) => [r.label, r.group])).toEqual([
+      ["Line", true],
+      ["Gem", true],
+      ["Ring", false],
+    ]);
+    // Two keys of one submenu place it once.
+    const text = row("Text", null, [row("Single Line", "text"), row("Multiline", "mtext")]);
+    expect(groupRows([text], [["text"], ["mtext"]]).map((r) => r.label)).toEqual(["Text"]);
   });
 
-  test("submenuIsOpen reads the first name of the chain", () => {
-    expect(submenuIsOpen(["Theme", "Sub"], "Theme")).toBe(true);
-    expect(submenuIsOpen(["Theme"], "Status Bar")).toBe(false);
-    expect(submenuIsOpen([], "Theme")).toBe(false);
+  test("a menu without groups keeps its registered order, and no row leads a group", () => {
+    const help = menu("Help", [], UI_ITEMS);
+    expect(help?.children.map((n) => n.label)).toEqual(["Open Sample Drawing", "Command Palette..."]);
+    expect(help?.children.some((n) => n.group)).toBe(false);
+  });
+
+  test("the engine's sources are read: the registry holds the commands the table is checked against", () => {
+    const ids = engineRegistry().map((c) => c.id);
+    expect(ids.length).toBeGreaterThan(400);
+    for (const id of ["line", "circle", "hatch", "u", "qsave", "dimlinear"]) expect(ids).toContain(id);
+  });
+
+  test("every key of MENU_GROUPS names a row of its menu in the engine's registry, and no row twice", () => {
+    const tree = buildMenu(engineRegistry(), UI_ITEMS);
+    const holds = (node: MenuNode, id: string): boolean => node.id === id || node.children.some((child) => holds(child, id));
+    const problems: string[] = [];
+    for (const [title, groups] of Object.entries(MENU_GROUPS)) {
+      const rows = tree.find((n) => n.label === title)?.children;
+      if (rows === undefined) {
+        problems.push(`${title}: not a menu`);
+        continue;
+      }
+      const named = new Set<MenuNode>();
+      for (const key of groups.flat()) {
+        const found = rows.find((candidate) => holds(candidate, key));
+        if (found === undefined) problems.push(`${title}: no row for "${key}" (was the command renamed or moved?)`);
+        else if (named.has(found)) problems.push(`${title}: "${key}" names the row "${found.label}" a second time`);
+        else named.add(found);
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
+  test("in the engine's registry, the Draw menu reads lines, curves, points, hatches, blocks and text, jewellery", () => {
+    const draw = buildMenu(engineRegistry(), UI_ITEMS).find((n) => n.label === "Draw");
+    const groups: string[][] = [];
+    for (const node of draw?.children ?? []) {
+      if (node.group) groups.push([]);
+      groups.at(-1)?.push(node.label);
+    }
+    expect(groups[0]).toEqual(["Line", "Construction Line", "Ray", "Multiline", "Polyline", "3D Polyline", "Rectangle", "Polygon"]);
+    expect(groups[1]).toEqual(["Arc", "Circle", "Donut", "Ellipse", "Spline", "Helix", "Revision Cloud"]);
+    expect(groups.map((g) => g.length)).toEqual([8, 7, 3, 5, 3, 4]);
+  });
+});
+
+describe("typedName", () => {
+  test("the shortest of the id and the aliases, in capitals; the id on a tie", () => {
+    expect(typedName({ id: "pline", aliases: ["pl"] }, "Polyline")).toBe("PL");
+    expect(typedName({ id: "rectang", aliases: ["rec", "rectangle"] }, "Rectangle")).toBe("REC");
+    expect(typedName({ id: "qsave", aliases: ["save"] }, "Save")).toBe("");
+    expect(typedName({ id: "plot", aliases: ["print"] }, "Print...")).toBe("PLOT");
+    expect(typedName({ id: "arc.sce", aliases: [] }, "Start, Center, End")).toBe("ARC.SCE");
+    expect(typedName({ id: "-attedit", aliases: ["-ate", "atte"] }, "Global")).toBe("-ATE");
+  });
+
+  test("empty where it would only repeat the label, whatever the case and with the dialog's dots", () => {
+    expect(typedName({ id: "erase", aliases: ["delete"] }, "Erase")).toBe("");
+    expect(typedName({ id: "find", aliases: [] }, "Find...")).toBe("");
+    expect(typedName({ id: "erase", aliases: ["e", "delete"] }, "Erase")).toBe("E");
+  });
+
+  test("an engine command's row carries it; a submenu and a shell item carry none", () => {
+    const line = { ...cmd("line", "Line", ["Draw", "Line"]), aliases: ["l"] };
+    const tree = buildMenu([line, CIRCLE], UI_ITEMS);
+    const draw = tree.find((n) => n.label === "Draw");
+    expect(draw?.children.map((n) => [n.label, n.name])).toEqual([
+      ["Line", "L"],
+      ["Circle", ""],
+    ]);
+    expect(draw?.children[1]?.children[0]?.name).toBe("CIRCLE");
+    const windowMenu = tree.find((n) => n.label === "Window");
+    expect(windowMenu?.children.every((n) => n.name === "")).toBe(true);
   });
 });
 
@@ -299,40 +399,6 @@ describe("defaultFileName", () => {
     expect(defaultFileName("a/b:c*d?e\"f<g>h|i")).toBe("a_b_c_d_e_f_g_h_i.dxf");
     expect(defaultFileName("  ")).toBe("Drawing.dxf");
     expect(defaultFileName("")).toBe("Drawing.dxf");
-  });
-});
-
-describe("hoverPath (the reference-stable hover)", () => {
-  const leaf = { label: "Save", id: "qsave", shortcut: "", enabled: true, children: [] };
-  const sub = { label: "Layout", id: null, shortcut: "", enabled: true, children: [] };
-
-  test("a leaf with nothing open returns the same reference (no signal change, no re-render)", () => {
-    const current: readonly string[] = [];
-    const next = hoverPath(current, leaf, []);
-    expect(next).toBe(current); // identity: a fresh array here would loop the pointerover
-  });
-
-  test("a submenu appends its label", () => {
-    const next = hoverPath([], sub, []);
-    expect([...next]).toEqual(["Layout"]);
-  });
-
-  test("hovering the same submenu again is reference-stable", () => {
-    const first = hoverPath([], sub, []);
-    const second = hoverPath(first, sub, []);
-    expect(second).toBe(first);
-  });
-
-  test("a leaf under an open submenu closes it (returns the parent path)", () => {
-    const open: readonly string[] = ["Layout"];
-    const next = hoverPath(open, leaf, []);
-    expect([...next]).toEqual([]);
-  });
-
-  test("a leaf inside a nested submenu keeps the parent path", () => {
-    const next = hoverPath(["Layout"], leaf, ["Layout"]);
-    expect(next).toBe(next); // same content: reference-stable against itself
-    expect([...hoverPath(["Layout"], leaf, ["Layout"])]).toEqual(["Layout"]);
   });
 });
 

@@ -5,7 +5,6 @@
       "height: 35px": 1,
       "height: 7px": 1,
       "max-width: 120px": 1,
-      "max-width: 160px": 1,
       "padding: 0 3px": 1,
       "width: 20px": 1,
       "width: 7px": 1
@@ -35,7 +34,7 @@
   },
   "src/components/AssistantPane.tsx": {
     "trap/native-control": {
-      "<button> where the system has Button": 3
+      "<button> where the system has Button": 2
     }
   },
   "src/components/CanvasView.tsx": {
@@ -54,11 +53,6 @@
   "src/components/LayersPanel.tsx": {
     "rule/raw-value": {
       "rgb(${c[0]},${c[1]},${c[2]})": 1
-    }
-  },
-  "src/components/Menu.tsx": {
-    "trap/native-control": {
-      "<button> where the system has Button": 1
     }
   },
   "src/components/MenuBar.tsx": {

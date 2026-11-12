@@ -723,7 +723,23 @@ export class MockFacade implements RawFacade {
     if (!usableOrdinate(x) || !usableOrdinate(y)) return JSON.stringify({ handles: [], error: "the point is not a usable world coordinate" });
     if (!Number.isFinite(aperture) || aperture < 0) return JSON.stringify({ handles: [], error: "the aperture must be a finite world distance, 0 or more" });
     const hit = this.handleAt(x, y);
-    return JSON.stringify({ handles: hit === null ? [] : [hit] });
+    // The mock's click selects what is under it whenever no prompt is up, so that is what lights.
+    return JSON.stringify({ handles: hit === null ? [] : [hit], hover: this.pending === null ? hit : null });
+  }
+
+  /**
+   * The mock has no drafting aids: the pointer is free (the point is the pointer, nothing bends
+   * it, no rays, no rubber band), in the engine's own reply shape, and what the engine refuses
+   * (a point, an aperture, a time or modifiers that are not usable) is refused the same way.
+   */
+  pointer(x: number, y: number, aperture: number, nowMs: number, modifiers: number): string {
+    const free = { constraint: "none", snap: null, from: null, distance: null, angle: null, label: "", paths: { verts: [], prims: [] }, acquired: [], wait: false, preview: { verts: [], prims: [], drag: null } };
+    const refuse = (error: string): string => JSON.stringify({ point: null, ...free, error });
+    if (!usableOrdinate(x) || !usableOrdinate(y)) return refuse("the point is not a usable world coordinate");
+    if (!Number.isFinite(aperture) || aperture < 0) return refuse("the aperture must be a finite world distance, 0 or more");
+    if (!Number.isFinite(nowMs) || nowMs < 0 || nowMs > 1e15) return refuse("the time must be finite milliseconds, 0 or more");
+    if (![0, 1, 2, 3].includes(modifiers)) return refuse("the modifiers must be 0 to 3: 1 for Shift, 2 for Ctrl");
+    return JSON.stringify({ point: [x, y], ...free });
   }
 
   /** The mock has no object snap: never a hit, with `error` for input it refuses. */
@@ -738,12 +754,12 @@ export class MockFacade implements RawFacade {
    * typed point is. With no prompt up it does nothing, as the engine's does.
    */
   click(x: number, y: number, aperture: number): string {
-    const refuse = (error: string): string => JSON.stringify({ ...this.promptJson(), output: [], error, snap: null });
+    const refuse = (error: string): string => JSON.stringify({ ...this.promptJson(), output: [], error, snap: null, point: null });
     if (!usableOrdinate(x) || !usableOrdinate(y)) return refuse("the point is not a usable world coordinate");
     if (!Number.isFinite(aperture) || aperture < 0) return refuse("the aperture must be a finite world distance, 0 or more");
     const reply = this.pending === null ? this.replyWith([]) : this.feed(`${x},${y}`);
     const parsed: unknown = JSON.parse(reply);
-    return JSON.stringify({ ...(typeof parsed === "object" && parsed !== null ? parsed : {}), snap: null });
+    return JSON.stringify({ ...(typeof parsed === "object" && parsed !== null ? parsed : {}), snap: null, point: [x, y] });
   }
 
   open_bytes(name: string, bytes: Uint8Array): string {

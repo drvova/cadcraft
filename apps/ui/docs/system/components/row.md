@@ -1,7 +1,7 @@
 # Row
 
 ## Description
-It is the full-width clickable band of a list: a menu item, a property row or a layer, marked current when it is the selected one.
+It is the full-width clickable band of a list: a layer, a command in a listbox or an item of a menu, marked current when it is the selected one.
 
 `import { Row } from "../../../../src/ui/Row";`, source `src/ui/Row.tsx`, status `ready`.
 Foundation: hand-rolled. Traps checked: trap/button-div, trap/role-button, trap/native-control, trap/list-dead-gap, trap/current-unmarked, trap/menu-navigation, trap/control-height, trap/focus-ring-shape, trap/hover-beats-focus, trap/disabled-still-hovers, trap/touch-hover-flash, trap/hover-unguarded.
@@ -12,13 +12,13 @@ Not applicable: hand-rolled — the 22px row, the 4px inset and the .14 selected
 ## Examples
 `<Row onClick={pick}>Layer 1</Row>` — one layer in the layers list.
 
-Real uses, 4 call sites (`rg -c "<Row" src/components` → `src/components/AssistantPane.tsx:2`, `src/components/CommandPalette.tsx:1`, `src/components/LayersPanel.tsx:1`):
-- `src/components/AssistantPane.tsx` — the setup sheet's provider rows and the composer's slash list (the commands a `/word` draft matches; `selected` marks the one the arrow keys are on); the chat tabs in the header moved onto `Tab`; the transcript's tool rows and the composer's toolbar row stay bespoke (the toolbar is a container, and the tool row carries a disclosure arrow and a note).
+Real uses, 6 call sites (`rg -c "<Row" src/components` → `src/components/AssistantPane.tsx:3`, `src/components/CommandPalette.tsx:1`, `src/components/LayersPanel.tsx:1`, `src/components/Menu.tsx:1`):
+- `src/components/AssistantPane.tsx` — the empty state's example rows (a glyph, the prompt and a chevron; a press puts the prompt in the composer), the setup sheet's provider rows and the composer's slash list (the commands a `/word` draft matches; `selected` marks the one the arrow keys are on); the chat tabs in the header moved onto `Tab`; the transcript's tool rows and the composer's toolbar row stay bespoke (the toolbar is a container, and the tool row carries a disclosure arrow and a note).
 - `src/components/CommandPalette.tsx:126` — each command in the palette's list; `selected` marks the one the arrow keys are on, `disabled` the ones that cannot run now.
 - `src/components/LayersPanel.tsx:53` — each layer's name band (`is-current` marks the current one); the toggle cluster beside it stays native buttons.
 - `src/components/CommandPalette.tsx` and the assistant's slash list in `src/components/AssistantPane.tsx` — their rows are `<Row option>` inside a `role="listbox"`: out of the Tab order, lit by the list's one highlight.
-- (planned) `src/components/MenuBar.tsx` — `.menu-row` (1 use) moves onto `<Row>` once `Row` can carry the `menuitem` roles; the rows stay native buttons for now.
-- (planned) `src/components/PropertiesPanel.tsx:202` — `.prop-row` (1 use) moves onto `<Row>` when the palette's rows become clickable; today they are display rows with an inline editor.
+- `src/components/Menu.tsx:307` — every row of every menu in the shell (the menu bar's dropdowns and their submenus, the narrow window's Main menu, the tool strip's overflow menu) is `<Row menuitem>`: `disabled` on a command that cannot run now, `popup="menu"` and `expanded` on a row that opens a submenu, `describedBy` naming the typed command, and the menu's own walk on `onKeyDown` and `onPointerEnter`. Until 2026-11-11 each was a raw `<button class="menu-row">` with its recipe in `src/chrome.css`; the recipe moved into the layer value for value. The menu bar's titles (`src/components/MenuBar.tsx`) are not rows and stay the bar's own.
+- (planned) `src/components/PropertiesPanel.tsx:185` — `.prop-row` (1 use) moves onto `<Row>` when the palette's rows become clickable; today they are display rows with an inline editor.
 - `.layer-row` (LayersPanel) stays bespoke because its row nests a toggle cluster, and a button cannot nest buttons.
 
 ### Example files
@@ -30,7 +30,8 @@ Real uses, 4 call sites (`rg -c "<Row" src/components` → `src/components/Assis
 | `docs/system/examples/row/disabled-selected.tsx` | state:disabled | A blocked current row with no fill, beside a blocked active option that keeps it. |
 | `docs/system/examples/row/title.tsx` | default | A row whose hint says what its text leaves out. |
 | `docs/system/examples/row/option.tsx` | state:option | Options of a listbox a search field drives: one lit, none a Tab stop. |
-| `docs/system/examples/row/in-menu-bar.tsx` | composition:MenuBar | A menu item inside an open menu. |
+| `docs/system/examples/row/menuitem.tsx` | state:menuitem | Rows of a menu: one that runs, one that is not available, one that opens a submenu; none a Tab stop. |
+| `docs/system/examples/row/in-menu-bar.tsx` | composition:MenuBar | Menu rows inside an open menu, with the typed name and the shortcut after the label. |
 
 ## Variants
 
@@ -47,6 +48,7 @@ Not applicable: no variant axes — a row is one band; the selected and disabled
 | Selected | The caller passes `selected` (the current row). | Click it; move to another row. | The `.14` fill, the full ink, and `aria-current="true"`. | test |
 | Disabled | The caller passes `disabled`. | Nothing: no click, no hover. | The label at the disabled ink; the cursor stays default. A button also drops the selected fill; an option keeps it. | test |
 | Clipped | The row's label, or the row itself, is wider than its box. | Rest the pointer on the row, or move focus to it by key, to read the whole label in the hint. | The ellipsis the label draws; the hint's first line is the label in full, without the trailing text beside it. | test |
+| Menu item | The caller passes `menuitem`, inside a `role="menu"` that moves the focus from row to row. | Press it; arrive on it with the pointer or by the menu's arrow keys. The keys are the menu's (`onKeyDown`). | A `role="menuitem"` button out of the Tab order (`tabindex="-1"`), 24px tall at the full ink, cornered to the popover (9px). The `.08` fill under the pointer, on the keyboard's row (with the ring) and while its submenu is open (`expanded`). A row that is not available carries `aria-disabled="true"`, the disabled ink and a default cursor, takes the ring and no fill, and stays in the walk. Never `aria-current`. | test |
 | Option | The caller passes `option`, inside a `role="listbox"` that keeps the keyboard in its own field. | Press it; move the pointer over it, which tells the listbox (`onPointerMove`). The keys are the listbox's. | A `role="option"` band, not a button: no Tab stop, no ring and no hover fill of its own. The active one (`selected`) carries `aria-selected="true"` and the `.14` fill; a blocked one carries `aria-disabled="true"`. | test |
 
 ### State precedence
@@ -59,6 +61,12 @@ Not applicable: no variant axes — a row is one band; the selected and disabled
 - Option and Selected: both show. The active option takes the `.14` fill and the full ink, as the current row does.
 - Option and Disabled: both show. A blocked option still takes the highlight when the keys reach it, at the disabled ink, and takes no click: in a listbox the fill is where the keys are, and a list with no fill has lost its cursor.
 - Clipped and Disabled: both show. The hint still reads the full label under the pointer.
+- Menu item and Selected: Menu item wins. A menu row is never the current row: `selected` is not read, and no `aria-current` or `.14` fill is drawn.
+- Menu item and Hover: both show. The pointer's row takes the `.08` fill, as a plain row does.
+- Menu item and Focused: both show, and unlike a plain row the fill comes with the ring. The focus is the menu's cursor, so the keyboard's row is lit exactly as the pointer's is.
+- Menu item and Disabled: Disabled wins the fill and the click, and the focus still arrives. A row that is not available shows the ring alone when the keys reach it, and neither the pointer nor the keys fill it; Enter, Space and a click do nothing, and the arrow keys move on from it.
+- Menu item expanded and Hover elsewhere: both show. The row whose submenu is open keeps the `.08` fill while the pointer is on a row of the submenu, so the path to the open menu stays lit.
+- Menu item and Clipped: both show. A label the menu's box cuts short (the stacked Main menu at 390px) shows in full in the hint, as on every row; a menu row has no other hint unless the caller passes `title`.
 - Option and Focused: Not applicable: an option is never focused; the listbox's field keeps the focus and names the active option with `aria-activedescendant`.
 
 ### Motion
@@ -69,9 +77,15 @@ Not applicable: no variant axes — a row is one band; the selected and disabled
 ## Props
 - `selected`: the current row; sets `aria-current="true"` and the `.14` fill. On an `option` it is the listbox's active option and sets `aria-selected`.
 - `option`: the row is one option of a `role="listbox"` that owns the focus and the highlight; it renders a `role="option"` band with no Tab stop and no hover fill.
+- `menuitem`: the row is one item of a `role="menu"` that moves the focus itself; it renders a `role="menuitem"` button with `tabindex="-1"` in the menu's recipe. `disabled` then sets `aria-disabled="true"` instead of the native attribute, and `selected` is not read.
+- `popup`: `"menu"` on a menu row that opens a submenu; sets `aria-haspopup`. It means what it means on `IconButton`. Pass `expanded` with it.
+- `expanded`: whether the submenu the row opens is showing; sets `aria-expanded` and holds the hover fill while it is.
+- `describedBy`: the `id` of a line of the caller's that describes a menu row (the typed command, "Type PL"); it comes first in `aria-describedby`, before the hint's own line.
+- `onKeyDown`: a key pressed on a menu row, handed to the menu's walk. A row that is not available hears it too.
+- `onPointerEnter`: the pointer arrived on a menu row; the menu opens or closes a submenu. A row that is not available hears it too.
 - `id`: the element's `id`, for the listbox's `aria-activedescendant`.
 - `onPointerMove`: the pointer moved over the row; a listbox moves its highlight here.
-- `disabled`: blocks the click and drops the ink to the disabled step.
+- `disabled`: blocks the click and drops the ink to the disabled step. A plain row is natively `disabled` and leaves the Tab order; an `option` and a `menuitem` say `aria-disabled="true"` and stay where the keys can reach them.
 - `title`: the hint: what the row's text leaves out. It shows in the layer's hint box (after 0.4s under a mouse or a pen, at once when a key moves focus in) and is the row's accessible description (`aria-describedby`), never its name, and no native `title` attribute is rendered. A title that repeats the row's text adds nothing and is dropped. A clipped label needs no `title`: it shows in full by itself, with the `title` under it.
 - `onClick`: runs on click; a disabled row never fires it.
 - `children`: the row's content: a label, and quiet trailing text such as a shortcut.
@@ -79,7 +93,7 @@ Not applicable: no variant axes — a row is one band; the selected and disabled
 ## Usage
 
 ### When to use
-- One item of a list is clickable and runs one action: a menu item, a layer, a property.
+- One item of a list is clickable and runs one action: a layer, a command, an item of a menu.
 - The current item of that list must be marked for a screen reader as well as the eye.
 
 ### When not to use
@@ -88,31 +102,34 @@ Not applicable: no variant axes — a row is one band; the selected and disabled
 - The band is a heading above a list rather than a row in it. Use `SectionLabel` instead.
 
 ### Rules
-- `rule/row-one-action`: When a row runs an action, wire it on `Row` itself rather than on a label inside it, because a label-only hit area leaves dead space that reads as broken. Evidence: app 8/8 lines across `src/chrome.css`, `src/components/MenuBar.tsx` and `src/styles.css`, `rg -c "menu-row" src`. Check: test `src/ui/Row.test.tsx`.
+- `rule/row-one-action`: When a row runs an action, wire it on `Row` itself rather than on a label inside it, because a label-only hit area leaves dead space that reads as broken. Evidence: app 6/6 call sites pass `onClick` on the row itself, `rg -n -A14 "<Row" src/components`. Check: test `src/ui/Row.test.tsx`.
   - Don't: `<Row><span onClick={pick}>Layer 1</span></Row>`
   - Do: `<Row onClick={pick}>Layer 1</Row>`
 - `rule/row-option-in-listbox`: When rows are the items of a `role="listbox"` whose field keeps the focus, pass `option` on each with an `id`, mark the active one with `selected` and move it from `onPointerMove`, because a `<button>` inside a `role="option"` adds 1 Tab stop per row and its own hover fill, so two rows are lit at once: the pointer's and the keyboard's. Evidence: single use `src/components/CommandPalette.tsx:244`, a `Row` button inside a `.palette-option` wrapper. Check: test `src/ui/Row.test.tsx`.
   - Don't: `<div role="option" aria-selected={lit}><Row selected={lit} onClick={run}>Line</Row></div>`
   - Do: `<Row option id="command-0" selected={lit} onPointerMove={light} onClick={run}>Line</Row>`
+- `rule/row-menuitem-in-menu`: When rows are the items of a `role="menu"`, pass `menuitem` on each and mark the ones that cannot run with `disabled`, because a native `disabled` button takes no focus, so the arrow keys skip it and a screen reader never hears that the command exists, and a raw `<button role="menuitem">` repeats the hover, focus and disabled recipe by hand (1 raw button and 9 `.menu-row` rules in `src/chrome.css` until 2026-11-11). Evidence: single use `src/components/Menu.tsx:307`, which draws every menu in the shell. Check: lint `trap/native-control`.
+  - Don't: `<button role="menuitem" tabIndex={-1} disabled={!item.enabled} onClick={run}>Paste</button>`
+  - Do: `<Row menuitem disabled={!item.enabled} onClick={run} onKeyDown={walk}>Paste</Row>`
 - `rule/row-current-marked`: When a list has a current item, pass `selected` on it, because the `.14` fill alone is colour and a screen reader needs `aria-current="true"` to hear it. Evidence: app 3/3 list surfaces draw a current row, `src/styles.css`. Check: test `src/ui/Row.test.tsx`.
   - Don't: a hand-painted background on the current row with no `aria-current`.
   - Do: `<Row selected>Current layer</Row>`
 
 ### Content
-- `rule/row-trailing-quiet`: When a row carries a shortcut or a value, put it after the label in the dim ink (`--text-faint`), because the label is what the user scans and the trailing text is secondary. Evidence: single use `src/components/MenuBar.tsx:231`, the shortcut span. Check: review `src/components/MenuBar.tsx`.
+- `rule/row-trailing-quiet`: When a row carries a shortcut or a value, put it after the label in the dim ink (`--text-faint`), because the label is what the user scans and the trailing text is secondary. Evidence: single use `src/components/Menu.tsx:343`, the shortcut span of a menu row (`.menu-shortcut` in `src/chrome.css`). Check: review `src/components/Menu.tsx`.
   - Don't: a shortcut before the label.
   - Do: `<Row>Save<span class="row-shortcut">Ctrl+S</span></Row>`
 
 ### Anti-slop
-- `rule/row-canonical-element`: When a surface needs a list band, render `Row` rather than a `div` with an `onClick`, because a `div` has no role, no focus and no disabled state, and the replaced classes repeat hover and selected by hand. Evidence: app 23/23 lines across 7 files, `rg -c "prop-row|menu-row|assistant-row|assistant-tool" src`. Check: review `src/ui/Row.tsx`.
+- `rule/row-canonical-element`: When a surface needs a list band, render `Row` rather than a `div` with an `onClick`, because a `div` has no role, no focus and no disabled state, and the replaced classes repeat hover and selected by hand. Evidence: app 6/6 list bands that run an action are `Row` (the layers, the palette's and the slash list's commands, the provider rows, the assistant's example rows, the menus' rows), `rg -c "<Row" src/components`. Check: review `src/ui/Row.tsx`.
   - Don't: `<div class="menu-row" onClick={pick}>Open</div>`
   - Do: `<Row onClick={pick}>Open</Row>`
 
 ### Limits
-- `rule/row-label-limit`: When a row's label runs past 40 characters at the 260px sidebar, clip it with an ellipsis on the label's own element and leave `title` for what the hint adds, because the measured row is 22px tall and the sidebar 260px wide, and the hint already reads a clipped label in full on its first line. Evidence: measured 22px row and 260px sidebar, `docs/system/decisions.md`. Check: review `src/styles.css`.
+- `rule/row-label-limit`: When a row's label runs past 40 characters at the 252px sidebar, clip it with an ellipsis on the label's own element and leave `title` for what the hint adds, because the measured row is 22px tall and the sidebar 252px wide, and the hint already reads a clipped label in full on its first line. Evidence: measured 22px row (`docs/system/decisions.md`) and the 252px sidebar (`.sidebar` in `src/styles.css`). Check: review `src/styles.css`.
   - Don't: a 60-character layer name that overflows the row.
   - Do: `<Row><span class="row-label">{name}</span></Row>` with `overflow: hidden; text-overflow: ellipsis` on the label, and no `title` that repeats it.
-- `rule/row-touch-target`: When rows stack in a list, let the list's height follow its rows rather than fixing it to a multiple of 22px, because under a coarse pointer each row grows from 22px to the 24px control height (rows stack with 0 gap, so an overhanging target would only overlap the next row) and a fixed list would cut its last rows. Evidence: measured 22px row, 24px under a coarse pointer, `src/ui/ui.css:1204`. Check: review `src/ui/ui.css`.
+- `rule/row-touch-target`: When rows stack in a list, let the list's height follow its rows rather than fixing it to a multiple of 22px, because under a coarse pointer each row grows from 22px to the 24px control height (rows stack with 0 gap, so an overhanging target would only overlap the next row), a menu row grows from 24px to the 28px button height, and a fixed list would cut its last rows. Evidence: measured 22px row, 24px under a coarse pointer, `src/ui/ui.css:1246`. Check: review `src/ui/ui.css`.
   - Don't: `.my-list { height: calc(var(--control-h-row) * 8); overflow: hidden }`
   - Do: `.my-list { max-height: calc(var(--control-h-input) * 8); overflow-y: auto }`
 
@@ -125,7 +142,9 @@ Rests on the native `<button>` element: role, Enter and Space, `disabled` and fo
 | Tab | The row, in document order. | Moves focus to it; the accent ring draws. | On the row. | test |
 | Enter | The focused row. | Runs the action. | Stays on the row. | test |
 | Space | The focused row. | Runs the action on release, exactly once. | Stays on the row. | by hand |
-| ArrowDown | The focused row (in a menu, by the parent's key handler). | Moves to the next row. | On the next row. | by hand |
+| Tab (menu item) | Anywhere before a menu of `menuitem` rows. | Skips every row: each is `tabindex="-1"`, and the menu puts the focus on one itself. | On the next control after the menu. | test |
+| ArrowDown, ArrowUp, Home, End, a letter, ArrowRight, ArrowLeft, Escape (menu item) | The focused menu row. | The row handles none of them: each is handed to the menu (`onKeyDown`), which moves the focus, opens or closes a submenu, or asks to be closed (`src/components/Menu.tsx`). A row that is not available hands them on too. | Where the menu puts it. | test |
+| Enter, Space (menu item) | The focused menu row. | Runs the action; on a row that is not available, nothing. | The menu's owner decides (the menu bar returns it to the title). | test |
 | Tab (option) | Anywhere before a listbox of `option` rows. | Skips every option: none is a Tab stop. | On the next control after the list. | test |
 | ArrowDown, Enter (option) | The listbox's own field. | The listbox moves `selected` to the next option, or runs the active one; the option handles no key. | Stays in the field. | by hand |
 
@@ -133,6 +152,7 @@ Rests on the native `<button>` element: role, Enter and Space, `disabled` and fo
 | Part | Role | Accessible name from | States and properties | Announced | Checked by |
 |---|---|---|---|---|---|
 | The row | `button` (native) | Its text content | `aria-current="true"` when selected; `disabled` when blocked; `aria-describedby` naming the `title`'s words when it has one that says more than the text | "Layer 1, button, current" / "Walls, button, Makes this the current layer" | test |
+| The row as a menu item | `menuitem` (`role="menuitem"` on the native `<button>`) | Its label; the typed name and the hidden description line inside it are the caller's to keep out of the name | `aria-disabled="true"` when not available (never the native `disabled`); `aria-haspopup="menu"` and `aria-expanded` on a row that opens a submenu; `aria-describedby` naming the caller's line (`describedBy`) and then the `title`'s words; never `aria-current` | "Polyline, menu item, Type PL" / "Paste, menu item, dimmed" / "Circle, menu item, has popup, collapsed" | test |
 | The row as an option | `option` (`role="option"` on a `<div>`) | Its text content | `aria-selected` (`true` on the active one, `false` on the rest); `aria-disabled="true"` when blocked; the `id` the listbox's `aria-activedescendant` names; `aria-describedby` naming the `title`'s words | "Circle, 2 of 4" as the listbox's field moves to it | test |
 
 ## Tokens
@@ -149,11 +169,17 @@ Rests on the native `<button>` element: role, Enter and Space, `disabled` and fo
 | The ring | focus-visible | `--focus-outline-w`, `--focus-ring`, `--focus-outline-offset` |
 | The motion | hover | `--dur-fast`, `--ease-standard` |
 | The band | coarse pointer | `--control-h-input` |
+| The band | menu item | `--control-h-input`, `--gap-8`, `--gap-16`, `--radius-popover`, `--gap-4`, `--hairline` |
+| The label | menu item, rest | `--text` |
+| The fill | menu item: hover, focus-visible, expanded | `--hover` |
+| The fill | menu item, disabled and focused | none: transparent |
+| The band | menu item, coarse pointer | `--control-h-button` |
+| The line | all | `--leading-ui` |
 
 ## Related
 - `Button`: when the control is an action rather than a list item.
 - `SectionLabel`: when the band is the heading above a list rather than a row in it.
-- `IconButton`: when the row's trailing control is a glyph action.
+- `IconButton`: when the row's trailing control is a glyph action. A key that opens a menu of `menuitem` rows carries the same `popup="menu"` and `expanded`.
 - `Tooltip`: the hint box a row's `title` and its clipped label show in. A `Tooltip` wrapped around a row with no `title` still speaks; give the row its `title` instead of wrapping it.
 - `Tab`: when the control brings one view of a strip to the front rather than being one band of a list.
 - `Kbd`: when the text is the key that runs an action, shown at the end of the row.

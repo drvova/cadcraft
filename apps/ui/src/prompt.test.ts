@@ -6,8 +6,10 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  anchorOf,
   capLines,
   emptyPrompt,
+  NO_ANCHOR,
   formatOrdinate,
   formatPoint,
   formatSelectBox,
@@ -50,6 +52,32 @@ describe("parseCmdlineReply", () => {
     expect(reply?.keywords).toEqual(["2Point", "3Point", "Ttr"]);
     expect(reply?.accept).toEqual({ point: true, number: false, text: false, select: false, enter: true });
     expect(reply?.error).toBeNull();
+  });
+
+  test("reads the prompt's anchor from the same reply: base, corner, distance, deferred", () => {
+    const next = parseCmdlineReply('{"prompt":"LINE Specify next point:","running":"line","keywords":["Undo"],"base":[2,3],"corner":false,"distance":false,"deferred":true,"output":[]}');
+    expect(next?.anchor).toEqual({ base: { x: 2, y: 3 }, corner: false, distance: false, deferred: true });
+    expect(parseCmdlineReply('{"base":[4,5],"corner":true}')?.anchor).toEqual({ base: { x: 4, y: 5 }, corner: true, distance: false, deferred: false });
+    expect(parseCmdlineReply('{"base":[1,1],"distance":true}')?.anchor.distance).toBe(true);
+    // A reply that names none of it (the mock, an older engine) is the shared constant.
+    expect(parseCmdlineReply(circleCentre)?.anchor).toBe(NO_ANCHOR);
+    expect(anchorOf({})).toBe(NO_ANCHOR);
+    // Malformed: a base that is not two finite numbers is no base, and a flag that is not `true` is off.
+    for (const base of [[1], ["a", "b"], [1, null], [Number.NaN, 2], "2,3", { x: 1, y: 2 }, 7]) expect(anchorOf({ base }).base).toBeNull();
+    expect(anchorOf({ base: null, corner: "yes", distance: 1, deferred: "true" })).toBe(NO_ANCHOR);
+    expect(anchorOf({ base: [1e308, -1e308] }).base).toEqual({ x: 1e308, y: -1e308 });
+  });
+
+  test("the folded state keeps the anchor of the last readable reply", () => {
+    let state = reducePrompt(emptyPrompt(), '{"prompt":"LINE Specify next point:","running":"line","keywords":[],"base":[2,3],"output":[]}');
+    expect(state.anchor.base).toEqual({ x: 2, y: 3 });
+    // An unreadable reply keeps it; a refusal carries the prompt's own anchor again.
+    state = reducePrompt(state, "not json");
+    expect(state.anchor.base).toEqual({ x: 2, y: 3 });
+    state = reducePrompt(state, '{"prompt":"LINE Specify next point:","running":"line","keywords":[],"base":[2,3],"output":[],"error":"Invalid point."}');
+    expect(state.anchor.base).toEqual({ x: 2, y: 3 });
+    expect(reducePrompt(state, '{"prompt":"Command:","running":null,"keywords":[],"base":null,"output":["*Cancel*"]}').anchor).toBe(NO_ANCHOR);
+    expect(emptyPrompt().anchor).toBe(NO_ANCHOR);
   });
 
   test("reads the engine's accept flags, and a canned facade's one word", () => {

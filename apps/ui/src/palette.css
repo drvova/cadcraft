@@ -184,7 +184,7 @@
   text-overflow: ellipsis;
   color: var(--text-faint);
   font-family: var(--font-family-mono);
-  font-size: var(--font-chip);
+  font-size: var(--font-mono);
   white-space: nowrap;
 }
 

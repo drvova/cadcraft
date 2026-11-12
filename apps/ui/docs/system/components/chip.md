@@ -88,7 +88,7 @@ Real uses, 2 call sites (`rg -c "<Chip" src/components` → `src/components/Assi
 - `rule/chip-row-limit`: When a chip row holds more than 6 chips, wrap the row or move the rest behind a "More" chip, because the measured chip is 20px tall with 8px side padding and a 608px composer row fits 6 of them before the row wraps. Evidence: measured 20px chip and 608px composer, `docs/system/decisions.md`. Check: review `src/components/CommandLine.tsx`.
   - Don't: 9 chips in one unwrapped row.
   - Do: 6 chips and a "More" chip that opens the rest.
-- `rule/chip-touch-target`: When interactive chips sit in a row, keep at least 4px between them and between 2 rows of them, because under a coarse pointer each 20px pill keeps its drawn size and takes a 24px target from an invisible `::after` 2px past every edge, and closer pills overlap their targets. Evidence: measured 20px pill with a 24px `::after` target, `src/ui/ui.css:1176`. Check: review `src/ui/ui.css`.
+- `rule/chip-touch-target`: When interactive chips sit in a row, keep at least 4px between them and between 2 rows of them, because under a coarse pointer each 20px pill keeps its drawn size and takes a 24px target from an invisible `::after` 2px past every edge, and closer pills overlap their targets. Evidence: measured 20px pill with a 24px `::after` target, `src/ui/ui.css:1218`. Check: review `src/ui/ui.css`.
   - Don't: `.my-chips { display: flex; gap: 0 }`
   - Do: `.my-chips { display: flex; flex-wrap: wrap; gap: var(--gap-4) }`
 
@@ -112,7 +112,7 @@ Rests on the native element each form renders: a `<span>` for the static chip, a
 ## Tokens
 | Part | State | Token |
 |---|---|---|
-| The pill | all | `--control-h-chip`, `--radius-round`, `--gap-8`, `--font-chip`, `--gap-4` |
+| The pill | all | `--control-h-chip`, `--radius-round`, `--gap-8`, `--font-chip`, `--leading-ui`, `--gap-4` |
 | The text (`neutral`) | all | `--text-faint` |
 | The fill (`accent`) | all | `--accent-soft` |
 | The text (`accent`) | all | `--text-accent` |

@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { boundsOfPrim, parseDisplayList } from "./display";
+import { boundsOfPrim, displayListOf, parseDisplayList } from "./display";
 
 const CANNED = JSON.stringify({
   revision: 7,
@@ -64,6 +64,21 @@ describe("parseDisplayList", () => {
     if (list === null) return;
     expect(list.prims.length).toBe(1);
     expect(list.prims[0]?.start).toBe(1);
+  });
+
+  test("displayListOf reads a list that is part of a larger, already parsed reply", () => {
+    const reply: unknown = JSON.parse('{"point":[1,2],"paths":{"verts":[[0,0],[5,5]],"prims":[{"kind":"polyline","start":0,"len":2,"color":[255,255,255],"lw":0,"alpha":255,"handle":0}]}}');
+    const paths = displayListOf((reply as { paths: unknown }).paths);
+    expect(paths?.verts).toEqual([{ x: 0, y: 0 }, { x: 5, y: 5 }]);
+    expect(paths?.prims).toHaveLength(1);
+    expect(paths?.prims[0]?.alpha).toBe(1);
+    // It is the same reader `parseDisplayList` uses.
+    const raw = '{"revision":3,"bounds":[0,0,5,5],"verts":[[0,0],[5,5]],"prims":[{"kind":"polyline","start":0,"len":2}]}';
+    expect(displayListOf(JSON.parse(raw))).toEqual(parseDisplayList(raw));
+    // What is not an object is no list; an object with junk in it is an empty one.
+    for (const value of [null, undefined, 7, "verts", [], [[0, 0]]]) expect(displayListOf(value)).toBeNull();
+    expect(displayListOf({ verts: "none", prims: 7 })?.prims).toEqual([]);
+    expect(displayListOf({ verts: [[0, 0]], prims: [{ kind: "polyline", start: 0, len: 9 }] })?.prims).toEqual([]);
   });
 
   test("survives not-JSON, non-objects and junk vertices", () => {

@@ -147,6 +147,17 @@ export function App(props: AppProps): JSX.Element {
   const [layouts, setLayouts] = createSignal<readonly string[]>([]);
   const [space, setSpace] = createSignal("Model");
   const [cursor, setCursor] = createSignal<{ x: number; y: number } | null>(null);
+  /**
+   * The readout's last text. The status bar reads it more than once for one pointer position;
+   * the engine formats it once. A command may change the drawing's units, so a drawing state
+   * read anew formats again.
+   */
+  let coordRead: { x: number; y: number; of: DrawingState | null; text: string } | null = null;
+  const coordText = (x: number, y: number): string => {
+    const of = drawing();
+    if (coordRead === null || coordRead.x !== x || coordRead.y !== y || coordRead.of !== of) coordRead = { x, y, of, text: props.facade.formatPoint(x, y) };
+    return coordRead.text;
+  };
   // Chrome visibility, driven by the ui.* items in the Window menu.
   const [showMenubar, setShowMenubar] = createSignal(true);
   const [showToolbar, setShowToolbar] = createSignal(true);
@@ -713,14 +724,14 @@ export function App(props: AppProps): JSX.Element {
 
   /**
    * A click while a command wants a point or objects: the engine takes it as a click (`click`),
-   * snapped exactly as the marker on the canvas showed, with a deferred tangent or perpendicular
-   * intact. The history shows the point taken, written as typed input would be.
+   * resolved exactly as the canvas showed it (the snap marker, the grid dot, the ortho or polar
+   * ray), with a deferred tangent or perpendicular intact. The history shows the point the engine
+   * says it took, written as typed input would be.
    */
   const onPoint = (point: { x: number; y: number }, worldPerPixel: number): void => {
     setNotice(null);
     const before = engineView();
-    const taken = props.facade.snap(point)?.point ?? point;
-    const clicked = props.facade.click(point, 0, prompt(), formatPoint(taken, worldPerPixel) ?? undefined);
+    const clicked = props.facade.click(point, 0, prompt(), (taken) => formatPoint(taken, worldPerPixel) ?? undefined);
     setPrompt(clicked.state);
     refresh();
     followView(before);
@@ -874,7 +885,7 @@ export function App(props: AppProps): JSX.Element {
           entityCount={drawing()?.entityCount ?? 0}
           layerCount={drawing()?.layerCount ?? 0}
           cursor={cursor()}
-          formatPoint={(x, y) => props.facade.formatPoint(x, y)}
+          formatPoint={coordText}
           selectionCount={selection().length}
           onCommand={onStatusCommand}
         />

@@ -15,6 +15,14 @@
  * ring's ink is `--focus-ring`; on a control filled with an action colour or with the ink itself,
  * where an accent ring at the edge has nothing to show against, the ring is the fill's own label
  * ink drawn inside the edge. The last section gives a coarse pointer its 24px targets.
+ *
+ * Every component that draws text sets its line to `--leading-ui` (16px), whatever size of the
+ * scale the text is. A control of one line has a box height from the control tokens, never from
+ * the line: the box is at least 20px and centres the line. Text that may wrap (a checkbox's
+ * label, a text area, the hint) stacks on the same line. The exceptions are stated where they
+ * are: the bare text area takes its card's line, a key cap in the hint gives back its two
+ * hairlines, 16px type under a finger takes a line a quarter taller, and the section label, which
+ * has no box of its own, keeps the face's line (docs/system/typography.md, "Leading").
  */
 
 /* ---- Button: <button class="ui-button ui-button--{variant} ui-button--{size}"> ---- */
@@ -30,16 +38,18 @@
   border-radius: var(--radius-control);
   font-family: var(--font-family);
   font-size: var(--font-button);
-  line-height: 1;
+  line-height: var(--leading-ui);
   white-space: nowrap;
   cursor: pointer;
   transition: background-color var(--dur-fast) var(--ease-standard);
 }
 
+/* sm — the 24px box of a control row. The label keeps the button's size: a button is told from a
+   smaller one by its box, as a field is, and 11px is the scale's step for labels and counts, not
+   for something pressed. */
 .ui-button--sm {
   height: var(--control-h-input);
   padding: var(--gap-2) var(--gap-6);
-  font-size: var(--font-chip);
 }
 
 .ui-button:focus-visible {
@@ -298,6 +308,7 @@
   background: transparent;
   color: var(--ui-toggle-ink-off);
   font-family: var(--font-family);
+  line-height: var(--leading-ui);
   white-space: nowrap;
   cursor: pointer;
   /* A tap is a tap: no double-tap zoom on a control (and none of its wait). */
@@ -483,7 +494,7 @@
   color: var(--text-faint);
   font-family: var(--font-family);
   font-size: var(--font-chip);
-  line-height: 1;
+  line-height: var(--leading-ui);
   white-space: nowrap;
 }
 
@@ -533,6 +544,7 @@
   color: var(--text);
   font-family: var(--font-family);
   font-size: var(--font-body);
+  line-height: var(--leading-ui);
   text-overflow: ellipsis;
   transition:
     border-color var(--dur-fast) var(--ease-standard),
@@ -630,6 +642,7 @@
   color: var(--text);
   font-family: var(--font-family);
   font-size: var(--font-body);
+  line-height: var(--leading-ui);
   vertical-align: middle;
   transition:
     border-color var(--dur-fast) var(--ease-standard),
@@ -757,7 +770,7 @@
   color: var(--text);
   font-family: var(--font-family);
   font-size: var(--font-body);
-  line-height: var(--gap-16);
+  line-height: var(--leading-ui);
   cursor: pointer;
 }
 
@@ -868,8 +881,8 @@
 
 /* ---- TextArea: <textarea class="ui-textarea ui-textarea--{variant}"> ---- */
 
-/* Field's recipe over several lines. One line is as tall as a Field (a 16px line, the field's
-   padding less the hairline), so the two sit on one row; the height past that is the script's
+/* Field's recipe over several lines. One line is as tall as a Field (the layer's 16px line, the
+   field's padding less the hairline), so the two sit on one row; the height past that is the script's
    (`TextArea.tsx` measures the text), between the `rows` floor and the `maxRows` cap. */
 .ui-textarea {
   display: block;
@@ -883,7 +896,7 @@
   color: var(--text);
   font-family: var(--font-family);
   font-size: var(--font-body);
-  line-height: var(--gap-16);
+  line-height: var(--leading-ui);
   resize: none;
   transition: border-color var(--dur-fast) var(--ease-standard);
 }
@@ -924,7 +937,8 @@
   outline-style: none;
 }
 
-/* ---- Row: <button class="ui-row">, or <div role="option" class="ui-row ui-row--option"> in a listbox ---- */
+/* ---- Row: <button class="ui-row">, <div role="option" class="ui-row ui-row--option"> in a listbox,
+        or <button role="menuitem" class="ui-row ui-row--menuitem"> in a menu ---- */
 
 .ui-row {
   display: flex;
@@ -940,6 +954,7 @@
   color: var(--text-dim);
   font-family: var(--font-family);
   font-size: var(--font-body);
+  line-height: var(--leading-ui);
   text-align: left;
   cursor: pointer;
   transition: background-color var(--dur-fast) var(--ease-standard);
@@ -953,7 +968,7 @@
 /* An option paints no hover of its own: its listbox moves the one highlight (`aria-selected`),
    by key and by pointer, so two rows are never lit at once. */
 @media (hover: hover) {
-  .ui-row:hover:not(:disabled):not([aria-current="true"]):not(.ui-row--option) {
+  .ui-row:hover:not(:disabled):not([aria-disabled="true"]):not([aria-current="true"]):not(.ui-row--option) {
     background: var(--hover);
   }
 }
@@ -977,6 +992,29 @@
   background: transparent;
 }
 
+/* menuitem — the row of a menu (`role="menuitem"`), on the popover's surface. The control height
+   rather than the list row's, because a menu is walked row by row with the pointer; the full ink,
+   because every row is a command and none is the current one; a corner concentric with the
+   popover's (its radius less the menu's 4px inset and its hairline); and the label, the typed
+   name and the shortcut or chevron spaced by the caller's slots across a 16px gap. */
+.ui-row--menuitem {
+  gap: var(--gap-16);
+  height: var(--control-h-input);
+  padding: 0 var(--gap-8);
+  border-radius: calc(var(--radius-popover) - var(--gap-4) - var(--hairline));
+  color: var(--text);
+  /* A tap is a tap: no double-tap zoom on a control (and none of its wait). */
+  touch-action: manipulation;
+}
+
+/* The keyboard's row (the focus itself is on it) and the row whose submenu is open hold the same
+   fill as the pointer's. A row that is not available takes the focus ring and no fill, from the
+   pointer or the keys, at the disabled ink every blocked row takes (above). */
+.ui-row--menuitem:focus-visible:not([aria-disabled="true"]),
+.ui-row--menuitem[aria-expanded="true"] {
+  background: var(--hover);
+}
+
 /* ---- Tab: <button role="tab" class="ui-tab ui-tab--{size}">, in a
         <span class="ui-tab-closable ui-tab-closable--{size}"> beside its close key ---- */
 
@@ -992,6 +1030,7 @@
   background: transparent;
   color: var(--text-faint);
   font-family: var(--font-family);
+  line-height: var(--leading-ui);
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
@@ -1069,12 +1108,15 @@
   color: var(--text-faint);
   font-family: var(--font-family);
   font-size: var(--font-chip);
-  line-height: var(--gap-16);
+  line-height: var(--leading-ui);
   white-space: nowrap;
 }
 
 /* ---- SectionLabel: <h2 class="ui-section-label"> ---- */
 
+/* The one component that sets no line: a heading with no height and no padding, so its line is
+   its box, and the face's own line at 11px (15px in Segoe UI) is the box the pane headers and the
+   setup sheet were laid out around. The layer's 16px line would make it a pixel taller. */
 .ui-section-label {
   margin: 0;
   color: var(--text-faint);
@@ -1113,7 +1155,7 @@
   color: var(--text);
   font-family: var(--font-family);
   font-size: var(--font-label);
-  line-height: var(--gap-16);
+  line-height: var(--leading-ui);
   overflow-wrap: anywhere;
   opacity: 0;
   visibility: hidden;
@@ -1126,7 +1168,7 @@
    the box does not jump along a tool row. */
 .ui-tooltip .ui-kbd {
   margin-left: var(--gap-6);
-  line-height: calc(var(--gap-16) - var(--hairline) * 2);
+  line-height: calc(var(--leading-ui) - var(--hairline) * 2);
 }
 
 /* The second line: why a control is disabled, or what a clipped label's hint adds. */
@@ -1210,6 +1252,12 @@
     min-width: var(--control-h-input);
   }
 
+  /* A menu row under a finger takes the button's height: a row is still a row, with room to land
+     on it. */
+  .ui-row.ui-row--menuitem {
+    height: var(--control-h-button);
+  }
+
   /* The small select and the small field grow as the row does; their list row is the caller's to
      let grow with them. */
   .ui-select--sm,
@@ -1242,7 +1290,9 @@
     padding-block: 0;
   }
 
+  /* The 16px type keeps the ratio a text area's line has to the type it was drawn for, to the
+     whole pixel: a quarter over the layer's line, 20px. */
   .ui-textarea--field {
-    line-height: 1.25;
+    line-height: calc(var(--leading-ui) * 1.25);
   }
 }

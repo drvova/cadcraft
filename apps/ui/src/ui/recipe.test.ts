@@ -107,6 +107,8 @@ describe("the layer's contrast, from the tokens", () => {
     ["an inline select's value at rest, and a checkbox's label, on the surface", "text", []],
     ["an inline mixed select's placeholder at rest, and a bare text area's placeholder, on the surface", "text-faint", []],
     ["an option's label on the listbox's highlight", "text", ["fill-active"]],
+    ["a menu row's label on the fill of the pointer, the keyboard and an open submenu", "text", ["hover"]],
+    ["a menu row's typed name and shortcut on that fill", "text-faint", ["hover"]],
     ["an off text toggle's word at rest, on the surface", "text-faint", []],
     ["an off text toggle's word under the pointer, on the hover chip", "text", ["hover"]],
     ["an off text toggle's word while held, and an on word under the pointer, on the selected chip", "text", ["fill-active"]],
@@ -134,6 +136,7 @@ describe("the layer's contrast, from the tokens", () => {
     // left is the engine badge's dot in the status bar.
     ["the engine badge's live dot on the surface", "toggle-on", []],
     ["a selected icon button's glyph on its fill", "text", ["hover"]],
+    ["a menu row's glyph on the fill of the pointer and the keyboard", "icon", ["hover"]],
   ];
   for (const [name, theme] of Object.entries(themes)) {
     for (const [what, ink, fills] of text) {
@@ -189,6 +192,17 @@ describe("the layer's contrast, from the tokens", () => {
     if (light === undefined) throw new Error("no light theme");
     expect(lowest(light, "text-accent", ["fill-active", "hover"], ["panel"])).toBeGreaterThanOrEqual(3);
   });
+
+  // `--swatch-border` was #191919 in both themes until 2026-11-11: 1.05 against the dark panel,
+  // so a layer in a dark colour had a swatch with no edge. It is the quiet ink of each theme,
+  // drawn over whatever fill the layer's row has.
+  for (const [name, theme] of Object.entries(themes)) {
+    test(`${name}: a layer swatch's edge holds 3:1 on the sidebar, on a hovered row, on the current row and on the current row hovered`, () => {
+      for (const fills of [[], ["hover"], ["fill-active"], ["fill-active", "hover"]]) {
+        expect(lowest(theme, "swatch-border", fills, ["panel"])).toBeGreaterThanOrEqual(3);
+      }
+    });
+  }
 
   test("the canvas keeps one surface and one ring in both themes", () => {
     const light = block(':root[data-theme="light"]');
@@ -282,10 +296,10 @@ describe("the layer's recipe, from the stylesheet", () => {
 
   test("a text area's one line is a field's height, and only the bare one drops its box and its ring", () => {
     const area = rule(uiCss, ".ui-textarea");
-    expect(area).toContain("line-height: var(--gap-16)");
+    expect(area).toContain("line-height: var(--leading-ui)");
     expect(area).toContain("padding: calc(var(--field-pad-y) - var(--hairline)) var(--field-pad-x)");
     expect(area).toContain("resize: none");
-    expect(dark["gap-16"]).toBe("16px");
+    expect(dark["leading-ui"]).toBe("16px");
     expect(dark["field-pad-y"]).toBe("4px");
     const bare = rule(uiCss, ".ui-textarea--bare");
     expect(bare).toContain("border: none");
@@ -296,7 +310,7 @@ describe("the layer's recipe, from the stylesheet", () => {
   });
 
   test("an option paints no hover of its own, and is lit and blocked by its ARIA state", () => {
-    expect(uiCss).toContain('.ui-row:hover:not(:disabled):not([aria-current="true"]):not(.ui-row--option)');
+    expect(uiCss).toContain('.ui-row:hover:not(:disabled):not([aria-disabled="true"]):not([aria-current="true"]):not(.ui-row--option)');
     expect(rule(uiCss, '.ui-row[aria-current="true"], .ui-row[aria-selected="true"]')).toContain("background: var(--fill-active)");
     expect(rule(uiCss, '.ui-row:disabled, .ui-row[aria-disabled="true"]')).toContain("color: var(--text-disabled)");
   });
@@ -305,8 +319,62 @@ describe("the layer's recipe, from the stylesheet", () => {
     expect(rule(uiCss, '.ui-row:disabled[aria-current="true"]')).toContain("background: transparent");
     // After the selected rule, or the fill would win; and nothing takes the fill from a blocked option.
     expect(uiCss.indexOf('.ui-row:disabled[aria-current="true"]')).toBeGreaterThan(uiCss.indexOf('.ui-row[aria-selected="true"]'));
-    const row = [...uiCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => (m[1] ?? "").includes(".ui-row") && (m[1] ?? "").includes("aria-disabled"));
+    // A rule that leaves a blocked row out (`:not([aria-disabled="true"])`) is not a rule for one.
+    const blocked = (head: string): boolean => head.replaceAll(':not([aria-disabled="true"])', "").includes("aria-disabled");
+    const row = [...uiCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => (m[1] ?? "").includes(".ui-row") && blocked(m[1] ?? ""));
+    expect(row.length).toBeGreaterThan(0);
     for (const m of row) expect(m[2]).not.toContain("background");
+  });
+
+  // The menus' rows were the shell's own `.menu-row` buttons until 2026-11-11; the recipe below is
+  // that one, moved into the layer value for value, so the menus did not change when they adopted it.
+  test("a menu row is the control height at the full ink, cornered to the popover, and lit by the pointer, the keyboard and its open submenu alike", () => {
+    const item = rule(uiCss, ".ui-row--menuitem");
+    expect(item).toContain("height: var(--control-h-input)");
+    expect(item).toContain("padding: 0 var(--gap-8)");
+    expect(item).toContain("gap: var(--gap-16)");
+    expect(item).toContain("color: var(--text)");
+    expect(item).toContain("border-radius: calc(var(--radius-popover) - var(--gap-4) - var(--hairline))");
+    expect(dark["radius-popover"]).toBe("14px");
+    expect(rule(uiCss, '.ui-row--menuitem:focus-visible:not([aria-disabled="true"]), .ui-row--menuitem[aria-expanded="true"]')).toContain("background: var(--hover)");
+    // After the base row, or the row's own height, inset, corner and ink would win at the same weight.
+    expect(uiCss.indexOf(".ui-row--menuitem {")).toBeGreaterThan(uiCss.indexOf(".ui-row {"));
+    // A blocked menu row is never natively disabled, so the pointer's fill must leave it out by its ARIA state.
+    expect(uiCss).not.toMatch(/\.ui-row--menuitem[^{}]*:disabled/);
+  });
+
+  // `sm` drew its label at `--font-chip` (11px) until 2026-11-11. The scale keeps 11px for section
+  // labels, counts and key caps; a button is pressed and read, and "Change provider" at 11px sat
+  // beside 12px and 13px rows as the smallest text in the sheet. Small is the box, as on Field.
+  test("a small button is a smaller box, not smaller type", () => {
+    expect(rule(uiCss, ".ui-button")).toContain("font-size: var(--font-button)");
+    const sm = rule(uiCss, ".ui-button--sm");
+    expect(sm).toContain("height: var(--control-h-input)");
+    expect(sm).not.toContain("font-size");
+    expect(dark["font-button"]).toBe("var(--font-body)");
+  });
+
+  // Until 2026-11-11 the layer's lines were `1` (Button, Chip), `var(--gap-16)` (Checkbox,
+  // TextArea, Kbd, Tooltip) and the face's own `normal` (Toggle, Field, Select, Row, Tab,
+  // SectionLabel): 17px for 13px type in Segoe UI and another height in another face.
+  test("every component that draws text sets the layer's one line, and nothing sets another", () => {
+    for (const component of [".ui-button", ".ui-toggle", ".ui-chip", ".ui-field", ".ui-select", ".ui-checkbox", ".ui-textarea", ".ui-row", ".ui-tab", ".ui-kbd", ".ui-tooltip"]) {
+      expect(`${component}: ${rule(uiCss, component).includes("line-height: var(--leading-ui)")}`).toBe(`${component}: true`);
+    }
+    const lines = [...uiCss.matchAll(/([^{}]+)\{[^{}]*?line-height:\s*([^;]+);/g)].map((m) => `${(m[1] ?? "").trim()}: ${m[2]}`);
+    const others = lines.filter((line) => !line.endsWith(": var(--leading-ui)"));
+    expect(others).toEqual([
+      // The editor inside a card takes the card's line.
+      ".ui-textarea--bare: inherit",
+      // A key cap in the hint gives its two hairlines back, so the hint is one line tall with or without it.
+      ".ui-tooltip .ui-kbd: calc(var(--leading-ui) - var(--hairline) * 2)",
+      // 16px type under a finger: the line a quarter taller, 20px.
+      ".ui-textarea--field: calc(var(--leading-ui) * 1.25)",
+    ]);
+    // The one component with no line: it has no box of its own, and the line would be its height.
+    expect(rule(uiCss, ".ui-section-label")).not.toContain("line-height");
+    // The glyph-only control draws no text.
+    expect(rule(uiCss, ".ui-icon-button")).not.toContain("line-height");
   });
 
   test("an inline field is text until it is touched, and focus, a refused value and disabled win over its hover", () => {
@@ -446,6 +514,9 @@ describe("the layer's recipe, from the stylesheet", () => {
       "inset: calc((var(--control-h-chip) - var(--control-h-input)) / 2)",
     );
     expect(rule(coarse, ".ui-row, .ui-tab--sm")).toContain("height: var(--control-h-input)");
+    // A menu row grows to the button's height, by a selector that outweighs the row's own growth.
+    expect(rule(coarse, ".ui-row.ui-row--menuitem")).toContain("height: var(--control-h-button)");
+    expect(dark["control-h-button"]).toBe("28px");
     expect(rule(coarse, ".ui-toggle--glyph.ui-toggle--sm::after")).toContain(
       "inset: calc((var(--control-h-row) - var(--control-h-input)) / 2) calc((var(--control-h-chip) - var(--control-h-input)) / 2)",
     );

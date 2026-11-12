@@ -12,26 +12,28 @@ Two families (the system UI stack and the mono stack) and one scale of four size
 | `--font-family` | `system-ui, "Segoe UI", -apple-system, sans-serif` | The interface family: labels, values, prose. |
 | `--font-family-mono` | `"Hack", ui-monospace, "Cascadia Mono", Consolas, monospace` | The monospace family: coordinates, command input, code in messages. |
 | `--font-button` | `var(--font-body)` (13px) | A button's label (`src/ui/ui.css`). Measured 14px in Cursor; the body size since 2026-11-11. |
-| `--font-chip` | `11px` | A chip, a section label, a count, a key cap, the status bar's toggles, the small button. |
+| `--font-chip` | `11px` | A chip, a section label, a count, a key cap, the status bar's toggles. Not the small button: since 2026-11-11 `Button size="sm"` keeps `--font-button`. |
 | `--font-label` | `12px` | Secondary text: a field's label above its input, a menu title, the command centre, the status bar's facts, a hint, the compact tab. |
 | `--font-small` | `var(--font-label)` (12px) | An alias of `--font-label`, kept for the sheets that name it. Measured 11.5px in Cursor; folded on 2026-11-11. New rules take `--font-label`. |
 | `--font-body` | `13px` | Body copy: field values, list rows, the assistant's messages. |
 | `--font-mono` | `12px` | The command line's input, history and prompt mark, coordinates. |
 | `--composer-font` | `var(--font-body)` (13px) | The assistant's composer and transcript. Measured 15px in Cursor; the body size since 2026-11-11. |
 | `--composer-leading` | `20px` | Their line. Measured 24px in Cursor, for 15px type. |
+| `--leading-ui` | `16px` | The line of every component in `src/ui`, whatever the size of its text ("Leading" below). |
 
 Composite styles (family, size, line height, weight, tracking), as the app sets them:
 
 | Style | Family | Size | Line height | Weight | Tracking |
 | --- | --- | --- | --- | --- | --- |
-| Button label | `--font-family` | `--font-button` | 1 | 400 | normal |
-| Chip | `--font-family` | `--font-chip` | 1 | 400 | normal |
-| Section label | `--font-family` | `--font-chip` | normal | 700 | normal, uppercased |
-| Field label | `--font-family` | `--font-label` | normal | 400 | normal |
-| Body / row | `--font-family` | `--font-body` | normal | 400 | normal |
+| Button label (`md` and `sm`) | `--font-family` | `--font-button` | `--leading-ui` | 400 | normal |
+| Chip | `--font-family` | `--font-chip` | `--leading-ui` | 400 | normal |
+| Section label | `--font-family` | `--font-chip` | the face's own (15px in Segoe UI) | 700 | normal, uppercased |
+| Field label (the shell's own) | `--font-family` | `--font-label` | normal | 400 | normal |
+| Row, tab, field and select value | `--font-family` | `--font-body` | `--leading-ui` | 400 | normal |
+| Hint, key cap | `--font-family` | `--font-label`, `--font-chip` | `--leading-ui` | 400 | normal |
 | Assistant message, composer | `--font-family` | `--composer-font` | `--composer-leading` | 400 | normal |
 | Status bar fact | `--font-family` | `--font-label` | the bar's line (21px) | 400 | normal |
-| Status bar toggle | `--font-family` | `--font-chip` | the bar's line | 400 | `0.04em`, uppercased |
+| Status bar toggle | `--font-family` | `--font-chip` | `--leading-ui`, in a box as tall as the bar's line | 400 | `0.04em`, uppercased |
 | List row (layer, property) | `--font-family` | `--font-body` | `--control-h-row` | 400 | normal |
 | Command input | `--font-family-mono` | `--font-mono` | `1.45` | 400 | normal |
 
@@ -52,13 +54,44 @@ Composite styles (family, size, line height, weight, tracking), as the app sets 
 - The smallest size is `--font-chip` at `11px`; nothing in the chrome goes below it, because below 11px the stroke font's glyphs start to blur at 100%.
 - Sizes do not scale with the viewport; the app's chrome keeps its density and the canvas handles scale, because a zoomed chrome wastes the drawing's space.
 
+## Leading
+
+A line height is a token, or it is a box height by a rule written here. Until 2026-11-11 the layer's lines were `1`, `var(--gap-16)` and the face's own `normal`, which is 17px for 13px type in Segoe UI and another height in another face, so a label sat where each platform's font put it.
+
+- In the layer (`src/ui/ui.css`) every component that draws text sets `line-height: var(--leading-ui)`, 16px, for all three sizes of the scale, because one line under 11, 12 and 13px type keeps a key cap, a shortcut and a label on one centre in the same row.
+- A control of one line takes its height from a control token (`--control-h-*`), never from its line, because the box is what the grid of a bar or a list is built from; the box is at least 20px and centres the 16px line. Changing the line cannot change a box.
+- Text that wraps (a checkbox's label, a text area, the hint) stacks on the same 16px line, because a wrapped label beside a one-line control must start on that control's line.
+- Prose that is read, not scanned, takes `--composer-leading` (20px): the assistant's composer and transcript.
+- The exceptions, each stated in `src/ui/ui.css` where it is and held by `src/ui/recipe.test.ts`: the `bare` text area inherits its card's line; a key cap inside the hint is `calc(var(--leading-ui) - var(--hairline) * 2)`, so the hint is one line tall with or without a shortcut; a text area under a coarse pointer is `calc(var(--leading-ui) * 1.25)` (20px) for its 16px type; and `SectionLabel` sets no line.
+- `SectionLabel` is the one component whose line is not the token: it has no height and no padding, so its line is its box, and the 16px line would make every section heading 1px taller. It stays the face's own (15px in Segoe UI) until its box is given a height of its own.
+
+What each component's line was and is (boxes measured in the browser before and after: none changed; the text of a tab, a text toggle and a listbox option moved by half a pixel, and a capture of the whole shell before and after differed in no pixel of text):
+
+| Component | Was | Is | Box, unchanged |
+| --- | --- | --- | --- |
+| Button | `1` (13px; 11px on `sm`) | `--leading-ui` | 28px, 24px (`sm`) |
+| IconButton | none: it draws no text | none | 24px, 20px (`sm`) |
+| Toggle | `normal` (15px at 11px) | `--leading-ui` | 22px cell; the bar's line for a word |
+| Chip | `1` (11px) | `--leading-ui` | 20px |
+| Field | `normal` (17px at 13px) | `--leading-ui` | 24px, 20px (`sm`) |
+| Select | `normal` (17px) | `--leading-ui` | 24px, 20px (`sm`) |
+| Checkbox | `var(--gap-16)` (16px) | `--leading-ui` | the label's lines |
+| TextArea | `var(--gap-16)`; `1.25` under a coarse pointer; `inherit` when `bare` | `--leading-ui`; `calc(var(--leading-ui) * 1.25)`; `inherit` | `rows` lines and the padding |
+| Row | `normal` (17px) | `--leading-ui` | 22px; 24px as a menu item |
+| Tab | `normal` (17px at 13px, 16px at 12px) | `--leading-ui` | the 35px strip (`md`), 22px (`sm`) |
+| Kbd | `var(--gap-16)`; `calc(var(--gap-16) - 2 hairlines)` in the hint | `--leading-ui`; `calc(var(--leading-ui) - 2 hairlines)` | 18px; 16px in the hint |
+| SectionLabel | `normal` (15px at 11px) | `normal`, by the rule above | 15px |
+| Tooltip | `var(--gap-16)` | `--leading-ui` | its lines and the padding |
+
+Outside the layer the shell still sets lines of its own, and they are not one system yet: the status bar's line (its box, 21px), a layer's name (`--control-h-row`, its box), the menu's typed name (`--menu-row-h`, its box), the command history (`1.45`), the assistant's and the palette's `1.5` and `1.4` blocks (19.5px and 18px at 13px), and `var(--gap-16)` used as a 16px line in `src/styles.css` and `src/assistant.css`. Those sheets take `--leading-ui` where they mean the layer's line and `--composer-leading` where they mean prose.
+
 ## Accessibility
 
 - The smallest type in use is `11px` (`--font-chip`), measured from `src/tokens.css`; every other role is larger, up to `13px` (`--font-body`). Under a coarse pointer a field, a text area and the palette's input are at least 16px, so a phone does not zoom into them.
 - Body copy sits at `13px`; the assistant's messages and composer are on a `20px` line (1.54), the command history on `1.45`.
-- Zoom to 200% without clipping: not measured this run. The fixed-width chrome (a 260px rail) is the risk this review should cover first.
+- Zoom to 200% without clipping: not measured this run. The fixed-width chrome (the 252px sidebar) is the risk this review should cover first.
 
 ## Not tokens
 
-- Font weight and `line-height` are set per component in `src/ui/ui.css` and `src/styles.css`, because they only matter for the roles named in the composite table above; a weight token would be a second scale for one value.
+- Font weight is set per component in `src/ui/ui.css` and `src/styles.css`, because it only matters for the roles named in the composite table above; a weight token would be a second scale for one value. The line is a token in the layer ("Leading" above) and still set per rule in the shell's own sheets.
 - The mono family names `Hack` first, but no font file ships with the app: the stack falls through to the platform's mono when it is absent, so nothing is embedded and nothing is licensed.

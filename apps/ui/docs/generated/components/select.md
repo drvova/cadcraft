@@ -408,7 +408,7 @@ Rests on the native `<select>` element: role, value, the list, type-ahead, the p
 ## Tokens
 | Part | State | Token |
 |---|---|---|
-| The box | md | `--control-h-input`, `--field-pad-x`, `--radius-control`, `--font-body` |
+| The box | md | `--control-h-input`, `--field-pad-x`, `--radius-control`, `--font-body`, `--leading-ui` |
 | The box | sm | `--control-h-chip`, `--gap-4`; `--control-h-input` under a coarse pointer |
 | The fill | rest (field), hover and focus (inline), invalid | `--control` |
 | The stroke | rest (field), hover (inline) | `--border-soft`, `--hairline` |

@@ -45,6 +45,11 @@ const REQUIRED: readonly (readonly string[])[] = [
  * contract above, so it is kept rather than traded for the mock: each call missing from it
  * answers the inert reply `STALE` holds, and a `click` types its point at the command line,
  * which is what a click did before `click` existed (no object snap).
+ *
+ * `pointer` came later again. A package without it resolves the pointer the way the canvas did
+ * before: the cursor told, the object snap asked, the rubber band drawn at the snapped point
+ * (`stalePointer`), so object snap still works and ortho, polar, grid snap and tracking, which
+ * only `pointer` knows, do nothing rather than something wrong.
  */
 const POINTER: readonly (readonly string[])[] = [
   ["set_viewport", "setViewport"],
@@ -53,6 +58,7 @@ const POINTER: readonly (readonly string[])[] = [
   ["pick"],
   ["snap"],
   ["click"],
+  ["pointer"],
 ];
 
 const STALE_REFUSAL = JSON.stringify({ ok: false, error: "the wasm package is older than this interface: run `bun run build:wasm`" });
@@ -124,6 +130,40 @@ export function wrapWasmFacade(instance: WasmModule): RawFacade | null {
   const text = (key: string, args: unknown[]): string => String(call(key, args));
   /** A pointer call: the wasm method when the package has it, else its inert reply. */
   const pointer = (key: string, args: unknown[]): string => (resolved.has(key) ? text(key, args) : (STALE[key] ?? STALE_REFUSAL));
+  /** A reply parsed for one of its fields; anything unreadable is an empty object. */
+  const fields = (reply: string): Record<string, unknown> => {
+    let value: unknown;
+    try {
+      value = JSON.parse(reply);
+    } catch {
+      value = null;
+    }
+    return isRecord(value) ? value : {};
+  };
+  /**
+   * `pointer` on a package without it, from the calls it does have: the object snap alone bends
+   * the point, and the reply has every field the real one has, so its reader needs no second path.
+   */
+  const stalePointer = (x: number, y: number, aperture: number): string => {
+    pointer("set_cursor", [x, y]);
+    const snap = fields(pointer("snap", [x, y, aperture]))["snap"];
+    const at = isRecord(snap) && Array.isArray(snap["point"]) && typeof snap["point"][0] === "number" && typeof snap["point"][1] === "number" ? [snap["point"][0], snap["point"][1]] : null;
+    const taken = at ?? [x, y];
+    const preview = fields(pointer("preview", taken));
+    return JSON.stringify({
+      point: Number.isFinite(taken[0]) && Number.isFinite(taken[1]) ? taken : null,
+      constraint: at === null ? "none" : "osnap",
+      snap: at === null ? null : snap,
+      from: null,
+      distance: null,
+      angle: null,
+      label: "",
+      paths: { verts: [], prims: [] },
+      acquired: [],
+      wait: false,
+      preview: { verts: preview["verts"] ?? [], prims: preview["prims"] ?? [], drag: preview["drag"] ?? null },
+    });
+  };
   /** `click` on a package without it: the point typed at the command line, in full precision. */
   const typedClick = (x: number, y: number): string => {
     const typed = formatPoint({ x, y }, Number.NaN);
@@ -152,6 +192,7 @@ export function wrapWasmFacade(instance: WasmModule): RawFacade | null {
     preview: (x, y) => pointer("preview", [x, y]),
     pick: (x, y, aperture) => pointer("pick", [x, y, aperture]),
     snap: (x, y, aperture) => pointer("snap", [x, y, aperture]),
+    pointer: (x, y, aperture, nowMs, modifiers) => (resolved.has("pointer") ? text("pointer", [x, y, aperture, nowMs, modifiers]) : stalePointer(x, y, aperture)),
     click: (x, y, aperture) => (resolved.has("click") ? text("click", [x, y, aperture]) : typedClick(x, y)),
     open_bytes: (name, bytes) => text("open_bytes", [name, bytes]),
     load_sample: () => text("load_sample", []),

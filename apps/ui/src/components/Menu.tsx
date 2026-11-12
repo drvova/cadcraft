@@ -1,5 +1,6 @@
 /**
- * The menu: a tree of items drawn as a `role="menu"` of `menuitem` rows, with submenus. It owns
+ * The menu: a tree of items drawn as a `role="menu"` of `menuitem` rows (the layer's `Row` in its
+ * `menuitem` form, found here by its role), with submenus. It owns
  * what every menu in the shell shares: the rows, the chain of open submenus, the keyboard's walk,
  * the pointer's hover and click, the placement that keeps an opened menu inside the window, and
  * the ways it asks to be closed. What opened it owns the rest: whether it is open, and where the
@@ -18,6 +19,11 @@
  * window ends. A `stacked` menu has no room beside its rows: it is one column that scrolls, and a
  * submenu opens in place, as an indented group under its row, on a click only.
  *
+ * A row may be the first of a group (`group`): a separator is drawn above it. A separator is not a
+ * row: it takes no focus, and the keys, the typeahead and the rows' count pass it by. A row may
+ * carry the name typed at the command line that runs it (`name`), drawn quiet before the
+ * shortcut and read as the row's description, not as part of its name.
+ *
  * `MenuKey` is the icon key that opens a menu of its own: the Main menu key and the tool strip's
  * overflow key.
  */
@@ -25,8 +31,9 @@
 import { createSignal, createUniqueId, Index, onCleanup, Show, type Accessor, type JSX } from "solid-js";
 import { isMacPlatform, shortcutLabel } from "../commands";
 import { ToolIcon } from "../icons";
-import { clickPath, flips, hoverPath, isOnPath, menuBounds, menuShift, rowKeyAction, samePath, stackedBlock, walkIndex, type MenuItem, type MenuPath } from "../menu";
+import { clickPath, flips, hoverPath, isOnPath, menuBounds, menuColumns, menuShift, ROW_TRACKS, rowKeyAction, samePath, stackedBlock, walkIndex, type MenuItem, type MenuPath } from "../menu";
 import { IconButton } from "../ui/IconButton";
+import { Row } from "../ui/Row";
 
 /**
  * Keeps an opened menu inside the window. A submenu with no room on the right of its row (its
@@ -34,10 +41,39 @@ import { IconButton } from "../ui/IconButton";
  * left of it (`is-flipped`, chrome.css). Whatever still overhangs, such as a submenu low in a
  * short window, is pulled back by the overhang, never past the top-left corner. The margin kept
  * from the window's edge is the menu's own inset. The status bar is an edge too: a menu ends above
- * it (`--menu-floor`, which chrome.css takes out of a menu's height). A submenu opened in place
+ * it (`--menu-floor`, which chrome.css takes out of a menu's height), and a menu taller than that
+ * stands in columns (`layColumns`). A submenu opened in place
  * (a stacked menu) is in its parent's flow and is only scrolled into view, with the row that
  * opened it: a group longer than the box starts at the box's top, under its row.
  */
+/**
+ * Stands a menu's rows in columns (`menuColumns`): marks the rows that start a column
+ * (`data-column-start`, chrome.css) and hides the separators that would lead or end one. The box
+ * holds as many tracks as its greatest height has room for; a menu that is not a grid (one that
+ * scrolls, a group opened in place) is one column with every separator drawn.
+ */
+function layColumns(drop: HTMLElement, style: CSSStyleDeclaration): void {
+  const items = Array.from(drop.querySelectorAll<HTMLElement>(":scope > .menu-item"));
+  const separatorOf = (item: HTMLElement): HTMLElement | null => {
+    const before = item.previousElementSibling;
+    return before instanceof HTMLElement && before.classList.contains("menu-separator") ? before : null;
+  };
+  const px = (value: string): number => Number.parseFloat(value) || 0;
+  const track = (items[0]?.offsetHeight ?? 0) / ROW_TRACKS;
+  const frame = style.boxSizing === "border-box" ? px(style.paddingTop) + px(style.paddingBottom) + px(style.borderTopWidth) + px(style.borderBottomWidth) : 0;
+  // Half a pixel of slack: the greatest height is a fraction where the window's is.
+  const capacity = style.display === "grid" && track > 0 ? (Number.parseFloat(style.maxHeight) - frame + 0.5) / track : Number.POSITIVE_INFINITY;
+  const plan = menuColumns(
+    items.map((item) => separatorOf(item) !== null),
+    capacity,
+  );
+  items.forEach((item, row) => {
+    item.toggleAttribute("data-column-start", plan.starts[row] === true);
+    const separator = separatorOf(item);
+    if (separator !== null) separator.hidden = plan.separators[row] !== true;
+  });
+}
+
 function keepOnScreen(drop: HTMLElement): void {
   if (!drop.isConnected) return;
   const style = getComputedStyle(drop);
@@ -51,6 +87,7 @@ function keepOnScreen(drop: HTMLElement): void {
   const margin = Number.parseFloat(style.paddingLeft) || 0;
   const floor = document.querySelector(".statusbar")?.getBoundingClientRect().top ?? window.innerHeight;
   drop.style.setProperty("--menu-floor", `${Math.max(0, window.innerHeight - floor)}px`);
+  layColumns(drop, style);
   const bounds = menuBounds(window.innerWidth, floor, margin);
   if (drop.classList.contains("menu-drop-sub") && flips(drop.getBoundingClientRect(), bounds)) drop.classList.add("is-flipped");
   const shift = menuShift(drop.getBoundingClientRect(), bounds);
@@ -74,8 +111,14 @@ export const keyed = (event: MouseEvent): boolean => event.detail === 0;
 /** The submenu a row opens: the `role="menu"` rendered beside it. */
 const menuOf = (row: HTMLElement): HTMLElement | null => row.parentElement?.querySelector<HTMLElement>(':scope > [role="menu"]') ?? null;
 
+/** A row among the children of its `.menu-item`: the layer's `Row`, found by the role it carries. */
+const ROW = ':scope > [role="menuitem"]';
+
 /** A menu's own rows in reading order (down the first column, then the next), not its submenus'. */
-const rowsOf = (menu: HTMLElement): HTMLElement[] => Array.from(menu.querySelectorAll<HTMLElement>(":scope > .menu-item > .menu-row"));
+const rowsOf = (menu: HTMLElement): HTMLElement[] => Array.from(menu.querySelectorAll<HTMLElement>(':scope > .menu-item > [role="menuitem"]'));
+
+/** The row an event of a row's own was heard on. */
+const rowOf = (event: Event): HTMLElement | null => (event.currentTarget instanceof HTMLElement ? event.currentTarget : null);
 
 /** Puts the focus on the first (or last) row of `menu`; says whether there was a row to take it. */
 function enterRows(menu: HTMLElement | null | undefined, last: boolean): boolean {
@@ -233,7 +276,7 @@ export function Menu(props: MenuProps): JSX.Element {
       props.onDismiss("escape");
     } else if (action === "back") {
       // The parent row is a sibling of this submenu; it takes the focus before the submenu goes.
-      menu.parentElement?.querySelector<HTMLElement>(":scope > .menu-row")?.focus();
+      menu.parentElement?.querySelector<HTMLElement>(ROW)?.focus();
       setChain(path.slice(0, -1));
     } else if (action === "into") {
       setChain([...path, item.label]);
@@ -253,47 +296,67 @@ export function Menu(props: MenuProps): JSX.Element {
   const renderItem = (item: Accessor<MenuItem>, at: number, path: MenuPath, siblings: Accessor<readonly MenuItem[]>): JSX.Element => {
     const submenu = (): boolean => item().id === null;
     const unavailable = (): boolean => !submenu() && !item().enabled;
+    const name = (): string => item().name ?? "";
+    const nameId = createUniqueId();
     return (
-      <div class={submenu() ? "menu-item menu-sub" : "menu-item menu-leaf"} role="none">
-        <button
-          class={unavailable() ? "menu-row is-disabled" : "menu-row"}
-          type="button"
-          role="menuitem"
-          tabIndex={-1}
-          aria-disabled={unavailable() ? "true" : undefined}
-          aria-haspopup={submenu() ? "menu" : undefined}
-          aria-expanded={submenu() ? isOpen(path, item().label) : undefined}
-          onPointerEnter={(event) => {
-            if (hovers(event)) hover(item(), path);
-          }}
-          onKeyDown={(event) => onRowKey(event, event.currentTarget, item(), path, siblings(), at)}
-          onClick={(event) => clickRow(event, event.currentTarget, item(), path)}
-        >
-          <Show when={item().icon} keyed>
-            {(icon) => (
-              <span class="menu-icon" aria-hidden="true">
-                <ToolIcon id={icon} />
+      <>
+        <Show when={at > 0 && item().group === true}>
+          <div class="menu-separator" role="separator" />
+        </Show>
+        <div class={submenu() ? "menu-item menu-sub" : "menu-item menu-leaf"} role="none">
+          <Row
+            menuitem
+            disabled={unavailable()}
+            popup={submenu() ? "menu" : undefined}
+            expanded={submenu() ? isOpen(path, item().label) : undefined}
+            describedBy={name() === "" ? undefined : nameId}
+            onPointerEnter={(event) => {
+              if (hovers(event)) hover(item(), path);
+            }}
+            onKeyDown={(event) => {
+              const row = rowOf(event);
+              if (row !== null) onRowKey(event, row, item(), path, siblings(), at);
+            }}
+            onClick={(event) => {
+              const row = rowOf(event);
+              if (row !== null) clickRow(event, row, item(), path);
+            }}
+          >
+            <Show when={item().icon} keyed>
+              {(icon) => (
+                <span class="menu-icon" aria-hidden="true">
+                  <ToolIcon id={icon} />
+                </span>
+              )}
+            </Show>
+            <span class="menu-label">{item().label}</span>
+            {/* The typed name is drawn for the eye and said as the row's description ("Type PL"),
+                so the row's name stays its label. In a row too narrow for all of it, it is the
+                part that goes, whole (chrome.css: a one-line box around the name). */}
+            <Show when={name() !== ""}>
+              <span class="menu-name" aria-hidden="true">
+                <span>{name()}</span>
               </span>
+              <span id={nameId} hidden>{`Type ${name()}`}</span>
+            </Show>
+            <Show when={item().shortcut !== ""}>
+              <span class="menu-shortcut">{shortcutLabel(item().shortcut, isMacPlatform())}</span>
+            </Show>
+            <Show when={submenu()}>
+              <span class="menu-arrow" aria-hidden="true">
+                <ToolIcon id="chevron-right" />
+              </span>
+            </Show>
+          </Row>
+          <Show when={submenu() && isOpen(path, item().label) ? item().label : false} keyed>
+            {(label) => (
+              <div class="menu-drop menu-drop-sub" role="menu" aria-label={label} ref={placeMenu}>
+                {renderList(() => item().children, [...path, label])}
+              </div>
             )}
           </Show>
-          <span class="menu-label">{item().label}</span>
-          <Show when={item().shortcut !== ""}>
-            <span class="menu-shortcut">{shortcutLabel(item().shortcut, isMacPlatform())}</span>
-          </Show>
-          <Show when={submenu()}>
-            <span class="menu-arrow" aria-hidden="true">
-              <ToolIcon id="chevron-right" />
-            </span>
-          </Show>
-        </button>
-        <Show when={submenu() && isOpen(path, item().label) ? item().label : false} keyed>
-          {(label) => (
-            <div class="menu-drop menu-drop-sub" role="menu" aria-label={label} ref={placeMenu}>
-              {renderList(() => item().children, [...path, label])}
-            </div>
-          )}
-        </Show>
-      </div>
+        </div>
+      </>
     );
   };
 

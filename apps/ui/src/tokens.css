@@ -1,8 +1,10 @@
 /*
  * Design tokens, measured from the running Cursor 3.27.22 desktop app (2026-10-28;
- * .design-system/research/cursor-recipes-2026-10-28.md). The earlier hand-copy from
- * crates/ui-egui/src/theme.rs is superseded — theme.rs stays the frozen egui reference until the
- * migration's phase 5 retires it. The mapping is documented in apps/ui/README.md.
+ * .design-system/research/cursor-recipes-2026-10-28.md). The names in brackets after each group
+ * are the constants of the egui interface's theme these tokens were first copied from; that
+ * interface and its theme file are gone, and this file is the one source. Each token's role and
+ * the reason for its value are in docs/system/ (colors, typography, spacing, radius, motion,
+ * icons) and docs/system/decisions.md.
  *
  * Colours are one base colour (#F0F0F0 dark, #141414 light) layered at an alpha ladder over a
  * few near-black / near-white surfaces; colour is a signal, never decoration. No colour may be
@@ -77,7 +79,12 @@
   --icon-layer-off: #8a8a5a;
   --icon-layer-frozen: #9fd4ff;
   --icon-locked: #e6b43c;
-  --swatch-border: #191919;
+  /* The edge of a layer's colour swatch. It is what tells the swatch from the row under it when
+     the layer's colour is near the surface's (a dark colour on the dark panel, white on the light
+     one), so it is the quiet ink, over whatever fill the row has: 6.4 on the panel, 5.8 hovered,
+     5.1 selected (dark); 5.9, 5.5, 5.2 (light). As #191919 in both themes it measured 1.05, 1.16
+     and 1.39 on the dark ones. */
+  --swatch-border: var(--text-faint);
 
   /* Elevation: the shadow under floating surfaces. The popover's measured ladder is the
      three-layer one from Cursor §8; the tooltip's is its own single layer. */
@@ -140,7 +147,9 @@
      transcript take the shell's size on a 20px line (docs/system/decisions.md, "One type scale"). */
   --composer-font: var(--font-body);
   --composer-leading: 20px;
-  --composer-min-height: 64px;
+  /* The editor's least height is not a token: it is the text area's `rows` on this line (two
+     lines, 40px). `--composer-min-height` (64px, two of Cursor's 24px lines and their padding)
+     had no reader left and is removed (docs/system/decisions.md, "Removed tokens"). */
   --composer-toolbar-height: 40px;
 
   /* ---- Type (FONT_BUTTON, FONT_CHIP, FONT_LABEL, small()/body()/mono()) ---- */
@@ -155,6 +164,11 @@
   --font-body: 13px;
   --font-mono: 12px;
   --font-family: system-ui, "Segoe UI", -apple-system, sans-serif;
+  /* The layer's one line: every size of the scale (11, 12, 13) sits on it in a component of
+     src/ui, in a one-line control and in text that wraps alike. Without it a line was the face's
+     own (17px for 13px type in Segoe UI, another height in another face), and each platform
+     centred a label a little differently. Prose that is read takes `--composer-leading`. */
+  --leading-ui: 16px;
   /* ---- Motion (measured: durations 50/100/150/200ms, ease-out + out-quint) ---- */
   --dur-press: 0.05s; /* the measured transform channel: the icon button's press scale */
   --dur-fast: 0.1s; /* the measured state-transition duration (Cursor §8: 0.1s ease) */

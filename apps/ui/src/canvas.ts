@@ -347,6 +347,37 @@ export interface OverlayPreview {
   drag: { handles: readonly number[]; matrix: Matrix; clipboard: boolean } | null;
 }
 
+/** How strong a drafting guide's ink is against the rubber band it leads: the same hue, quieter. */
+export const GUIDE_ALPHA = 0.6;
+
+/** A guide ray's dash and gap, in CSS px: a construction line, never mistaken for geometry. */
+export const GUIDE_DASH: readonly [number, number] = [4, 4];
+
+/** The grid-snap dot's radius, in CSS px. */
+export const GRID_DOT_RADIUS = 2.5;
+
+/** Half the mark on an acquired tracking point (a small upright cross), in CSS px. */
+export const ACQUIRED_HALF = 4;
+
+/**
+ * What the engine's drafting aids add under the pointer while a command wants a point
+ * (`ResolvedPointer` in the facade): the ray that bent it, the dot it landed on, the points
+ * tracking holds.
+ */
+export interface OverlayGuide {
+  /** The ortho or polar ray and the tracking paths, in the display list's form (world). */
+  paths: { verts: readonly Point[]; prims: readonly DisplayPrim[] };
+  /** Where grid snap put the point (world), or null when grid snap did not place it. */
+  dot: Point | null;
+  /** The points object-snap tracking has acquired (world). */
+  acquired: readonly Point[];
+}
+
+/** Whether a guide draws nothing. */
+export function guideIsEmpty(guide: OverlayGuide | null | undefined): boolean {
+  return guide === null || guide === undefined || (guide.paths.prims.length === 0 && guide.dot === null && guide.acquired.length === 0);
+}
+
 /** What lies over the drawing under the pointer; every part may be absent. */
 export interface OverlayOptions {
   width: number;
@@ -359,12 +390,30 @@ export interface OverlayOptions {
   preview: OverlayPreview | null;
   /** The object snap in hand: where (world) and which (the OSMODE bit). */
   snap: { point: Point; mode: number } | null;
+  /** The drafting aids' feedback: the ray, the grid dot, the acquired points. */
+  guide?: OverlayGuide | null;
 }
 
 /** Whether an overlay with these parts draws nothing at all. */
-export function overlayIsEmpty(options: Pick<OverlayOptions, "hover" | "preview" | "snap">): boolean {
+export function overlayIsEmpty(options: Pick<OverlayOptions, "hover" | "preview" | "snap" | "guide">): boolean {
   const preview = options.preview;
-  return options.hover === null && options.snap === null && (preview === null || (preview.prims.length === 0 && preview.drag === null));
+  return options.hover === null && options.snap === null && guideIsEmpty(options.guide) && (preview === null || (preview.prims.length === 0 && preview.drag === null));
+}
+
+/** A mark of the overlay's own, at a screen point: over a hairline of the canvas's ground, in the selection ink. */
+function strokeMark(ctx: CanvasRenderingContext2D, palette: Palette, width: number, trace: () => void): void {
+  ctx.globalAlpha = 1;
+  ctx.lineCap = "butt";
+  ctx.lineJoin = "miter";
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  trace();
+  ctx.strokeStyle = palette.canvas;
+  ctx.lineWidth = width + 2;
+  ctx.stroke();
+  ctx.strokeStyle = palette.selection;
+  ctx.lineWidth = width;
+  ctx.stroke();
 }
 
 /**
@@ -374,10 +423,13 @@ export function overlayIsEmpty(options: Pick<OverlayOptions, "hover" | "preview"
  * drag names, moved by its matrix, in their own colours at [`DRAG_ALPHA`]; the rubber band's own
  * primitives in the selection ink (pasted objects, which are not in the drawing, in their own
  * colours); and the object-snap marker, the same size at any zoom, over a hairline of the
- * canvas's ground so it reads where it lies on geometry. The canvas is cleared first.
+ * canvas's ground so it reads where it lies on geometry. The drafting aids' guide lies with
+ * them: its rays dashed and quieter than the rubber band they lead, under it; the grid-snap dot
+ * and a small cross on each acquired tracking point, over it. The canvas is cleared first.
  */
 export function drawOverlay(ctx: CanvasRenderingContext2D, list: DisplayList, view: Rect, options: OverlayOptions): void {
   const { width, height, dpr, palette, hover, preview, snap } = options;
+  const guide = guideIsEmpty(options.guide) ? null : (options.guide ?? null);
   const w = width > 0 ? width : 1;
   const h = height > 0 ? height : 1;
   const scale = Math.max(0.25, Math.min(8, dpr));
@@ -399,6 +451,19 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, list: DisplayList, vi
       if (b === null || !rectsOverlap(b, view)) continue;
       highlightPrim(ctx, prim, list.verts, still);
     }
+  }
+
+  if (guide !== null && guide.paths.prims.length > 0) {
+    ctx.globalAlpha = GUIDE_ALPHA;
+    ctx.strokeStyle = palette.selection;
+    ctx.lineWidth = RUBBER_WIDTH;
+    ctx.lineCap = "butt";
+    ctx.setLineDash([...GUIDE_DASH]);
+    for (const prim of guide.paths.prims) {
+      if (prim.kind === "polyline") highlightPrim(ctx, prim, guide.paths.verts, still);
+    }
+    ctx.setLineDash([]);
+    ctx.lineCap = "round";
   }
 
   if (preview !== null) {
@@ -430,20 +495,37 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, list: DisplayList, vi
     }
   }
 
+  if (guide !== null) {
+    for (const p of guide.acquired) {
+      const at = place(p, still);
+      if (at === null) continue;
+      const x = Math.round(at.x);
+      const y = Math.round(at.y);
+      strokeMark(ctx, palette, RUBBER_WIDTH, () => {
+        ctx.moveTo(x - ACQUIRED_HALF, y);
+        ctx.lineTo(x + ACQUIRED_HALF, y);
+        ctx.moveTo(x, y - ACQUIRED_HALF);
+        ctx.lineTo(x, y + ACQUIRED_HALF);
+      });
+    }
+    const dot = guide.dot === null ? null : place(guide.dot, still);
+    if (dot !== null) {
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.arc(dot.x, dot.y, GRID_DOT_RADIUS + 1, 0, Math.PI * 2);
+      ctx.fillStyle = palette.canvas;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(dot.x, dot.y, GRID_DOT_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = palette.selection;
+      ctx.fill();
+    }
+  }
+
   if (snap !== null && Number.isFinite(snap.point.x) && Number.isFinite(snap.point.y)) {
     const x = Math.round(proj.projectX(snap.point.x));
     const y = Math.round(proj.projectY(snap.point.y));
-    ctx.globalAlpha = 1;
-    ctx.lineCap = "butt";
-    ctx.lineJoin = "miter";
-    ctx.beginPath();
-    traceSnap(ctx, snapGlyph(snap.mode), x, y, SNAP_MARKER_HALF);
-    ctx.strokeStyle = palette.canvas;
-    ctx.lineWidth = SNAP_MARKER_WIDTH + 2;
-    ctx.stroke();
-    ctx.strokeStyle = palette.selection;
-    ctx.lineWidth = SNAP_MARKER_WIDTH;
-    ctx.stroke();
+    strokeMark(ctx, palette, SNAP_MARKER_WIDTH, () => traceSnap(ctx, snapGlyph(snap.mode), x, y, SNAP_MARKER_HALF));
   }
   ctx.globalAlpha = 1;
 }

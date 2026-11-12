@@ -90,7 +90,7 @@ Rests on the native `<kbd>` element: it marks its text as keyboard input and is 
 | Part | State | Token |
 |---|---|---|
 | The box | all | `--hairline`, `--border-soft`, `--radius-small`, `--gap-4` |
-| The text | all | `--text-faint`, `--font-family`, `--font-chip`, `--gap-16` |
+| The text | all | `--text-faint`, `--font-family`, `--font-chip`, `--leading-ui` |
 
 ## Related
 - `Button`: the action a cap sits beside.

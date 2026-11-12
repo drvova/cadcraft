@@ -1,8 +1,9 @@
 /**
  * The pure rules of a menu (`components/Menu.tsx`): which submenus are open, what a key on a row
- * means, which row a key moves to, where an opened menu is pulled to stay inside the window, and
- * how many leading groups of a band fit before the key that opens the rest as a menu. No DOM
- * here: the component reads the rectangles and owns the focus.
+ * means, which row a key moves to, how a tall menu's rows and the separators between its groups
+ * are cut into columns, where an opened menu is pulled to stay inside the window, and how many
+ * leading groups of a band fit before the key that opens the rest as a menu. No DOM here: the
+ * component reads the rectangles and owns the focus.
  */
 
 import { isTypeaheadKey, rovingIndex, typeaheadIndex, type TypedKey } from "./roving";
@@ -10,7 +11,11 @@ import { isTypeaheadKey, rovingIndex, typeaheadIndex, type TypedKey } from "./ro
 /**
  * One row of a menu: an item that runs `id`, or a submenu (`id === null`) holding `children`. A
  * `MenuNode` of `commands.ts` is one as it stands; `icon` (an id of `icons.ts`) is drawn before
- * the label by a menu whose rows have one.
+ * the label by a menu whose rows have one. `name` is the name typed at the command line that
+ * runs the item, drawn quiet before the shortcut. `group` marks the first row of a group: a
+ * separator is drawn above it, unless the row leads its menu or its column. A separator is not an
+ * item: the rows are the whole list, so the keys, the typeahead and a count of the rows never
+ * meet one.
  */
 export interface MenuItem {
   label: string;
@@ -19,6 +24,8 @@ export interface MenuItem {
   enabled: boolean;
   children: readonly MenuItem[];
   icon?: string;
+  name?: string;
+  group?: boolean;
 }
 
 /** The labels of the submenus open one inside the other, from the menu's own rows down. */
@@ -81,6 +88,81 @@ export function rowKeyAction(key: string, depth: number, submenu: boolean): RowK
  */
 export function walkIndex(event: TypedKey, labels: readonly string[], at: number): number | null {
   return isTypeaheadKey(event) ? typeaheadIndex(labels, at, event.key) : rovingIndex(event.key, at, labels.length, "vertical");
+}
+
+/**
+ * A row's and a separator's heights in the tracks of a menu's grid: a track is half a row
+ * (chrome.css), so a separator is half a row tall.
+ */
+export const ROW_TRACKS = 2;
+export const SEPARATOR_TRACKS = 1;
+
+/** How a menu's rows stand in columns, per row: whether it starts a column, and whether a separator is drawn above it. */
+export interface MenuColumns {
+  starts: boolean[];
+  separators: boolean[];
+}
+
+/**
+ * The first row of each column when groups of these `sizes` (in rows) fill columns `capacity`
+ * tracks tall, one after the other. A separator stands between two groups of a column and takes
+ * its track only when the row after it fits too, so a column never ends on one and never starts
+ * with one. `whole`: a group that does not fit in what is left of a column, and fits in a column
+ * of its own, starts the next column instead of being cut.
+ */
+function columnStarts(sizes: readonly number[], capacity: number, whole: boolean): number[] {
+  const starts = [0];
+  let used = 0;
+  let row = 0;
+  for (const size of sizes) {
+    const group = size * ROW_TRACKS;
+    if (whole && used > 0 && used + SEPARATOR_TRACKS + group > capacity && group <= capacity) {
+      starts.push(row);
+      used = 0;
+    }
+    for (let at = 0; at < size; at += 1, row += 1) {
+      let lead = at === 0 && used > 0 ? SEPARATOR_TRACKS : 0;
+      if (used > 0 && used + lead + ROW_TRACKS > capacity) {
+        starts.push(row);
+        used = 0;
+        lead = 0;
+      }
+      used += lead + ROW_TRACKS;
+    }
+  }
+  return starts;
+}
+
+/**
+ * The columns of a menu whose rows are grouped (`leads[i]`: row `i` is the first of a group) in a
+ * box `capacity` tracks tall. One column while everything fits. A taller menu takes the fewest
+ * columns that hold it, and those as short as they can be with every group whole, so the columns
+ * break between groups and come out even; where no height keeps the groups whole in that many
+ * columns, the rows simply fill each column. A separator is drawn above the first row of a group
+ * except where that row leads the menu or a column. A capacity that is not a number is no limit.
+ */
+export function menuColumns(leads: readonly boolean[], capacity: number): MenuColumns {
+  const sizes: number[] = [];
+  leads.forEach((lead, row) => {
+    if (lead || row === 0) sizes.push(1);
+    else sizes[sizes.length - 1] = (sizes[sizes.length - 1] ?? 0) + 1;
+  });
+  const room = Number.isFinite(capacity) ? Math.max(ROW_TRACKS, Math.floor(capacity)) : Number.POSITIVE_INFINITY;
+  let columns = columnStarts(sizes, room, false);
+  if (columns.length > 1) {
+    for (let height = Math.max(ROW_TRACKS, Math.ceil((leads.length * ROW_TRACKS) / columns.length)); height <= room; height += 1) {
+      const even = columnStarts(sizes, height, true);
+      if (even.length <= columns.length) {
+        columns = even;
+        break;
+      }
+    }
+  }
+  const first = new Set(columns);
+  return {
+    starts: leads.map((_, row) => row > 0 && first.has(row)),
+    separators: leads.map((lead, row) => lead && row > 0 && !first.has(row)),
+  };
 }
 
 /** A rectangle in the window's coordinates. */

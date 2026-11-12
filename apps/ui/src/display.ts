@@ -67,12 +67,24 @@ export function parseDisplayList(raw: string): DisplayList | null {
   } catch {
     return null;
   }
+  return displayListOf(value);
+}
+
+/**
+ * Read a display list out of a value that is already parsed: the whole of a `display()` reply, or
+ * the part of a larger reply that has its shape (a preview, a pointer's rubber band and its
+ * tracking paths), so a reply that carries one is parsed once. Null when it is not a JSON object.
+ */
+export function displayListOf(value: unknown): DisplayList | null {
   if (!isRecord(value)) return null;
   const verts = parseVerts(value["verts"]);
   const prims = parsePrims(value["prims"], verts.length);
   const bounds = parseRect(value["bounds"]) ?? boundsOfPoints(verts) ?? UNIT_RECT;
   return { revision: Math.max(0, intOr(value["revision"], 0)), bounds, verts, prims };
 }
+
+/** The most bytes of a reply holding a display list that is read at all. */
+export const MAX_DISPLAY_REPLY_BYTES = MAX_REPLY_BYTES;
 
 function parseVerts(v: unknown): Point[] {
   if (!Array.isArray(v)) return [];

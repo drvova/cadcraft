@@ -12,47 +12,48 @@ them.
 
 ## Open it
 
-- **Window ▸ Assistant** (⌘7 / Ctrl+7), or the pane's own close button to hide it again.
-- Type `assistant` at the command line, or run it with parameters:
+- **Window ▸ Assistant**, Ctrl+7 (⌘7 on macOS), or the assistant key at the end of the title bar.
+  The same three close it. The chats outlive the panel: closing it hides them, it does not end
+  them.
+- The first time, the panel says no model is connected and offers the setup sheet.
 
-```json
-{"id": 1, "method": "engine.execute", "params": {"command": "assistant", "params": {"ask": "trace this wing picture and scale it to 30 mm"}}}
-```
+There is no `assistant` command today. The egui interface had one (`assistant {ask, attach,
+stop, clear}`), and it was removed with that interface on 2026-11-11. A script or an MCP client
+drives the drawing through `run` directly; it cannot open the panel or ask the model.
 
-| `assistant {…}` | does |
-|---|---|
-| `{}` | show the pane |
-| `{"ask": "…"}` | show the pane and ask the model |
-| `{"attach": "path.png"}` | attach a picture to the ask (`attach` takes one path or a list; with no `ask`, the model is told to look at it) |
-| `{"stop": true}` | stop the turn running now |
-| `{"clear": true}` | forget the conversation |
-| `{"open": false}` | do the above without opening the pane |
+## The panel
 
-## The pane
+The panel is laid out like an agent panel, not a chat. It is
+`apps/ui/src/components/AssistantPane.tsx` over `assistant.ts` and `assistant-session.ts`.
 
-The pane is laid out like an agent panel, not a chat: a header naming the conversation with the
-new-conversation and settings buttons, the transcript as plain text on the panel surface (a prompt
-in a quiet inset block, the model's words without a bubble), and each tool call collapsed to one
-dim line — what ran, and the first line of what came back — that opens on a click to show the code
-and the whole result. A picture the code rendered stands inline as an artifact card: the render
-itself, with its size and path under it. The composer is a bordered box at the bottom with the
-model on the left, how full the context is, and Send on the right (⌘/Ctrl+Enter sends).
-
-**While a turn runs** the composer keeps taking input: Enter (or Queue) holds the message until the
-turn ends and sends it next; ⌘/Ctrl+Enter (or Send now) delivers it to the model at its next tool
-call, so a correction lands without cutting the work off mid-action. Queued messages are listed
-above the box and can be dropped before they go.
-
-**Checkpoints.** The pane records the drawing's undo depth before each request. Hover a request of
-your own and a restore control appears: it reverts the drawing to the state before that request —
-the conversation stays, so you can keep talking about what happened. (Cursor's rule for its own
-checkpoints; the undo history is the same one ⌘Z walks.)
-
-**Pictures.** Attach one with the paperclip, paste it into the pane (⌘/Ctrl+V), or drop it on the
-window while the pane is open. The model sees the picture *and* its path, so it can measure it:
-`(cmd "imagetrace" '((PATH . "…") (WIDTH . 30)))` turns it into editable polylines at that size and
-`(cmd "imageattach" …)` places it as a reference. A photograph of a part becomes geometry you can
-dimension — that is the point of attaching it.
+- **Chats are tabs.** New chat opens one beside the others, and each closes on its own key. A
+  chat is its own conversation, draft and running turn.
+- **The transcript.** Your prompt sits in a quiet block and the model's words stand without a
+  bubble, with headings, lists and code blocks drawn as such. A link opens only when its address
+  is `http` or `https`; anything else the model writes as a link stays text. A Markdown table
+  has no room in a narrow panel, so it is drawn as readable rows: the header as a small heading
+  and each row as one line, its first cell in bold. Each tool call is one row that
+  reads as a sentence, what ran and what changed, and opens to the code and the whole result. A
+  failure is a calm block that says what happened and the way out. A long chat draws its newest
+  rows and keeps following the end while you are there.
+- **The composer.** Enter sends; Shift+Enter is a new line. A draft that starts with `/`
+  searches the commands, and Enter runs the lit one as the command palette would. The selection
+  on the canvas rides along as a chip. A context meter says how much the next request carries.
+  A message too long to send is refused, never cut.
+- **While a turn runs** the composer keeps taking input: a message sent then joins a queue,
+  listed above the composer, and goes when the turn ends. A queued message can be dropped. Stop
+  (or Escape) ends the turn, and the turn's status and Stop stay in view while the setup sheet is
+  open. A queued message does not steer the running turn; the egui pane's
+  "send now at the next tool call" has no counterpart yet.
+- **Changes.** The panel records the drawing's undo depth before a request. When the model has
+  changed the drawing, a row says how many changes there are and opens to one line per step.
+  **Undo all** takes the drawing back to before them (the engine's `undoto`); **Keep** accepts
+  them. The conversation stays either way.
+- **Pictures.** Attach with the paperclip, paste, or drop: up to four per message, 4 MB each.
+  The model sees them. In the interface a picture has no file path, so the model cannot trace or
+  measure it with code (see below).
+- The panel's left edge drags to resize (or the arrow keys; Home returns it), and the width is
+  kept.
 
 ## Set the provider
 
@@ -60,52 +61,55 @@ The assistant speaks the **OpenAI chat protocol**, which is what OpenAI, OpenRou
 compatibility endpoint, DeepSeek, Groq, Mistral, xAI, Together, Ollama, LM Studio, vLLM and
 llama.cpp all serve. A provider is three things: a base URL, a model name and a key.
 
-Set it in the pane's settings (the gear in the header) or in the Options JSON form:
+Setup is a sheet over the transcript, in two steps:
 
-```json
-{"id": 1, "method": "engine.execute", "params": {"command": "options", "params": {
-  "assistantBaseUrl": "http://127.0.0.1:11434/v1",
-  "assistantModel": "qwen3-coder",
-  "assistantApiKey": "",
-  "assistantMaxTokens": 8192
-}}}
-```
+1. **Provider.** A list of presets, each marked "needs a key" or "no key", and "Other" for any
+   OpenAI-compatible server. Choosing one fills in its address and model.
+2. **Connection.** The base URL, the API key where the provider needs one, and the model.
+   **Check connection** asks the server for its models and lists them to pick from, or says why
+   it could not. **Save** says why it waits when something is missing.
 
-`options {}` reports `assistantPreset`, `assistantBaseUrl`, `assistantModel`, `assistantMaxTokens`
-and `assistantKeySet` (never the key itself). The pane's presets are convenience, not a limit: type
-any OpenAI-compatible base URL. A local server usually wants no key at all.
+The presets are a convenience, not a limit: type any OpenAI-compatible base URL. A local server
+usually wants no key, and it must accept requests from the page's origin (`OLLAMA_ORIGINS` for
+Ollama).
 
-The provider is saved with the machine's CADCraft profile (the same place the interface
-preferences live), so it survives restarts. The key is stored in that profile in clear text — it is
-your machine's profile, and a key that cannot be read cannot be used, but do not paste a key you
-would not leave in a local file.
+**Where the setup is kept.** In the browser's `localStorage`, under
+`cadcraft.assistant.provider`, key included, in clear text. In the desktop app that storage is
+the webview's own folder under the user's data directory. Treat the key as you would a key in a
+local file.
 
-## In the browser
+**What protects the key.** It is sent only to the base URL, as a bearer token. An address that
+carries a name and password is refused. The key is removed from any error text before it is
+shown. A stored setup is read strictly: anything that is not a plain object of bounded strings
+with an `http` or `https` address is read as "not set up", never half-read.
 
-The SolidJS interface (`apps/ui`) carries the same assistant: **Window ▸ Assistant** (Ctrl+7)
-opens the composer over the drawing — Cursor's measured recipe (`.design-system/cursor/recipes.md`
-§1: the 5px box with a 6px padding and gap, the border that turns active on focus, the ghost model
-chip, the `0 0 4px 1px` shadow, the ripple while a turn runs), the same one the desktop pane
-follows. It speaks the same OpenAI chat protocol with the same one tool — `run`, AutoLISP in the
-open drawing — so a model that works in the desktop works here, and the model's code reaches the
-same engine through the wasm facade (`execute("run", …)`).
+**What bounds a provider.** A reply, a tool call's name and arguments, the number of tool calls
+in a reply, the model list and the whole stream each have a limit, a stream that goes silent is
+ended, and a turn is capped at 12 rounds. The limits are constants at the top of
+`apps/ui/src/assistant.ts`.
 
-What the browser changes:
+**What has been exercised.** The tests run whole turns against a local stand-in that answers
+like a provider. No hosted provider has been run against this panel.
 
-- **The provider lives in the browser** (`localStorage`), set from the composer's model button;
-  the preset list is the desktop's. The key is in the browser's storage in clear text — treat it
-  as you would a key in a local file. A local server (Ollama, LM Studio) needs no key, and it must
-  allow the page's origin (`OLLAMA_ORIGINS` for Ollama).
-- **There is no filesystem.** A definition a run writes with `(defun …)` is kept for the session —
-  live in the drawing's namespace, reported as kept — but not reloaded next time, and `(render)`
-  answers that the browser has nowhere to write a PNG. Everything else behaves as on the desktop:
-  `(cmd …)`, `(commands)`, `(describe "id")`, `(inspect)`, measurements.
-- Attachments (paperclip, paste, drop) are not in the browser composer yet.
+## What the interface changes
+
+The interface runs the engine as WebAssembly, in a browser tab and in the desktop window alike.
+That build has no file system, which changes three things the model is told about in its brief:
+
+- A definition a run writes with `(defun …)` is kept for the session, live in the drawing's
+  namespace and reported as kept, and is not reloaded next time.
+- `(render)` answers that there is nowhere to write a PNG. The drawing is on screen.
+- An attached picture has no path, so `imagetrace` and `imageattach` cannot reach it. The model
+  can look at it and describe it.
+
+Everything else behaves as over MCP: `(cmd …)`, `(cmdline …)`, `(commands)`, `(describe "id")`,
+`(inspect)`, measurements. Kept definitions, renders and traced pictures work in full on a
+native session: `cadcraft-cli mcp`.
 
 ## The namespace
 
 The same vocabulary is seeded into every drawing's AutoLISP environment, so a person, a script, an
-MCP client and the pane all drive the application through exactly the same functions.
+MCP client and the panel all drive the application through exactly the same functions.
 
 | function | does |
 |---|---|
@@ -137,8 +141,8 @@ A command's real parameter names are in `(commands)` and `(describe "id")` — n
 
 ## Kept definitions: the model builds its own tooling
 
-A `defun` (or a `setq` of a literal) is **saved** after the run that wrote it, one file per name in
-the definitions directory (`%APPDATA%\CADCraft\definitions`, `~/.config/cadcraft/definitions`, or
+On a native session (`cadcraft-cli mcp`, `cadcraft-cli run`), a `defun` (or a `setq` of a
+literal) is **saved** after the run that wrote it, one file per name in the definitions directory (`%APPDATA%\CADCraft\definitions`, `~/.config/cadcraft/definitions`, or
 `CADCRAFT_DEFINITIONS` when set). At the start of a drawing's session they are loaded back, so a
 helper written today is there tomorrow — in this process and in the next one:
 
@@ -165,19 +169,23 @@ kept: WING-OUTLINE
 rendered C:\Users\you\AppData\Local\Temp\cadcraft-render-4821-0.png
 ```
 
-Pictures come back as image content blocks in MCP and as artifact cards the pane draws inline in the
-transcript: the render itself, with its size and path under it.
+Pictures come back as image content blocks in MCP. The interface's panel has no renders to show
+(see above).
 The brief tells the model to quote the numbers the tools returned and to name anything that came
 out different from what was asked: a drawing report is a report of measurements.
 
 ## The same tool over MCP
 
-`cadcraft-cli mcp` serves the identical tool — one entry in `tools/list`, the same schema — on a
-headless session or bridged to the running app:
+`cadcraft-cli mcp` serves the identical tool, one entry in `tools/list` with the same schema, on
+a headless session:
 
 ```json
-{"mcpServers": {"cadcraft": {"command": "cadcraft-cli", "args": ["mcp", "--connect", "127.0.0.1:7979", "--launch"]}}}
+{"mcpServers": {"cadcraft": {"command": "cadcraft-cli", "args": ["mcp"]}}}
 ```
+
+`cadcraft-cli mcp --connect HOST:PORT` bridges to a running app's control channel. The egui app
+served that channel and the web interface does not yet, so today there is nothing to connect to
+([control-protocol.md](control-protocol.md), [mcp.md](mcp.md)).
 
 There are no resources and no second tool set: the drawing is read from code like everything else.
 
@@ -196,11 +204,12 @@ and that is the boundary.
 
 - **One surface, one door.** A tool call is `engine.execute` of the `run` command, which runs the
   same AutoLISP a person can type at the command line. A capability is a command, and a command
-  added to the engine is reachable the same day — with no glue in the assistant, MCP or the pane.
+  added to the engine is reachable the same day — with no glue in the assistant, MCP or the panel.
 - **Discovery is in-language.** `(commands)`, `(describe "id")` and `(man)` are functions the code
   calls, so a model explores the application the way it explores anything else: by asking.
-- **The interface thread owns the drawing.** The pane's worker never touches the session; tool
-  calls arrive as control requests and run between frames, exactly like a script's.
+- **The panel never touches the drawing itself.** A tool call is the facade's
+  `execute("run", …)`, the same call a menu item makes, and the panel refreshes from the engine
+  afterwards.
 - **Adaptation is emergent.** Each deployment's model accretes its own helpers in its own
   definitions directory. There is no per-model tool set anywhere in the code.
 
@@ -210,17 +219,26 @@ and that is the boundary.
 |---|---|
 | `crates/ai/src/code.rs` | the one tool: schema, argument checking, and the report a model reads |
 | `crates/ai/src/surface.rs` | the catalog — one entry — and the `Harness` a call goes through |
-| `crates/ai/src/agent.rs` | the turn loop, and the brief that teaches the namespace |
-| `crates/ai/src/client.rs` | the transport: one `/chat/completions` endpoint, streamed |
+| `crates/ai/src/agent.rs`, `chat.rs`, `client.rs` | the Rust turn loop, conversation and streamed transport. The egui pane ran them; no app does today. The interface's port is below |
 | `crates/engine/src/lisp/agent.rs` | the namespace: the functions, the manual, kept definitions |
 | `crates/engine/src/cmd/code.rs` | the `run` command (load, run, keep, report) |
 | `crates/engine/src/paths.rs` | the config directory and the definitions directory |
-| `crates/ui-egui/src/assistant.rs` | the pane and the bridge to the interface thread |
 | `crates/mcp/src/tools.rs` | the same tool, wrapped in MCP's protocol |
+| `apps/ui/src/assistant.ts` | the interface's port: provider presets and checks, the wire protocol, the bounds, the brief, the transcript's text |
+| `apps/ui/src/assistant-session.ts` | one chat: the conversation, the queue, the changes, the stored setup |
+| `apps/ui/src/components/AssistantPane.tsx` | the panel and the setup sheet |
 
 The tests are worth reading. `crates/mcp/src/tests.rs` drives the whole drafting workflow —
 a plate with holes, entity queries, texts, the report, a traced picture — **through `run` and
 nothing else**, which is what proves a capability is not lost by not being a tool.
 `crates/ai/src/tests.rs` runs whole turns against a real HTTP server on localhost that answers
-like a provider. `.scratch/mcp_live.py` (a scratch harness, not shipped) drives three real MCP
-server processes in turn to prove a definition kept in one is usable in the next.
+like a provider. `apps/ui/src/assistant.test.ts` and `assistant-session.test.ts` cover the
+interface's port: the setup's faults, key redaction, a stored setup read strictly, the bounds on
+a provider's output, the queue and the changes row.
+
+## Revision history
+
+| Date | Change | Summary |
+|---|---|---|
+| 2026-11-11 | minor | Replies draw links (http and https only) and turn a Markdown table into readable rows; the turn's status and Stop stay in view while the setup sheet is open |
+| 2026-11-11 | major | Rewritten for the web interface after the egui interface was removed: how to open the panel, the panel, setup in two steps with a connection check, where the key is kept and what protects it, the bounds on a provider, what the WebAssembly build changes. Removed: the `assistant {…}` command and the `options` assistant keys (both were the egui interface's), the `--connect` configuration as the default, `crates/ui-egui/src/assistant.rs` |

@@ -1,6 +1,6 @@
 /**
- * The chrome's pure logic: what an invoked id means, the menu bar tree, and the small helpers the
- * menu renders with (shortcut labels, submenu state, the keyboard walk order).
+ * The chrome's pure logic: what an invoked id means, the menu bar tree (its rows, their groups
+ * and the names typed at the command line), and the shortcut labels and chords.
  *
  * Everything here mirrors the desktop chrome:
  *   - `crates/ui-egui/src/menus.rs` — `MENUS` (the top-level order), `UI_COMMANDS` (the `ui.*`
@@ -72,13 +72,153 @@ export function classify(id: string): CommandAction {
 /** The top-level menus, in order (`MENUS` in `menus.rs`). */
 export const MENU_TITLES: readonly string[] = ["File", "Edit", "View", "Insert", "Format", "Tools", "Draw", "Dimension", "Modify", "Window", "Help"];
 
-/** One menu bar entry: an item (`id !== null`) or a submenu (`id === null`). */
+/**
+ * One menu bar entry: an item (`id !== null`) or a submenu (`id === null`). `name` is the name
+ * typed at the command line that runs the item (`typedName`; empty for a submenu and for the
+ * shell's own items). `group` marks the first row of a group of its menu (`MENU_GROUPS`).
+ */
 export interface MenuNode {
   label: string;
   id: string | null;
   shortcut: string;
   enabled: boolean;
   children: MenuNode[];
+  name: string;
+  group: boolean;
+}
+
+/**
+ * The name a menu row prints for a command: the shortest of its id and its aliases (the id on a
+ * tie, then the earlier alias), in the capitals a drafter writes it in. The command line takes
+ * any of them; the shortest is the one worth learning. Empty where it would only repeat the
+ * row's label ("Erase", "Find...").
+ */
+export function typedName(command: Pick<CommandInfo, "id" | "aliases">, label: string): string {
+  const name = [command.id, ...command.aliases].reduce((best, next) => (next.length < best.length ? next : best));
+  const plain = label.endsWith("...") ? label.slice(0, -3) : label;
+  return name.toLowerCase() === plain.toLowerCase() ? "" : name.toUpperCase();
+}
+
+/**
+ * The groups of each menu's own rows, in the order they are drawn: a separator stands between two
+ * groups. The engine's registry gives a command a menu path and nothing about groups or order, so
+ * the rows of a menu arrive in the order the engine's modules register them; this table is the
+ * conventional order of a drafting menu, written for this shell. A key is a command id: it names
+ * the row that runs that command, or the submenu that holds it (`arc` is the Arc submenu). A row
+ * no key names keeps its registered order in a last group of its own, and a key the registry
+ * does not have is passed over: `commands.test.ts` reads the engine's sources and fails when a
+ * key names no row of its menu, so a renamed command is caught there.
+ */
+export const MENU_GROUPS: Readonly<Record<string, readonly (readonly string[])[]>> = {
+  // Open and close; save; exchange with other formats; page setup and printing; repair.
+  File: [
+    ["new", "open", "close", "closeall"],
+    ["qsave", "saveas"],
+    ["import", "export", "exportpdf"],
+    ["pagesetup", "plottermanager", "stylesmanager", "preview", "plot", "publish", "pdfbook"],
+    ["audit"],
+  ],
+  // History; the clipboard and Clear; selecting and finding.
+  Edit: [
+    ["u", "redo"],
+    ["cutclip", "cutbase", "copyclip", "copybase", "pasteclip", "pasteblock", "pasteorig", "erase.selection"],
+    ["selectall", "qselect", "find"],
+  ],
+  // Moving the view; redrawing it; saved views and viewports; what is displayed; the interface.
+  View: [
+    ["zoom.realtime", "pan"],
+    ["regen", "regenall", "redraw"],
+    ["view", "mview.polygonal"],
+    ["annovisible.current", "attdisp.normal"],
+    ["ui.animations.system", "ui.theme.system"],
+  ],
+  // Blocks, references and data; images; layouts.
+  Insert: [["insert", "xattach", "datalink"], ["imageattach", "imagetrace"], ["layout.new"]],
+  // Layers; an object's properties; the named styles; the drawing's setup; renaming.
+  Format: [
+    ["layer", "layerstate.save", "layer.current"],
+    ["color", "linetype", "lweight", "thickness", "plotstyle"],
+    ["style", "dimstyle", "tablestyle", "mleaderstyle", "mlstyle", "ddptype"],
+    ["units", "limits", "scalelistedit"],
+    ["rename"],
+  ],
+  // Order, isolation and groups; inquiry; blocks and references; constraints and the express
+  // tools; scripts and applications; settings last.
+  Tools: [
+    ["draworder.front", "isolateobjects", "group", "ungroup"],
+    ["dist", "count", "compare", "dataextraction"],
+    ["bedit", "refedit", "xopen"],
+    ["autoconstrain", "breakline"],
+    ["script", "appload"],
+    ["aliasedit", "dsettings", "options"],
+  ],
+  // Lines and polylines; curves; points and marks; hatches and regions; blocks, tables and text;
+  // jewellery.
+  Draw: [
+    ["line", "xline", "ray", "mline", "pline", "3dpoly", "rectang", "polygon"],
+    ["arc", "circle", "donut", "ellipse", "spline", "helix", "revcloud"],
+    ["point", "centermark", "centerline"],
+    ["hatch", "gradient", "boundary", "region", "wipeout"],
+    ["block", "table", "text"],
+    ["ring", "gem", "pave", "setting"],
+  ],
+  // The general commands; lengths and positions; circles and angles; chains; leaders and
+  // tolerances; changes to a placed dimension; the style.
+  Dimension: [
+    ["dim", "qdim"],
+    ["dimlinear", "dimaligned", "dimarc", "dimordinate"],
+    ["dimradius", "dimdiameter", "dimjogged", "dimangular"],
+    ["dimbaseline", "dimcontinue"],
+    ["mleader", "tolerance", "diminspect"],
+    ["dimspace", "dimbreak", "dimjogline", "dimedit.oblique", "dimtedit.home"],
+    ["dimstyle.dimension", "dimoverride", "dimstyle.update", "dimreassociate"],
+  ],
+  // Properties; editing by kind of object; erasing and copying; moving and resizing; trimming
+  // and joining; taking apart and combining.
+  Modify: [
+    ["properties", "matchprop"],
+    ["mledit", "objectscale", "vpclip"],
+    ["erase", "overkill", "copy", "ncopy", "mirror", "offset", "arrayrect"],
+    ["move", "rotate", "scale", "stretch", "lengthen", "align"],
+    ["trim", "extend", "break", "breakatpoint", "join", "chamfer", "fillet", "blend"],
+    ["explode", "flatten", "chspace", "union"],
+  ],
+  // The parts of the window; the palettes; where the keyboard goes.
+  Window: [
+    ["ui.toggle.sidebar", "ui.toggle.assistant", "ui.toggle.cmdline", "ui.toggle.toolbar", "ui.toggle.statusbar", "ui.toggle.menubar"],
+    ["ui.panel.properties", "ui.panel.layers", "xref"],
+    ["ui.focus.cmdline", "ui.focus.next", "ui.focus.previous"],
+  ],
+};
+
+/** Whether `row` runs the command `id`, or is a submenu that holds it. */
+function holds(row: MenuNode, id: string): boolean {
+  return row.id === id || row.children.some((child) => holds(child, id));
+}
+
+/**
+ * A menu's rows in the order of its `groups`, the first row of each group marked. The rows no
+ * key names follow in the order they came, as one more group.
+ */
+export function groupRows(rows: readonly MenuNode[], groups: readonly (readonly string[])[]): MenuNode[] {
+  const placed = new Set<MenuNode>();
+  const out: MenuNode[] = [];
+  const place = (row: MenuNode, lead: boolean): void => {
+    placed.add(row);
+    row.group = lead;
+    out.push(row);
+  };
+  for (const keys of groups) {
+    let lead = true;
+    for (const key of keys) {
+      const row = rows.find((candidate) => !placed.has(candidate) && holds(candidate, key));
+      if (row === undefined) continue;
+      place(row, lead);
+      lead = false;
+    }
+  }
+  rows.filter((row) => !placed.has(row)).forEach((row, index) => place(row, index === 0));
+  return out;
 }
 
 /** The separator `facade.ts` joins a command's menu path with. */
@@ -95,16 +235,19 @@ const MENU_SEP = " \u203a ";
  *   - the last segment is the item's label when non-empty (so `["Draw", "Circle",
  *     "Center, Radius"]` reads "Center, Radius"), else the command's own label;
  *   - an id that already landed in the tree is skipped (the first occurrence wins).
+ *
+ * A menu's own rows then stand in its groups (`MENU_GROUPS`), and an engine command's row
+ * carries the name typed at the command line (`typedName`).
  */
 export function buildMenu(commands: readonly CommandInfo[], items: readonly UiItem[]): MenuNode[] {
   const roots = new Map<string, MenuNode>();
   const tree = MENU_TITLES.map((label): MenuNode => {
-    const node: MenuNode = { label, id: null, shortcut: "", enabled: true, children: [] };
+    const node: MenuNode = { label, id: null, shortcut: "", enabled: true, children: [], name: "", group: false };
     roots.set(label, node);
     return node;
   });
   const seen = new Set<string>();
-  const add = (path: readonly string[], label: string, id: string, shortcut: string, enabled: boolean): void => {
+  const add = (path: readonly string[], label: string, id: string, shortcut: string, enabled: boolean, aliases: readonly string[] | null): void => {
     if (path.length < 2 || seen.has(id)) return;
     const root = roots.get(path[0] ?? "");
     if (root === undefined) return;
@@ -113,74 +256,29 @@ export function buildMenu(commands: readonly CommandInfo[], items: readonly UiIt
       const segment = path[i] ?? "";
       let sub = children.find((child) => child.id === null && child.label === segment);
       if (sub === undefined) {
-        sub = { label: segment, id: null, shortcut: "", enabled: true, children: [] };
+        sub = { label: segment, id: null, shortcut: "", enabled: true, children: [], name: "", group: false };
         children.push(sub);
       }
       children = sub.children;
     }
     const last = path[path.length - 1] ?? "";
-    children.push({ label: last === "" ? label : last, id, shortcut, enabled, children: [] });
+    const shown = last === "" ? label : last;
+    children.push({ label: shown, id, shortcut, enabled, children: [], name: aliases === null ? "" : typedName({ id, aliases }, shown), group: false });
     seen.add(id);
   };
   for (const command of commands) {
     if (command.menu === "") continue;
-    add(command.menu.split(MENU_SEP), command.label, command.id, command.shortcut, command.enabled);
+    add(command.menu.split(MENU_SEP), command.label, command.id, command.shortcut, command.enabled, command.aliases);
   }
   for (const item of items) {
     if (item.menu.length === 0) continue;
-    add(item.menu, item.label, item.id, item.shortcut ?? "", true);
+    add(item.menu, item.label, item.id, item.shortcut ?? "", true, null);
+  }
+  for (const root of tree) {
+    const groups = MENU_GROUPS[root.label];
+    if (groups !== undefined) root.children = groupRows(root.children, groups);
   }
   return tree;
-}
-
-/** One visible entry of an open dropdown, for the keyboard walk. */
-export interface MenuEntry {
-  node: MenuNode;
-  /** How deep the node sits in the dropdown (0 = directly under the title). */
-  depth: number;
-  /** The submenu labels above the node, from the dropdown root. */
-  path: readonly string[];
-}
-
-/**
- * The entries a keyboard walk sees in one dropdown: every node in order, plus the children of a
- * submenu that is open. `openPath` is relative to the list being rendered — `openPath[0]` names
- * the first submenu on the open chain.
- */
-
-/** Whether two path arrays hold the same segments. */
-export function sameStrings(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((v, i) => v === b[i]);
-}
-
-/**
- * The open-path a pointer hover sets inside an open dropdown: a submenu appends its label, a leaf
- * returns to the parent path (closing any submenu). Returns `current` **by reference** when the
- * content would not change, so the caller's signal does not notify — a fresh array on every
- * hover would re-create the rows under the pointer and the pointerover would fire again forever.
- */
-export function hoverPath(current: readonly string[], node: MenuNode, path: readonly string[]): readonly string[] {
-  const next = node.id === null ? [...path, node.label] : path;
-  return sameStrings(next, current) ? current : next;
-}
-
-export function menuEntries(nodes: readonly MenuNode[], openPath: readonly string[]): MenuEntry[] {
-  const out: MenuEntry[] = [];
-  const walk = (list: readonly MenuNode[], path: readonly string[], open: readonly string[]): void => {
-    for (const node of list) {
-      out.push({ node, depth: path.length, path });
-      if (node.id === null && open.length > 0 && open[0] === node.label) {
-        walk(node.children, [...path, node.label], open.slice(1));
-      }
-    }
-  };
-  walk(nodes, [], openPath);
-  return out;
-}
-
-/** True when the first name on the open chain is `label` (the chain is relative to the list). */
-export function submenuIsOpen(openPath: readonly string[], label: string): boolean {
-  return openPath[0] === label;
 }
 
 /**

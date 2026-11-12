@@ -29,18 +29,24 @@ When two rules conflict, the earlier wins:
 The app's real shell, in order (from `src/app.tsx`):
 
 ```tsx
-<div class="app">
-  <TopBar … />                       <!-- header: title, mode, layer, zoom -->
-  <MenuBar … />                      <!-- the menu row -->
-  <ToolStrip … />                    <!-- the toolbar -->
-  <div class="workspace">            <!-- canvas + assistant + rail -->
-    <main class="stage"><CanvasView … /></main>
-    <aside class="rail">             <!-- layers + properties, 260px -->
+<div class="app">                     <!-- a grid of four rows: auto, auto, the rest, auto -->
+  <TopBar menu={<MenuBar … />} … />   <!-- the title bar, 35px: the menus (one Main menu key under 900px), the command centre, three layout keys -->
+  <ToolStrip … />                     <!-- the tool strip, 28px: the drawing tools, an overflow menu for the ones that do not fit -->
+  <div class="workspace">             <!-- a flex row: sidebar, editor, assistant -->
+    <aside class="sidebar">           <!-- left, 252px: LayersPanel over PropertiesPanel -->
+    <div class="editor">              <!-- the middle, what is left -->
+      <LayoutTabs … />                <!-- the editor tabs (Model and the layouts) -->
+      <main class="stage"><CanvasView … /></main>
+      <CommandLine … />               <!-- the bottom panel -->
+    </div>
+    <AssistantPane … />               <!-- right, 340px by default, resizable -->
   </div>
-  <CommandLine … />                  <!-- the command line -->
-  <StatusBar … />                    <!-- the status bar -->
+  <StatusBar … />                     <!-- the status bar, one 22px line -->
+  <CommandPalette … />                <!-- a dialog over the page (Ctrl+Shift+P) -->
 </div>
 ```
+
+Every part but the editor can be hidden (the title bar's layout keys, View's commands). With the assistant open under 900px the sidebar steps aside, and under 560px the assistant takes the whole workspace.
 
 ## When to ask
 

@@ -1,6 +1,7 @@
 /**
  * Row's contract: a full-width native button, `selected` announced as `aria-current`, a click
- * that runs, and a disabled row that takes none; the option form inside a listbox; and the
+ * that runs, and a disabled row that takes none; the option form inside a listbox; the menuitem
+ * form inside a menu, which stays focusable while blocked and passes the menu its keys; and the
  * `title` as the layer's hint and the row's description in both forms.
  */
 
@@ -89,6 +90,115 @@ describe("Row", () => {
     expect(clicks).toBe(0);
   });
 
+  test("a menu row is the menuitem itself: a button out of the Tab order, in the menu's recipe, never the current row", () => {
+    const container = mount(() => (
+      <div role="menu" aria-label="File">
+        <Row menuitem selected>
+          Save
+        </Row>
+      </div>
+    ));
+    const item = itemIn(container);
+    expect(item.tagName).toBe("BUTTON");
+    expect(item.getAttribute("type")).toBe("button");
+    expect(item.className).toBe("ui-row ui-row--menuitem");
+    expect(item.getAttribute("tabindex")).toBe("-1");
+    expect(item.hasAttribute("aria-current")).toBe(false);
+    expect(item.hasAttribute("aria-selected")).toBe(false);
+    expect(item.hasAttribute("aria-haspopup")).toBe(false);
+    expect(item.hasAttribute("aria-expanded")).toBe(false);
+    expect(container.querySelectorAll("button").length).toBe(1);
+  });
+
+  test("a menu row that is not available stays in the keyboard's walk and is inert", () => {
+    let clicks = 0;
+    let keys = 0;
+    let enters = 0;
+    const item = itemIn(
+      mount(() => (
+        <Row menuitem disabled onClick={() => clicks++} onKeyDown={() => keys++} onPointerEnter={() => enters++}>
+          Paste
+        </Row>
+      )),
+    );
+    expect(item.getAttribute("aria-disabled")).toBe("true");
+    // Not natively disabled: a disabled button takes no focus, and the walk would skip it.
+    expect((item as HTMLButtonElement).disabled).toBe(false);
+    item.focus();
+    expect(document.activeElement).toBe(item);
+    item.click();
+    expect(clicks).toBe(0);
+    // The menu still hears the keys (Down moves on) and the pointer (an open submenu closes).
+    item.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    item.dispatchEvent(new Event("pointerenter"));
+    expect(keys).toBe(1);
+    expect(enters).toBe(1);
+  });
+
+  test("a menu row runs its click and hands the menu its keys and the pointer's arrival, with the row as the event's target", () => {
+    const heard: string[] = [];
+    const hear = (event: Event): void => {
+      heard.push(`${event.type}:${event.currentTarget instanceof HTMLButtonElement}`);
+    };
+    const item = itemIn(
+      mount(() => (
+        <Row menuitem onClick={hear} onKeyDown={hear} onPointerEnter={hear}>
+          Open
+        </Row>
+      )),
+    );
+    item.click();
+    item.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    item.dispatchEvent(new Event("pointerenter"));
+    expect(heard).toEqual(["click:true", "keydown:true", "pointerenter:true"]);
+  });
+
+  test("a menu row that opens a submenu says so, and whether it is open", () => {
+    const row = (open: boolean): HTMLElement =>
+      itemIn(
+        mount(() => (
+          <Row menuitem popup="menu" expanded={open}>
+            Circle
+          </Row>
+        )),
+      );
+    expect(row(false).getAttribute("aria-haspopup")).toBe("menu");
+    expect(row(false).getAttribute("aria-expanded")).toBe("false");
+    expect(row(true).getAttribute("aria-expanded")).toBe("true");
+  });
+
+  test("a menu row is described by the caller's line, with the hint's after it, and shows no hint of its own unless its label is cut", async () => {
+    const container = mount(() => (
+      <div role="menu" aria-label="Draw">
+        <Row menuitem describedBy="typed-name">
+          <span class="label">Polyline</span>
+          <span id="typed-name" hidden>
+            Type PL
+          </span>
+        </Row>
+        <Row menuitem describedBy="typed-name" title="Draws connected segments">
+          <span class="label">Polyline</span>
+        </Row>
+        <Row menuitem>Line</Row>
+      </div>
+    ));
+    await Promise.resolve();
+    const [named, titled, bare] = [...container.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    if (named === undefined || titled === undefined || bare === undefined) throw new Error("no menu rows were rendered");
+    expect(named.getAttribute("aria-describedby")).toBe("typed-name");
+    expect(describedBy(named)).toBe("Type PL");
+    expect(named.hasAttribute("title")).toBe(false);
+    expect(named.getAttribute("data-hint")).toBe("");
+    expect(hintContent(named)).toBeNull();
+    expect(describedBy(titled)).toBe("Type PL Draws connected segments");
+    expect(bare.hasAttribute("aria-describedby")).toBe(false);
+    // A label the menu's box cuts short shows in full, as on every row.
+    const label = named.querySelector(".label") as HTMLElement;
+    Object.defineProperty(label, "scrollWidth", { value: 300 });
+    Object.defineProperty(label, "clientWidth", { value: 120 });
+    expect(hintContent(named)).toEqual({ text: "Polyline", keys: "", note: "" });
+  });
+
   test("the title is the layer's hint and the row's description, never a native title or its name, in both forms", () => {
     const button = buttonIn(mount(() => <Row title="Makes this the current layer">Walls</Row>));
     expect(button.hasAttribute("title")).toBe(false);
@@ -154,6 +264,12 @@ describe("Row", () => {
     expect(button.getAttribute("aria-current")).toBe("true");
   });
 });
+
+function itemIn(container: HTMLElement): HTMLElement {
+  const item = container.querySelector<HTMLElement>('[role="menuitem"]');
+  if (item === null) throw new Error("no menu row was rendered");
+  return item;
+}
 
 function optionIn(container: HTMLElement): HTMLElement {
   const option = container.querySelector<HTMLElement>('[role="option"]');

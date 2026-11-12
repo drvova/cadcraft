@@ -30,18 +30,24 @@ When two rules conflict, the earlier wins:
 The app's real shell, in order (from `src/app.tsx`):
 
 ```tsx
-<div class="app">
-  <TopBar … />                       <!-- header: title, mode, layer, zoom -->
-  <MenuBar … />                      <!-- the menu row -->
-  <ToolStrip … />                    <!-- the toolbar -->
-  <div class="workspace">            <!-- canvas + assistant + rail -->
-    <main class="stage"><CanvasView … /></main>
-    <aside class="rail">             <!-- layers + properties, 260px -->
+<div class="app">                     <!-- a grid of four rows: auto, auto, the rest, auto -->
+  <TopBar menu={<MenuBar … />} … />   <!-- the title bar, 35px: the menus (one Main menu key under 900px), the command centre, three layout keys -->
+  <ToolStrip … />                     <!-- the tool strip, 28px: the drawing tools, an overflow menu for the ones that do not fit -->
+  <div class="workspace">             <!-- a flex row: sidebar, editor, assistant -->
+    <aside class="sidebar">           <!-- left, 252px: LayersPanel over PropertiesPanel -->
+    <div class="editor">              <!-- the middle, what is left -->
+      <LayoutTabs … />                <!-- the editor tabs (Model and the layouts) -->
+      <main class="stage"><CanvasView … /></main>
+      <CommandLine … />               <!-- the bottom panel -->
+    </div>
+    <AssistantPane … />               <!-- right, 340px by default, resizable -->
   </div>
-  <CommandLine … />                  <!-- the command line -->
-  <StatusBar … />                    <!-- the status bar -->
+  <StatusBar … />                     <!-- the status bar, one 22px line -->
+  <CommandPalette … />                <!-- a dialog over the page (Ctrl+Shift+P) -->
 </div>
 ```
+
+Every part but the editor can be hidden (the title bar's layout keys, View's commands). With the assistant open under 900px the sidebar steps aside, and under 560px the assistant takes the whole workspace.
 
 ## When to ask
 
@@ -74,7 +80,7 @@ Ask only for an amount or a limit the task did not give (a new size, a new durat
 - [Field](docs/generated/components/field.md): It takes one line of text and hands every keystroke back to the caller, who owns the value.
 - [IconButton](docs/generated/components/icon-button.md): It runs one action drawn as a single glyph, and its title is both its accessible name and the hint a sighted person reads.
 - [Kbd](docs/generated/components/kbd.md): It shows the key or shortcut that runs the action beside it, as a fact to read and never as a control.
-- [Row](docs/generated/components/row.md): It is the full-width clickable band of a list: a menu item, a property row or a layer, marked current when it is the selected one.
+- [Row](docs/generated/components/row.md): It is the full-width clickable band of a list: a layer, a command in a listbox or an item of a menu, marked current when it is the select...
 - [SectionLabel](docs/generated/components/section-label.md): It names a panel's section as a real heading, so a screen reader can jump between the sections by heading.
 - [Select](docs/generated/components/select.md): It lets the user pick one value from a short, known list, and hands the pick back to the caller, who owns the value.
 - [Tab](docs/generated/components/tab.md): It brings one view of a strip to the front: a layout over the drawing or a chat in the assistant, marked selected when it is the one show...

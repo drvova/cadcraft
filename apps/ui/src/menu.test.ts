@@ -1,12 +1,13 @@
 /**
  * The menu's pure rules: the chain of open submenus under the pointer and the click, what each key
- * on a row asks for, the walk between rows, where an opened menu is pulled to stay on screen, and
- * how many groups of a band fit before the key that opens the rest. Pinned here so the menu bar,
+ * on a row asks for, the walk between rows, the columns of a tall menu and the separators between
+ * its groups, where an opened menu is pulled to stay on screen, and how many groups of a band fit
+ * before the key that opens the rest. Pinned here so the menu bar,
  * the compact menu and the tool strip's overflow menu cannot drift apart.
  */
 
 import { describe, expect, test } from "bun:test";
-import { clickPath, flips, hoverPath, isOnPath, leadingFit, menuBounds, menuShift, rowKeyAction, samePath, stackedBlock, walkIndex } from "./menu";
+import { clickPath, flips, hoverPath, isOnPath, leadingFit, menuBounds, menuColumns, menuShift, ROW_TRACKS, rowKeyAction, samePath, SEPARATOR_TRACKS, stackedBlock, walkIndex } from "./menu";
 
 const press = (key: string) => ({ key, ctrlKey: false, metaKey: false, altKey: false });
 
@@ -118,6 +119,99 @@ describe("walkIndex", () => {
     for (const key of ["ArrowLeft", "ArrowRight", "Enter", " ", "Escape", "Tab"]) expect(walkIndex(press(key), labels, 1)).toBeNull();
     expect(walkIndex({ key: "c", ctrlKey: true, metaKey: false, altKey: false }, labels, 0)).toBeNull();
     expect(walkIndex(press("ArrowDown"), [], 0)).toBeNull();
+  });
+});
+
+describe("menuColumns", () => {
+  /** The rows of groups of these sizes: `true` on the first row of each. */
+  const rowsOf = (sizes: readonly number[]): boolean[] => sizes.flatMap((size) => Array.from({ length: size }, (_, at) => at === 0));
+  /** The columns as they would be drawn: each a list of rows (`r`) and separators (`-`), with its height in tracks. */
+  const drawn = (sizes: readonly number[], capacity: number): { text: string[]; heights: number[] } => {
+    const leads = rowsOf(sizes);
+    const plan = menuColumns(leads, capacity);
+    const text: string[] = [];
+    leads.forEach((_, row) => {
+      if (row === 0 || plan.starts[row]) text.push("");
+      text[text.length - 1] += `${plan.separators[row] ? "-" : ""}r`;
+    });
+    return { text, heights: text.map((column) => [...column].reduce((sum, cell) => sum + (cell === "r" ? ROW_TRACKS : SEPARATOR_TRACKS), 0)) };
+  };
+
+  test("a row is two tracks and a separator one", () => {
+    expect([ROW_TRACKS, SEPARATOR_TRACKS]).toEqual([2, 1]);
+  });
+
+  test("one column while everything fits: a separator above each group but the first", () => {
+    expect(drawn([2, 3, 1], 14).text).toEqual(["rr-rrr-r"]);
+    expect(menuColumns(rowsOf([2, 3, 1]), 14).starts).toEqual([false, false, false, false, false, false]);
+    expect(menuColumns(rowsOf([2, 3, 1]), 14).separators).toEqual([false, false, true, false, false, true]);
+  });
+
+  test("the first row never has a separator, whether or not it is marked", () => {
+    expect(menuColumns([true, false], 100).separators).toEqual([false, false]);
+    expect(menuColumns([false, true], 100).separators).toEqual([false, true]);
+  });
+
+  test("no limit (a menu that scrolls, a height that is not a number) is one column", () => {
+    for (const capacity of [Number.POSITIVE_INFINITY, Number.NaN]) {
+      expect(drawn([8, 7, 3, 5, 3, 4], capacity).text).toEqual(["rrrrrrrr-rrrrrrr-rrr-rrrrr-rrr-rrrr"]);
+    }
+  });
+
+  test("a menu one track too tall takes two columns, cut between groups and as short as that allows", () => {
+    // Thirty rows in six groups: 65 tracks with the separators, in a box of 60.
+    const { text, heights } = drawn([8, 7, 3, 5, 3, 4], 60);
+    expect(text).toEqual(["rrrrrrrr-rrrrrrr", "rrr-rrrrr-rrr-rrrr"]);
+    expect(heights).toEqual([31, 33]);
+  });
+
+  test("a column never ends on a separator and never starts with one", () => {
+    for (const sizes of [[8, 7, 3, 5, 3, 4], [2, 2, 5, 6, 3, 6, 2, 4], [1, 1, 1, 1, 1, 1, 1], [30], [3, 27], [12, 1, 12]]) {
+      for (let capacity = 2; capacity <= 70; capacity += 1) {
+        const { text, heights } = drawn(sizes, capacity);
+        for (const column of text) {
+          expect(column.startsWith("-")).toBe(false);
+          expect(column.endsWith("-")).toBe(false);
+        }
+        // No column is taller than the box, and every row is drawn once.
+        expect(Math.max(...heights)).toBeLessThanOrEqual(Math.max(capacity, ROW_TRACKS));
+        expect(text.join("").replaceAll("-", "").length).toBe(sizes.reduce((sum, size) => sum + size, 0));
+      }
+    }
+  });
+
+  test("keeping the groups whole never costs a column over simply filling them", () => {
+    const filled = (sizes: readonly number[], capacity: number): number => {
+      let columns = 1;
+      let used = 0;
+      for (const lead of rowsOf(sizes)) {
+        let need = (lead && used > 0 ? SEPARATOR_TRACKS : 0) + ROW_TRACKS;
+        if (used > 0 && used + need > capacity) {
+          columns += 1;
+          used = 0;
+          need = ROW_TRACKS;
+        }
+        used += need;
+      }
+      return columns;
+    };
+    for (const sizes of [[8, 7, 3, 5, 3, 4], [2, 3, 7, 6, 8, 4], [2, 4, 4, 2, 3, 5, 4], [30], [1, 29]]) {
+      for (let capacity = 2; capacity <= 70; capacity += 1) expect(drawn(sizes, capacity).text.length).toBe(filled(sizes, capacity));
+    }
+  });
+
+  test("a group longer than a column is cut where a column ends, and the columns are still evened", () => {
+    expect(drawn([7, 2], 8).text).toEqual(["rrr", "rrr", "r-rr"]);
+  });
+
+  test("where no height keeps the groups whole in as few columns, the rows fill each column", () => {
+    // Nine rows need two columns of 10 tracks; whole, the last group would ask for a third.
+    expect(drawn([7, 2], 10).text).toEqual(["rrrrr", "rr-rr"]);
+  });
+
+  test("an empty menu and a box shorter than a row", () => {
+    expect(menuColumns([], 10)).toEqual({ starts: [], separators: [] });
+    expect(drawn([2, 1], 0).text).toEqual(["r", "r", "r"]);
   });
 });
 

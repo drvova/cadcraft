@@ -13,6 +13,8 @@ import {
   noteOf,
   oneShot,
   parseInline,
+  safeHref,
+  MAX_HREF_CHARS,
   parseToolArgs,
   relativeTime,
   splitFences,
@@ -337,6 +339,126 @@ describe("parseInline", () => {
 
   test("empty text is one empty run", () => {
     expect(parseInline("")).toEqual([{ kind: "text", text: "" }]);
+  });
+
+  test("a labelled link and a bare address become links to the address as written", () => {
+    expect(parseInline("see [the docs](https://example.com/a?b=1#c) or http://127.0.0.1:8080/x.")).toEqual([
+      { kind: "text", text: "see " },
+      { kind: "link", text: "the docs", href: "https://example.com/a?b=1#c" },
+      { kind: "text", text: " or " },
+      { kind: "link", text: "http://127.0.0.1:8080/x", href: "http://127.0.0.1:8080/x" },
+      { kind: "text", text: "." },
+    ]);
+  });
+
+  test("a bare address ends before the punctuation of its sentence, and keeps a bracket it opened", () => {
+    expect(parseInline("(https://example.com/a), then https://en.wikipedia.org/wiki/Arc_(geometry)!")).toEqual([
+      { kind: "text", text: "(" },
+      { kind: "link", text: "https://example.com/a", href: "https://example.com/a" },
+      { kind: "text", text: "), then " },
+      { kind: "link", text: "https://en.wikipedia.org/wiki/Arc_(geometry)", href: "https://en.wikipedia.org/wiki/Arc_(geometry)" },
+      { kind: "text", text: "!" },
+    ]);
+  });
+
+  test("code and bold win over an address inside them", () => {
+    expect(parseInline("`https://example.com` and **https://example.com**")).toEqual([
+      { kind: "code", text: "https://example.com" },
+      { kind: "text", text: " and " },
+      { kind: "bold", text: "https://example.com" },
+    ]);
+  });
+
+  test("hostile links stay the text the model wrote: only http and https are ever links", () => {
+    const hostile = [
+      "[click](javascript:alert(1))",
+      "[click](javascript:alert`1`)",
+      "[click](JaVaScRiPt:void0)",
+      "[click](java\tscript:alert)",
+      "[click](data:text/html;base64,PHNjcmlwdD4=)",
+      "[click](vbscript:msgbox)",
+      "[click](file:///etc/passwd)",
+      "[click](blob:https://example.com/1)",
+      "[click](//evil.example/x)",
+      "[click](/relative/path)",
+      "[click](mailto:a@example.com)",
+      "[click](https:evil.example)",
+      "[click](https:/evil.example)",
+      "[bank.example](https://bank.example@evil.example/login)",
+      "[bank.example](https://user:pass@evil.example/)",
+      "[click](https://evil.example\\@bank.example/)",
+      "[click](https://)",
+      "javascript:alert(1)",
+      "data:text/html,<script>alert(1)</script>",
+      "<a href=\"javascript:alert(1)\">x</a>",
+      "<img src=x onerror=alert(1)>",
+    ];
+    for (const text of hostile) {
+      const parts = parseInline(text);
+      expect(parts.filter((p) => p.kind === "link")).toEqual([]);
+      // Nothing is dropped or rewritten: the reader sees exactly what was written.
+      expect(parts.map((p) => p.text).join("")).toBe(text);
+    }
+  });
+
+  test("every link's address passes safeHref, whatever surrounds it", () => {
+    const control = String.fromCharCode(0x202e, 0x2028, 0x0007);
+    const texts = [
+      "[a](https://ok.example/x) [b](javascript:alert(1)) https://ok.example/y javascript:https://ok.example/z",
+      `[a](https://ok.example/${control})`,
+      `https://ok.example/${String.fromCharCode(0x2028)}tail`,
+      `[x](${"https://ok.example/".padEnd(5_000, "a")})`,
+      `${"[".repeat(2_000)}x${"](https://ok.example/)".repeat(2_000)}`,
+      `${"(".repeat(3_000)}https://ok.example/${")".repeat(3_000)}`,
+    ];
+    for (const text of texts) {
+      for (const part of parseInline(text)) {
+        if (part.kind !== "link") expect(part.href).toBeUndefined();
+        else expect(safeHref(part.href ?? "")).toBe(part.href ?? null);
+      }
+    }
+    // The scheme of an address nested in another scheme's text is the only part that links.
+    expect(parseInline("javascript:https://ok.example/z").filter((p) => p.kind === "link")).toEqual([{ kind: "link", text: "https://ok.example/z", href: "https://ok.example/z" }]);
+  });
+});
+
+describe("safeHref", () => {
+  test("an absolute http or https address passes as written", () => {
+    for (const ok of ["https://example.com", "http://example.com/", "HTTPS://Example.com/a?b=c#d", "http://127.0.0.1:11434/v1", "https://[::1]:8443/x", "https://example.com/a_(b)"]) expect(safeHref(ok)).toBe(ok);
+  });
+
+  test("anything else is refused", () => {
+    const refused = [
+      "",
+      "example.com",
+      "/path",
+      "//example.com",
+      "javascript:alert(1)",
+      "JAVASCRIPT:alert(1)",
+      " javascript:alert(1)",
+      "data:text/html,x",
+      "vbscript:x",
+      "file:///c:/windows",
+      "ftp://example.com",
+      "mailto:a@example.com",
+      "https:example.com",
+      "https:/example.com",
+      "https://",
+      "https://user@example.com",
+      "https://user:pass@example.com/",
+      "https://example.com\\@evil.example",
+      "https://exa mple.com",
+      "https://example.com/a b",
+      `https://example.com/${String.fromCharCode(10)}x`,
+      `https://example.com/${String.fromCharCode(0)}`,
+      `https://example.com/${String.fromCharCode(0x2028)}`,
+      `${String.fromCharCode(9)}https://example.com`,
+      // A mark that turns the text's direction would draw the address other than it is.
+      `https://example.com/${String.fromCharCode(0x202e)}gnp.exe`,
+      `https://example.com/${String.fromCharCode(0x2066)}x`,
+      "https://example.com/".padEnd(MAX_HREF_CHARS + 1, "a"),
+    ];
+    for (const bad of refused) expect(safeHref(bad)).toBeNull();
   });
 });
 
@@ -744,6 +866,38 @@ describe("parseBlocks", () => {
     expect(parseBlocks("**bold** start")).toEqual([{ kind: "para", text: "**bold** start" }]);
     expect(parseBlocks("-5 mm offset")).toEqual([{ kind: "para", text: "-5 mm offset" }]);
     expect(parseBlocks("")).toEqual([]);
+  });
+  test("a table is read as text: its header a minor heading, each row an item, no pipes left", () => {
+    const table = ["Layers:", "| Layer | Colour | Objects |", "|:------|:------:|--------:|", "| Outline | white | 12 |", "| `Hatch` | grey |  |", "after"].join("\n");
+    const blocks = parseBlocks(table);
+    expect(blocks).toEqual([
+      { kind: "para", text: "Layers:" },
+      { kind: "heading", level: 4, text: "Layer · Colour · Objects" },
+      { kind: "list", ordered: false, items: ["**Outline** · white · 12", "`Hatch` · grey"] },
+      { kind: "para", text: "after" },
+    ]);
+    expect(JSON.stringify(blocks)).not.toContain("|");
+  });
+  test("a table without outer pipes, and a pipe escaped inside a cell", () => {
+    expect(parseBlocks(["Area | Change", "--- | ---", "a\\|b | removed"].join("\n"))).toEqual([
+      { kind: "heading", level: 4, text: "Area · Change" },
+      { kind: "list", ordered: false, items: ["**a|b** · removed"] },
+    ]);
+    // A header with no rows under it is still not drawn as pipes.
+    expect(parseBlocks(["| A | B |", "|---|---|"].join("\n"))).toEqual([{ kind: "heading", level: 4, text: "A · B" }]);
+  });
+  test("pipes that are not a table stay the text they are", () => {
+    expect(parseBlocks("a | b")).toEqual([{ kind: "para", text: "a | b" }]);
+    expect(parseBlocks(["a | b", "c | d"].join("\n"))).toEqual([{ kind: "para", text: "a | b\nc | d" }]);
+    // A rule under a line that has no pipe is not a table's (and a header needs as many cells as its rule).
+    expect(parseBlocks(["title", "---"].join("\n"))).toEqual([{ kind: "para", text: "title\n---" }]);
+    expect(parseBlocks(["a | b | c", "---|---"].join("\n"))).toEqual([{ kind: "para", text: "a | b | c\n---|---" }]);
+  });
+  test("a hostile table is read without failing", () => {
+    const wide = `${"| x ".repeat(5_000)}|`;
+    const blocks = parseBlocks([wide, `${"|---".repeat(5_000)}|`, wide, "|".repeat(20_000), "\\|".repeat(10_000)].join("\n"));
+    expect(blocks[0]?.kind).toBe("heading");
+    expect(blocks[1]).toMatchObject({ kind: "list", ordered: false });
   });
 });
 

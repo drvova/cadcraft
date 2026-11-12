@@ -156,7 +156,7 @@ Real uses, 4 call sites (`rg -c "<Toggle" src/components` → `src/components/La
   - Do: `<Toggle tone="info" icon="layer.thawed" iconOn="layer.frozen" ariaLabel="Outline frozen" pressed />`
 
 ### Limits
-- `rule/toggle-touch-target`: When 2 `sm` glyph toggles sit side by side, keep at least 4px between them under a coarse pointer, because each 20px by 22px cell keeps its drawn size there and takes a 24px by 24px target from an invisible `::after`, and cells closer than 4px overlap their targets. Evidence: measured 20px by 22px cell, `src/ui/ui.css:1146`. Check: review `src/styles.css`.
+- `rule/toggle-touch-target`: When 2 `sm` glyph toggles sit side by side, keep at least 4px between them under a coarse pointer, because each 20px by 22px cell keeps its drawn size there and takes a 24px by 24px target from an invisible `::after`, and cells closer than 4px overlap their targets. Evidence: measured 20px by 22px cell, `src/ui/ui.css:1227`. Check: review `src/styles.css`.
   - Don't: `.layer-toggles { gap: 0 }` on a touch screen.
   - Do: `@media (pointer: coarse) { .layer-toggles { gap: var(--gap-4) } }`
 - `rule/toggle-line-height`: When `sm` text toggles stand in a bar whose line is not 22px, set `--ui-toggle-line` on their container to the bar's line, because the word's target is the whole line and a 22px toggle in a 21px line makes the bar 1px taller. Evidence: measured 21px toggles in the 22px status bar under its 1px rule, in the browser, 2026-11-11. Check: review `src/chrome.css`.
@@ -191,7 +191,7 @@ Rests on the native `<button>` element with `aria-pressed`, the drawn glyph hidd
 | The cell (`glyph`, `sm`) | all | `--control-h-chip`, `--control-h-row`, `--radius-small` |
 | The cell (`glyph`, `md`) | all | `--control-h-input`, `--radius-small` |
 | The glyph | all | `--icon-size-sm` (`sm`), `--icon-size-md` (`md`) |
-| The word (`sm`) | all | `--font-chip`, `--font-family`, `--gap-4`, `--control-h-row` (the line, when the container sets none) |
+| The word (`sm`) | all | `--font-chip`, `--font-family`, `--leading-ui` (the text's line), `--gap-4`, `--control-h-row` (the box's height, when the container sets no `--ui-toggle-line`) |
 | The word (`md`) | all | `--font-label`, `--gap-6`, `--control-h-input` |
 | The face | off | `--text-faint` |
 | The face | on (`neutral` glyph), and under the pointer | `--text` |

@@ -204,7 +204,7 @@ Rests on the native `<input type="checkbox">` inside a `<label>`: role, Space, t
 | The fill and the stroke | checked, mixed | `--accent`; `--accent-hover` under the pointer; `--accent-pressed` while pressed |
 | The mark | checked, mixed | `--on-accent`, `--gap-3` |
 | The box and the mark | disabled | `--text-disabled`, `--fill-disabled` |
-| The label | rest | `--text`, `--font-body`, `--gap-16`, `--gap-6` |
+| The label | rest | `--text`, `--font-body`, `--leading-ui`, `--gap-6` |
 | The label | disabled | `--text-disabled` |
 | The ring | focus-visible | `--focus-outline-w`, `--focus-ring`, `--hairline` (the offset) |
 | The target | coarse pointer | `--control-h-input` |

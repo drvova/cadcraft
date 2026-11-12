@@ -9,13 +9,16 @@ import {
   AppFacade,
   EMPTY_PREVIEW,
   NO_ANCHOR,
+  freePointer,
   layerColor,
   parseCommands,
   parseDrawingState,
   parseEnvelope,
   parseHexColor,
+  parseHover,
   parseLayers,
   parsePick,
+  parsePointer,
   parsePreview,
   parsePromptAnchor,
   parseSnap,
@@ -219,6 +222,7 @@ describe("AppFacade over the mock", () => {
         preview: trap,
         pick: trap,
         snap: trap,
+        pointer: trap,
         click: trap,
         open_bytes: () => "",
         load_sample: () => "",
@@ -237,6 +241,8 @@ describe("AppFacade over the mock", () => {
     if (!sized.ok) expect(sized.error).toContain("trap");
     expect(facade.setCursor({ x: 1, y: 2 }).ok).toBe(false);
     expect(facade.preview({ x: 1, y: 2 })).toBe(EMPTY_PREVIEW);
+    expect(facade.pointer({ x: 1, y: 2 }, { now: 0 })).toEqual(freePointer({ x: 1, y: 2 }));
+    expect(facade.hover({ x: 1, y: 2 })).toBeNull();
     expect(facade.pick({ x: 1, y: 2 })).toEqual([]);
     expect(facade.snap({ x: 1, y: 2 })).toBeNull();
     const clicked = facade.click({ x: 1, y: 2 });
@@ -289,6 +295,90 @@ describe("the pointer replies", () => {
     for (const raw of ["", "junk", "null", '{"snap":null}', '{"snap":null,"error":"x"}', '{"snap":{"mode":1}}', '{"snap":{"point":[1]}}', '{"snap":{"point":["a","b"]}}', '{"snap":[1,2]}', '{"ok":false,"error":"trap"}']) {
       expect(parseSnap(raw)).toBeNull();
     }
+  });
+
+  test("parsePreview reads a reply once, whatever it holds", () => {
+    const parse = JSON.parse;
+    let parses = 0;
+    JSON.parse = ((text: string) => {
+      parses++;
+      return parse(text) as unknown;
+    }) as typeof JSON.parse;
+    try {
+      const drag = parsePreview('{"drag":{"clipboard":false,"handles":[18],"matrix":[1,0,0,1,3,4]},"prims":[{"kind":"polyline","start":0,"len":2}],"verts":[[0,0],[1,1]]}');
+      expect(drag.drag?.handles).toEqual([18]);
+      expect(drag.prims).toHaveLength(1);
+      expect(parses).toBe(1);
+      parsePreview('{"verts":[[0,0],[1,1]],"prims":[{"kind":"polyline","start":0,"len":2}],"drag":null}');
+      expect(parses).toBe(2);
+      parsePointer('{"point":[1,2],"constraint":"none","preview":{"verts":[],"prims":[],"drag":{"handles":[3],"matrix":[1,0,0,1,0,0]}}}', { x: 0, y: 0 });
+      expect(parses).toBe(3);
+    } finally {
+      JSON.parse = parse;
+    }
+  });
+
+  test("parseHover reads the engine's own choice, and falls back to the nearest handle without one", () => {
+    expect(parseHover('{"handles":["1A","2B"],"hover":"1A"}')).toBe("1A");
+    // The engine says nothing lights (a locked layer, a point prompt, the preview off): nothing does.
+    expect(parseHover('{"handles":["1A","2B"],"hover":null}')).toBeNull();
+    expect(parseHover('{"handles":["1A"],"hover":""}')).toBeNull();
+    expect(parseHover('{"handles":["1A"],"hover":7}')).toBeNull();
+    // An older package, or a canned facade: the nearest handle, as the hover was before.
+    expect(parseHover('{"handles":["1A","2B"]}')).toBe("1A");
+    expect(parseHover('{"handles":[]}')).toBeNull();
+    // A refusal, or anything unreadable.
+    expect(parseHover('{"handles":[],"hover":null,"error":"the point is not a usable world coordinate"}')).toBeNull();
+    for (const raw of ["", "junk", "null", "[]", "42", '{"ok":false,"error":"trap"}']) expect(parseHover(raw)).toBeNull();
+  });
+
+  test("parsePointer reads the resolved point, what bent it, its rays and its rubber band", () => {
+    const polar = parsePointer(
+      JSON.stringify({
+        point: [4.025, 4.025],
+        constraint: "polar",
+        snap: null,
+        from: [1, 1],
+        distance: 4.278,
+        angle: 45,
+        label: "Polar: 4.2780 < 45°",
+        paths: { verts: [[1, 1], [40, 40]], prims: [{ kind: "polyline", start: 0, len: 2, color: [255, 255, 255], lw: 0, alpha: 255, handle: 0 }] },
+        acquired: [[10, 0]],
+        wait: true,
+        preview: { verts: [[1, 1], [4.025, 4.025]], prims: [{ kind: "polyline", start: 0, len: 2, color: [1, 2, 3], lw: 0, alpha: 255, handle: 0 }], drag: null },
+      }),
+      { x: 4.05, y: 4 },
+    );
+    expect(polar.point).toEqual({ x: 4.025, y: 4.025 });
+    expect(polar.constraint).toBe("polar");
+    expect(polar.from).toEqual({ x: 1, y: 1 });
+    expect(polar.distance).toBe(4.278);
+    expect(polar.angle).toBe(45);
+    expect(polar.label).toBe("Polar: 4.2780 < 45°");
+    expect(polar.paths.verts).toEqual([{ x: 1, y: 1 }, { x: 40, y: 40 }]);
+    expect(polar.paths.prims).toHaveLength(1);
+    expect(polar.acquired).toEqual([{ x: 10, y: 0 }]);
+    expect(polar.wait).toBe(true);
+    expect(polar.preview.verts[1]).toEqual({ x: 4.025, y: 4.025 });
+    const snapped = parsePointer('{"point":[10,0],"constraint":"osnap","snap":{"point":[10,0],"mode":1,"name":"Endpoint","deferred":false}}', { x: 9.9, y: 0.1 });
+    expect(snapped.snap).toEqual({ point: { x: 10, y: 0 }, mode: 1, name: "Endpoint", deferred: false });
+    expect(snapped.preview).toBe(EMPTY_PREVIEW);
+    expect(snapped.paths.prims).toEqual([]);
+  });
+
+  test("parsePointer answers the free pointer for a refusal or anything malformed", () => {
+    const at = { x: 3, y: -4 };
+    const refusal = '{"point":null,"constraint":"none","snap":null,"paths":{"verts":[],"prims":[]},"acquired":[],"wait":false,"preview":{"verts":[],"prims":[],"drag":null},"error":"the time must be finite milliseconds, 0 or more"}';
+    for (const raw of ["", "junk", "null", "[]", "42", '{"ok":false,"error":"trap"}', refusal, '{"point":[1]}', '{"point":["a","b"]}', '{"point":{"x":1,"y":2}}']) {
+      expect(parsePointer(raw, at)).toEqual(freePointer(at));
+    }
+    // A point with junk around it keeps the point and tames the rest.
+    const junk = parsePointer('{"point":[1,2],"constraint":"sideways","snap":{"mode":1},"from":[1],"distance":"far","angle":null,"label":7,"paths":{"verts":[[0,0]],"prims":[{"kind":"polyline","start":0,"len":9}]},"acquired":[[1],"x",[2,3]],"wait":"yes","preview":"none"}', at);
+    expect(junk).toEqual({ ...freePointer({ x: 1, y: 2 }), acquired: [{ x: 2, y: 3 }] });
+    // More acquired points, or a longer label, than the engine ever sends are cut.
+    const many = parsePointer(JSON.stringify({ point: [0, 0], acquired: Array.from({ length: 500 }, (_, i) => [i, i]), label: "x".repeat(5000) }), at);
+    expect(many.acquired.length).toBe(16);
+    expect(many.label.length).toBe(120);
   });
 
   test("parsePromptAnchor reads the base, corner and distance of a command-line reply", () => {
@@ -368,7 +458,8 @@ describe("the pointer calls over the mock", () => {
     expect(facade.displayList().prims.length).toBe(before);
 
     let state = facade.start("line");
-    let clicked = facade.click({ x: 1.5, y: -2 }, 0, state, "1.5,-2");
+    let clicked = facade.click({ x: 1.5, y: -2 }, 0, state, (taken) => `${taken.x},${taken.y}`);
+    expect(clicked.point).toEqual({ x: 1.5, y: -2 });
     state = clicked.state;
     expect(state.running).toBe("line");
     expect(promptText(state)).toBe("Specify next point or [Undo]:");
@@ -381,17 +472,114 @@ describe("the pointer calls over the mock", () => {
     // A hostile click is refused before it reaches the facade, and the prompt stays up.
     const refused = facade.click({ x: NaN, y: 0 }, 0, clicked.state);
     expect(refused.state.error).toContain("refused");
+    expect(refused.point).toBeNull();
     expect(refused.state.running).toBe("line");
     expect(facade.click({ x: 0, y: 0 }, -1, clicked.state).state.error).toContain("refused");
     const raw: unknown = JSON.parse(new MockFacade().click(Infinity, 0, 0));
-    expect(raw).toMatchObject({ snap: null, output: [] });
+    expect(raw).toMatchObject({ snap: null, point: null, output: [] });
   });
 
-  test("promptAnchor has no base in the mock (it does not say one)", () => {
+  test("click echoes the point the engine says it took, not the one under the pointer", () => {
+    const reply = (extra: Record<string, unknown>): string => JSON.stringify({ prompt: "LINE Specify next point:", running: "line", keywords: [], output: [], ...extra });
+    const facadeWith = (click: string): AppFacade => new AppFacade({ ...new MockFacade(), click: () => click } as unknown as MockFacade, { kind: "wasm", detail: "test" });
+    const echo = (taken: { x: number; y: number }): string => `${taken.x},${taken.y}`;
+    // Ortho bent it: the history shows where the line went.
+    const bent = facadeWith(reply({ snap: null, point: [6, 2], base: [6, 2] })).click({ x: 6, y: 3 }, 0, emptyPrompt(), echo);
+    expect(bent.point).toEqual({ x: 6, y: 2 });
+    expect(bent.state.output).toEqual(["6,2"]);
+    expect(bent.state.anchor.base).toEqual({ x: 6, y: 2 });
+    // A package that names no point took the snap, or else the pointer.
+    const snapped = facadeWith(reply({ snap: { point: [10, 0], mode: 1, name: "Endpoint" } })).click({ x: 9.9, y: 0.1 }, 0, emptyPrompt(), echo);
+    expect(snapped.point).toEqual({ x: 10, y: 0 });
+    expect(facadeWith(reply({})).click({ x: 9.9, y: 0.1 }, 0, emptyPrompt(), echo).state.output).toEqual(["9.9,0.1"]);
+    // A refusal from the engine names no point, and nothing is echoed for it.
+    const refused = facadeWith(reply({ snap: null, point: null, error: "the point is not a usable world coordinate" })).click({ x: 1, y: 1 }, 0, emptyPrompt(), echo);
+    expect(refused.point).toBeNull();
+    expect(refused.state.output).toEqual([]);
+    expect(refused.state.error).toContain("usable");
+  });
+
+  test("the prompt state carries the anchor its reply named, with no second read of the prompt", () => {
     const facade = mockFacade();
-    expect(facade.promptAnchor()).toEqual(NO_ANCHOR);
+    // The mock names no base: the state says so, by the shared constant.
+    expect(facade.currentPrompt().anchor).toBe(NO_ANCHOR);
+    expect(facade.start("line").anchor).toBe(NO_ANCHOR);
+    let prompts = 0;
+    const engine = new AppFacade(
+      {
+        ...new MockFacade(),
+        prompt: () => {
+          prompts++;
+          return "{}";
+        },
+        start: () => '{"prompt":"LINE Specify first point:","running":"line","keywords":[],"base":null,"corner":false,"distance":false,"deferred":true,"output":[]}',
+        cmdline: () => '{"prompt":"LINE Specify next point:","running":"line","keywords":[],"base":[2,3],"corner":false,"distance":false,"deferred":false,"output":[]}',
+        cancel: () => '{"prompt":"Command:","running":null,"keywords":[],"base":null,"corner":false,"distance":false,"deferred":false,"output":["*Cancel*"]}',
+        click: () => '{"prompt":"RECTANG Specify other corner:","running":"rectang","keywords":[],"base":[4,5],"corner":true,"distance":false,"deferred":false,"output":[],"snap":null,"point":[4,5]}',
+      } as unknown as MockFacade,
+      { kind: "wasm", detail: "test" },
+    );
+    let state = engine.start("line");
+    expect(state.anchor).toEqual({ base: null, corner: false, distance: false, deferred: true });
+    state = engine.cmdline("2,3", state);
+    expect(state.anchor).toEqual({ base: { x: 2, y: 3 }, corner: false, distance: false, deferred: false });
+    expect(engine.click({ x: 4, y: 5 }, 0, state).state.anchor).toEqual({ base: { x: 4, y: 5 }, corner: true, distance: false, deferred: false });
+    expect(engine.cancel(state).anchor).toBe(NO_ANCHOR);
+    expect(prompts).toBe(0);
+  });
+
+  test("pointer is free in the mock, and what the engine refuses is refused the same way", () => {
+    const facade = mockFacade();
+    expect(facade.pointer({ x: 5, y: 6 }, { now: 12 })).toEqual(freePointer({ x: 5, y: 6 }));
     facade.start("line");
-    expect(facade.promptAnchor()).toEqual(NO_ANCHOR);
+    expect(facade.pointer({ x: 5, y: 6 }, { now: 12, shift: true, ctrl: true }).point).toEqual({ x: 5, y: 6 });
+    // Hostile numbers never reach the facade as they are: the free pointer, quietly.
+    expect(facade.pointer({ x: NaN, y: 0 }, { now: 0 }).constraint).toBe("none");
+    expect(facade.pointer({ x: 0, y: 0 }, { now: 0, aperture: -1 }).preview).toBe(EMPTY_PREVIEW);
+    const mock = new MockFacade();
+    for (const args of [[NaN, 0, 0, 0, 0], [0, 1e308, 0, 0, 0], [0, 0, -1, 0, 0], [0, 0, Infinity, 0, 0], [0, 0, 0, -1, 0], [0, 0, 0, NaN, 0], [0, 0, 0, Infinity, 0], [0, 0, 0, 1e308, 0], [0, 0, 0, 0, 4], [0, 0, 0, 0, -1], [0, 0, 0, 0, 1.5], [0, 0, 0, 0, NaN]] as const) {
+      const reply: unknown = JSON.parse(mock.pointer(args[0], args[1], args[2], args[3], args[4]));
+      expect(reply).toMatchObject({ point: null, constraint: "none", preview: { verts: [], prims: [], drag: null } });
+      expect(typeof (reply as { error?: unknown }).error).toBe("string");
+    }
+    expect(JSON.parse(mock.pointer(1, 2, 0, 1e15, 3))).toMatchObject({ point: [1, 2] });
+  });
+
+  test("the clock and the keys cross as numbers the engine takes", () => {
+    const seen: number[][] = [];
+    const facade = new AppFacade(
+      {
+        ...new MockFacade(),
+        pointer: (...args: number[]) => {
+          seen.push(args);
+          return '{"point":[0,0]}';
+        },
+      } as unknown as MockFacade,
+      { kind: "wasm", detail: "test" },
+    );
+    facade.pointer({ x: 1, y: 2 }, { now: 16.5 });
+    facade.pointer({ x: 1, y: 2 }, { now: 33, shift: true, aperture: 0.25 });
+    facade.pointer({ x: 1, y: 2 }, { now: 50, ctrl: true });
+    facade.pointer({ x: 1, y: 2 }, { now: NaN, shift: true, ctrl: true });
+    facade.pointer({ x: 1, y: 2 }, { now: -5 });
+    expect(seen).toEqual([
+      [1, 2, 0, 16.5, 0],
+      [1, 2, 0.25, 33, 1],
+      [1, 2, 0, 50, 2],
+      [1, 2, 0, 0, 3],
+      [1, 2, 0, 0, 0],
+    ]);
+  });
+
+  test("hover is the mock's pick at rest and nothing while a prompt is up", () => {
+    const facade = mockFacade();
+    expect(facade.hover({ x: 50, y: 5 })).toBe(facade.pick({ x: 50, y: 5 })[0] ?? null);
+    expect(facade.hover({ x: -500, y: -500 })).toBeNull();
+    expect(facade.hover({ x: NaN, y: 0 })).toBeNull();
+    expect(facade.hover({ x: 50, y: 5 }, -1)).toBeNull();
+    facade.start("line");
+    expect(facade.pick({ x: 50, y: 5 }).length).toBe(1);
+    expect(facade.hover({ x: 50, y: 5 })).toBeNull();
   });
 });
 
@@ -528,6 +716,7 @@ describe("the extended facade contract over the mock", () => {
       preview: () => '{"verts":"none","prims":7,"drag":{"matrix":[1]}}',
       pick: () => '{"handles":{"0":"1A"}}',
       snap: () => '{"snap":{"point":[null,2],"mode":"end"}}',
+      pointer: () => '{"point":[null,2],"paths":7,"preview":[]}',
       click: () => "not json",
       open_bytes: () => "",
       load_sample: () => "",
@@ -565,7 +754,9 @@ describe("the extended facade contract over the mock", () => {
     const clicked = facade.click({ x: 0, y: 0 }, 0, state);
     expect(clicked.state.error).toContain("unreadable");
     expect(clicked.snap).toBeNull();
-    expect(facade.promptAnchor()).toEqual(NO_ANCHOR);
+    expect(clicked.state.anchor).toBe(NO_ANCHOR);
+    expect(facade.pointer({ x: 3, y: 4 }, { now: 0 })).toEqual(freePointer({ x: 3, y: 4 }));
+    expect(facade.hover({ x: 0, y: 0 })).toBeNull();
   });
 
   test("MockFacade satisfies every RawFacade method the shim uses", () => {
@@ -591,6 +782,7 @@ describe("the extended facade contract over the mock", () => {
       "preview",
       "pick",
       "snap",
+      "pointer",
       "click",
       "open_bytes",
       "load_sample",
@@ -621,6 +813,7 @@ describe("the extended facade contract over the mock", () => {
     expect(typeof mock.preview(NaN, 1e308)).toBe("string");
     expect(typeof mock.pick(NaN, 0, -1)).toBe("string");
     expect(typeof mock.snap(0, -Infinity, NaN)).toBe("string");
+    expect(typeof mock.pointer(NaN, -Infinity, NaN, -1, 1e308)).toBe("string");
     expect(typeof mock.click(NaN, NaN, NaN)).toBe("string");
     expect(typeof mock.open_bytes("x", new Uint8Array())).toBe("string");
     expect(typeof mock.load_sample()).toBe("string");

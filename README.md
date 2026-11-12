@@ -72,6 +72,10 @@
 
 ## Screenshots
 
+These three pictures were taken in the earlier interface, which has since been replaced by the
+one described below: the drawings are the same, the window around them is not (the sidebar is
+on the left now, and there is no Tool Sets palette or ViewCube). New captures are due.
+
 <table>
   <tr>
     <td width="50%"><img src="docs/images/ui-layout.png" alt="A paper-space layout in CADCraft: a white sheet with a dashed printable area and a viewport showing the apartment plan at scale, the status bar showing the A1 Plan layout tab and a PAPER toggle"></td>
@@ -86,41 +90,45 @@
 ## Why CADCraft
 
 - **The workflow you know.** Type `L`, click two points, type `@5<45`, press Enter. The command
-  line, prompts with clickable `[Keywords]`, AutoComplete, object snaps, polar tracking, ortho,
-  direct distance entry, window and crossing selection, grips, and right-click-to-repeat behave
-  the way decades of drafting habit expect.
-- **Open files.** DXF is read and written natively (ASCII and binary, R12 through 2018), and DWG
-  files (R13 through 2018) open and save through the open-source acadrust library. Export to SVG
-  and PNG today.
+  line, prompts with clickable `[Keywords]`, object snaps with a marker under the pointer,
+  direct distance entry, window and crossing selection, and right-click to repeat behave the way
+  decades of drafting habit expect.
+- **Open files.** DXF is read and written natively (ASCII and binary, R12 through 2018). DWG
+  files (R13 through 2018) are read and written through the open-source acadrust library by the
+  command-line tool; the app itself opens and saves DXF for now. Export to SVG, PNG and PDF
+  from the command-line tool.
 - **One interface everywhere.** The engine is pure Rust; the interface is a small SolidJS app
   that runs it as WebAssembly. The desktop app is that interface in a native window (the
   system's own webview, no bundled browser), and the same build runs in a browser tab.
 - **Built for agents.** Every menu item, tool and prompt is a command. Agents can type at the
   command line exactly like a person, call any command with JSON, inspect the drawing to verify
-  their work, and render it — over MCP, a JSON control channel, or the CLI.
+  their work, and render it, over MCP or the CLI.
 - **Free.** MIT OR Apache-2.0, with no account and no subscription.
 
 ## What works today
 
 CADCraft is in early, fast development. Honest status (see [ROADMAP.md](ROADMAP.md) for parity
-numbers):
+numbers). The engine is ahead of the interface: the interface was rebuilt in November 2026, and a
+command that used to open a dialog now runs as its command-line prompts. The first two rows say
+what the app's window does today; the rest say what the commands do, from the app's command line,
+the CLI and MCP alike.
 
 | Area | Status |
 |---|---|
-| Drawing area | Model space with adaptive grid, axes, pan/zoom (wheel, middle-drag, pinch), crosshair cursor with pickbox, UCS icon, ViewCube, viewport label |
-| Command line | Prompts with keywords, history, AutoComplete, aliases, `@dx,dy`, `@d<a`, `#x,y`, direct distance entry, Enter/space/right-click to repeat, transparent commands, `.scr`-style scripts |
+| The app's window | Laid out as an editor: menus and a command centre in the title bar, a drawing toolbar (draw, modify, dimension, zoom), Layers and Properties in a sidebar, layout tabs over the drawing, the command line as the bottom panel, an assistant panel, a status bar of drafting toggles, and a command palette (`Ctrl+Shift+P`). Drawing with the pointer: a click gives a running command its point, with a rubber band and an object-snap marker, held to ortho, polar tracking, grid snap and object snap tracking when they are on; hover highlight, window and crossing selection, right click as Enter, middle-button pan, wheel zoom, touch pan and pinch. Dark and light themes. Keyboard access through the whole window. [Details](apps/ui/README.md) |
+| Not in the app's window yet | Dialogs (Options, Plot, Layer Properties Manager, Hatch, the block and text editors), grips, dynamic input, right-click menus (a right click is Enter), DWG, autosave, file tabs, languages other than English. [The list](docs/gaps.md#uiux) |
+| Command line | Prompts with keywords, history, aliases, `@dx,dy`, `@d<a`, `#x,y`, direct distance entry, Enter/space/right-click to repeat, transparent commands, scripts through the CLI |
 | Draw | LINE, PLINE (arcs, widths), CIRCLE (center/radius/diameter, 2P, 3P), ARC, RECTANG (fillet/chamfer), POLYGON, ELLIPSE (+arcs), SPLINE, POINT, XLINE, RAY, DONUT, TEXT, MTEXT |
 | Modify | ERASE, MOVE, COPY, ROTATE, SCALE, MIRROR, STRETCH, OFFSET, TRIM, EXTEND, FILLET, CHAMFER, BREAK, JOIN, EXPLODE, rectangular/polar ARRAY, draw order, OVERKILL |
-| Precision | Object snaps (endpoint, midpoint, center, geometric center, node, quadrant, intersection, insertion, perpendicular, tangent, nearest; deferred tangent/perpendicular for the first point of a line, e.g. belt lines tangent to two circles), polar tracking, ortho, grid snap |
-| Layers & properties | Layers palette and Layer Properties Manager (on/off, freeze, lock, plot, colour, linetype), layer tools (isolate, freeze, off, lock, match, previous), Properties palette with per-object editing, linetypes, lineweights, colour index and true colour |
+| Precision | Object snaps (endpoint, midpoint, center, geometric center, node, quadrant, intersection, insertion, perpendicular, tangent, nearest; deferred tangent/perpendicular for the first point of a line, e.g. belt lines tangent to two circles), typed point modifiers (FROM, M2P, point filters, snap overrides), and polar tracking, object snap tracking, ortho (Shift flips it) and grid snap under the pointer, with a label that names the constraint and its distance and angle |
+| Layers & properties | Layers palette (current layer, on/off, freeze, lock), the LAYER command for the rest (plot, colour, linetype), layer tools (isolate, freeze, off, lock, match, previous), Properties palette editing the common properties, linetypes, lineweights, colour index and true colour |
 | Annotation | All DIM* commands with full DIMSTYLE variables, overrides and every arrowhead, associative dimensions that follow geometry, MLEADER, TABLE, TrueType fonts (`.ttf`, `.otf`, `.ttc` collections), MTEXT formatting codes (fonts, heights, colours, stacked fractions), our own single-stroke drafting font |
 | Hatch & blocks | Pick-point hatch boundaries with islands, pattern, solid and gradient fills from our own pattern library, BLOCK/INSERT, attributes and nested blocks |
-| Files | DXF read (R12–2018, ASCII and binary) and write (R2000), including dimension styles, associativity, tables and constraints; DWG read (via the acadrust library) and write (R2000); PDF plotting, SVG and PNG export. Entities CADCraft doesn't model yet are not kept on save: see [file-format parity](docs/file-format-parity.md) |
+| Files | DXF read (R12–2018, ASCII and binary) and write, including dimension styles, associativity, tables and constraints; DWG read and write through the acadrust library and PDF plotting, SVG and PNG export, all three from `cadcraft-cli` (the app's window opens and saves DXF). Not everything CADCraft doesn't model is kept on save: see [file-format parity](docs/file-format-parity.md) |
 | Layouts & plotting | Paper-space layouts, viewports (scale, lock, per-viewport layer freeze), MSPACE/PSPACE through viewports, page setups, PLOT and EXPORTPDF |
 | Parametric | Geometric and dimensional constraints, AUTOCONSTRAIN, PARAMETERS with expressions, conflict detection; constraints re-solve after every edit |
-| Grips | Hot grips with Space to cycle Stretch, Move, Rotate, Scale and Mirror |
-| Interface languages | English, Ukrainian (Українська), Brazilian Portuguese (Português (Brasil)), German (Deutsch), Spanish (Español), Czech (Čeština), Russian (Русский), French (Français), Simplified Chinese (简体中文, with an installed CJK font), Italian (Italiano), Korean (한국어, with an installed Hangul font), Swedish (Svenska), Arabic (العربية, with an installed Arabic font), Hungarian (Magyar) and Turkish (Türkçe), live switching and a remembered Auto/system-language choice; [details](docs/localization.md) |
-| Automation | MCP server (one `run` tool: AutoLISP in the open drawing), JSON control channel, `cadcraft-cli` (info, convert, run, commands, mcp), in-app assistant |
+| Interface languages | English. The earlier interface's translations (15 languages) went with it and have not been redone |
+| Automation | MCP server (one `run` tool: AutoLISP in the open drawing), `cadcraft-cli` (info, convert, run, commands, mcp), in-app assistant |
 
 ## Quick start
 
@@ -132,6 +140,11 @@ cd cadcraft
 cd apps/ui && bun install && bun run build:wasm && bun run build && cd ../..
 cargo run --release -p cadcraft                   # the desktop app, on the sample drawing
 ```
+
+The first line builds the interface (it needs [bun](https://bun.sh) and the
+`wasm32-unknown-unknown` target with `wasm-bindgen`); the desktop app embeds that build and
+shows it in the system's webview. The desktop app has been run on Windows so far; the other
+platforms' builds of it are not yet verified.
 
 On Windows x64 the repository links with the Rust toolchain's own LLVM linker
 (`rust-lld`, set in [`.cargo/config.toml`](.cargo/config.toml)): linking the GUI binary
@@ -183,12 +196,12 @@ reached from that code — `(cmd "circle" '((CENTER . (0 0)) (RADIUS . 5)))` dra
 `(cmdline "line" "0,0" "10,0")` types at the command line, `(cmd "describe")` reads the drawing
 back, `(render)` returns a picture — and a `defun` the model writes is kept and reloaded next
 session, so it builds its own tooling instead of choosing from a menu. An empty call returns the
-manual. See [docs/mcp.md](docs/mcp.md); the desktop app's JSON control channel is documented in
-[docs/control-protocol.md](docs/control-protocol.md).
+manual. See [docs/mcp.md](docs/mcp.md). A JSON control channel for driving the running app is
+specified in [docs/control-protocol.md](docs/control-protocol.md); the app does not serve it yet.
 
-**The same one tool drives the in-app assistant** (Window ▸ Assistant): a model that works in the
-drawing in front of you, over any OpenAI-compatible provider — cloud or local. See
-[docs/assistant.md](docs/assistant.md).
+**The same one tool drives the in-app assistant** (Window ▸ Assistant, `Ctrl+7`): a model that
+works in the drawing in front of you, over any OpenAI-compatible provider, cloud or local. Setup
+is two steps with a connection check. See [docs/assistant.md](docs/assistant.md).
 
 To run LISP routines, scripts and alias files, or to drive CADCraft from your own programs, see
 [docs/customization.md](docs/customization.md).

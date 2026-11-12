@@ -852,19 +852,59 @@ export function checkRunArgs(args: unknown): { code: string; values: Record<stri
 
 // ---- Inline text (the model's words, rendered) ----------------------------------------------------
 
-/** One run of the model's text: plain, **bold**, or `code`. */
+/** One run of the model's text: plain, **bold**, `code`, or a link to an http or https address. */
 export interface InlinePart {
-  kind: "text" | "bold" | "code";
+  kind: "text" | "bold" | "code" | "link";
   text: string;
+  /** A link's address, exactly as [`safeHref`] passed it: an http or https one. Absent on every other run. */
+  href?: string;
 }
 
-const INLINE_RE = /`([^`]+)`|\*\*([^*]+)\*\*/g;
+/** The longest address a link may carry, and the longest label a `[label](address)` link may show. */
+export const MAX_HREF_CHARS = 2_048;
+const MAX_LINK_LABEL_CHARS = 200;
+
+/** `code`, **bold**, `[label](address)`, or a bare http or https address, in that order of precedence. */
+const INLINE_RE = new RegExp(
+  ["`([^`]+)`", "\\*\\*([^*]+)\\*\\*", `\\[([^\\]\\n]{1,${MAX_LINK_LABEL_CHARS}})\\]\\(([^()\\s]{1,${MAX_HREF_CHARS}})\\)`, `\\bhttps?://[^\\s<>"\`]{1,${MAX_HREF_CHARS}}`].join("|"),
+  "gi",
+);
+
+/** An address a link may open: `http://` or `https://`, then a host with no name or password before it, then anything printable. */
+const HREF_RE = /^https?:\/\/[^\s/?#@\\]+(?:[/?#][^\s\\]*)?$/i;
 
 /**
- * Split one line of the model's text into plain, bold and code runs. Backticks win over bold
- * inside them; a marker that never closes stays literal. No HTML is produced: the pane maps the
- * parts to elements, so a model's words can never inject markup.
+ * The address a link in a reply may open, or null when what the model wrote must stay text. Only
+ * an absolute http or https address passes: `javascript:`, `data:`, `vbscript:`, `file:`, a
+ * scheme-relative `//host`, a path, an address with a name or a password before its host (the
+ * reader would see one site's name and open another), one holding a backslash, a space, a
+ * control character or a mark that turns the direction of the text (it would draw the address
+ * other than it is), and one past [`MAX_HREF_CHARS`] do not. The address is returned as written
+ * and never parsed, so this never throws.
  */
+export function safeHref(candidate: string): string | null {
+  if (candidate.length > MAX_HREF_CHARS || /[\u0000-\u0020\u007f-\u009f\u200e\u200f\u2028-\u202e\u2066-\u2069]/.test(candidate)) return null;
+  return HREF_RE.test(candidate) ? candidate : null;
+}
+
+/** A bare address as the sentence around it meant it: without the stop, the comma or the closing bracket that follows it. */
+function bareAddress(raw: string): string {
+  let opened = 0;
+  let closed = 0;
+  for (const ch of raw) {
+    if (ch === "(") opened += 1;
+    else if (ch === ")") closed += 1;
+  }
+  let end = raw.length;
+  for (; end > 0; end--) {
+    const last = raw[end - 1] ?? "";
+    // A closing bracket belongs to the address only when the address opened it.
+    if (last === ")" && closed > opened) closed -= 1;
+    else if (!".,;:!?'*_]}>".includes(last)) break;
+  }
+  return raw.slice(0, end);
+}
+
 /**
  * Split a reply into prose and fenced code: `[{ kind: "text", text }, { kind: "code", text }]`.
  * A fence opens on ``` (an optional language word on the same line is dropped) and closes on the
@@ -1354,12 +1394,50 @@ const HEADING_RE = /^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/;
 const BULLET_RE = /^\s*[-*•]\s+(.*)$/;
 const ORDERED_RE = /^\s*\d{1,9}[.)]\s+(.*)$/;
 
+/** The line under a table's header: a run of dashes per column, between pipes (`|---|:--:|`). */
+const TABLE_RULE_RE = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
+/** How a table's cells are joined once it is read as text. */
+const CELL_JOIN = " · ";
+/** A table's header reads as a heading under the reply's own (`###` and deeper are the minor ones). */
+const TABLE_HEADING_LEVEL = 4;
+
+/** The cells of one table row: the text between its pipes (`\|` is a pipe inside a cell). */
+function tableCells(line: string): string[] {
+  const cells: string[] = [];
+  let cell = "";
+  const row = line.trim();
+  for (let i = 0; i < row.length; i++) {
+    const ch = row[i] ?? "";
+    if (ch === "\\" && row[i + 1] === "|") {
+      cell += "|";
+      i += 1;
+    } else if (ch === "|") {
+      // The pipe that opens the row starts its first cell; it does not end an empty one.
+      if (i > 0) cells.push(cell.trim());
+      cell = "";
+    } else cell += ch;
+  }
+  if (cell.trim() !== "") cells.push(cell.trim());
+  return cells;
+}
+
+/** A table's row as one line of a list: its cells in order, the first in bold (it names the row). */
+function tableItem(cells: readonly string[]): string {
+  const [first = "", ...rest] = cells;
+  // A cell with its own markers is left as it is: wrapped in bold it would break them.
+  const lead = first === "" || /[*`]/.test(first) ? first : `**${first}**`;
+  return [lead, ...rest].filter((cell) => cell !== "").join(CELL_JOIN);
+}
+
 /**
  * Split a reply's prose (what `splitFences` left outside the code) into the blocks models write:
  * `#` headings, `-`/`*` and `1.` lists, and paragraphs divided by blank lines (a port of the
- * desktop pane's `parse_markdown_lite`, without its tables). Lines of one paragraph keep their
- * breaks; a line that continues a list item is folded into it. Nothing is HTML: the pane maps
- * blocks to elements and runs `parseInline` over each text.
+ * desktop pane's `parse_markdown_lite`). Lines of one paragraph keep their breaks; a line that
+ * continues a list item is folded into it. A Markdown table has no room in a panel a few hundred
+ * pixels wide, and left alone it would be drawn as its pipes and dashes: it is read as text
+ * instead, its header as a minor heading and each row as a list item, the cells joined by a
+ * middle dot. Nothing is HTML: the pane maps blocks to elements and runs `parseInline` over each
+ * text.
  */
 export function parseBlocks(text: string): ProseBlock[] {
   const blocks: ProseBlock[] = [];
@@ -1373,10 +1451,23 @@ export function parseBlocks(text: string): ProseBlock[] {
     if (list !== null) blocks.push({ kind: "list", ordered: list.ordered, items: list.items });
     list = null;
   };
-  for (const line of text.split("\n")) {
+  const lines = text.split("\n");
+  for (let at = 0; at < lines.length; at++) {
+    const line = lines[at] ?? "";
     if (line.trim() === "") {
       endPara();
       endList();
+      continue;
+    }
+    const rule = lines[at + 1] ?? "";
+    if (line.includes("|") && rule.includes("|") && TABLE_RULE_RE.test(rule) && tableCells(line).length === tableCells(rule).length) {
+      endPara();
+      endList();
+      blocks.push({ kind: "heading", level: TABLE_HEADING_LEVEL, text: tableCells(line).join(CELL_JOIN) });
+      const rows: string[] = [];
+      for (at += 2; at < lines.length && (lines[at] ?? "").includes("|"); at++) rows.push(tableItem(tableCells(lines[at] ?? "")));
+      at -= 1;
+      if (rows.length > 0) blocks.push({ kind: "list", ordered: false, items: rows });
       continue;
     }
     const heading = HEADING_RE.exec(line);
@@ -1536,15 +1627,37 @@ export function focusIsOurs(panel: { contains: (node: Node | null) => boolean },
   return active === null || active === body || panel.contains(active);
 }
 
+/**
+ * Split the model's text into plain, bold, code and link runs. Backticks win over everything
+ * inside them; a marker that never closes stays literal. A link is `[label](address)` or a bare
+ * address, and only when [`safeHref`] passes the address: anything else (`[x](javascript:…)`, a
+ * `data:` address) stays the text the model wrote, brackets and all, so the reader sees what it
+ * was. No HTML is produced: the pane maps the parts to elements, so a model's words can never
+ * inject markup.
+ */
 export function parseInline(text: string): InlinePart[] {
   const parts: InlinePart[] = [];
   let last = 0;
   for (const m of text.matchAll(INLINE_RE)) {
     const index = m.index ?? 0;
+    let part: InlinePart | null = null;
+    let length = m[0].length;
+    if (m[1] !== undefined) part = { kind: "code", text: m[1] };
+    else if (m[2] !== undefined) part = { kind: "bold", text: m[2] };
+    else if (m[3] !== undefined) {
+      const href = safeHref(m[4] ?? "");
+      if (href !== null) part = { kind: "link", text: m[3], href };
+    } else {
+      const address = bareAddress(m[0]);
+      const href = safeHref(address);
+      if (href !== null) part = { kind: "link", text: address, href };
+      length = address.length;
+    }
+    // What is not a link stays in the text around it, exactly as written.
+    if (part === null) continue;
     if (index > last) parts.push({ kind: "text", text: text.slice(last, index) });
-    if (m[1] !== undefined) parts.push({ kind: "code", text: m[1] });
-    else parts.push({ kind: "bold", text: m[2] ?? "" });
-    last = index + m[0].length;
+    parts.push(part);
+    last = index + length;
   }
   if (last < text.length) parts.push({ kind: "text", text: text.slice(last) });
   if (parts.length === 0) parts.push({ kind: "text", text });

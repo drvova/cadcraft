@@ -17,7 +17,7 @@
 - [Field](docs/generated/components/field.md): It takes one line of text and hands every keystroke back to the caller, who owns the value.
 - [IconButton](docs/generated/components/icon-button.md): It runs one action drawn as a single glyph, and its title is both its accessible name and the hint a sighted person reads.
 - [Kbd](docs/generated/components/kbd.md): It shows the key or shortcut that runs the action beside it, as a fact to read and never as a control.
-- [Row](docs/generated/components/row.md): It is the full-width clickable band of a list: a menu item, a property row or a layer, marked current when it is the selected one.
+- [Row](docs/generated/components/row.md): It is the full-width clickable band of a list: a layer, a command in a listbox or an item of a menu, marked current when it is the select...
 - [SectionLabel](docs/generated/components/section-label.md): It names a panel's section as a real heading, so a screen reader can jump between the sections by heading.
 - [Select](docs/generated/components/select.md): It lets the user pick one value from a short, known list, and hands the pick back to the caller, who owns the value.
 - [Tab](docs/generated/components/tab.md): It brings one view of a strip to the front: a layout over the drawing or a chat in the assistant, marked selected when it is the one show...
