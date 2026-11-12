@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseBench } from "../bench";
 import { benchPanelParams, MAX_PARAM_TEXT, paramText, pressedHandles } from "./bench-params";
 import { buildMetrics, codepoints, UNITS_PER_PX } from "./fonts";
-import { compareArtifacts, describeReport, formatLock, matchesLock, parseLock, type SlabLock } from "./lock";
+import { compareArtifacts, describeReport, formatLock, matchesLock, parseLock, parsePin, type SlabLock } from "./lock";
 import { readPaneWidths, sizesMatch, targetSizes, widthClass, widthsAfterDrag, writePaneWidths } from "./panes";
 import { themeName } from "./surface";
 import { shellChoice, slabFailed } from "./switch";
@@ -279,12 +280,45 @@ describe("the lock", () => {
     expect(describeReport(report)).toContain("missing: wasm/k.wasm");
   });
 
-  test("the committed lock is well formed and pins the patches in the tree", () => {
+  test("the pin parses, and a damaged one is refused", () => {
+    const sum = "a".repeat(64);
+    const text = `# the pin\nrepo https://github.com/stencil-hq/slab\ncommit ${"0".repeat(40)}\n\npatch ${sum} 0001-a.patch\npatch ${sum} 0002-b.patch\n`;
+    const parsed = parsePin(text);
+    expect(parsed.ok && parsed.pin).toEqual({ repo: "https://github.com/stencil-hq/slab", commit: "0".repeat(40), patches: [{ file: "0001-a.patch", sha256: sum }, { file: "0002-b.patch", sha256: sum }] });
+    const bad = (pin: string): string => {
+      const r = parsePin(pin);
+      return r.ok ? "ok" : r.error;
+    };
+    expect(bad("commit main\n")).toContain("line 1");
+    expect(bad(`repo https://x.test/a\n`)).toContain("no commit");
+    expect(bad(`commit ${"0".repeat(40)}\n`)).toContain("no repo");
+    expect(bad(`repo https://x.test/a\nrepo https://y.test/b\ncommit ${"0".repeat(40)}\n`)).toContain("line 2");
+    expect(bad(`repo https://x.test/a\ncommit ${"0".repeat(40)}\npatch ${sum} ../../etc/passwd.patch\n`)).toContain("line 3");
+    expect(bad(`repo https://x.test/a\ncommit ${"0".repeat(40)}\npatch short 0001-a.patch\n`)).toContain("line 3");
+    expect(bad("rm -rf /\n")).toContain("line 1");
+  });
+
+  test("the committed record is of the committed pin, and the pin's patches are in the tree", () => {
     const parsed = parseLock(readFileSync(join(ui, "slab.lock.json"), "utf8"));
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
-    for (const patch of parsed.lock.patches) expect(existsSync(join(ui, "slab", "patches", patch.file))).toBe(true);
+    const shared = join(ui, "..", "..", "third_party", "slab");
+    const pin = parsePin(readFileSync(join(shared, "SLAB.lock"), "utf8"));
+    expect(pin.ok).toBe(true);
+    if (!pin.ok) return;
+    // One pin for the web and the Rust side: the record names the same commit and series.
+    expect(parsed.lock.repo).toBe(pin.pin.repo);
+    expect(parsed.lock.commit).toBe(pin.pin.commit);
+    expect(parsed.lock.patches).toEqual(pin.pin.patches);
+    expect(pin.pin.patches.length).toBeGreaterThan(0);
+    for (const patch of pin.pin.patches) {
+      const bytes = readFileSync(join(shared, "patches", patch.file));
+      expect(createHash("sha256").update(bytes).digest("hex")).toBe(patch.sha256);
+    }
+    expect(existsSync(join(ui, "slab", "patches"))).toBe(false);
     for (const path of ["slab-runtime.js", "wasm/slab_kernel_bg.wasm", "compiler/slab_wasm.js", "compiler/slab_wasm_bg.wasm"]) expect(parsed.lock.artifacts[path]).toBeDefined();
+    // The kernel is built without Slab's bundled faces: with them it was 4.3 MB.
+    expect(parsed.lock.artifacts["wasm/slab_kernel_bg.wasm"]?.bytes ?? Infinity).toBeLessThan(2_500_000);
   });
 });
 

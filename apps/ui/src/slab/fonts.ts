@@ -3,13 +3,15 @@
  * stack (`--font-family`, `--font-family-mono` of `../tokens.css`), whatever face that resolves to
  * on this machine.
  *
- * Slab's kernel measures text from a table of advances per codepoint and never asks the page. At
- * the pinned commit a document compiled without help is measured with Inter (bundled in the
- * kernel) and painted with it too. This repository ships no font and paints in the system's, so
- * instead the page measures the face it will really paint with (a canvas `measureText` per
- * codepoint, per weight, per size) and hands the kernel those advances
- * (`SlabElement.registerFontMetrics`, slab/patches/0001). No font file is read, fetched or
- * shipped, and the bundled Inter is never loaded.
+ * Slab's kernel measures text from a table of advances per codepoint and never asks the page.
+ * Upstream's kernel carries Inter and JetBrains Mono and measures and paints with them; the one
+ * built here carries no font at all (`third_party/slab`, the `bundled-fonts` feature off), and a
+ * document compiled for it holds only a built-in default advance table. This repository ships no
+ * font and paints in the system's, so the page measures the face it will really paint with (a
+ * canvas `measureText` per codepoint, per weight, per size) and hands the kernel those advances
+ * (`SlabElement.registerFontMetrics`, the series' web patch). No font file is read, fetched or
+ * shipped. A family the page did not register would be laid out with the default table and
+ * named in the element's diagnostics (`font-default`).
  *
  * A system face is not one outline scaled: its advances at 11px are not 11/13 of those at 13px
  * (hinting, optical sizes, the tracking a platform adds to small text). So each type size is its
@@ -137,7 +139,8 @@ function canvasMeasure(ctx: CanvasRenderingContext2D, css: string, size: number,
 
 /**
  * Measure each family in the page and register it. Says how many faces were registered; 0 when
- * the page has no canvas to measure with (the documents then fall back to the bundled metrics).
+ * the page has no canvas to measure with (the documents are then laid out with the kernel's
+ * built-in default advances).
  */
 export function registerFamilies(registry: FontRegistry, families: readonly FamilySpec[], doc: Document = document): number {
   const ctx = doc.createElement("canvas").getContext("2d");

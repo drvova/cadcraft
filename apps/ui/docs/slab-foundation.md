@@ -7,17 +7,26 @@ unless said otherwise. Behind `?shell=slab`; the standard interface is unchanged
 ## The toolchain
 
 - **Pin**: `stencil-hq/slab` at `65747371a18da9a54a94955473d0ec7f7fd07d5f` (2026-08-22, the head of
-  `main` today; the same commit the spike saw as "ahead of npm"). `slab.lock.json` holds the commit,
-  the patch's checksum, the tool versions and the sha256 of the four pinned artifacts.
+  `main` when it was chosen; the same commit the spike saw as "ahead of npm"), under a series of
+  four patches. The pin and the series are shared with the Rust side and live in
+  `third_party/slab/` (`SLAB.lock`, `patches/`, and a `README.md` that says what each patch
+  does). `slab.lock.json` here is the record of the last reviewed build: the commit and patches
+  it was built from, which a test holds equal to the pin, the tool versions and the sha256 of the
+  four pinned artifacts.
 - **Built by `scripts/build-slab.mjs`** (`bun run build:slab`): clone, reset to the commit, apply
-  `slab/patches/*.patch`, then `slab-kernel-wasm` (profile `wasm-release`) + wasm-bindgen 0.2.126,
+  the series, then, all with `--no-default-features` (no bundled fonts; no runtime or kernel
+  embedded in the compiler), `slab-kernel-wasm` (profile `wasm-release`) + wasm-bindgen 0.2.126,
   the web runtime (`bun scripts/build-web-runtime.ts`), `slab-wasm` (the compiler the playground
   runs in the browser; `--target web`), and `slab-cli`. Cold: about 3.5 minutes and a 1.5 GB cargo
   target directory (upstream pins `nightly-2026-07-28`, which rustup installs). Warm: about a minute.
-  The wgpu driver is not built.
-- **Artifacts** (`src/slab-vendor/`, git-ignored, 30 MB): `slab-runtime.js` 86.5 kB,
-  `wasm/slab_kernel_bg.wasm` 4.34 MB, `compiler/slab_wasm{.js,_bg.wasm}` 11.5 MB, `bin/slab` 14.8 MB,
-  `licenses/`, and the compiled documents (`shell.js`, `shell.slir`, `bench.js`, `bench.*.slir`).
+  The wgpu driver is not built. Every artifact is searched for a font's name records before it
+  is vendored, and the build fails if one is found.
+- **Artifacts** (`src/slab-vendor/`, git-ignored, 14 MB): `slab-runtime.js` 86.5 kB,
+  `wasm/slab_kernel_bg.wasm` 1.57 MB (it was 4.34 MB with Slab's fonts in it),
+  `compiler/slab_wasm{.js,_bg.wasm}` 4.35 MB (11.5 MB), `bin/slab` 7.5 MB (14.8 MB),
+  `licenses/` (Slab's MIT text; there is no font licence to carry), and the compiled documents
+  (`shell.js`, `shell.slir`, `bench.js`, `bench.*.slir`: 96 kB in all, where they were 139 kB
+  of mostly font tables).
 - **Documents** are compiled by the vendored wasm compiler running under Bun (`bun run slab:docs`,
   0.3 s, no Rust), as web components (`gen wc`: what upstream recommends for a page). The tokens
   module the documents import (`slab/gen/tokens.slab`) is generated from `src/tokens.css` first.
@@ -28,54 +37,62 @@ unless said otherwise. Behind `?shell=slab`; the standard interface is unchanged
   standard interface." beside the command field.
 - The script never touches the wasm-bindgen on PATH (upstream's own `xtask kernel-wasm` would
   replace it with 0.2.126 by `cargo install`; this repository's engine build uses another version).
+- The compiler built here has no web runtime payload, so its `gen wc` returns the module and the
+  SLIR without `slab-runtime.js` and the kernel: the interface loads the runtime and kernel the
+  same build produced.
 
 ## Fonts
 
-How it works at the pinned commit:
+**No font is in the build.** Upstream's kernel compiles in eight faces (Inter and JetBrains Mono,
+four weights each: 2.7 of its 4.3 MB, SIL OFL), and its web driver takes them back out of the
+kernel and paints with them. The series in `third_party/slab` makes those faces a Cargo feature
+(`bundled-fonts`), and this build turns it off: the kernel, the compiler and the runtime contain
+no font bytes.
 
-- SLIR carries a `FONT` table per authored family and weight: a complete cmap and per-glyph
-  advances, never font bytes. `family` is kept as authored; a name containing "mono" is measured
-  with JetBrains Mono's table and any other with Inter's.
-- The kernel wasm embeds eight faces (Inter and JetBrains Mono, four weights each: 2.7 of its 4.3
-  MB). The web driver takes each table's bytes back out of the kernel (`font_data`), makes a
-  `FontFace` of them and paints with it. So an unassisted document is laid out and painted in
-  Inter on every machine: correct, and not the interface's font.
+How it works on the font-less build:
+
+- SLIR carries a `FONT` table per authored family and weight: a cmap and per-glyph advances, never
+  font bytes. With no face to read, the compiler fills each table from a built-in default advance
+  model (one advance for a monospaced class, six width classes for a proportional one; derived
+  from no font file). `family` is kept as authored.
 - `inst_font_register(family, weight, upem, ascent, descent, …, data, codepoints, glyphs, advances)`
   appends a runtime table; the latest matching family (case-insensitive) and nearest weight wins.
-  `data` may be empty: then the kernel only measures and "the host owns that face". The web driver
-  exposes this only as `registerFont(name, bytes)`, which needs a font file.
+  `data` may be empty: then the kernel only measures and "the host owns that face".
+- A family nobody registered is laid out with the default table, and the kernel says so once, by
+  name, in the element's diagnostics (`font-default`). None is reported for the two documents here.
 
 Chosen: **measure the face the page really paints, register the metrics, paint with the page's own
 stack.** `src/slab/fonts.ts` measures `--font-family` and `--font-family-mono` with a canvas
 (`measureText` per codepoint, kerning off as the driver paints), at each of the interface's type
 sizes and four weights, and registers them through one added driver method,
-`SlabElement.registerFontMetrics(name, metrics, cssFamily)`
-(`slab/patches/0001-web-host-owned-font-metrics.patch`, about 40 added lines; the same patch stops the
-driver loading the bundled face for a family the host owns). Each type size is its own family to
-the kernel (`cadcraft-ui-13`, `-12`, `-11`, `cadcraft-mono-12`), because a system face's advances
-do not scale linearly.
+`SlabElement.registerFontMetrics(name, metrics, cssFamily)` (patch 0003 of the series, about 40
+added lines). Each type size is its own family to the kernel (`cadcraft-ui-13`, `-12`, `-11`,
+`cadcraft-mono-12`), because a system face's advances do not scale linearly.
 
-Proof: `font-proof.png` (the Slab Bench panel left, the SolidJS one right, with `--font-family`
-forced to DejaVu Sans, Liberation Sans and Carlito). The right-aligned values end on the same edge
-as the SolidJS panel's in all three, and nothing overruns. The spike measured DejaVu 8.5% too wide
-and Carlito 14% too narrow.
+Proof, re-run on the font-less build (2026-11-12): the Slab Bench panel with `--font-family`
+forced to DejaVu Sans, Liberation Sans and Carlito, against the screenshots of the build that
+still had the fonts in it. All three are pixel-identical to those screenshots (`bench-slab-DejaVuSans`, `-LiberationSans`, `-Carlito`: 0 differing pixels), as are the default panel and the selected and pressed states. The right-aligned values end on the same edge as the SolidJS
+panel's in all three, and nothing overruns. (The spike, which could not register metrics,
+measured DejaVu 8.5% too wide and Carlito 14% too narrow.)
 
 Trade-offs:
 
-- One patch to carry until upstream takes it.
+- A patch series to carry until upstream takes it or a fork holds it (four patches;
+  `third_party/slab/README.md`).
 - 368 codepoints are measured (Latin, Latin-1, Extended-A, the signs the interface writes): 16
   faces, a few milliseconds at start. Other text is charged a default advance and painted by the
   browser's fallback in a box of that width, so CJK or Cyrillic text in a Slab surface would be
   spaced wrongly until its range is added.
 - Kerning and ligatures are off in a Slab surface (they are on in the rest of the interface).
 - Not measured on Windows or macOS. The per-size families are there for them; they are untested.
-- **OFL duty.** The kernel wasm and the compiler wasm still contain Inter and JetBrains Mono. They
-  are never committed, never painted with and (with the patch) never loaded into the page, but a
-  `dist` built with the artifacts present ships them inside `slab_kernel_bg-*.wasm`. Redistributing
-  that requires the two OFL texts to go with it: they are in `src/slab-vendor/licenses/` and are not
-  yet copied into `dist` or shown in the interface, and `ATTRIBUTION.md` has no row. The owner must
-  rule before a build with the Slab shell is shipped. The clean end is a kernel built without the
-  faces (a cargo feature on `slab-fonts`; not attempted): the wasm would drop to about 1.6 MB.
+- **The OFL question is closed.** It was open while the kernel and compiler wasm still contained
+  Inter and JetBrains Mono: a `dist` built with the artifacts present would have shipped them
+  inside `slab_kernel_bg-*.wasm`, with the duty to carry both OFL texts and an attribution row.
+  They are no longer there to ship. The kernel is built with `--no-default-features`; the build
+  searches every artifact for the faces' UTF-16 name records and copyright strings and fails on a
+  hit (`scripts/build-slab.mjs`, `fontNamesIn`); a test holds the recorded kernel under 2.5 MB.
+  Measured on this build: the kernel wasm is 1,566,589 bytes (4,338,926 before: 2,772,337 less, the size of the eight font files) and 616 kB gzipped (1.96 MB); the compiler wasm 4,318,765 (11,514,461); the name records `Inter` and `JetBrains Mono` in UTF-16 and both copyright strings occur 0 times in the kernel, the compiler, the runtime and the `slab` binary (32, 18 and 4 + 4 times in the old kernel). So there is no font licence to carry, no `ATTRIBUTION.md` row
+  to add, and nothing for the owner to rule on.
 
 ## The spike's blockers, on this commit
 
@@ -138,9 +155,9 @@ Against the standard shell (`pair-*.png`; magenta divides standard | Slab):
 
 Performance: kernel solve of the shell 0.2 ms median, 0.6 ms p95 (alternating widths); a split
 write 0.1 ms; the Bench panel 0.4 ms. A divider drag painted at 16.7 ms median frame gap, 21.9 p95.
-Ready (canvas up, shell laid out), median of five: standard 429 ms, Slab 659 ms. Loaded at start
-by the standard interface: no Slab file. Loaded by `?shell=slab` on top: 106 kB of JS (the runtime
-is 85.4), the kernel wasm 4.34 MB (1.96 MB gzip) and 54 kB of SLIR; 22 requests against 11.
+Ready (canvas up, shell laid out), median of five: standard 565 to 594 ms, Slab 758 to 779 ms, against 862 to 885 ms for the same build with the old kernel, all on one machine that was also running a Rust test suite; on the quieter machine, Slab 625 ms (with the fonts in the kernel it was
+standard 429 ms, Slab 659 ms). Loaded at start by the standard interface: no Slab file. Loaded by
+`?shell=slab` on top: 106 kB of JS (the runtime is 85.4), the kernel wasm 1.57 MB (616 kB gzip) and 96 kB of SLIR, 1.70 MB in all where it was 4.50 MB; 22 requests against 11.
 
 ## The Bench panel
 
@@ -194,7 +211,9 @@ Missing or broken for this application at the pinned commit:
 - No `prefers-reduced-motion`, no host motion switch (§14).
 - `max-w`/`max-h` take no percentage (§5).
 - No `aria-current`, `aria-pressed` (§15.2).
-- `registerFont` needs bytes (patched here).
+- `registerFont` needs bytes (patch 0003 of the series adds `registerFontMetrics`).
+- The fonts are compiled in with no switch, and `slab-compile` does not build from a clean
+  checkout (patches 0002 and 0001).
 
 ## Upstream risk
 
@@ -209,8 +228,9 @@ Missing or broken for this application at the pinned commit:
   event, signal events' `detail.item`, the `copy` event behaviour, `registerFontMetrics`; the
   compiler's `gen_wc_with_sources`, `compiler_version`, `initSync`; the generated tags
   (`cadcraft-shell`, `slab-bench-panel`) and the scene keys `#shell/#work/#side|#editor|#chat`.
-- A fork would carry: the one patch; fixes for the hole-shrink and hole-over-sash bugs (small, in
-  the driver); and, for shipping, a kernel build without the bundled faces.
+- The fork is decided, as a patch series (`third_party/slab`): the clean build, the fonts as a
+  feature, the metrics registration and the SVG family fix. Still to add to it: fixes for the
+  hole-shrink and hole-over-sash bugs (in the driver; not one-screen fixes).
 
 ## Not run or not verified
 
@@ -223,7 +243,8 @@ Missing or broken for this application at the pinned commit:
 
 ## Removing it
 
-Delete `slab/`, `slab.lock.json`, `src/slab/`, `scripts/build-slab.mjs` and this file; revert the
+Delete `slab/`, `slab.lock.json`, `src/slab/`, `scripts/build-slab.mjs` and this file (and
+`third_party/slab/` if the Rust side's surfaces go too: the pin is shared); revert the
 marked parts of `src/main.tsx` and `src/app.tsx` (the `slab` and `shellNotice` props and the
 `if (slab !== undefined)` branch; the region closures can stay), the three `package.json` scripts,
 the `.gitignore` lines, the `check-system.config.json` exclude and the README section.

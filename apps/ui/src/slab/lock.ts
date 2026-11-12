@@ -1,10 +1,14 @@
 /**
- * The Slab pin (`apps/ui/slab.lock.json`): which commit of the upstream repository the vendored
- * toolchain was built from, the patches laid over it, and the checksum of every artifact that
- * build produced. `scripts/build-slab.mjs` reads and writes it; this file is the checked reading
- * and the comparison, kept pure so they are tested.
+ * Slab's two records, read and checked.
  *
- * The lock is committed; the artifacts are not (`src/slab-vendor/` is git-ignored).
+ * The pin is `third_party/slab/SLAB.lock`: the upstream repository, one commit, and the patch
+ * series laid over it, shared with the Rust side ([`parsePin`]). `apps/ui/slab.lock.json` is the
+ * record of the last reviewed web build ([`parseLock`]): the commit and patches it was built
+ * from, which must be the pin's, and the checksum of every artifact that build produced.
+ * `scripts/build-slab.mjs` reads both and writes the second; this file is the checked reading and
+ * the comparison, kept pure so they are tested.
+ *
+ * Both are committed; the artifacts are not (`src/slab-vendor/` is git-ignored).
  */
 
 import { isRecord } from "../json";
@@ -19,7 +23,7 @@ export interface SlabLock {
   repo: string;
   /** The full commit hash the toolchain is built from. */
   commit: string;
-  /** The patches applied over that commit, in order, by file name under `slab/patches/`. */
+  /** The patches applied over that commit, in order, by file name under `third_party/slab/patches/`. */
   patches: { file: string; sha256: string }[];
   /** What was built, in upstream's own words (`slab --version`, the pinned toolchains). */
   versions: Record<string, string>;
@@ -35,6 +39,39 @@ const PATH_RE = /^[A-Za-z0-9_][A-Za-z0-9._-]*(?:\/[A-Za-z0-9_][A-Za-z0-9._-]*)*$
 const REPO_RE = /^https:\/\/[A-Za-z0-9.-]+\/[A-Za-z0-9._/-]+$/;
 const MAX_ENTRIES = 64;
 const MAX_BYTES = 256 * 1024 * 1024;
+
+/** What `SLAB.lock` pins. */
+export interface SlabPin {
+  repo: string;
+  commit: string;
+  /** The patch series, in the order it applies. */
+  patches: { file: string; sha256: string }[];
+}
+
+/**
+ * `SLAB.lock` read from its text: a `repo URL` line, a `commit HASH` line and one
+ * `patch SHA256 FILE` line per patch, in order; blank lines and `#` comments are skipped.
+ * Anything else is an error, so a damaged pin never fetches or applies something unexpected.
+ */
+export function parsePin(text: string): { ok: true; pin: SlabPin } | { ok: false; error: string } {
+  let repo: string | undefined;
+  let commit: string | undefined;
+  const patches: SlabPin["patches"] = [];
+  const lines = text.split("\n").slice(0, 4 * MAX_ENTRIES);
+  for (const [index, raw] of lines.entries()) {
+    const line = raw.trim();
+    if (line === "" || line.startsWith("#")) continue;
+    const fields = line.split(/\s+/);
+    const [key, a, b] = fields;
+    if (key === "repo" && fields.length === 2 && a !== undefined && REPO_RE.test(a) && repo === undefined) repo = a;
+    else if (key === "commit" && fields.length === 2 && a !== undefined && COMMIT_RE.test(a) && commit === undefined) commit = a;
+    else if (key === "patch" && fields.length === 3 && a !== undefined && b !== undefined && SHA256_RE.test(a) && PATH_RE.test(b) && !b.includes("/") && b.endsWith(".patch") && patches.length < MAX_ENTRIES) patches.push({ file: b, sha256: a });
+    else return { ok: false, error: `SLAB.lock line ${index + 1} is not \`repo URL\`, \`commit HASH\` or \`patch SHA256 FILE\`` };
+  }
+  if (repo === undefined) return { ok: false, error: "SLAB.lock names no repo" };
+  if (commit === undefined) return { ok: false, error: "SLAB.lock names no commit" };
+  return { ok: true, pin: { repo, commit, patches } };
+}
 
 /** The lock read from JSON text; an error naming what is wrong with it. */
 export function parseLock(text: string): { ok: true; lock: SlabLock } | { ok: false; error: string } {
