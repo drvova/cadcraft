@@ -82,11 +82,26 @@ pub fn decode_controls(s: &str) -> Vec<(char, bool, bool)> {
 
 /// Advance width of one character at height 1 and width factor 1.
 pub fn char_advance(c: char) -> f64 {
-    match stroke::glyph(c) {
-        Some((w, _)) => (w + stroke::GAP) / stroke::CAP,
+    if stroke::is_invisible(c) || stroke::is_combining(c) {
+        return 0.0;
+    }
+    match stroke::glyph(c).or_else(|| substitute_glyph(c)) {
+        Some(g) => (g.width + stroke::GAP) / stroke::CAP,
         None if c.is_whitespace() => (2.4 + stroke::GAP) / stroke::CAP,
         None => (4.0 + stroke::GAP) / stroke::CAP,
     }
+}
+
+/// The glyph the stroke font draws for a character it lacks when no installed font has it
+/// either: the nearest character it does have (`stroke::substitute`).
+fn substitute_glyph(c: char) -> Option<stroke::Glyph> {
+    stroke::substitute(c).and_then(stroke::glyph)
+}
+
+/// Whether `c` takes no room and draws nothing in stroke-font text: formatting and control
+/// characters, and a combining mark no font can draw (its base letter stands alone).
+fn takes_no_room(c: char) -> bool {
+    bidi::is_format_control(c) || stroke::is_invisible(c) || (stroke::is_combining(c) && ttf::fallback_glyph(c).is_none())
 }
 
 /// Whether `c` is an East Asian wide character (CJK ideographs and punctuation, kana, Hangul,
@@ -122,13 +137,13 @@ fn stroke_fallback_metrics(g: &ttf::GlyphOutline, c: char, h: f64) -> (f64, f64)
 
 /// Whether the stroke font draws `c` from a fallback font.
 fn draws_fallback(c: char) -> bool {
-    stroke::glyph(c).is_none() && !c.is_whitespace() && ttf::fallback_glyph(c).is_some()
+    stroke::glyph(c).is_none() && !c.is_whitespace() && !stroke::is_invisible(c) && ttf::fallback_glyph(c).is_some()
 }
 
 /// Advance of `c` in the stroke font at height `h` and width factor `wf`; characters the
 /// stroke font lacks take a fallback font's advance when one has them.
 fn stroke_advance(c: char, h: f64, wf: f64) -> f64 {
-    if bidi::is_format_control(c) {
+    if bidi::is_format_control(c) || stroke::is_invisible(c) {
         return 0.0;
     }
     if stroke::glyph(c).is_none()
@@ -142,7 +157,8 @@ fn stroke_advance(c: char, h: f64, wf: f64) -> f64 {
 
 /// Shape a single line in the stroke font at `height`, with `width_factor` and `oblique`
 /// (radians). Characters the stroke font lacks are drawn from an installed font that has them
-/// (glyph outlines, sized like TrueType text), else as a missing-glyph box.
+/// (glyph outlines, sized like TrueType text), else as the nearest character the stroke font has
+/// (a letter without its mark), else as a missing-glyph box.
 pub fn shape_stroke(s: &str, height: f64, width_factor: f64, oblique: f64) -> Shaped {
     let h = if height.is_finite() && height > 0.0 { height } else { 1.0 };
     let wf = if width_factor.is_finite() && width_factor.abs() > 1e-6 { width_factor } else { 1.0 };
@@ -159,13 +175,14 @@ pub fn shape_stroke(s: &str, height: f64, width_factor: f64, oblique: f64) -> Sh
         return sh;
     }
     for (c, under, over) in decode_controls(s) {
-        if bidi::is_format_control(c) {
+        if bidi::is_format_control(c) || stroke::is_invisible(c) {
             continue;
         }
         let mut adv = char_advance(c) * h * wf;
+        let gap_before = gap;
         gap = stroke::GAP * sc * wf;
         match stroke::glyph(c) {
-            Some((_, spec)) => draw_stroke_glyph(&mut out, spec, x, sc, wf, shear),
+            Some(g) => draw_stroke_glyph(&mut out, &g, x, sc, wf, shear),
             None if !c.is_whitespace() => match ttf::fallback_glyph(c) {
                 Some(g) => {
                     let (y, scale) = stroke_fallback_metrics(&g, c, h);
@@ -176,7 +193,12 @@ pub fn shape_stroke(s: &str, height: f64, width_factor: f64, oblique: f64) -> Sh
                     adv = g.advance * scale * wf;
                     gap = 0.0;
                 }
-                None => missing_glyph_box(&mut out, x, h, sc * wf),
+                // A combining mark no font draws: nothing, and the line ends as it did.
+                None if stroke::is_combining(c) => gap = gap_before,
+                None => match substitute_glyph(c) {
+                    Some(g) => draw_stroke_glyph(&mut out, &g, x, sc, wf, shear),
+                    None => missing_glyph_box(&mut out, x, h, sc * wf),
+                },
             },
             None => {}
         }
@@ -212,9 +234,9 @@ pub fn shape_stroke(s: &str, height: f64, width_factor: f64, oblique: f64) -> Sh
     out
 }
 
-/// Draw stroke-font glyph `spec` with its left edge at `x` (`sc` = text height / cap height).
-fn draw_stroke_glyph(out: &mut Shaped, spec: &str, x: f64, sc: f64, wf: f64, shear: f64) {
-    for st in stroke::strokes(spec) {
+/// Draw stroke-font glyph `g` with its left edge at `x` (`sc` = text height / cap height).
+fn draw_stroke_glyph(out: &mut Shaped, g: &stroke::Glyph, x: f64, sc: f64, wf: f64, shear: f64) {
+    for st in g.strokes() {
         let pts: Vec<Vec2> = st.iter().map(|(gx, gy)| Vec2::new(x + (gx * sc * wf) + gy * sc * shear, gy * sc)).collect();
         if pts.len() == 1 {
             if let Some(p) = pts.first() {
@@ -255,7 +277,7 @@ pub fn line_width(s: &str, height: f64, width_factor: f64) -> f64 {
     let n: f64 = chars.iter().map(|(c, _, _)| stroke_advance(*c, height, width_factor)).sum();
     // The stroke font's gap after the last character isn't part of the line; a fallback glyph
     // has none.
-    let last = chars.iter().rev().map(|(c, _, _)| *c).find(|c| !bidi::is_format_control(*c));
+    let last = chars.iter().rev().map(|(c, _, _)| *c).find(|c| !takes_no_room(*c));
     let gap = if last.is_some_and(draws_fallback) { 0.0 } else { stroke::GAP / stroke::CAP * height * width_factor };
     (n - gap).max(0.0)
 }
@@ -621,8 +643,9 @@ mod tests {
     #[test]
     fn glyph_points_stay_in_grid() {
         for c in ' '..='~' {
-            let (w, spec) = stroke::glyph(c).unwrap();
-            for st in stroke::strokes(spec) {
+            let g = stroke::glyph(c).unwrap();
+            let w = g.width;
+            for st in g.strokes() {
                 for (x, y) in st {
                     assert!(x >= 0.0 && x <= w, "{c:?} x={x} w={w}");
                     assert!((-2.0..=6.0).contains(&y), "{c:?} y={y}");
@@ -683,6 +706,9 @@ mod tests {
         assert!((bb.max.y - 1.0).abs() < 1e-9);
     }
 }
+
+#[cfg(test)]
+mod stroke_tests;
 
 #[cfg(test)]
 mod ttf_tests {
