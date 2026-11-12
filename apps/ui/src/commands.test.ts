@@ -10,7 +10,7 @@
 
 import { describe, expect, test } from "bun:test";
 import type { CommandInfo } from "./facade";
-import { buildMenu, classify, hoverPath, isMacPlatform, menuEntries, MENU_TITLES, shortcutLabel, submenuIsOpen, UI_ITEMS } from "./commands";
+import { chordCommand, pressShortcut, buildMenu, classify, hoverPath, isMacPlatform, menuEntries, MENU_TITLES, shortcutLabel, submenuIsOpen, UI_ITEMS } from "./commands";
 import { defaultFileName } from "./files";
 
 /** One engine command row, with its menu path joined the way `facade.ts` does. */
@@ -333,5 +333,48 @@ describe("hoverPath (the reference-stable hover)", () => {
     const next = hoverPath(["Layout"], leaf, ["Layout"]);
     expect(next).toBe(next); // same content: reference-stable against itself
     expect([...hoverPath(["Layout"], leaf, ["Layout"])]).toEqual(["Layout"]);
+  });
+});
+
+describe("command chords", () => {
+  const press = (key: string, more: Partial<{ ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }> = {}) => ({
+    key,
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+    altKey: false,
+    ...more,
+  });
+
+  test("a press with Ctrl or Cmd reads in the registry's form", () => {
+    expect(pressShortcut(press("n", { ctrlKey: true }))).toBe("Cmd+N");
+    expect(pressShortcut(press("z", { metaKey: true, shiftKey: true }))).toBe("Cmd+Shift+Z");
+    expect(pressShortcut(press("Z", { ctrlKey: true, shiftKey: true }))).toBe("Cmd+Shift+Z");
+  });
+
+  test("a plain key, an Alt chord, a named key and Space are not command chords", () => {
+    expect(pressShortcut(press("n"))).toBeNull();
+    expect(pressShortcut(press("n", { ctrlKey: true, altKey: true }))).toBeNull();
+    expect(pressShortcut(press("Enter", { ctrlKey: true }))).toBeNull();
+    expect(pressShortcut(press(" ", { ctrlKey: true }))).toBeNull();
+  });
+
+  const commands = [
+    { id: "new", shortcut: "Cmd+N", enabled: true },
+    { id: "u", shortcut: "Cmd+Z", enabled: true },
+    { id: "pasteclip", shortcut: "Cmd+V", enabled: false },
+  ];
+
+  test("a chord runs the enabled command that carries it, and a shell item before an engine one", () => {
+    expect(chordCommand("Cmd+N", commands, [], false)).toBe("new");
+    expect(chordCommand("cmd+n", commands, [], false)).toBe("new");
+    expect(chordCommand("Cmd+V", commands, [], false)).toBeNull();
+    expect(chordCommand("Cmd+Q", commands, [], false)).toBeNull();
+    expect(chordCommand("Cmd+N", commands, [{ id: "ui.new", label: "New", menu: [], shortcut: "Cmd+N" }], false)).toBe("ui.new");
+  });
+
+  test("a text field keeps its own undo, select all and clipboard chords", () => {
+    expect(chordCommand("Cmd+Z", commands, [], true)).toBeNull();
+    expect(chordCommand("Cmd+N", commands, [], true)).toBe("new");
   });
 });

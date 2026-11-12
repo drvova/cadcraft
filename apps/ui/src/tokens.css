@@ -39,7 +39,10 @@
   --text-faint: rgba(240, 240, 240, 0.60);
   --text-disabled: rgba(240, 240, 240, 0.36); /* the disabled ink (Cursor §5) */
   --text-accent: #599CE7; /* the accent as a text ink (Chip tone=accent); the accent itself here */
-  --icon: rgba(240, 240, 240, 0.66);
+  /* The glyph ink is the secondary ink: Cursor's measured .66 sat between .74 and .60, three steps
+     no eye told apart. Two steps remain; the quiet one stays at .60, its floor: a key cap in a
+     selected row over the elevated surface measures 4.54 there, 4.45 at .59 and 3.83 at .52. */
+  --icon: var(--text-dim);
 
   /* ---- Action and selection (accent, selection, hover, fill_active) ---- */
   --accent: #599CE7;
@@ -55,7 +58,7 @@
   --fill-pressed: rgba(240, 240, 240, 0.20); /* the pressed step of a .14-hover control */
   --fill-disabled: rgba(240, 240, 240, 0.04); /* the disabled fill (Cursor §5: no fill change) */
 
-  /* ---- Status (warn, error, toggle_on) ---- */
+  /* ---- Status (warn, error, toggle_on: the engine badge's "live" dot, nothing else) ---- */
   --warn: #f1b467;
   --error: #e34671;
   --error-hover: #E6597F; /* the error fill mixed 10% toward white: the danger button's hover */
@@ -70,11 +73,10 @@
   --list-bg: #1c1c1c;
   --list-row: var(--fill-active);
 
-  /* ---- Layers (icon_layer_off, icon_layer_frozen, icon_locked, layer_current, swatch_border) ---- */
+  /* ---- Layers (icon_layer_off, icon_layer_frozen, icon_locked, swatch_border) ---- */
   --icon-layer-off: #8a8a5a;
   --icon-layer-frozen: #9fd4ff;
   --icon-locked: #e6b43c;
-  --layer-current: #4cc25a;
   --swatch-border: #191919;
 
   /* Elevation: the shadow under floating surfaces. The popover's measured ladder is the
@@ -133,16 +135,23 @@
   --field-pad-y: 4px;
 
   /* ---- The composer (Cursor §2): the glass box's editor and toolbar ---- */
-  --composer-font: 15px;
-  --composer-leading: 24px;
+  /* Cursor's composer measures 15px on a 24px line. The shell around ours is 13px, and two
+     reading sizes side by side made the assistant a second product: the composer and the
+     transcript take the shell's size on a 20px line (docs/system/decisions.md, "One type scale"). */
+  --composer-font: var(--font-body);
+  --composer-leading: 20px;
   --composer-min-height: 64px;
   --composer-toolbar-height: 40px;
 
   /* ---- Type (FONT_BUTTON, FONT_CHIP, FONT_LABEL, small()/body()/mono()) ---- */
-  --font-button: 14px;
+  /* One scale, four sizes on screen: 11 (section labels, counts, key caps, the bar's toggles),
+     12 (secondary text), 13 (everything read or typed) and the 12px mono. Cursor's button
+     measures 14px and its small text 11.5px; both fold into the scale (`--font-button` and
+     `--font-small` stay as names for the sheets that use them, and hold no size of their own). */
+  --font-button: var(--font-body);
   --font-chip: 11px;
   --font-label: 12px;
-  --font-small: 11.5px;
+  --font-small: var(--font-label);
   --font-body: 13px;
   --font-mono: 12px;
   --font-family: system-ui, "Segoe UI", -apple-system, sans-serif;
@@ -174,8 +183,10 @@
   --chrome-dark: #F3F3F3;
   --panel: #FCFCFC;
   --tab-active: #FCFCFC; /* the light active tab fill (the pane surface) */
-  --control: #e8e8e8;
-  --control-hover: #dedede;
+  /* A field is a step under the pane, not a grey slab: #e8e8e8 on #FCFCFC read as disabled. The
+     hovered row takes the old field grey, which is the .08 hover fill over the pane. */
+  --control: #F3F3F3;
+  --control-hover: #e8e8e8;
   --surface-elevated: #FCFCFC;
   --surface-inset: #F3F3F3; /* the light recessed block (the pane surface) */
   --tooltip-bg: #F8F8F8;
@@ -185,23 +196,24 @@
   --border-soft: rgba(20, 20, 20, 0.08);
   --text: #141414;
   --text-dim: rgba(20, 20, 20, 0.74);
-  /* Cursor's tertiary ink (.60) misses 4.5 over the frozen #e8e8e8 control surface (4.49); the
-     nearest measured step that passes is the icon ink .66 (5.45). */
+  /* Cursor's tertiary ink (.60) misses 4.5 over the #e8e8e8 hovered row (4.49); the nearest
+     measured step that passes is .66 (5.45). */
   --text-faint: rgba(20, 20, 20, 0.66);
   --text-disabled: rgba(20, 20, 20, 0.36); /* the disabled ink (Cursor §5) */
   /* The accent as a text ink. The accent fill (#2678C1) measures 3.28 on its own tint over the
      #e8e8e8 control; this is the same hue and chroma at OKLCH L .47 (the accent is .56), the
      first step that holds 4.5 there and over the .08 hover fill (4.80 and 4.71). */
   --text-accent: #005DA4;
-  --icon: rgba(20, 20, 20, 0.66);
   --accent: #2678C1;
   /* On light surfaces the action fills step toward black, not white: the --on-accent label
      measured 3.77 and 3.20 on the white-mixed steps, and holds 5.35 and 6.41 on these. */
   --accent-hover: #226CAE; /* the accent mixed 10% toward black: the primary button's hover */
   --accent-pressed: #1E609A; /* the same at 20%: the primary button's pressed fill */
   --accent-soft: rgba(38, 120, 193, 0.12); /* the accent-tinted chip fill (Chip tone=accent) */
-  --cmd-bg: #ebebeb;
-  --cmd-border: #c9c9c9;
+  /* The command line is a band of the chrome, closed by the chrome's own stroke: as #ebebeb under
+     #c9c9c9 it was the darkest thing on the page. */
+  --cmd-bg: var(--chrome);
+  --cmd-border: var(--border);
   --selection: #2678C1;
   /* The accent ring measures 2.83 against the .14 selected fill over the control; the accent's
      text step holds 4.14 there. */
@@ -217,7 +229,6 @@
   --error: #BE1744;
   --error-hover: #AB153D; /* the error fill mixed 10% toward black: the danger button's hover */
   --error-pressed: #981236; /* the same at 20% (the white-mixed step measured 4.46 under the label) */
-  --layer-current: #d5dfe9;
   --scrollbar: rgba(20, 20, 20, 0.14);
   --scrollbar-hover: rgba(20, 20, 20, 0.22);
   --on-accent: #FCFCFC;

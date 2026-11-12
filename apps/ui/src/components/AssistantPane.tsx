@@ -2,7 +2,7 @@
  * The assistant panel: the agent docked to the right of the workspace. The part title is the
  * classic recipe's (35px, padding 8px); the composer is the glass one measured on Cursor 3.27's
  * composer (`.design-system/research/cursor-recipes-2026-10-28.md` §2): the elevated surface at
- * radius 12 (docked; a floating card would take 20), no shadow, a 1px border that turns active on focus, an editor at 15px/24px with a
+ * radius 12 (docked; a floating card would take 20), no shadow, a 1px border that turns active on focus, an editor at `--composer-font`/`--composer-leading` with a
  * 64px min-height and 8px/12px padding, and a 40px toolbar row (padding 8px, `gap: 4px`) that
  * holds 24px circles and the pill model chip; send and stop are the inverted circle. Its controls
  * are the system's own: `ui/TextArea` (the editor, bare: the card draws its box and its focus),
@@ -11,8 +11,12 @@
  * carries §1.14's `ripple 1.2s` to `scale(1.7)`.
  *
  * The transcript is the agent-panel grammar: a prompt in a quiet inset block, the model's words
- * plain on the surface (with inline `code` and **bold** runs), and each tool call one dim line
- * that opens on click to its code and report.
+ * plain on the surface (with inline `code` and **bold** runs), and each tool call one quiet row
+ * that says what ran as a sentence (`activityParts`) and what it changed, and opens on click to
+ * its code and report.
+ *
+ * Setting a model up is a sheet over the panel (the composer is out of the page meanwhile): the
+ * provider list alone first, then the connection that provider filled in.
  *
  * Over the composer sits the stack (the reference board's "one surface over the input"): what is
  * queued behind the running turn, the turn's status with Stop, and the assistant's unresolved
@@ -25,7 +29,7 @@
  */
 
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack, type JSX } from "solid-js";
-import { activityLine, clampPanelWidth, failedNote, focusIsOurs, followAfterScroll, growReply, listProviderModels, MAX_MESSAGE_CHARS, MAX_REQUEST_CHARS, PANEL_WIDTH, parseInline, presetFor, PROVIDER_PRESETS, providerReady, reachedNote, relativeTime, saveBlocker, type ChatImage, type ConnectionNote, type ProviderConfig, type ReplyBlock, type ReplyParse } from "../assistant";
+import { activityParts, clampPanelWidth, failedNote, focusIsOurs, followAfterScroll, growReply, listProviderModels, MAX_MESSAGE_CHARS, MAX_REQUEST_CHARS, PANEL_WIDTH, parseInline, presetFor, PROVIDER_PRESETS, providerReady, reachedNote, relativeTime, saveBlocker, type ChatImage, type ConnectionNote, type ProviderConfig, type ReplyBlock, type ReplyParse } from "../assistant";
 import { turnStart, type AssistantSession } from "../assistant-session";
 import { highlight, rankCommands, slashQuery, SLASH_LIMIT, type PaletteItem } from "../palette";
 import { ToolIcon } from "../icons";
@@ -63,6 +67,9 @@ export interface AssistantPaneProps {
 
 /** How many of the models a provider lists the setup offers as chips; the rest are typed by name. */
 const MODEL_CHIPS = 12;
+
+/** The fewest rows the provider list keeps in a short panel; past that the sheet itself scrolls. */
+const MIN_LIST_ROWS = 3;
 
 /** The empty state's suggestions, once a model is set up: one click fills the composer and sends
  *  nothing (the measured 32px suggestion row). Each works on whatever drawing is open. */
@@ -401,15 +408,51 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   let fieldsEl: HTMLDivElement | undefined;
   let modelsEl: HTMLDivElement | undefined;
   let listEl: HTMLDivElement | undefined;
-  /** The provider list scrolls by itself in a short panel; while rows lie under its fold, a line says so. */
+  let scrollEl: HTMLDivElement | undefined;
+  /** The whole provider list is showing: before a provider is chosen, and after "Change provider".
+   *  With one chosen, the list is that provider's line, and the fields it filled are under it. */
+  const [listOpen, setListOpen] = createSignal(false);
+  const listShown = (): boolean => presetId() === null || listOpen();
+  /** How many rows of the provider list the sheet has room for: all of them in a tall panel, and in
+   *  a short one a whole number of them (never part of a row), where the list scrolls by itself. */
+  const [listRows, setListRows] = createSignal(PROVIDER_PRESETS.length);
+  /** The list is cut: the line that says so has its place under it. */
+  const [listCut, setListCut] = createSignal(false);
+  /** Rows lie under the list's fold; the line says so until the last one is in view. */
   const [moreBelow, setMoreBelow] = createSignal(false);
   const measureList = (): void => {
     if (listEl !== undefined) setMoreBelow(listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight > 1);
   };
+  /** Give the list the rows the sheet has room for beside everything else it holds. */
+  const fitList = (): void => {
+    const list = listEl;
+    const scroll = scrollEl;
+    const row = list?.firstElementChild;
+    const last = scroll?.lastElementChild;
+    if (list === undefined || scroll === undefined || !list.isConnected || !(row instanceof HTMLElement) || !(last instanceof HTMLElement) || row.offsetHeight === 0) return;
+    const total = PROVIDER_PRESETS.length;
+    const pitch = row.offsetHeight;
+    const pad = Number.parseFloat(getComputedStyle(scroll).paddingBottom);
+    /** The height of everything in the sheet but the list's rows, as it is laid out now. */
+    const others = (): number => last.getBoundingClientRect().bottom - scroll.getBoundingClientRect().top + scroll.scrollTop + (Number.isFinite(pad) ? pad : 0) - list.offsetHeight;
+    setListCut(false);
+    if (others() + total * pitch <= scroll.clientHeight) setListRows(total);
+    else {
+      // The cut list brings its "more below" line: the rows are counted with that line in place.
+      setListCut(true);
+      setListRows(Math.min(total - 1, Math.max(MIN_LIST_ROWS, Math.floor((scroll.clientHeight - others()) / pitch))));
+    }
+    list.querySelector("[aria-current='true']")?.scrollIntoView({ block: "nearest" });
+    measureList();
+  };
+  // The list is fitted again whenever what shares the sheet with it comes or goes.
+  createEffect(on([menuOpen, listShown, presetId, keyWanted, models], () => queueMicrotask(fitList), { defer: true }));
   /** What had the focus when the sheet opened: it gets the focus back when the sheet closes. */
   let opener: HTMLElement | null = null;
   onCleanup(() => checkAbort?.abort());
   const picked = createMemo(() => PROVIDER_PRESETS.find((p) => p.id === presetId()));
+  /** The chosen provider is a server on this machine: it takes no key. */
+  const localPreset = (): boolean => picked()?.key === false && picked()?.id !== "custom";
   /** Why Save is off, or null when the setup can work. */
   const blocker = createMemo(() => saveBlocker(draft(), picked()?.key === true, models().length));
   /** The address can be asked: there is one, and it is an http or https one. */
@@ -432,14 +475,31 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     setKeyVisible(false);
     setModels([]);
     setCheckNote(null);
+    // A first setup is the first decision alone, the provider list; a return visit is the filled
+    // form under the provider's line.
+    setListOpen(false);
     setMenuOpen(true);
-    // A first setup starts at the first decision, the provider; a return visit at the model.
-    const first = s.ready() ? "input[aria-label='Model']" : ".assistant-setup-list button";
     queueMicrotask(() => {
-      // The chosen provider is in view in its list before anything takes the focus.
-      listEl?.querySelector("[aria-current='true']")?.scrollIntoView({ block: "nearest" });
-      setupEl?.querySelector<HTMLElement>(first)?.focus();
-      measureList();
+      fitList();
+      if (presetId() === null) setupEl?.querySelector<HTMLElement>(".assistant-setup-list button")?.focus();
+      else focusField(s.ready());
+    });
+  };
+
+  /** Move the focus into the fields: to the first empty one, or to the model when none is empty
+   *  (`toModel`: a setup that already works is opened to change its model). */
+  const focusField = (toModel = false): void => {
+    const fields = [...(fieldsEl?.querySelectorAll<HTMLInputElement>("input") ?? [])];
+    const model = fields[fields.length - 1];
+    ((toModel ? undefined : fields.find((field) => field.value.trim() === "")) ?? model)?.focus();
+  };
+
+  /** "Change provider": the whole list again, the keyboard on the provider it is on. */
+  const changeProvider = (): void => {
+    setListOpen(true);
+    queueMicrotask(() => {
+      fitList();
+      (listEl?.querySelector<HTMLElement>("[aria-current='true']") ?? listEl?.querySelector<HTMLElement>("button"))?.focus();
     });
   };
 
@@ -467,13 +527,18 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
 
   const applyPreset = (id: string): void => {
     const preset = PROVIDER_PRESETS.find((p) => p.id === id);
+    if (preset === undefined) return;
     // Choosing the row that is already chosen changes nothing: what was typed under it stays.
-    if (preset === undefined || id === presetId()) return;
-    setPresetId(id);
-    setDraft({ baseUrl: preset.baseUrl, model: preset.model, apiKey: draft().apiKey });
-    setKeyWanted(preset.key || preset.id === "custom" || draft().apiKey !== "");
-    forgetCheck();
-    fieldsEl?.scrollIntoView({ block: "nearest" });
+    if (id !== presetId()) {
+      setPresetId(id);
+      setDraft({ baseUrl: preset.baseUrl, model: preset.model, apiKey: draft().apiKey });
+      // A provider that takes no key shows no key field, unless a key is already typed.
+      setKeyWanted(preset.key || preset.id === "custom" || draft().apiKey !== "");
+      forgetCheck();
+    }
+    // The decision is made: the list folds to its line, and the keyboard goes to what is still to fill in.
+    setListOpen(false);
+    queueMicrotask(() => focusField());
   };
 
   const setBaseUrl = (value: string): void => {
@@ -609,11 +674,12 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         onKeyDown={onResizeKey}
       />
       <div class="assistant-head">
+        {/* While a model is being set up the panel is that task: its title says so, in place of the chat's. */}
         <Show
-          when={props.chats().length > 1}
+          when={props.chats().length > 1 && !menuOpen()}
           fallback={
             <span class="assistant-title" data-hint="">
-              {s.title()}
+              {menuOpen() ? "Set up a model" : s.title()}
             </span>
           }
         >
@@ -723,8 +789,22 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                   onClick={() => s.toggleTool(index())}
                   aria-expanded={entry.kind === "tool" && entry.open}
                 >
-                  <span class="assistant-tool-name" data-hint="">{entry.kind === "tool" ? activityLine(entry.code) : ""}</span>
-                  <span class="assistant-tool-note" data-hint="">{entry.kind === "tool" ? entry.note : ""}</span>
+                  {/* What ran, as a sentence: plain words, with only a command's name in the mono face. */}
+                  <span class="assistant-tool-name" data-hint="">
+                    <For each={entry.kind === "tool" ? activityParts(entry.code, entry.report) : []}>
+                      {(part) =>
+                        part.kind === "code" ? (
+                          <code>{part.text}</code>
+                        ) : (
+                          // Each argument after a middle dot holds together: the sentence breaks between arguments, never inside one.
+                          <For each={part.text.split(" · ")}>{(piece, at) => (at() === 0 ? piece : <> · <span class="assistant-tool-arg">{piece}</span></>)}</For>
+                        )
+                      }
+                    </For>
+                  </span>
+                  <Show when={entry.kind === "tool" && entry.note !== ""}>
+                    <span class="assistant-tool-note" data-hint="">{entry.kind === "tool" ? entry.note : ""}</span>
+                  </Show>
                   <span class="assistant-tool-chevron">
                     <ToolIcon id="chevron-right" />
                   </span>
@@ -766,44 +846,75 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
       </div>
         <Show when={menuOpen()}>
           <section class="assistant-setup" id="assistant-setup" aria-label="Model setup" ref={setupEl}>
-            <div class="assistant-setup-scroll">
-              <div class="assistant-setup-group assistant-setup-group--providers">
+            <div
+              class="assistant-setup-scroll"
+              ref={(el) => {
+                scrollEl = el;
+                // The panel's height changed: the list is given the rows there is room for now.
+                const watcher = new ResizeObserver(fitList);
+                watcher.observe(el);
+                onCleanup(() => watcher.disconnect());
+              }}
+            >
+              <div class="assistant-setup-group">
                 <SectionLabel>Provider</SectionLabel>
-                <div
-                  class="assistant-setup-list"
-                  onKeyDown={onPresetKey}
-                  onScroll={measureList}
-                  ref={(el) => {
-                    listEl = el;
-                    const watcher = new ResizeObserver(measureList);
-                    watcher.observe(el);
-                    onCleanup(() => watcher.disconnect());
-                  }}
+                {/* The first decision. Until it is made the sheet holds nothing else; once it is,
+                    the list is the chosen provider's line, and "Change provider" brings it back. */}
+                <Show
+                  when={listShown()}
+                  fallback={
+                    <div class="assistant-setup-chosen">
+                      <span class="assistant-preset-label" data-hint="">{picked()?.label ?? ""}</span>
+                      <Button variant="ghost" size="sm" onClick={changeProvider}>
+                        Change provider
+                      </Button>
+                    </div>
+                  }
                 >
-                  <For each={PROVIDER_PRESETS}>
-                    {(preset) => (
-                      <Row selected={presetId() === preset.id} onClick={() => applyPreset(preset.id)}>
-                        <span class="assistant-preset-label">{preset.label}</span>
-                        <span class="assistant-preset-url">{preset.id === "custom" ? "any server" : preset.key ? "needs a key" : "no key"}</span>
-                      </Row>
-                    )}
-                  </For>
-                </div>
-                <Show when={moreBelow()}>
-                  <span class="assistant-field-hint" aria-hidden="true">
-                    More providers below
-                  </span>
+                  <div
+                    class="assistant-setup-list"
+                    style={{ "--assistant-list-rows": String(listRows()) }}
+                    onKeyDown={onPresetKey}
+                    onScroll={measureList}
+                    ref={(el) => {
+                      listEl = el;
+                    }}
+                  >
+                    <For each={PROVIDER_PRESETS}>
+                      {(preset) => (
+                        <Row selected={presetId() === preset.id} onClick={() => applyPreset(preset.id)}>
+                          <span class="assistant-preset-label">{preset.label}</span>
+                          <span class="assistant-preset-url">{preset.id === "custom" ? "any server" : preset.key ? "needs a key" : "no key"}</span>
+                        </Row>
+                      )}
+                    </For>
+                  </div>
+                  <Show when={listCut()}>
+                    <span class={moreBelow() ? "assistant-field-hint" : "assistant-field-hint is-spent"} aria-hidden="true">
+                      More providers below
+                    </span>
+                  </Show>
+                  <Show when={presetId() === null}>
+                    <p class="assistant-setup-next">Choosing one fills in its address and model.</p>
+                  </Show>
                 </Show>
               </div>
+              <Show when={presetId() !== null}>
               <div class="assistant-setup-group" ref={fieldsEl}>
                 <SectionLabel>Connection</SectionLabel>
                 <div class="assistant-field">
                   <span>Base URL</span>
-                  <Field value={draft().baseUrl} ariaLabel="Base URL" describedBy="assistant-url-hint" spellcheck={false} placeholder="e.g. http://127.0.0.1:11434/v1" onInput={setBaseUrl} />
+                  <Field
+                    value={draft().baseUrl}
+                    ariaLabel="Base URL"
+                    describedBy="assistant-url-hint"
+                    title={localPreset() ? "The server must accept requests from this page" : "Every request is sent to this address"}
+                    spellcheck={false}
+                    placeholder="e.g. http://127.0.0.1:11434/v1"
+                    onInput={setBaseUrl}
+                  />
                   <span class="assistant-field-hint" id="assistant-url-hint">
-                    {picked()?.key === false && picked()?.id !== "custom"
-                      ? "A server on this machine. It needs no key, but it must accept requests from this page."
-                      : "The address requests go to: the root of an OpenAI-compatible API, usually ending in /v1."}
+                    {localPreset() ? "A server on this machine. It needs no key." : "The root of an OpenAI-compatible API, usually ending in /v1."}
                   </span>
                 </div>
                 <Show when={keyWanted()}>
@@ -817,6 +928,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                         autocomplete="off"
                         spellcheck={false}
                         describedBy="assistant-key-hint"
+                        title="Sent only to the base URL above"
                         placeholder="e.g. sk-..."
                         onInput={(v) => {
                           setDraft({ ...draft(), apiKey: v });
@@ -830,14 +942,22 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                         onClick={() => setKeyVisible(!keyVisible())}
                       />
                     </div>
-                    <span class="assistant-field-hint" id="assistant-key-hint">Stored in this browser, not encrypted. Sent only to the base URL above.</span>
+                    <span class="assistant-field-hint" id="assistant-key-hint">Stored in this browser, not encrypted.</span>
                   </div>
                 </Show>
                 <div class="assistant-field">
                   <span>Model</span>
-                  <Field value={draft().model} ariaLabel="Model" spellcheck={false} placeholder="e.g. llama3.2" onInput={setModel} />
+                  <Field
+                    value={draft().model}
+                    ariaLabel="Model"
+                    describedBy={models().length === 0 ? "assistant-model-hint" : undefined}
+                    title="Check connection lists the models the provider serves"
+                    spellcheck={false}
+                    placeholder="e.g. llama3.2"
+                    onInput={setModel}
+                  />
                   <Show when={models().length === 0}>
-                    <span class="assistant-field-hint">The model's name as the provider spells it. Check connection lists the ones it serves.</span>
+                    <span class="assistant-field-hint" id="assistant-model-hint">The model's name, as the provider spells it.</span>
                   </Show>
                 </div>
                 <Show when={models().length > 0}>
@@ -855,35 +975,46 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                   </Show>
                 </Show>
               </div>
+              </Show>
             </div>
             <div class="assistant-setup-foot">
-              <div class="assistant-setup-notes">
-                <p class={`assistant-setup-note is-${checkState()}`} role="status" aria-live="polite" aria-atomic="true">
-                  <Show when={checking()}>
-                    <span class="assistant-ripple" />
-                  </Show>
-                  {checkText()}
-                </p>
-                <Show when={blocker()}>{(reason) => <p class="assistant-setup-reason">{reason()}</p>}</Show>
-              </div>
+              {/* The check, its line, the reason and Save come with the fields they are about;
+                  before a provider is chosen the foot is the one way out. */}
+              <Show when={presetId() !== null}>
+                <div class="assistant-setup-notes">
+                  <p class={`assistant-setup-note is-${checkState()}`} role="status" aria-live="polite" aria-atomic="true">
+                    <Show when={checking()}>
+                      <span class="assistant-ripple" />
+                    </Show>
+                    {checkText()}
+                  </p>
+                  <Show when={blocker()}>{(reason) => <p class="assistant-setup-reason">{reason()}</p>}</Show>
+                </div>
+              </Show>
               <div class="assistant-setup-actions">
-                <Button variant="ghost" disabled={!canCheck()} title={canCheck() ? undefined : "Needs an http or https base URL"} onClick={() => void checkConnection()}>
-                  Check connection
-                </Button>
+                <Show when={presetId() !== null}>
+                  <Button variant="ghost" disabled={!canCheck()} title={canCheck() ? undefined : "Needs an http or https base URL"} onClick={() => void checkConnection()}>
+                    Check connection
+                  </Button>
+                </Show>
                 <span class="assistant-setup-spacer" />
                 <Button variant="ghost" onClick={closeSetup}>
                   Cancel
                 </Button>
-                <Button variant="primary" disabled={blocker() !== null} onClick={saveDraft}>
-                  Save
-                </Button>
+                <Show when={presetId() !== null}>
+                  <Button variant="primary" disabled={blocker() !== null} onClick={saveDraft}>
+                    Save
+                  </Button>
+                </Show>
               </div>
             </div>
           </section>
         </Show>
       </div>
 
-      <div class="assistant-composer">
+      {/* The setup sheet takes the panel to its foot: the composer, which cannot send without a
+          model, is out of the page (and the tab order) until the sheet closes. */}
+      <div class="assistant-composer" hidden={menuOpen()}>
         <Show when={s.running() || s.status() !== "" || s.queued.length > 0 || s.changes() !== null || over() > 0}>
           <div class="assistant-stack">
             <Show when={s.queued.length > 0}>
@@ -1017,7 +1148,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               }}
               rows={COMPOSER_ROWS}
               maxRows={COMPOSER_MAX_ROWS}
-              placeholder={s.running() ? "Queue a follow-up" : "Ask, or / for commands"}
+              placeholder={s.running() ? "Queue a follow-up" : s.ready() ? "Ask, or / for commands" : "Set up a model to start"}
               value={s.input()}
               onInput={(value) => {
                 s.setInput(value);
@@ -1047,7 +1178,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               aria-controls="assistant-setup"
               onClick={() => (menuOpen() ? closeSetup() : openSetup())}
             >
-              <span class="assistant-ghost-label">{s.ready() ? s.provider().model : "Set up a model"}</span>
+              <span class={s.ready() ? "assistant-ghost-label" : "assistant-ghost-label is-unset"}>{s.ready() ? s.provider().model : "No model"}</span>
               <span class="assistant-ghost-caret">
                 <ToolIcon id="chevron-down" />
               </span>

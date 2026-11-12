@@ -71,6 +71,12 @@ const INK = {
 const ON = { "on-accent": ["accent", "accent-hover", "accent-pressed"], "on-error": ["error", "error-hover", "error-pressed"] };
 // The focus ring also crosses the two state fills a focused control can carry (3:1 over each surface).
 const RING_FILLS = ["hover", "fill-active"];
+// Text drawn on a state fill over each surface (4.5:1): the quiet ink on the selected fill (a key
+// cap in a selected row, the pair that sets that ink's floor) and the secondary ink on it (the on
+// word of a text toggle on its chip). `--control-hover` is left out, as in src/ui/recipe.test.ts:
+// it is the properties palette's hovered row, which holds no selected row, key cap or toggle.
+const TEXT_ON_FILL = [["text-faint", "fill-active"], ["text-dim", "fill-active"]];
+const FILL_SURFACES = SURFACES.filter((s) => s !== "control-hover");
 // The drawing is the same dark surface in both themes, so no theme ink is paired with it: these
 // are the only strokes the interface draws over it (3:1).
 const CANVAS_INK = ["selection", "canvas-focus-ring"];
@@ -130,6 +136,10 @@ function report(theme, name) {
   for (const fill of RING_FILLS) {
     const under = (s) => { const surface = color(s); const top = color(fill); return surface && top ? over(top, surface) : null; };
     lines.push("", `\`--focus-ring\` against \`--${fill}\` over each surface: ${pairs("focus-ring", SURFACES, 3, under, (s) => `${fill} over ${s}`).join("; ")}.`);
+  }
+  for (const [ink, fill] of TEXT_ON_FILL) {
+    const under = (s) => { const surface = color(s); const top = color(fill); return surface && top ? over(top, surface) : null; };
+    lines.push("", `\`--${ink}\` as text on \`--${fill}\` over each surface: ${pairs(ink, FILL_SURFACES, 4.5, under, (s) => `${fill} over ${s}`).join("; ")}.`);
   }
   const canvas = color("canvas");
   if (canvas) {

@@ -9,7 +9,28 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { crispRule, drawDisplay, GRID_FULL_PX, GRID_MIN_PX, gridLevels, handleHex, isHighlighted, lineWidthPx, samePalette, SELECTION_WIDTH, type Palette } from "./canvas";
+import {
+  crispRule,
+  DRAG_ALPHA,
+  drawDisplay,
+  drawOverlay,
+  GRID_FULL_PX,
+  GRID_MIN_PX,
+  gridLevels,
+  handleHex,
+  HOVER_ALPHA,
+  isHighlighted,
+  lineWidthPx,
+  overlayIsEmpty,
+  RUBBER_WIDTH,
+  samePalette,
+  SELECTION_WIDTH,
+  SNAP_MARKER_HALF,
+  SNAP_MARKER_WIDTH,
+  snapGlyph,
+  type OverlayOptions,
+  type Palette,
+} from "./canvas";
 import type { DisplayList, DisplayPrim } from "./display";
 import { UNIT_RECT } from "./view";
 
@@ -326,5 +347,140 @@ describe("drawDisplay — the selection highlight", () => {
     expect(own).toHaveLength(1);
     expect(accent).toHaveLength(2);
     expect(own[0]?.width).toBeCloseTo(lineWidthPx(0.25), 6);
+  });
+});
+
+/** A recorder that also keeps where each path went, and what was cleared. */
+class PathContext extends RecordingContext {
+  readonly points: { x: number; y: number }[] = [];
+  readonly arcs: { x: number; y: number; r: number }[] = [];
+  cleared = 0;
+  override clearRect(): void {
+    this.cleared++;
+  }
+  override moveTo(x?: number, y?: number): void {
+    this.points.push({ x: x ?? NaN, y: y ?? NaN });
+  }
+  override lineTo(x?: number, y?: number): void {
+    this.points.push({ x: x ?? NaN, y: y ?? NaN });
+  }
+  arc(x: number, y: number, r: number): void {
+    this.arcs.push({ x, y, r });
+  }
+}
+
+describe("snapGlyph", () => {
+  const MODES = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192];
+
+  test("every OSMODE bit the engine reports has a marker of its own", () => {
+    const seen = new Set(MODES.map((mode) => JSON.stringify(snapGlyph(mode))));
+    expect(seen.size).toBe(MODES.length);
+  });
+
+  test("an endpoint is a square, a midpoint a triangle, a centre a circle, an intersection a saltire", () => {
+    const end = snapGlyph(1);
+    expect(end).toHaveLength(1);
+    expect(end[0]).toMatchObject({ kind: "path", closed: true });
+    expect(end[0]?.kind === "path" ? end[0].points.length : 0).toBe(4);
+    const mid = snapGlyph(2)[0];
+    expect(mid?.kind === "path" ? mid.points.length : 0).toBe(3);
+    expect(snapGlyph(4)).toEqual([{ kind: "circle", cx: 0, cy: 0, r: 1 }]);
+    expect(snapGlyph(32)).toHaveLength(2);
+    expect(snapGlyph(32).every((s) => s.kind === "path" && !s.closed && s.points.length === 2)).toBe(true);
+  });
+
+  test("every marker stays inside its box, and an unknown bit is still marked", () => {
+    for (const mode of [...MODES, 0, 3, 16384, Number.NaN]) {
+      const glyph = snapGlyph(mode);
+      expect(glyph.length).toBeGreaterThan(0);
+      for (const shape of glyph) {
+        const extent = shape.kind === "circle" ? [shape.cx - shape.r, shape.cx + shape.r, shape.cy - shape.r, shape.cy + shape.r] : shape.points.flat();
+        expect(extent.every((n) => n >= -1 && n <= 1)).toBe(true);
+      }
+    }
+  });
+});
+
+describe("drawOverlay", () => {
+  /** The test primitives' own colour, as the drawing itself strokes it. */
+  const OWN = draw().strokes[0]?.style ?? "";
+  const overlay = (parts: Partial<Pick<OverlayOptions, "hover" | "preview" | "snap">>, view = VIEW): PathContext => {
+    const ctx = new PathContext();
+    drawOverlay(ctx as unknown as CanvasRenderingContext2D, LIST, view, { width: 800, height: 600, dpr: 1, palette: PALETTE, hover: null, preview: null, snap: null, ...parts });
+    return ctx;
+  };
+
+  test("with nothing under the pointer it only clears", () => {
+    const ctx = overlay({});
+    expect(ctx.cleared).toBe(1);
+    expect(ctx.strokes).toHaveLength(0);
+    expect(ctx.fills).toHaveLength(0);
+    expect(overlayIsEmpty({ hover: null, preview: null, snap: null })).toBe(true);
+    expect(overlayIsEmpty({ hover: null, preview: { verts: [], prims: [], drag: null }, snap: null })).toBe(true);
+    expect(overlayIsEmpty({ hover: "2F", preview: null, snap: null })).toBe(false);
+  });
+
+  test("the hover is the handle's own outline in the selection hue, quieter than the selection", () => {
+    const ctx = overlay({ hover: "2F" });
+    expect(ctx.strokes).toEqual([{ style: PALETTE.selection, width: SELECTION_WIDTH, alpha: HOVER_ALPHA }]);
+    expect(HOVER_ALPHA).toBeLessThan(1);
+    expect(overlay({ hover: "99" }).strokes).toHaveLength(0);
+  });
+
+  test("a rubber band is stroked in the selection ink, a hairline", () => {
+    const preview = { verts: [{ x: 0, y: 0 }, { x: 5, y: 5 }], prims: [prim("polyline", 0, 2, 0)], drag: null };
+    const ctx = overlay({ preview });
+    expect(ctx.strokes).toEqual([{ style: PALETTE.selection, width: RUBBER_WIDTH, alpha: 1 }]);
+    expect(ctx.points).toEqual([
+      { x: 0, y: 600 },
+      { x: 400, y: 300 },
+    ]);
+  });
+
+  test("dragged objects are the list's own primitives under the matrix, in their own colour, fainter", () => {
+    // Move by (2, 1): the polyline (1,1)-(4,4) is drawn from (3,2) to (6,5); the point follows.
+    const preview = { verts: [], prims: [], drag: { handles: [0x2f, 0x30], matrix: [1, 0, 0, 1, 2, 1] as const, clipboard: false } };
+    const ctx = overlay({ preview });
+    expect(ctx.strokes).toEqual([{ style: OWN, width: lineWidthPx(0.25), alpha: DRAG_ALPHA }]);
+    expect(ctx.points[0]?.x).toBeCloseTo(240, 9);
+    expect(ctx.points[0]?.y).toBeCloseTo(480, 9);
+    expect(ctx.points[1]?.x).toBeCloseTo(480, 9);
+    expect(ctx.points[1]?.y).toBeCloseTo(300, 9);
+    expect(ctx.fillRects).toEqual([OWN]);
+  });
+
+  test("a rotation turns the dragged vertices: the matrix is a canvas transform's", () => {
+    // A quarter turn about the origin: (x, y) goes to (-y, x).
+    const preview = { verts: [], prims: [], drag: { handles: [0x2f], matrix: [0, 1, -1, 0, 0, 0] as const, clipboard: false } };
+    const ctx = overlay({ preview }, { x0: -10, y0: 0, x1: 0, y1: 10 });
+    expect(ctx.points[0]?.x).toBeCloseTo(720, 9);
+    expect(ctx.points[0]?.y).toBeCloseTo(540, 9);
+  });
+
+  test("pasted objects come in the preview and keep their own colour; a matrix that is not finite draws nothing", () => {
+    const pasted = { verts: [{ x: 0, y: 0 }, { x: 5, y: 5 }], prims: [prim("polyline", 0, 2, 7)], drag: { handles: [], matrix: [1, 0, 0, 1, 0, 0] as const, clipboard: true } };
+    expect(overlay({ preview: pasted }).strokes).toEqual([{ style: OWN, width: lineWidthPx(0.25), alpha: DRAG_ALPHA }]);
+    const hostile = { verts: [], prims: [], drag: { handles: [0x2f, 0x30], matrix: [Number.NaN, 0, 0, 1, Number.POSITIVE_INFINITY, 0] as const, clipboard: false } };
+    const ctx = overlay({ preview: hostile });
+    expect(ctx.strokes).toHaveLength(0);
+    expect(ctx.fillRects).toHaveLength(0);
+  });
+
+  test("the snap marker is the same size at any zoom, on whole pixels, over a rule of the ground", () => {
+    for (const view of [VIEW, { x0: 4.9, y0: 4.9, x1: 5.1, y1: 5.1 }, { x0: -1000, y0: -1000, x1: 1000, y1: 1000 }]) {
+      const ctx = overlay({ snap: { point: { x: 5, y: 5 }, mode: 1 } }, view);
+      expect(ctx.strokes).toEqual([
+        { style: PALETTE.canvas, width: SNAP_MARKER_WIDTH + 2, alpha: 1 },
+        { style: PALETTE.selection, width: SNAP_MARKER_WIDTH, alpha: 1 },
+      ]);
+      const xs = ctx.points.map((p) => p.x);
+      const ys = ctx.points.map((p) => p.y);
+      expect(Math.max(...xs) - Math.min(...xs)).toBe(SNAP_MARKER_HALF * 2);
+      expect(Math.max(...ys) - Math.min(...ys)).toBe(SNAP_MARKER_HALF * 2);
+      expect(xs.every((x) => Number.isInteger(x))).toBe(true);
+    }
+    const centre = overlay({ snap: { point: { x: 5, y: 5 }, mode: 4 } });
+    expect(centre.arcs).toEqual([{ x: 400, y: 300, r: SNAP_MARKER_HALF }]);
+    expect(overlay({ snap: { point: { x: Number.NaN, y: 5 }, mode: 1 } }).strokes).toHaveLength(0);
   });
 });

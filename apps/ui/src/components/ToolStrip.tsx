@@ -1,10 +1,11 @@
 /**
- * The tool strip: the icon row of `chrome.rs`'s `TOOLBAR` table, in the same groups and order,
- * with a thin divider between groups. Each button invokes its command id through `onInvoke`; its
- * name is the command's label, and its shortcut is a key cap in the hint and `aria-keyshortcuts`.
+ * The tool strip: the icon row under the title bar, the drafting tools first (file, history, draw,
+ * modify, annotate, view, inspect, print), with a thin divider between groups. Each button starts
+ * its command id through `onInvoke`, exactly as the command's menu item does; its name is the
+ * command's label, its shortcut is a key cap in the hint and `aria-keyshortcuts`, and the name
+ * typed at the command line is the hint's second line.
  *
- * The icons come from `icons.ts` (original code-drawn paths); the table below is transcribed from
- * the Rust table, egui types removed.
+ * The icons come from `icons.ts` (original code-drawn paths).
  *
  * A window narrower than the strip keeps the leading groups that fit, whole, and folds the rest
  * behind one overflow key at the strip's end, which opens them as a menu (`MenuKey`, `./Menu.tsx`):
@@ -15,6 +16,7 @@
 
 import { createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import { isMacPlatform, shortcutLabel } from "../commands";
+import type { CommandInfo } from "../facade";
 import { leadingFit, type MenuItem } from "../menu";
 import { rovingIndex } from "../roving";
 import { IconButton } from "../ui/IconButton";
@@ -102,59 +104,86 @@ export function rovingBand(band: HTMLElement, selector: string, home?: () => HTM
   sync();
 }
 
-/** One toolbar button: the icon id, the command id it invokes, the label, and the shortcut. */
+/**
+ * One toolbar button: the icon id, the command id it invokes, the label, the shortcut, and the
+ * name typed at the command line that starts the same command (the engine's first alias, in the
+ * capitals a drafter writes it in; empty when the command has none).
+ */
 export interface ToolbarEntry {
   icon: string;
   id: string;
   label: string;
   shortcut: string;
+  alias: string;
 }
 
-/** The toolbar groups, mirroring `crates/ui-egui/src/chrome.rs`'s `TOOLBAR`. */
+/**
+ * The toolbar groups, the most used first, so the overflow menu takes the least used: file,
+ * history, draw, modify, annotate, view, inspect, print. Every id is a command the engine
+ * registers (`crates/engine/src/cmd/*`) or one the shell runs itself (`UI_ITEMS`, `../commands`),
+ * and each label, shortcut and alias is that command's own.
+ */
 export const TOOLBAR: readonly (readonly ToolbarEntry[])[] = [
   [
-    { icon: "new", id: "new", label: "New Drawing", shortcut: "Cmd+N" },
-    { icon: "open", id: "open", label: "Open", shortcut: "Cmd+O" },
-    { icon: "save", id: "qsave", label: "Save", shortcut: "Cmd+S" },
-    { icon: "saveas", id: "saveas", label: "Save As", shortcut: "" },
+    { icon: "new", id: "new", label: "New Drawing", shortcut: "Cmd+N", alias: "" },
+    { icon: "open", id: "open", label: "Open", shortcut: "Cmd+O", alias: "" },
+    { icon: "save", id: "qsave", label: "Save", shortcut: "Cmd+S", alias: "" },
   ],
   [
-    { icon: "u", id: "u", label: "Undo", shortcut: "Cmd+Z" },
-    { icon: "redo", id: "redo", label: "Redo", shortcut: "Cmd+Shift+Z" },
+    { icon: "u", id: "u", label: "Undo", shortcut: "Cmd+Z", alias: "" },
+    { icon: "redo", id: "redo", label: "Redo", shortcut: "Cmd+Shift+Z", alias: "" },
   ],
   [
-    { icon: "plot", id: "plot", label: "Print", shortcut: "" },
-    { icon: "publish", id: "publish", label: "Batch Publish", shortcut: "" },
-    { icon: "pagesetup", id: "pagesetup", label: "Page Setup Manager", shortcut: "" },
-    { icon: "preview", id: "preview", label: "Plot Preview", shortcut: "" },
+    { icon: "line", id: "line", label: "Line", shortcut: "", alias: "L" },
+    { icon: "polyline", id: "pline", label: "Polyline", shortcut: "", alias: "PL" },
+    { icon: "circle", id: "circle", label: "Circle", shortcut: "", alias: "C" },
+    { icon: "arc", id: "arc", label: "Arc", shortcut: "", alias: "A" },
+    { icon: "rectangle", id: "rectang", label: "Rectangle", shortcut: "", alias: "REC" },
+    { icon: "hatch", id: "hatch", label: "Hatch", shortcut: "", alias: "H" },
+    { icon: "text", id: "mtext", label: "Multiline Text", shortcut: "", alias: "T" },
   ],
   [
-    { icon: "import", id: "import", label: "Import", shortcut: "" },
-    { icon: "export", id: "export", label: "Export", shortcut: "" },
-    { icon: "attach", id: "attach", label: "Attach", shortcut: "" },
-    { icon: "share", id: "share", label: "Share", shortcut: "" },
+    { icon: "move", id: "move", label: "Move", shortcut: "", alias: "M" },
+    { icon: "copy-objects", id: "copy", label: "Copy", shortcut: "", alias: "CO" },
+    { icon: "rotate", id: "rotate", label: "Rotate", shortcut: "", alias: "RO" },
+    { icon: "mirror", id: "mirror", label: "Mirror", shortcut: "", alias: "MI" },
+    { icon: "offset", id: "offset", label: "Offset", shortcut: "", alias: "O" },
+    { icon: "trim", id: "trim", label: "Trim", shortcut: "", alias: "TR" },
+    { icon: "fillet", id: "fillet", label: "Fillet", shortcut: "", alias: "F" },
+    { icon: "erase", id: "erase", label: "Erase", shortcut: "", alias: "E" },
+  ],
+  [{ icon: "dimension-linear", id: "dimlinear", label: "Linear Dimension", shortcut: "", alias: "DLI" }],
+  [
+    { icon: "zoom.extents", id: "zoom.extents", label: "Zoom Extents", shortcut: "", alias: "" },
+    { icon: "zoom.window", id: "zoom.window", label: "Zoom Window", shortcut: "", alias: "" },
+    { icon: "pan", id: "pan", label: "Pan", shortcut: "", alias: "P" },
   ],
   [
-    { icon: "zoom.window", id: "zoom.window", label: "Zoom Window", shortcut: "" },
-    { icon: "pan", id: "pan", label: "Pan", shortcut: "" },
-    { icon: "3dorbit", id: "3dorbit", label: "Orbit", shortcut: "" },
+    { icon: "properties", id: "ui.panel.properties", label: "Properties", shortcut: "Cmd+1", alias: "" },
+    { icon: "ui.dialog.layers", id: "ui.panel.layers", label: "Layers", shortcut: "", alias: "" },
+    { icon: "dist", id: "dist", label: "Measure Distance", shortcut: "", alias: "DI" },
   ],
-  [
-    { icon: "zoom.extents", id: "zoom.extents", label: "Zoom Extents", shortcut: "" },
-    { icon: "ui.toggle.palettes", id: "ui.toggle.palettes", label: "Properties", shortcut: "" },
-    { icon: "ui.dialog.layers", id: "ui.dialog.layers", label: "Layer Properties Manager", shortcut: "" },
-    { icon: "ui.dialog.blocks", id: "ui.dialog.blocks", label: "Blocks", shortcut: "" },
-  ],
-  [
-    { icon: "dist", id: "dist", label: "Measure Distance", shortcut: "" },
-    { icon: "list", id: "list", label: "List", shortcut: "" },
-    { icon: "area", id: "area", label: "Area", shortcut: "" },
-  ],
-  [{ icon: "ui.dialog.about", id: "ui.dialog.about", label: "Help", shortcut: "" }],
+  [{ icon: "plot", id: "plot", label: "Print", shortcut: "", alias: "" }],
 ];
 
 export interface ToolStripProps {
   onInvoke: (id: string) => void;
+  /** The engine's commands, when the caller has them: a tool whose command the engine reports as
+   *  not available is drawn disabled. Without them every tool is live, as it is in the menus
+   *  before the engine answers. */
+  commands?: readonly CommandInfo[];
+}
+
+/** Whether a tool can run now: the engine's own answer for its command. A tool the engine does not
+ *  list (the shell's own `ui.*` ids, or no list at all) is live. */
+export function toolEnabled(id: string, commands: readonly CommandInfo[] | undefined): boolean {
+  return commands?.find((command) => command.id === id)?.enabled ?? true;
+}
+
+/** The second line of a tool's hint: why it is blocked, or the name that starts it at the command line. */
+export function toolNote(entry: ToolbarEntry, enabled: boolean): string | undefined {
+  if (!enabled) return "Not available now";
+  return entry.alias === "" ? undefined : `Type ${entry.alias}`;
 }
 
 /** The strip's own keys: the tools drawn and the overflow key, not the rows of the overflow menu. */
@@ -214,7 +243,7 @@ export function ToolStrip(props: ToolStripProps): JSX.Element {
   const folded = createMemo((): MenuItem[] =>
     TOOLBAR.slice(shown())
       .flat()
-      .map((entry) => ({ label: entry.label, id: entry.id, shortcut: entry.shortcut, enabled: true, children: [], icon: entry.icon })),
+      .map((entry) => ({ label: entry.label, id: entry.id, shortcut: entry.shortcut, enabled: toolEnabled(entry.id, props.commands), children: [], icon: entry.icon })),
   );
 
   const fit = (count: number): void => {
@@ -255,6 +284,8 @@ export function ToolStrip(props: ToolStripProps): JSX.Element {
                   icon={entry.icon}
                   title={entry.label}
                   shortcut={entry.shortcut === "" ? undefined : shortcutLabel(entry.shortcut, isMacPlatform())}
+                  description={toolNote(entry, toolEnabled(entry.id, props.commands))}
+                  disabled={!toolEnabled(entry.id, props.commands)}
                   onClick={() => props.onInvoke(entry.id)}
                 />
               )}

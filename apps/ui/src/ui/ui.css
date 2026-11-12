@@ -197,13 +197,17 @@
   cursor: default;
 }
 
-/* selected — the .14 fill and the full ink, whatever the variant */
+/* selected — the full ink on the faint fill, squared to the control radius, whatever the variant.
+   A key that is on is told from one that is off by the fill and its shape, not by ink alone; the
+   fill is the .08 one, because a row of keys that are mostly on (the title bar's layout keys)
+   drawn as .14 discs was louder than the bar's own title. */
 .ui-icon-button[aria-pressed="true"] {
-  background: var(--fill-active);
+  border-radius: var(--radius-control);
+  background: var(--hover);
   color: var(--text);
 }
 
-/* ghost — transparent, the .08 fill on hover; a selected one keeps its .14 fill under the pointer */
+/* ghost — transparent, the .08 fill on hover; a selected one keeps its own fill under the pointer */
 @media (hover: hover) {
   .ui-icon-button--ghost:hover:not([aria-disabled="true"]):not([aria-pressed="true"]) {
     background: var(--hover);
@@ -272,14 +276,19 @@
 
 /* ---- Toggle: <button aria-pressed class="ui-toggle ui-toggle--{variant} ui-toggle--{size} ui-toggle--{tone}"> ---- */
 
-/* A setting switched in place. The state is the face's alone (the glyph and its ink, or the
-   word's ink and the rule under it): no fill at rest, on or off, because a row of toggles is
-   mostly on. The fills are the layer's hover and press. Every colour rule below weighs the same,
-   so the later one wins: a state's ink over the hover's, and the disabled ink over them all. */
+/* A setting switched in place. The state is the face's alone: a glyph and its ink, with no fill at
+   rest, on or off, because a column of them is mostly in one state; or a word, which is a quiet
+   chip while on and bare while off (the word has no second glyph to change, so the chip is what
+   says on besides the ink). The button itself never takes a state's fill: a glyph's hover and
+   press are its own background, a word's chip is its `::before`. Every colour rule below weighs
+   the same, so the later one wins: a state's ink over the hover's, and the disabled ink over
+   them all. */
 .ui-toggle {
   --ui-toggle-ink-off: var(--text-faint);
   --ui-toggle-ink-on: var(--text);
   position: relative;
+  /* The word's chip is drawn under the word and over nothing else. */
+  isolation: isolate;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -326,13 +335,29 @@
 
 /* text — a word in capitals, a little tracked. The small one is as tall as the line it stands in
    (`--ui-toggle-line`, set by the bar that holds it; a list row's height when nothing sets it),
-   so the target is the whole line and not the word's own box. */
+   so the target is the whole line and not the word's own box. On, the word is the secondary ink
+   on a chip; off, the quiet ink on nothing: the two differ by the fill and by lightness, never by
+   hue. */
 .ui-toggle--text {
   --ui-toggle-pad: var(--gap-4);
+  --ui-toggle-ink-on: var(--text-dim);
   padding: 0 var(--ui-toggle-pad);
   border-radius: 0;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+/* The chip: the word's width, a little shorter than the line, so a run of them in a 22px bar is
+   a row of chips and not a row of blocks. It carries the word's every fill (on, hover, press), so
+   the fill is one shape in every state. */
+.ui-toggle--text::before {
+  content: "";
+  position: absolute;
+  inset: var(--gap-3) 0;
+  z-index: -1;
+  border-radius: var(--radius-control);
+  background: transparent;
+  transition: background-color var(--dur-fast) var(--ease-standard);
 }
 
 .ui-toggle--text.ui-toggle--sm {
@@ -353,30 +378,39 @@
 
 @media (hover: hover) {
   .ui-toggle:hover {
-    background: var(--hover);
     color: var(--text);
+  }
+
+  .ui-toggle--glyph:hover,
+  .ui-toggle--text:hover::before {
+    background: var(--hover);
   }
 }
 
-.ui-toggle:active {
+.ui-toggle--glyph:active,
+.ui-toggle--text:active::before {
   background: var(--fill-active);
 }
 
-/* on — the on ink. It keeps it under the pointer. */
+/* on — the on ink. A glyph keeps it under the pointer. */
 .ui-toggle[aria-pressed="true"] {
   color: var(--ui-toggle-ink-on);
 }
 
-/* The word's rule, in the on-colour: on and off differ in lightness and by the rule, not by hue
-   alone. */
+/* An on word's chip: the selected fill at rest and under the pointer, one step up while held.
+   Under the pointer the word takes the full ink, as an off word does. */
 .ui-toggle--text[aria-pressed="true"]::before {
-  content: "";
-  position: absolute;
-  left: var(--ui-toggle-pad);
-  right: var(--ui-toggle-pad);
-  bottom: var(--gap-3);
-  height: var(--hairline);
-  background: var(--toggle-on);
+  background: var(--fill-active);
+}
+
+@media (hover: hover) {
+  .ui-toggle--text[aria-pressed="true"]:hover:not([aria-disabled="true"]) {
+    color: var(--text);
+  }
+}
+
+.ui-toggle--text[aria-pressed="true"]:active::before {
+  background: var(--fill-pressed);
 }
 
 /* absent — on is the ordinary state and stays at the glyph ink; off is the one that explains
@@ -418,8 +452,9 @@
   --ui-toggle-ink-on: color-mix(in srgb, var(--warn) 80%, var(--text));
 }
 
-/* disabled — after every state above: the disabled ink whatever the state, no fill under the
-   pointer or the press, and the rule in the same ink. */
+/* disabled — after every state above: the disabled ink whatever the state, and no fill under the
+   pointer or the press. A blocked word that is on keeps a chip, at the faintest fill that shows,
+   so its state is still drawn. */
 .ui-toggle[aria-disabled="true"] {
   background: transparent;
   color: var(--text-disabled);
@@ -427,7 +462,11 @@
 }
 
 .ui-toggle--text[aria-disabled="true"]::before {
-  background: currentColor;
+  background: transparent;
+}
+
+.ui-toggle--text[aria-disabled="true"][aria-pressed="true"]::before {
+  background: var(--hover);
 }
 
 /* ---- Chip: <button|span class="ui-chip ui-chip--{tone}"> ---- */
@@ -981,7 +1020,7 @@
   max-width: 18ch;
   padding: 0 var(--gap-6);
   border-radius: var(--radius-card);
-  font-size: var(--font-small);
+  font-size: var(--font-label);
 }
 
 .ui-tab:focus-visible {
@@ -1150,16 +1189,16 @@
   }
 
   /* A word under a finger: never narrower or shorter than the target ("LW", "QP"), with more
-     room around it, and the rule keeps its width and its distance from the word in the taller
-     line the bar gives it. */
+     room around it, and the chip keeps its distance from the word in the taller line the bar
+     gives it. */
   .ui-toggle--text {
     --ui-toggle-pad: var(--gap-8);
     min-width: var(--control-h-input);
     min-height: var(--control-h-input);
   }
 
-  .ui-toggle--text[aria-pressed="true"]::before {
-    bottom: var(--gap-6);
+  .ui-toggle--text::before {
+    inset-block: var(--gap-4);
   }
 
   .ui-row,

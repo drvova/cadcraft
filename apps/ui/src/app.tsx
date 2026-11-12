@@ -13,12 +13,12 @@
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { AppFacade, type CommandInfo, type DrawingState, type LayerInfo, type SettingsState } from "./facade";
 import type { DisplayList } from "./display";
-import { padView, regionCovers, regionOf, VIEW_PAD, type DisplayRegion } from "./display-cache";
+import { padView, regionCovers, regionOf, VIEW_PAD, viewScale, type DisplayRegion } from "./display-cache";
 import { emptyPrompt, formatPoint, formatSelectBox, pointerWants, type PromptState } from "./prompt";
-import { padRect, UNIT_RECT, type Rect } from "./view";
+import { padRect, UNIT_RECT, type Rect, type ScreenSize } from "./view";
 import { applyPick, pickAperture, type PickRule } from "./selection";
 import { parseProperties, type PropertiesReply } from "./props";
-import { classify, isMacPlatform, shortcutLabel, UI_ITEMS } from "./commands";
+import { chordCommand, classify, isMacPlatform, pressShortcut, shortcutLabel, UI_ITEMS } from "./commands";
 import { paletteItems, rememberCommand } from "./palette";
 import { defaultFileName, downloadBytes, pickFile } from "./files";
 import { TopBar } from "./components/TopBar";
@@ -192,6 +192,11 @@ export function App(props: AppProps): JSX.Element {
    * reads the view (ZOOM and PAN start from it, and a pick inside a command sizes its aperture by it).
    */
   let toldView: Rect | null = null;
+  /** The canvas's size in CSS px, as it last reported it; null until it is measured. */
+  let screen: ScreenSize | null = null;
+
+  /** The zoom of a view on the canvas (CSS px per world unit); 0 while the canvas is unmeasured. */
+  const scaleOf = (rect: Rect): number => (screen === null ? 0 : viewScale(rect, screen));
 
   /**
    * Fetch the display list for `rect`, asking the engine for a window [`VIEW_PAD`] wider than the
@@ -205,8 +210,9 @@ export function App(props: AppProps): JSX.Element {
     else toldView = rect;
     const list = props.facade.displayList(VIEW_PAD);
     // The region carries the revision of the list we now hold: a later edit makes the engine's
-    // revision differ from it, which is exactly what triggers the next fetch.
-    displayRegion = regionOf(padView(rect), list.revision);
+    // revision differ from it, and a zoom past the scale it was built for makes its curves too
+    // coarse: either is exactly what triggers the next fetch.
+    displayRegion = regionOf(padView(rect), list.revision, scaleOf(rect));
     setDisplay(list);
   };
 
@@ -234,10 +240,10 @@ export function App(props: AppProps): JSX.Element {
     if (moved) syncView();
   };
 
-  /** Fetch only when the cached window no longer answers for the view (or the drawing changed). */
+  /** Fetch only when the cached list no longer answers for the view (or the drawing changed). */
   const syncDisplay = (): void => {
     const rect = view();
-    if (!regionCovers(displayRegion, rect, engineRevision)) fetchDisplay(rect);
+    if (!regionCovers(displayRegion, rect, engineRevision, scaleOf(rect))) fetchDisplay(rect);
   };
 
   /** Pull everything the surfaces read from the facade, in one place. */
@@ -340,6 +346,21 @@ export function App(props: AppProps): JSX.Element {
         else if (key === "9") setShowCmdline((v) => !v);
         else panelKey();
         return;
+      }
+      // Every other command chord the menus and the tool strip print (Ctrl+N, Ctrl+O, Ctrl+S,
+      // Ctrl+Z, Ctrl+Shift+Z...): the command that carries it runs as its menu item does. A text
+      // field keeps its own undo and clipboard, and an open menu, palette or sheet keeps the key.
+      const chord = pressShortcut(e);
+      if (chord !== null && !e.repeat && document.querySelector(OVERLAYS) === null) {
+        // Text selected on the page (a reply, the command history) is what Ctrl+C copies, as in a field.
+        const textPicked = (window.getSelection()?.toString() ?? "") !== "";
+        const field = textPicked || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target instanceof HTMLElement && e.target.isContentEditable);
+        const id = chordCommand(chord, commands(), UI_ITEMS, field);
+        if (id !== null) {
+          e.preventDefault();
+          onInvoke(id);
+          return;
+        }
       }
       // F6 / Shift+F6 walk the regions, as the editor does.
       if (e.key === "F6" && !mod && !e.altKey) {
@@ -484,11 +505,13 @@ export function App(props: AppProps): JSX.Element {
   /**
    * The canvas moved. Panning inside the fetched window is a pure redraw — the display signal is
    * untouched and the canvas effect re-runs on the view alone; only leaving the window (or a
-   * drawing change) fetches again.
+   * drawing change) fetches again, and so does zooming in past the detail the list was built with
+   * (a wider canvas or a closer view would show a circle's chords).
    */
-  const onViewChange = (rect: Rect): void => {
+  const onViewChange = (rect: Rect, size: ScreenSize): void => {
+    screen = size;
     setView(rect);
-    if (!regionCovers(displayRegion, rect, engineRevision)) fetchDisplay(rect);
+    syncDisplay();
   };
 
   /**
@@ -689,13 +712,22 @@ export function App(props: AppProps): JSX.Element {
   };
 
   /**
-   * A click while a command wants a point or objects: the point goes to the command as typed
-   * input does, so the history shows it and the engine reads it by the same rules.
+   * A click while a command wants a point or objects: the engine takes it as a click (`click`),
+   * snapped exactly as the marker on the canvas showed, with a deferred tangent or perpendicular
+   * intact. The history shows the point taken, written as typed input would be.
    */
   const onPoint = (point: { x: number; y: number }, worldPerPixel: number): void => {
-    const text = formatPoint(point, worldPerPixel);
-    if (text !== null) onCommand(text);
+    setNotice(null);
+    const before = engineView();
+    const taken = props.facade.snap(point)?.point ?? point;
+    const clicked = props.facade.click(point, 0, prompt(), formatPoint(taken, worldPerPixel) ?? undefined);
+    setPrompt(clicked.state);
+    refresh();
+    followView(before);
   };
+
+  /** What the canvas watches to ask the engine again about the pointer: the prompt and the drafting settings. */
+  const engineState = createMemo(() => ({ prompt: prompt(), settings: settings() }));
 
   /**
    * A rectangle dragged on the drawing. At rest it picks by window or crossing; while a command
@@ -779,7 +811,7 @@ export function App(props: AppProps): JSX.Element {
         onToggleAssistant={() => setShowAssistant((v) => !v)}
       />
       <Show when={showToolbar()}>
-        <ToolStrip onInvoke={onInvoke} />
+        <ToolStrip onInvoke={onInvoke} commands={commands()} />
       </Show>
       <div class={showAssistant() ? "workspace has-assistant" : "workspace"}>
         <Show when={showSidebar() && (showLayers() || showProperties())}>
@@ -800,6 +832,7 @@ export function App(props: AppProps): JSX.Element {
               view={view}
               display={display}
               selection={selection}
+              extents={() => drawing()?.extents ?? null}
               onViewChange={onViewChange}
               onNotice={setNotice}
               onPick={onPick}
@@ -807,6 +840,8 @@ export function App(props: AppProps): JSX.Element {
               wants={wants}
               onPoint={onPoint}
               onContext={() => onCommand("")}
+              engineState={engineState}
+              onBeforeQuery={tellView}
               onCursor={setCursor}
             />
           </main>

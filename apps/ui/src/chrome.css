@@ -336,6 +336,13 @@
   flex: 0 0 auto;
 }
 
+/* A tool's glyph is the large step, 16 in the 24 key: the drafting glyphs carry grips, dashes and
+   arrowheads that close up at 14. The overflow key's chevron stays the default size. */
+.toolstrip > .ui-icon-button .tool-icon {
+  width: var(--icon-size-lg);
+  height: var(--icon-size-lg);
+}
+
 /* The overflow key's host, at the strip's end whatever the groups before it leave: the box its
    menu opens from. The menu hangs from the key's own end, so it opens into the window. */
 .tool-more {
@@ -359,7 +366,7 @@
 .tool-divider {
   flex: 0 0 auto;
   width: var(--hairline);
-  height: var(--icon-size-md);
+  height: var(--icon-size-lg);
   margin: 0 var(--gap-4);
   background: var(--border);
 }
@@ -404,6 +411,13 @@
 
    The layer's name at its floor never goes: with the sidebar closed the bar is the one place that
    names it. The toggles are never clipped and never scroll.
+
+   The bar is three parts and the middle one stands still: the facts at the start (what the
+   window is working on, the selection count last among them), the toggles' run, and the
+   coordinates at the end in a box of a reserved width. Nothing that comes and goes sits between
+   the toggles and the bar's end, so a selection made or a pointer entering the drawing moves no
+   toggle: the selection count used to stand after the coordinates and pushed the whole run 60px
+   sideways each time something was selected.
 
    How: the bar is one flex row and the order is its items' `flex-shrink`, each step a million
    times the one after it, so a step takes the whole shortfall before the next gives a pixel.
@@ -489,7 +503,7 @@
 .status-item {
   margin-inline-end: var(--gap-12);
   color: var(--text-faint);
-  font-size: var(--font-small);
+  font-size: var(--font-label);
   white-space: nowrap;
 }
 
@@ -543,9 +557,9 @@
    toggle that has to be swiped to is a toggle not found, so the run takes a second line and the
    bar grows by it. Every toggle is on screen, each line one line's height.
 
-   The toggles are the layer's `Toggle` with a word as its face (ui.css): quiet when off; on, the
-   full ink over a rule in the on-green. Each is as tall as the bar's line (`--ui-toggle-line`),
-   so the target is the whole line and not the word's own box. */
+   The toggles are the layer's `Toggle` with a word as its face (ui.css): the quiet ink when off;
+   on, the secondary ink on a chip. Each is as tall as the bar's line (`--ui-toggle-line`), so the
+   target is the whole line and not the word's own box. */
 .status-toggles {
   --ui-toggle-line: var(--status-line);
   flex: 0 1 auto;
@@ -594,10 +608,8 @@
   background: var(--border);
 }
 
+/* The selection count is the last of the facts at the start of the bar (a `status-item`, with
+   that rule's ink, size and gap), in figures that change in place. */
 .status-selection {
-  margin-inline-start: var(--gap-8);
-  color: var(--text-faint);
-  font-size: var(--font-small);
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }

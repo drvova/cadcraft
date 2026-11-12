@@ -17,8 +17,8 @@ Dark is the default (`:root`); light restates only the roles that change, under 
 | `--chrome-dark` | `#0f0f0f` | `#F3F3F3` | The recessed chrome: the status bar, the tab strip's well. |
 | `--panel` | `#141414` | `#FCFCFC` | A floating panel's surface, one step above chrome. |
 | `--tab-active` | `#181818` | `#FCFCFC` | The selected tab, lifted off the strip. |
-| `--control` | `#1c1c1c` | `#e8e8e8` | A control's own fill: fields, buttons at rest, list rows. |
-| `--control-hover` | `#232323` | `#dedede` | The control fill under the pointer. |
+| `--control` | `#1c1c1c` | `#F3F3F3` | A control's own fill: fields, buttons at rest, list rows. Light's was `#e8e8e8` until 2026-11-11: on the `#FCFCFC` pane (1.19:1) a resting field read as disabled; `#F3F3F3` is a step under the pane (1.08:1) and the hairline carries the edge. |
+| `--control-hover` | `#232323` | `#e8e8e8` | The control fill under the pointer, and the properties palette's hovered row. Light's is the old field grey, which is the `.08` hover fill over the pane. |
 | `--surface-elevated` | `#212121` | `#FCFCFC` | The elevated surface: the composer, menus, popovers. |
 | `--border` | `rgba(240,240,240,.12)` | `rgba(20,20,20,.12)` | The measured border stroke (Cursor §1). |
 | `--border-soft` | `rgba(240,240,240,.08)` | `rgba(20,20,20,.08)` | The hairline stroke inside controls. |
@@ -40,10 +40,10 @@ Dark is the default (`:root`); light restates only the roles that change, under 
 | --- | --- | --- | --- |
 | `--text` | `#F0F0F0` | `#141414` | Primary ink: labels, values, the drawing's titles. |
 | `--text-dim` | `rgba(240,240,240,.74)` | `rgba(20,20,20,.74)` | Secondary ink: hints, units, secondary values. |
-| `--text-faint` | `rgba(240,240,240,.60)` | `rgba(20,20,20,.66)` | Tertiary ink: section headers, captions. Light's `.60` misses 4.5 over the `#e8e8e8` control (4.49); the nearest passing measured step, the icon ink `.66` (5.45), is used instead. |
+| `--text-faint` | `rgba(240,240,240,.60)` | `rgba(20,20,20,.66)` | Tertiary ink: section headers, captions. Light's `.60` misses 4.5 over the `#e8e8e8` hovered row (4.49); the nearest passing measured step, `.66` (5.45), is used instead. Dark's `.60` is its floor: on the selected fill over the elevated surface it measures 4.54 (4.45 at `.59`, 3.83 at `.52`), so the 2026-11-11 pass that wanted the ladder's steps further apart moved `--icon` and left this. |
 | `--text-disabled` | `rgba(240,240,240,.36)` | `rgba(20,20,20,.36)` | Disabled ink (Cursor §5); exempt from contrast as an inactive control. |
-| `--text-accent` | `#599CE7` | `#005DA4` | The accent as a text or glyph ink: the label of an accent chip, the palette's matched letters, the command line's prompt mark, a frozen layer's key in light. Dark's is the accent itself; light's is the accent's hue and chroma at OKLCH L .47 (the accent is .56), because `#2678C1` measures 3.28 on its own tint over the `#e8e8e8` control. |
-| `--icon` | `rgba(240,240,240,.66)` | `rgba(20,20,20,.66)` | The default glyph ink. |
+| `--text-accent` | `#599CE7` | `#005DA4` | The accent as a text or glyph ink: the label of an accent chip, the palette's matched letters, the command line's prompt mark while a command runs, a frozen layer's key in light. Dark's is the accent itself; light's is the accent's hue and chroma at OKLCH L .47 (the accent is .56), because `#2678C1` measures 3.28 on its own tint over the `#e8e8e8` control. |
+| `--icon` | `var(--text-dim)` | `var(--text-dim)` | The default glyph ink: the secondary ink. It was Cursor's measured `.66` until 2026-11-11, a third step between `.74` and `.60` that no eye told from either. |
 
 ### Action and selection
 
@@ -68,14 +68,14 @@ Dark is the default (`:root`); light restates only the roles that change, under 
 | `--error` | `#e34671` | `#BE1744` | An error: the danger button's fill, an error message. |
 | `--error-hover` | `#E6597F` | `#AB153D` | The danger button's hover: the error fill stepped 10% away from the surface (toward white in dark, toward black in light). |
 | `--error-pressed` | `#E96B8D` | `#981236` | The same at 20%. |
-| `--toggle-on` | `#3fa266` | `#007041` | A switch in its on position. |
+| `--toggle-on` | `#3fa266` | `#007041` | The engine badge's dot when the real engine is live (the status bar). Until 2026-11-11 it was also the rule under an on toggle and the current layer's name: green is no longer "on", and no toggle or row takes it. |
 
 ### Command line
 
 | Token | Dark | Light | Role |
 | --- | --- | --- | --- |
-| `--cmd-bg` | `rgba(28,28,28,.94)` | `#ebebeb` | The command line's own surface over the chrome. |
-| `--cmd-border` | `#333333` | `#c9c9c9` | Its border. |
+| `--cmd-bg` | `rgba(28,28,28,.94)` | `var(--chrome)` | The command line's band. Light's is the chrome itself: as `#ebebeb` it was the darkest chrome on the page. |
+| `--cmd-border` | `#333333` | `var(--border)` | Its border; in light, the chrome's own stroke. |
 
 ### Lists
 
@@ -91,7 +91,6 @@ Dark is the default (`:root`); light restates only the roles that change, under 
 | `--icon-layer-off` | `#8a8a5a` | `#8a8a5a` | A layer switched off. |
 | `--icon-layer-frozen` | `#9fd4ff` | `#9fd4ff` | A frozen layer. |
 | `--icon-locked` | `#e6b43c` | `#e6b43c` | A locked layer. |
-| `--layer-current` | `#4cc25a` | `#d5dfe9` | The current layer's row fill. |
 | `--swatch-border` | `#191919` | `#191919` | The hairline around a colour swatch. |
 
 ### Elevation, scrollbars, borders, misc
@@ -114,13 +113,13 @@ Each specimen is drawn with the token itself, never a copied value.
 - Icons on `--chrome`: <span style="background:var(--chrome);color:var(--icon);padding:2px 8px">icon</span>.
 - Action fills: <span style="display:inline-block;width:72px;height:20px;background:var(--accent);vertical-align:middle"></span> <span style="display:inline-block;width:72px;height:20px;background:var(--accent-hover);vertical-align:middle"></span> <span style="display:inline-block;width:72px;height:20px;background:var(--accent-pressed);vertical-align:middle"></span> <span style="display:inline-block;width:72px;height:20px;background:var(--accent-soft);vertical-align:middle"></span> — accent, hover, pressed, soft.
 - On accent: <span style="background:var(--accent);color:var(--on-accent);padding:2px 10px">Primary</span> <span style="background:var(--error);color:var(--on-error);padding:2px 10px">Danger</span>.
-- Status: <span style="color:var(--warn)">warn</span> <span style="color:var(--error)">error</span> <span style="color:var(--toggle-on)">toggle-on</span>.
+- Status: <span style="color:var(--warn)">warn</span> <span style="color:var(--error)">error</span> <span style="color:var(--toggle-on)">live</span>.
 - State fills over `--control`: <span style="background:var(--control);padding:2px 10px">rest <span style="background:var(--hover);padding:1px 6px">hover</span> <span style="background:var(--fill-active);padding:1px 6px">active</span> <span style="background:var(--fill-pressed);padding:1px 6px">pressed</span> <span style="background:var(--fill-disabled);padding:1px 6px">disabled</span></span>.
 - Borders: <span style="border:1px solid var(--border);padding:2px 10px">border</span> <span style="border:1px solid var(--border-soft);padding:2px 10px">border-soft</span>.
 
 ## Usage
 
-- Reach for a role, never a hue: `--accent` for the one action, `--error` for a failure, `--warn` for a caution, `--toggle-on` for a setting that is on, because a second meaning per hue makes the interface unreadable at a glance.
+- Reach for a role, never a hue: `--accent` for the one action, `--error` for a failure, `--warn` for a caution, because a second meaning per hue makes the interface unreadable at a glance. A setting that is on is not a hue at all: it is a fill and a lighter ink (`Toggle`, `IconButton`'s `selected`), and the current layer is the selected fill and the accent bar. `--toggle-on` is the engine badge's dot and nothing else.
 - Hover and selection are fills, not colour changes — `--hover`, `--fill-active`, `--fill-pressed` over whatever surface the control sits on — because a hue swap changes a control's meaning, while a fill step only moves it.
 - Disabled is a lighter ink (`--text-disabled`) on an unchanged fill (`--fill-disabled`), because a disabled control should read as unavailable, not as a different control.
 - On an accent fill the label is `--on-accent`, never `--text`, because the fill is the same in both themes' buttons and the ink must stay readable on it; on the error fill it is `--on-error`, because the dark error fill is darker than the dark accent and the accent's ink misses 4.5 on it.
@@ -143,7 +142,7 @@ Contrast, measured by `node scripts/contrast-report.mjs` (run from the app folde
 | `--text-faint` | 6.4 ✓ | 6.5 ✓ | 6.4 ✓ | 6.3 ✓ | 6.1 ✓ | 5.9 ✓ | 6.0 ✓ | 6.3 ✓ | 6.1 ✓ | 6.1 ✓ |
 | `--text-disabled` | 3.1 · | 3.0 · | 3.1 · | 3.1 · | 3.1 · | 3.0 · | 3.0 · | 3.1 · | 3.1 · | 3.1 · |
 | `--text-accent` | 6.4 ✓ | 6.7 ✓ | 6.4 ✓ | 6.2 ✓ | 6.0 ✓ | 5.5 ✓ | 5.6 ✓ | 6.2 ✓ | 6.0 ✓ | 6.0 ✓ |
-| `--icon` | 7.5 ✓ | 7.6 ✓ | 7.5 ✓ | 7.3 ✓ | 7.2 ✓ | 6.8 ✓ | 6.9 ✓ | 7.3 ✓ | 7.2 ✓ | 7.2 ✓ |
+| `--icon` | 9.2 ✓ | 9.4 ✓ | 9.2 ✓ | 8.9 ✓ | 8.7 ✓ | 8.2 ✓ | 8.3 ✓ | 8.9 ✓ | 8.7 ✓ | 8.7 ✓ |
 | `--accent` | 6.4 ✓ | 6.7 ✓ | 6.4 ✓ | 6.2 ✓ | 6.0 ✓ | 5.5 ✓ | 5.6 ✓ | 6.2 ✓ | 6.0 ✓ | 6.0 ✓ |
 | `--focus-ring` | 6.4 ✓ | 6.7 ✓ | 6.4 ✓ | 6.2 ✓ | 6.0 ✓ | 5.5 ✓ | 5.6 ✓ | 6.2 ✓ | 6.0 ✓ | 6.0 ✓ |
 | `--warn` | 10.1 ✓ | 10.5 ✓ | 10.1 ✓ | 9.7 ✓ | 9.3 ✓ | 8.6 ✓ | 8.8 ✓ | 9.7 ✓ | 9.3 ✓ | 9.3 ✓ |
@@ -169,6 +168,10 @@ Contrast, measured by `node scripts/contrast-report.mjs` (run from the app folde
 
 `--focus-ring` against `--fill-active` over each surface: `--chrome` 4.4 ✓; `--chrome-dark` 4.7 ✓; `--panel` 4.4 ✓; `--tab-active` 4.2 ✓; `--control` 4.0 ✓; `--control-hover` 3.6 ✓; `--surface-elevated` 3.7 ✓; `--surface-inset` 4.2 ✓; `--list-bg` 4.0 ✓; `--cmd-bg` 4.0 ✓.
 
+`--text-faint` as text on `--fill-active` over each surface: `--chrome` 5.1 ✓; `--chrome-dark` 5.3 ✓; `--panel` 5.1 ✓; `--tab-active` 4.9 ✓; `--control` 4.8 ✓; `--surface-elevated` 4.5 ✓; `--surface-inset` 4.9 ✓; `--list-bg` 4.8 ✓; `--cmd-bg` 4.8 ✓.
+
+`--text-dim` as text on `--fill-active` over each surface: `--chrome` 6.9 ✓; `--chrome-dark` 7.2 ✓; `--panel` 6.9 ✓; `--tab-active` 6.6 ✓; `--control` 6.3 ✓; `--surface-elevated` 6.0 ✓; `--surface-inset` 6.6 ✓; `--list-bg` 6.3 ✓; `--cmd-bg` 6.3 ✓.
+
 On the drawing (`--canvas`, one dark surface in both themes): `--selection` 6.2 ✓; `--canvas-focus-ring` 6.2 ✓.
 
 On the hint (`--tooltip-bg`): `--text` 16.2 ✓; `--text-dim` 9.2 ✓; `--text-faint` 6.4 ✓.
@@ -179,22 +182,22 @@ Every ink pair is at or above its threshold.
 
 | foreground \ surface | `--chrome` | `--chrome-dark` | `--panel` | `--tab-active` | `--control` | `--control-hover` | `--surface-elevated` | `--surface-inset` | `--list-bg` | `--cmd-bg` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `--text` | 17.3 ✓ | 16.6 ✓ | 18.0 ✓ | 18.0 ✓ | 15.0 ✓ | 13.7 ✓ | 18.0 ✓ | 16.6 ✓ | 18.4 ✓ | 15.5 ✓ |
-| `--text-dim` | 7.7 ✓ | 7.5 ✓ | 7.8 ✓ | 7.8 ✓ | 7.1 ✓ | 6.7 ✓ | 7.8 ✓ | 7.5 ✓ | 7.9 ✓ | 7.2 ✓ |
-| `--text-faint` | 5.8 ✓ | 5.7 ✓ | 5.9 ✓ | 5.9 ✓ | 5.5 ✓ | 5.2 ✓ | 5.9 ✓ | 5.7 ✓ | 5.9 ✓ | 5.5 ✓ |
-| `--text-disabled` | 2.3 · | 2.3 · | 2.3 · | 2.3 · | 2.2 · | 2.2 · | 2.3 · | 2.3 · | 2.3 · | 2.3 · |
-| `--text-accent` | 6.4 ✓ | 6.1 ✓ | 6.6 ✓ | 6.6 ✓ | 5.5 ✓ | 5.0 ✓ | 6.6 ✓ | 6.1 ✓ | 6.8 ✓ | 5.7 ✓ |
-| `--icon` | 5.8 ✓ | 5.7 ✓ | 5.9 ✓ | 5.9 ✓ | 5.5 ✓ | 5.2 ✓ | 5.9 ✓ | 5.7 ✓ | 5.9 ✓ | 5.5 ✓ |
-| `--accent` | 4.4 ✓ | 4.2 ✓ | 4.5 ✓ | 4.5 ✓ | 3.8 ✓ | 3.4 ✓ | 4.5 ✓ | 4.2 ✓ | 4.6 ✓ | 3.9 ✓ |
-| `--focus-ring` | 6.4 ✓ | 6.1 ✓ | 6.6 ✓ | 6.6 ✓ | 5.5 ✓ | 5.0 ✓ | 6.6 ✓ | 6.1 ✓ | 6.8 ✓ | 5.7 ✓ |
-| `--warn` | 4.4 ✓ | 4.2 ✓ | 4.5 ✓ | 4.5 ✓ | 3.8 ✓ | 3.5 ✓ | 4.5 ✓ | 4.2 ✓ | 4.6 ✓ | 3.9 ✓ |
-| `--error` | 5.8 ✓ | 5.6 ✓ | 6.0 ✓ | 6.0 ✓ | 5.0 ✓ | 4.6 ✓ | 6.0 ✓ | 5.6 ✓ | 6.2 ✓ | 5.2 ✓ |
-| `--toggle-on` | 5.8 ✓ | 5.6 ✓ | 6.0 ✓ | 6.0 ✓ | 5.0 ✓ | 4.6 ✓ | 6.0 ✓ | 5.6 ✓ | 6.2 ✓ | 5.2 ✓ |
+| `--text` | 17.3 ✓ | 16.6 ✓ | 18.0 ✓ | 18.0 ✓ | 16.6 ✓ | 15.0 ✓ | 18.0 ✓ | 16.6 ✓ | 18.4 ✓ | 17.3 ✓ |
+| `--text-dim` | 7.7 ✓ | 7.5 ✓ | 7.8 ✓ | 7.8 ✓ | 7.5 ✓ | 7.1 ✓ | 7.8 ✓ | 7.5 ✓ | 7.9 ✓ | 7.7 ✓ |
+| `--text-faint` | 5.8 ✓ | 5.7 ✓ | 5.9 ✓ | 5.9 ✓ | 5.7 ✓ | 5.5 ✓ | 5.9 ✓ | 5.7 ✓ | 5.9 ✓ | 5.8 ✓ |
+| `--text-disabled` | 2.3 · | 2.3 · | 2.3 · | 2.3 · | 2.3 · | 2.2 · | 2.3 · | 2.3 · | 2.3 · | 2.3 · |
+| `--text-accent` | 6.4 ✓ | 6.1 ✓ | 6.6 ✓ | 6.6 ✓ | 6.1 ✓ | 5.5 ✓ | 6.6 ✓ | 6.1 ✓ | 6.8 ✓ | 6.4 ✓ |
+| `--icon` | 7.7 ✓ | 7.5 ✓ | 7.8 ✓ | 7.8 ✓ | 7.5 ✓ | 7.1 ✓ | 7.8 ✓ | 7.5 ✓ | 7.9 ✓ | 7.7 ✓ |
+| `--accent` | 4.4 ✓ | 4.2 ✓ | 4.5 ✓ | 4.5 ✓ | 4.2 ✓ | 3.8 ✓ | 4.5 ✓ | 4.2 ✓ | 4.6 ✓ | 4.4 ✓ |
+| `--focus-ring` | 6.4 ✓ | 6.1 ✓ | 6.6 ✓ | 6.6 ✓ | 6.1 ✓ | 5.5 ✓ | 6.6 ✓ | 6.1 ✓ | 6.8 ✓ | 6.4 ✓ |
+| `--warn` | 4.4 ✓ | 4.2 ✓ | 4.5 ✓ | 4.5 ✓ | 4.2 ✓ | 3.8 ✓ | 4.5 ✓ | 4.2 ✓ | 4.6 ✓ | 4.4 ✓ |
+| `--error` | 5.8 ✓ | 5.6 ✓ | 6.0 ✓ | 6.0 ✓ | 5.6 ✓ | 5.0 ✓ | 6.0 ✓ | 5.6 ✓ | 6.2 ✓ | 5.8 ✓ |
+| `--toggle-on` | 5.8 ✓ | 5.6 ✓ | 6.0 ✓ | 6.0 ✓ | 5.6 ✓ | 5.0 ✓ | 6.0 ✓ | 5.6 ✓ | 6.2 ✓ | 5.8 ✓ |
 | `--hover` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · |
 | `--fill-active` (fill) | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · |
 | `--fill-pressed` (fill) | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · | 1.5 · |
 | `--fill-disabled` (fill) | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · | 1.1 · |
-| `--accent-soft` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.1 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · |
+| `--accent-soft` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · |
 | `--border` (fill) | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · |
 | `--border-soft` (fill) | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · | 1.2 · |
 | `--scrollbar` (fill) | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · | 1.3 · |
@@ -206,9 +209,13 @@ Every ink pair is at or above its threshold.
 
 `--on-error` on its action fills: `--error` 6.0 ✓; `--error-hover` 7.0 ✓; `--error-pressed` 8.3 ✓.
 
-`--focus-ring` against `--hover` over each surface: `--chrome` 5.4 ✓; `--chrome-dark` 5.2 ✓; `--panel` 5.6 ✓; `--tab-active` 5.6 ✓; `--control` 4.7 ✓; `--control-hover` 4.3 ✓; `--surface-elevated` 5.6 ✓; `--surface-inset` 5.2 ✓; `--list-bg` 5.7 ✓; `--cmd-bg` 4.8 ✓.
+`--focus-ring` against `--hover` over each surface: `--chrome` 5.4 ✓; `--chrome-dark` 5.2 ✓; `--panel` 5.6 ✓; `--tab-active` 5.6 ✓; `--control` 5.2 ✓; `--control-hover` 4.7 ✓; `--surface-elevated` 5.6 ✓; `--surface-inset` 5.2 ✓; `--list-bg` 5.7 ✓; `--cmd-bg` 5.4 ✓.
 
-`--focus-ring` against `--fill-active` over each surface: `--chrome` 4.8 ✓; `--chrome-dark` 4.6 ✓; `--panel` 4.9 ✓; `--tab-active` 4.9 ✓; `--control` 4.1 ✓; `--control-hover` 3.8 ✓; `--surface-elevated` 4.9 ✓; `--surface-inset` 4.6 ✓; `--list-bg` 5.0 ✓; `--cmd-bg` 4.3 ✓.
+`--focus-ring` against `--fill-active` over each surface: `--chrome` 4.8 ✓; `--chrome-dark` 4.6 ✓; `--panel` 4.9 ✓; `--tab-active` 4.9 ✓; `--control` 4.6 ✓; `--control-hover` 4.1 ✓; `--surface-elevated` 4.9 ✓; `--surface-inset` 4.6 ✓; `--list-bg` 5.0 ✓; `--cmd-bg` 4.8 ✓.
+
+`--text-faint` as text on `--fill-active` over each surface: `--chrome` 5.1 ✓; `--chrome-dark` 5.0 ✓; `--panel` 5.2 ✓; `--tab-active` 5.2 ✓; `--control` 5.0 ✓; `--surface-elevated` 5.2 ✓; `--surface-inset` 5.0 ✓; `--list-bg` 5.2 ✓; `--cmd-bg` 5.1 ✓.
+
+`--text-dim` as text on `--fill-active` over each surface: `--chrome` 6.5 ✓; `--chrome-dark` 6.4 ✓; `--panel` 6.7 ✓; `--tab-active` 6.7 ✓; `--control` 6.4 ✓; `--surface-elevated` 6.7 ✓; `--surface-inset` 6.4 ✓; `--list-bg` 6.7 ✓; `--cmd-bg` 6.5 ✓.
 
 On the drawing (`--canvas`, one dark surface in both themes): `--selection` 3.8 ✓; `--canvas-focus-ring` 6.2 ✓.
 

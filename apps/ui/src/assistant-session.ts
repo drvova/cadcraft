@@ -15,7 +15,7 @@
 import { batch, createSignal } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import type { AppFacade } from "./facade";
-import { activityLine, MAX_MESSAGE_CHARS, MAX_REQUEST_CHARS, PROVIDER_LIMITS, providerFault, runTurn, trimToBudget, type AssistantEvent, type Briefing, type ChatImage, type ChatMessage, type ProviderConfig, type TurnOptions } from "./assistant";
+import { activityLine, resultNote, MAX_MESSAGE_CHARS, MAX_REQUEST_CHARS, PROVIDER_LIMITS, providerFault, runTurn, trimToBudget, type AssistantEvent, type Briefing, type ChatImage, type ChatMessage, type ProviderConfig, type TurnOptions } from "./assistant";
 
 export interface ToolEntry {
   kind: "tool";
@@ -45,8 +45,8 @@ export interface QueuedMessage {
 export interface Changes {
   depth: number;
   steps: number;
-  /** What the assistant ran to make them, oldest first: one line per tool call that succeeded
-   *  since the checkpoint (`activityLine` of its code). */
+  /** What the assistant ran to make them, oldest first: one sentence per tool call that succeeded
+   *  since the checkpoint (`activityLine` of its code and its report). */
   labels: string[];
 }
 
@@ -209,8 +209,14 @@ export function createAssistantSession(opts: SessionOptions) {
   let lastEnd: "done" | "stopped" | "failed" = "done";
   /** Due when the model has been silent for `slowMs`: the status then names the provider. */
   let slow: ReturnType<typeof setTimeout> | undefined;
-  /** The code of each tool call that succeeded since the open checkpoint. */
+  /** Each tool call that succeeded since the open checkpoint, as its sentence. */
   let ranSince: string[] = [];
+  /** The drawing as the running tool call found it: what its note is measured against. */
+  let before: { objects: number; depth: number | null } | null = null;
+  const measure = (): { objects: number; depth: number | null } | null => {
+    const state = opts.facade.drawingState();
+    return state === null || state === undefined ? null : { objects: state.entityCount, depth: state.undoDepth };
+  };
 
   /**
    * How much of the conversation the next request carries: while a turn runs, what it is sending;
@@ -250,8 +256,8 @@ export function createAssistantSession(opts: SessionOptions) {
    * The status row says what the turn is doing now, in four phases. The model has the conversation
    * and has said nothing yet: it is thinking, and past `slowMs` of silence it is the provider that
    * is being waited on. Its words are arriving: it is writing. It asked for a command: that
-   * command is running, by its first line. A command runs within one frame, so its name stays in
-   * the row while the model reads the report (`ran`): "Ran …. Thinking…".
+   * command is running, in the tool row's own sentence. A command runs within one frame, so the
+   * sentence stays in the row while the model reads the report (`ran`): "Ran CIRCLE · …. Thinking…".
    */
   const awaitReply = (ran = ""): void => {
     clearTimeout(slow);
@@ -291,8 +297,9 @@ export function createAssistantSession(opts: SessionOptions) {
     // Anything else comes after the words before it: they are written first.
     flushText();
     if (e.type === "call") {
-      heard(e.code.trim() === "" ? "Reading the manual…" : `Running ${activityLine(e.code)}…`);
-      setEntries(produce((list) => void list.push({ kind: "tool", name: e.name, code: e.code, report: "", ok: true, note: "running…", open: false, at: Date.now() })));
+      heard(`${activityLine(e.code, "", "present")}…`);
+      before = measure();
+      setEntries(produce((list) => void list.push({ kind: "tool", name: e.name, code: e.code, report: "", ok: true, note: "Running…", open: false, at: Date.now() })));
       return;
     }
     if (e.type === "result") {
@@ -301,10 +308,11 @@ export function createAssistantSession(opts: SessionOptions) {
           for (let i = list.length - 1; i >= 0; i--) {
             const entry = list[i];
             if (entry?.kind === "tool" && entry.report === "") {
+              const after = measure();
               entry.ok = e.ok;
-              entry.note = e.note;
+              entry.note = resultNote(entry.code, e.report, e.ok, before === null || after === null ? null : { objects: after.objects - before.objects, steps: after.depth === null || before.depth === null ? null : after.depth - before.depth });
               entry.report = e.report;
-              if (e.ok) ranSince.push(entry.code);
+              if (e.ok) ranSince.push(activityLine(entry.code, e.report));
               break;
             }
           }
@@ -312,7 +320,7 @@ export function createAssistantSession(opts: SessionOptions) {
       );
       opts.onChanged();
       // The report goes back to the model: the turn waits on its next words.
-      awaitReply(e.code.trim() === "" ? "Read the manual" : `Ran ${activityLine(e.code)}`);
+      awaitReply(activityLine(e.code, e.report));
       return;
     }
     if (e.type === "failed") {
@@ -362,7 +370,7 @@ export function createAssistantSession(opts: SessionOptions) {
       const now = undoDepth();
       const changed = before !== null && now !== null && now > before;
       if (!changed) ranSince = [];
-      setChanges(changed ? { depth: before, steps: now - before, labels: ranSince.map(activityLine) } : null);
+      setChanges(changed ? { depth: before, steps: now - before, labels: [...ranSince] } : null);
       // A queued message goes as soon as the turn before it ended cleanly.
       if (lastEnd === "done") sendQueued(0);
     });

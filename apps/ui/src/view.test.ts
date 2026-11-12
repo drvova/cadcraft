@@ -24,6 +24,9 @@ import {
   rectIsDegenerate,
   rectsOverlap,
   resizeView,
+  FIT_HOLD,
+  FIT_SLACK,
+  holdsFit,
   screenToWorld,
   WHEEL_LINE_PX,
   WHEEL_MAX_PX,
@@ -391,5 +394,71 @@ describe("fitAspect", () => {
     expect(fitAspect(r, { w: 0, h: 100 })).toEqual(r);
     expect(fitAspect(r, { w: 100, h: 0 })).toEqual(r);
     expect(fitAspect({ x0: 5, y0: 5, x1: 5, y1: 5 }, { w: 100, h: 100 })).toEqual(normalizeRect({ x0: 5, y0: 5, x1: 5, y1: 5 }));
+  });
+});
+
+describe("holdsFit", () => {
+  /** A drawing fitted with room to spare below: 100 by 40 on a canvas of 1000 by 600. */
+  const wide = { x0: 0, y0: 0, x1: 100, y1: 40 };
+  /** One fitted to the canvas's height: any row taken from the bottom covers part of it. */
+  const tall = { x0: 0, y0: 0, x1: 100, y1: 60 };
+  const box: ScreenBox = { left: 250, top: 100, w: 1000, h: 600 };
+
+  test("the command line taking a row leaves a fitted drawing where it is", () => {
+    const to = { ...box, h: 572 };
+    expect(holdsFit(wide, box, to)).toBe(true);
+    // Held: the point under the pointer is the point that was there, at the same zoom.
+    const before = fitAspect(wide, box);
+    const after = resizeView(before, box, to);
+    const at = { x: 400, y: 300 };
+    expect(screenToWorld(after, to, at).x).toBeCloseTo(screenToWorld(before, box, at).x, 9);
+    expect(screenToWorld(after, to, at).y).toBeCloseTo(screenToWorld(before, box, at).y, 9);
+  });
+
+  test("the row given back restores the fit exactly", () => {
+    const to = { ...box, h: 572 };
+    expect(holdsFit(wide, box, to)).toBe(true);
+    expect(holdsFit(wide, box, box)).toBe(true);
+    expect(resizeView(fitAspect(wide, box), box, box)).toEqual(fitAspect(wide, box));
+  });
+
+  test("a row that would cover more than the fit's margin fits the view again", () => {
+    // 4% of the height is margin: 24px of 600 may go, 28 may not.
+    expect(holdsFit(tall, box, { ...box, h: 600 - FIT_SLACK * 600 })).toBe(true);
+    expect(holdsFit(tall, box, { ...box, h: 572 })).toBe(false);
+  });
+
+  test("a width change, or the top or left edge moving, fits the view again", () => {
+    expect(holdsFit(wide, box, { ...box, w: 660 })).toBe(false);
+    expect(holdsFit(wide, box, { ...box, top: 60, h: 640 })).toBe(false);
+    expect(holdsFit(wide, box, { ...box, left: 0 })).toBe(false);
+  });
+
+  test("a canvas grown much taller fits the view again; a little taller holds", () => {
+    expect(holdsFit(wide, box, { ...box, h: 600 * (1 + FIT_HOLD) + 1 })).toBe(false);
+    expect(holdsFit(wide, box, { ...box, h: 600 * (1 + FIT_HOLD) - 1 })).toBe(true);
+  });
+
+  test("with the drawing's extents known, it holds for as long as their bottom still shows", () => {
+    // The fit shows y from -10 to 50; the geometry starts at y = 4: 14 units (140px) may go.
+    const content = { x0: 5, y0: 4, x1: 95, y1: 36 };
+    expect(holdsFit(wide, box, { ...box, h: 461 }, content)).toBe(true);
+    expect(holdsFit(wide, box, { ...box, h: 459 }, content)).toBe(false);
+    // Without them only the fit's own margin may go: 11.6 units.
+    expect(holdsFit(wide, box, { ...box, h: 470 })).toBe(false);
+  });
+
+  test("extents that reach below the fitted view fall back to the fit's margin", () => {
+    const below = { x0: 0, y0: -500, x1: 100, y1: 40 };
+    expect(holdsFit(tall, box, { ...box, h: 600 - FIT_SLACK * 600 }, below)).toBe(true);
+    expect(holdsFit(tall, box, { ...box, h: 572 }, below)).toBe(false);
+    expect(holdsFit(tall, box, { ...box, h: 572 }, { x0: 0, y0: Number.NaN, x1: 1, y1: 1 })).toBe(false);
+  });
+
+  test("hostile boxes and views never hold", () => {
+    expect(holdsFit(wide, box, { ...box, h: Number.NaN })).toBe(false);
+    expect(holdsFit(wide, { ...box, w: 0 }, box)).toBe(false);
+    expect(holdsFit({ x0: 0, y0: 0, x1: 0, y1: 0 }, box, box)).toBe(false);
+    expect(holdsFit({ x0: 0, y0: Number.NaN, x1: 1, y1: 1 }, box, box)).toBe(false);
   });
 });

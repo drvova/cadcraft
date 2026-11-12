@@ -127,9 +127,9 @@ const MAX_PREVIEW_CLIPBOARD: usize = 512;
 /// Bytes a dragged handle is estimated to take in a [`Facade::preview`] reply, for the size cap.
 const HANDLE_BYTES: usize = 24;
 
-/// The canvas is assumed about this many pixels tall: chord tolerance is half a pixel and the
-/// minimum dash two pixels at that scale.
-const NOMINAL_CANVAS_PX: f64 = 1000.0;
+/// How far a drawn curve may stand from the true one, in canvas pixels: a quarter of a pixel is
+/// under what the eye resolves, so a circle reads round at any zoom the display list was built for.
+const CURVE_TOLERANCE_PX: f64 = 0.25;
 
 /// Bytes a vertex is estimated to take in the display-list JSON, for the size cap.
 const VERTEX_BYTES: usize = 56;
@@ -895,17 +895,20 @@ impl Facade {
         }
     }
 
-    /// The build options for the current view: level of detail from the view's height (the canvas
-    /// is assumed [`NOMINAL_CANVAS_PX`] tall), the view as the pattern-generation window, and
+    /// The build options for the current view: level of detail from the size of a canvas pixel in
+    /// the view (the canvas's real height, from `setViewport`), the view as the pattern-generation window, and
     /// transparency on so `alpha` is meaningful.
-    /// The build options for a window: level of detail from the window's height (the canvas is
-    /// assumed [`NOMINAL_CANVAS_PX`] tall), the window as the pattern-generation window, and
+    /// The build options for a window: level of detail from the size of a canvas pixel in the
+    /// view on screen (the canvas's real height, from `setViewport`), the window as the pattern-generation window, and
     /// transparency on so `alpha` is meaningful.
     fn build_options_for(&self, window: Bounds2) -> Options {
         let height = window.height().max(MIN_VIEW_SIZE);
-        let px = (height / NOMINAL_CANVAS_PX).clamp(1e-9, 1e9);
+        // One canvas pixel in drawing units: the view on screen over the canvas's real height (the
+        // window built for may be the view padded by a margin, which is not what a pixel spans).
+        let canvas_px = finite(self.session.viewport_px.1).max(1.0);
+        let px = (self.view.height().max(MIN_VIEW_SIZE) / canvas_px).clamp(1e-9, 1e9);
         Options {
-            tolerance: px * 0.5,
+            tolerance: px * CURVE_TOLERANCE_PX,
             min_dash: px * 2.0,
             text: true,
             fill: true,

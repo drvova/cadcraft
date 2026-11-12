@@ -180,58 +180,272 @@ export function drawDisplay(ctx: CanvasRenderingContext2D, list: DisplayList, vi
       if (!isHighlighted(handleHex(prim.handle), selection)) continue;
       const b = boundsOfPrim(prim, list.verts);
       if (b === null || !rectsOverlap(b, view)) continue;
-      highlightPrim(ctx, prim, list, proj.projectX, proj.projectY);
+      highlightPrim(ctx, prim, list.verts, { projectX: proj.projectX, projectY: proj.projectY, m: null });
     }
   }
   ctx.globalAlpha = 1;
 }
 
-/** Stroke a primitive's own outline again for the selection highlight. */
-function highlightPrim(
-  ctx: CanvasRenderingContext2D,
-  prim: DisplayPrim,
-  list: DisplayList,
-  projectX: (x: number) => number,
-  projectY: (y: number) => number,
-): void {
-  const end = Math.min(prim.start + prim.len, list.verts.length);
-  if (prim.kind === "point") {
-    const p = list.verts[prim.start] as Point;
-    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
-    const sx = projectX(p.x);
-    const sy = projectY(p.y);
-    ctx.strokeRect(sx - POINT_SIZE / 2, sy - POINT_SIZE / 2, POINT_SIZE, POINT_SIZE);
-    return;
-  }
-  ctx.beginPath();
+/** A drag's transform: world `(x, y)` goes to `(a·x + c·y + e, b·x + d·y + f)` (`PreviewDrag.matrix`). */
+export type Matrix = readonly [number, number, number, number, number, number];
+
+/** World to screen, through a drag's matrix first when there is one. */
+interface Mapping {
+  projectX: (x: number) => number;
+  projectY: (y: number) => number;
+  m: Matrix | null;
+}
+
+/** Where a vertex lands on screen, or null when it (or its image under the matrix) is not finite. */
+function place(p: Point | undefined, map: Mapping): Point | null {
+  if (p === undefined || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
+  const m = map.m;
+  const x = m === null ? p.x : m[0] * p.x + m[2] * p.y + m[4];
+  const y = m === null ? p.y : m[1] * p.x + m[3] * p.y + m[5];
+  return Number.isFinite(x) && Number.isFinite(y) ? { x: map.projectX(x), y: map.projectY(y) } : null;
+}
+
+/**
+ * Put a primitive's outline on the current path: a polyline's run, an image's closed frame, each
+ * whole triangle closed. False for a point primitive and for one with nothing finite to trace.
+ */
+function tracePrim(ctx: CanvasRenderingContext2D, prim: DisplayPrim, verts: readonly Point[], map: Mapping): boolean {
+  if (prim.kind === "point") return false;
+  const end = Math.min(prim.start + prim.len, verts.length);
   let started = false;
   if (prim.kind === "tris") {
     for (let i = prim.start; i + 2 < end; i += 3) {
-      const a = list.verts[i] as Point;
-      const b = list.verts[i + 1] as Point;
-      const c = list.verts[i + 2] as Point;
-      if (![a, b, c].every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))) continue;
-      ctx.moveTo(projectX(a.x), projectY(a.y));
-      ctx.lineTo(projectX(b.x), projectY(b.y));
-      ctx.lineTo(projectX(c.x), projectY(c.y));
+      const a = place(verts[i], map);
+      const b = place(verts[i + 1], map);
+      const c = place(verts[i + 2], map);
+      if (a === null || b === null || c === null) continue;
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.lineTo(c.x, c.y);
       ctx.closePath();
       started = true;
     }
-  } else {
-    for (let i = prim.start; i < end; i++) {
-      const p = list.verts[i] as Point;
-      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
-      const sx = projectX(p.x);
-      const sy = projectY(p.y);
-      if (started) ctx.lineTo(sx, sy);
-      else {
-        ctx.moveTo(sx, sy);
-        started = true;
+    return started;
+  }
+  for (let i = prim.start; i < end; i++) {
+    const s = place(verts[i], map);
+    if (s === null) continue;
+    if (started) ctx.lineTo(s.x, s.y);
+    else {
+      ctx.moveTo(s.x, s.y);
+      started = true;
+    }
+  }
+  if (started && prim.kind === "image") ctx.closePath();
+  return started;
+}
+
+/** Stroke a primitive's own outline again in the ink in hand (the selection, a hover, a rubber band). */
+function highlightPrim(ctx: CanvasRenderingContext2D, prim: DisplayPrim, verts: readonly Point[], map: Mapping): void {
+  if (prim.kind === "point") {
+    const s = place(verts[prim.start], map);
+    if (s !== null) ctx.strokeRect(s.x - POINT_SIZE / 2, s.y - POINT_SIZE / 2, POINT_SIZE, POINT_SIZE);
+    return;
+  }
+  ctx.beginPath();
+  if (tracePrim(ctx, prim, verts, map)) ctx.stroke();
+}
+
+/** Draw a primitive in its own colour at [`DRAG_ALPHA`] of its opacity: an object following the pointer. */
+function ghostPrim(ctx: CanvasRenderingContext2D, prim: DisplayPrim, verts: readonly Point[], map: Mapping): void {
+  ctx.globalAlpha = prim.alpha * DRAG_ALPHA;
+  ctx.strokeStyle = rgb(prim.color);
+  ctx.fillStyle = rgb(prim.color);
+  if (prim.kind === "point") {
+    const s = place(verts[prim.start], map);
+    if (s !== null) ctx.fillRect(s.x - POINT_SIZE / 2, s.y - POINT_SIZE / 2, POINT_SIZE, POINT_SIZE);
+    return;
+  }
+  ctx.lineWidth = prim.kind === "polyline" ? lineWidthPx(prim.lw) : 1;
+  ctx.beginPath();
+  if (!tracePrim(ctx, prim, verts, map)) return;
+  if (prim.kind === "tris") ctx.fill();
+  else ctx.stroke();
+}
+
+/** How strong the hover ink is against the selection's: the same hue, quieter. */
+export const HOVER_ALPHA = 0.5;
+
+/** How strong the dragged objects' own colours are while they follow the pointer. */
+export const DRAG_ALPHA = 0.55;
+
+/** A rubber band's fill (a preview's solid area) against its outline. */
+export const RUBBER_FILL_ALPHA = 0.18;
+
+/** The rubber band's stroke width, in CSS px: a construction line, finer than the selection's. */
+export const RUBBER_WIDTH = 1;
+
+/** Half the object-snap marker's box, in CSS px: the same size at any zoom. */
+export const SNAP_MARKER_HALF = 6;
+
+/** The object-snap marker's stroke width, in CSS px. */
+export const SNAP_MARKER_WIDTH = 1.5;
+
+/** One stroke of a snap marker, in a box from -1 to 1 with y down (the screen's). */
+export type SnapShape = { kind: "path"; points: readonly (readonly [number, number])[]; closed: boolean } | { kind: "circle"; cx: number; cy: number; r: number };
+
+const stroke = (...points: (readonly [number, number])[]): SnapShape => ({ kind: "path", points, closed: false });
+const outline = (...points: (readonly [number, number])[]): SnapShape => ({ kind: "path", points, closed: true });
+const SQUARE = outline([-1, -1], [1, -1], [1, 1], [-1, 1]);
+const SALTIRE = [stroke([-1, -1], [1, 1]), stroke([-1, 1], [1, -1])];
+
+/** The marker of each object snap, by the engine's OSMODE bit (`SnapPoint.mode`). */
+const SNAP_GLYPHS: Readonly<Record<number, readonly SnapShape[]>> = {
+  1: [SQUARE],
+  2: [outline([0, -1], [1, 0.8], [-1, 0.8])],
+  4: [{ kind: "circle", cx: 0, cy: 0, r: 1 }],
+  8: [{ kind: "circle", cx: 0, cy: 0, r: 1 }, stroke([-0.7, -0.7], [0.7, 0.7]), stroke([-0.7, 0.7], [0.7, -0.7])],
+  16: [outline([0, -1], [1, 0], [0, 1], [-1, 0])],
+  32: SALTIRE,
+  64: [outline([-1, -1], [0.3, -1], [0.3, 0.3], [-1, 0.3]), outline([-0.3, -0.3], [1, -0.3], [1, 1], [-0.3, 1])],
+  128: [stroke([-1, -1], [-1, 1], [1, 1]), stroke([-1, 0], [0, 0], [0, 1])],
+  256: [{ kind: "circle", cx: 0, cy: 0.25, r: 0.75 }, stroke([-1, -0.5], [1, -0.5])],
+  512: [outline([-1, -1], [1, -1], [-1, 1], [1, 1])],
+  1024: [stroke([0, -1], [0, 1]), stroke([-0.87, -0.5], [0.87, 0.5]), stroke([-0.87, 0.5], [0.87, -0.5])],
+  2048: [SQUARE, ...SALTIRE],
+  4096: [stroke([-1, 0], [-0.5, 0]), stroke([-0.25, 0], [0.25, 0]), stroke([0.5, 0], [1, 0]), stroke([1, -0.5], [1, 0.5])],
+  8192: [stroke([-1, 0.2], [0.4, -1]), stroke([-0.4, 1], [1, -0.2])],
+};
+
+/** A snap of a kind this build does not know: an upright cross, so the point is still marked. */
+const SNAP_FALLBACK: readonly SnapShape[] = [stroke([-1, 0], [1, 0]), stroke([0, -1], [0, 1])];
+
+/**
+ * The marker for an object snap, keyed on the engine's OSMODE bit: a square for an endpoint, a
+ * triangle for a midpoint, a circle for a centre, a saltire for an intersection, and so on, each
+ * its own simple figure so the kind reads before the label does. An unknown bit is a cross.
+ */
+export function snapGlyph(mode: number): readonly SnapShape[] {
+  return SNAP_GLYPHS[mode] ?? SNAP_FALLBACK;
+}
+
+/** Put a snap marker's strokes on the current path, centred on a screen point. */
+function traceSnap(ctx: CanvasRenderingContext2D, glyph: readonly SnapShape[], x: number, y: number, half: number): void {
+  for (const shape of glyph) {
+    if (shape.kind === "circle") {
+      ctx.moveTo(x + (shape.cx + shape.r) * half, y + shape.cy * half);
+      ctx.arc(x + shape.cx * half, y + shape.cy * half, shape.r * half, 0, Math.PI * 2);
+      continue;
+    }
+    shape.points.forEach(([px, py], i) => {
+      if (i === 0) ctx.moveTo(x + px * half, y + py * half);
+      else ctx.lineTo(x + px * half, y + py * half);
+    });
+    if (shape.closed) ctx.closePath();
+  }
+}
+
+/** The running command's rubber band, as the overlay draws it (the facade's `CommandPreview`). */
+export interface OverlayPreview {
+  verts: readonly Point[];
+  prims: readonly DisplayPrim[];
+  drag: { handles: readonly number[]; matrix: Matrix; clipboard: boolean } | null;
+}
+
+/** What lies over the drawing under the pointer; every part may be absent. */
+export interface OverlayOptions {
+  width: number;
+  height: number;
+  dpr: number;
+  palette: Palette;
+  /** The handle a click would select (the engine's hex), outlined in the hover ink. */
+  hover: string | null;
+  /** The running command's rubber band. */
+  preview: OverlayPreview | null;
+  /** The object snap in hand: where (world) and which (the OSMODE bit). */
+  snap: { point: Point; mode: number } | null;
+}
+
+/** Whether an overlay with these parts draws nothing at all. */
+export function overlayIsEmpty(options: Pick<OverlayOptions, "hover" | "preview" | "snap">): boolean {
+  const preview = options.preview;
+  return options.hover === null && options.snap === null && (preview === null || (preview.prims.length === 0 && preview.drag === null));
+}
+
+/**
+ * Draw what follows the pointer, on a canvas of its own over the drawing (so a pointer move
+ * repaints these few strokes and never the display list): the hover outline; the dragged objects
+ * of a MOVE, COPY, ROTATE, SCALE or MIRROR, which are the primitives of `list` whose handle the
+ * drag names, moved by its matrix, in their own colours at [`DRAG_ALPHA`]; the rubber band's own
+ * primitives in the selection ink (pasted objects, which are not in the drawing, in their own
+ * colours); and the object-snap marker, the same size at any zoom, over a hairline of the
+ * canvas's ground so it reads where it lies on geometry. The canvas is cleared first.
+ */
+export function drawOverlay(ctx: CanvasRenderingContext2D, list: DisplayList, view: Rect, options: OverlayOptions): void {
+  const { width, height, dpr, palette, hover, preview, snap } = options;
+  const w = width > 0 ? width : 1;
+  const h = height > 0 ? height : 1;
+  const scale = Math.max(0.25, Math.min(8, dpr));
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const proj = makeProjection(view, { w, h });
+  const still: Mapping = { projectX: proj.projectX, projectY: proj.projectY, m: null };
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.setLineDash([]);
+
+  if (hover !== null && hover !== "") {
+    ctx.globalAlpha = HOVER_ALPHA;
+    ctx.strokeStyle = palette.selection;
+    ctx.lineWidth = SELECTION_WIDTH;
+    for (const prim of list.prims) {
+      if (handleHex(prim.handle) !== hover) continue;
+      const b = boundsOfPrim(prim, list.verts);
+      if (b === null || !rectsOverlap(b, view)) continue;
+      highlightPrim(ctx, prim, list.verts, still);
+    }
+  }
+
+  if (preview !== null) {
+    const drag = preview.drag;
+    if (drag !== null && drag.handles.length > 0) {
+      const dragged = new Set(drag.handles);
+      const moved: Mapping = { projectX: proj.projectX, projectY: proj.projectY, m: drag.matrix };
+      for (const prim of list.prims) {
+        if (dragged.has(prim.handle)) ghostPrim(ctx, prim, list.verts, moved);
       }
     }
-    if (started && prim.kind === "image") ctx.closePath();
+    const pasted = drag !== null && drag.clipboard;
+    for (const prim of preview.prims) {
+      if (pasted && prim.handle !== 0) {
+        ghostPrim(ctx, prim, preview.verts, still);
+        continue;
+      }
+      ctx.strokeStyle = palette.selection;
+      ctx.fillStyle = palette.selection;
+      ctx.lineWidth = RUBBER_WIDTH;
+      if (prim.kind === "tris") {
+        ctx.globalAlpha = RUBBER_FILL_ALPHA;
+        ctx.beginPath();
+        if (tracePrim(ctx, prim, preview.verts, still)) ctx.fill();
+        continue;
+      }
+      ctx.globalAlpha = 1;
+      highlightPrim(ctx, prim, preview.verts, still);
+    }
   }
-  if (started) ctx.stroke();
+
+  if (snap !== null && Number.isFinite(snap.point.x) && Number.isFinite(snap.point.y)) {
+    const x = Math.round(proj.projectX(snap.point.x));
+    const y = Math.round(proj.projectY(snap.point.y));
+    ctx.globalAlpha = 1;
+    ctx.lineCap = "butt";
+    ctx.lineJoin = "miter";
+    ctx.beginPath();
+    traceSnap(ctx, snapGlyph(snap.mode), x, y, SNAP_MARKER_HALF);
+    ctx.strokeStyle = palette.canvas;
+    ctx.lineWidth = SNAP_MARKER_WIDTH + 2;
+    ctx.stroke();
+    ctx.strokeStyle = palette.selection;
+    ctx.lineWidth = SNAP_MARKER_WIDTH;
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
 }
 
 /** The most grid lines drawn along one axis: the spacing floor keeps a real canvas far below it. */

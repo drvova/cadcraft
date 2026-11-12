@@ -107,8 +107,14 @@ describe("the layer's contrast, from the tokens", () => {
     ["an inline select's value at rest, and a checkbox's label, on the surface", "text", []],
     ["an inline mixed select's placeholder at rest, and a bare text area's placeholder, on the surface", "text-faint", []],
     ["an option's label on the listbox's highlight", "text", ["fill-active"]],
-    ["a text toggle's word, on or under the pointer, on the hover fill", "text", ["hover"]],
-    ["a text toggle's word on the pressed fill", "text", ["fill-active"]],
+    ["an off text toggle's word at rest, on the surface", "text-faint", []],
+    ["an off text toggle's word under the pointer, on the hover chip", "text", ["hover"]],
+    ["an off text toggle's word while held, and an on word under the pointer, on the selected chip", "text", ["fill-active"]],
+    // The on word was the full ink over a 1px rule in the on-green (three 3:1 rows for the rule,
+    // below, until 2026-11-11). It is now the secondary ink on a chip: the chip replaced the rule,
+    // so the rule's three rows became the word's on its chip, at the text threshold.
+    ["an on text toggle's word at rest, on its chip", "text-dim", ["fill-active"]],
+    ["an on text toggle's word while held, on the pressed chip", "text", ["fill-pressed"]],
   ];
   /** Not text: a glyph, or the edge that alone tells a control from its surface (WCAG 1.4.11). */
   const graphics: [string, string, string[]][] = [
@@ -124,9 +130,10 @@ describe("the layer's contrast, from the tokens", () => {
     ["a glyph toggle at rest on the surface", "text-faint", []],
     ["a glyph toggle at rest on a selected row", "text-faint", ["fill-active"]],
     ["an on glyph of the absent tone, hovered on a selected row", "icon", ["fill-active", "hover"]],
-    ["the rule under an on word", "toggle-on", []],
-    ["the rule under an on word, hovered", "toggle-on", ["hover"]],
-    ["the rule under an on word, pressed", "toggle-on", ["fill-active"]],
+    // `--toggle-on` no longer draws a toggle's rule (see the on word's rows above); its one use
+    // left is the engine badge's dot in the status bar.
+    ["the engine badge's live dot on the surface", "toggle-on", []],
+    ["a selected icon button's glyph on its fill", "text", ["hover"]],
   ];
   for (const [name, theme] of Object.entries(themes)) {
     for (const [what, ink, fills] of text) {
@@ -342,16 +349,35 @@ describe("the layer's recipe, from the stylesheet", () => {
     expect(uiCss).toContain('.ui-icon-button--ghost:hover:not([aria-disabled="true"]):not([aria-pressed="true"])');
   });
 
-  test("a toggle draws no fill at rest, on or off: the state is the face's ink, and the word's rule", () => {
+  // Was the .14 disc (`--fill-active` at the button's own round radius) until 2026-11-11: three
+  // such discs in the title bar outweighed its title. On is now the full ink on the .08 fill,
+  // squared to the control radius, so it is still told from off by a fill and a shape.
+  test("a selected icon button is the full ink on the faint fill, squared to the control radius", () => {
+    const selected = rule(uiCss, '.ui-icon-button[aria-pressed="true"]');
+    expect(selected).toContain("background: var(--hover)");
+    expect(selected).toContain("color: var(--text)");
+    expect(selected).toContain("border-radius: var(--radius-control)");
+  });
+
+  // Until 2026-11-11 no toggle drew a fill at rest and an on word stood over a rule in
+  // `--toggle-on`. The word read as a link and was the brightest text in its bar, so the on word
+  // is now a chip. What still holds: the button itself never takes a state's fill (a glyph is
+  // told by its glyph and ink, and the word's chip is its `::before`), so the expectations below
+  // moved from the rule to the chip and kept the rest.
+  test("a toggle's button draws no fill for its state: a glyph says it in the face, a word on a chip of its own", () => {
     expect(rule(uiCss, ".ui-toggle")).toContain("background: transparent");
     const pressed = [...uiCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => (m[1] ?? "").includes(".ui-toggle") && (m[1] ?? "").includes('[aria-pressed="true"]') && !(m[1] ?? "").includes("::"));
     expect(pressed.length).toBeGreaterThan(0);
     for (const m of pressed) expect(m[2]).not.toContain("background");
     expect(rule(uiCss, '.ui-toggle[aria-pressed="true"]')).toContain("color: var(--ui-toggle-ink-on)");
-    const mark = rule(uiCss, '.ui-toggle--text[aria-pressed="true"]::before');
-    expect(mark).toContain("background: var(--toggle-on)");
-    expect(mark).toContain("height: var(--hairline)");
-    expect(mark).toContain("left: var(--ui-toggle-pad)");
+    expect(rule(uiCss, ".ui-toggle--text")).toContain("--ui-toggle-ink-on: var(--text-dim)");
+    const chip = rule(uiCss, ".ui-toggle--text::before");
+    expect(chip).toContain("background: transparent");
+    expect(chip).toContain("inset: var(--gap-3) 0");
+    expect(chip).toContain("border-radius: var(--radius-control)");
+    expect(rule(uiCss, '.ui-toggle--text[aria-pressed="true"]::before')).toContain("background: var(--fill-active)");
+    // No hue says on: the on-green is not in the layer's sheet at all.
+    expect(uiCss).not.toContain("var(--toggle-on)");
   });
 
   test("a toggle's state ink outlasts the hover, and the disabled ink outlasts them all: one weight, in this order", () => {

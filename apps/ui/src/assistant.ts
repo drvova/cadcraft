@@ -910,18 +910,438 @@ export function relativeTime(then: number, now: number): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+// ---- What a tool call did, as a sentence a drafter reads -------------------------------------------
+//
+// The model writes AutoLISP (`RUN_DESCRIPTION`): `(cmd "id" '((KEY . value) …))` runs a command
+// with an alist of parameters, `(cmdline "id" "answer" …)` types at the command line, and
+// `(commands)`, `(describe "id")`, `(inspect)`, `(kept)`, `(forget "NAME")`, `(render)`,
+// `(defun NAME …)` and `(setq NAME …)` are the namespace around them. The report is the value of
+// the last form after `=> `, as an alist with upper-case keys (`((HANDLE . "12E"))`,
+// `((MOVED . 3))`, `((DISTANCE . 5.0) …)`), or `error: …`. A tool row says that in words: the
+// command's name and its telling arguments, and a note for what the result changed. The code and
+// the report themselves stay in the row's opened detail.
+
+/** One read value: a number, a text (`{ s }`), a symbol (upper case), or a list. A quote is dropped. */
+type Sx = number | string | { s: string } | Sx[];
+
+const isText = (x: Sx | undefined): x is { s: string } => typeof x === "object" && !Array.isArray(x);
+const isList = (x: Sx | undefined): x is Sx[] => Array.isArray(x);
+
+/** How much of a program or a report the reader looks at, and how deep: past these it stops. */
+const MAX_READ_CHARS = 20_000;
+const MAX_READ_NODES = 4_000;
+const MAX_READ_DEPTH = 64;
+
 /**
- * The one-line form of a tool call's code: its first non-empty line and how many more follow
- * (a port of the desktop pane's `activity_lines`). Empty code asks for the manual.
+ * Read Lisp text into its top-level forms. Strict (`partial` false: a program), anything that is
+ * not whole is null: an unclosed list or text, a stray `)`, more than the reader's bounds. Partial
+ * (a report, which may be very long), it returns what it read up to the first of those. Never throws.
  */
-export function activityLine(code: string): string {
+function readForms(text: string, partial: boolean): Sx[] | null {
+  if (!partial && text.length > MAX_READ_CHARS) return null;
+  const end = Math.min(text.length, MAX_READ_CHARS);
+  const root: Sx[] = [];
+  const stack: Sx[][] = [root];
+  let nodes = 0;
+  let i = 0;
+  while (i < end) {
+    const c = text.charAt(i);
+    if (c === "'" || /\s/.test(c)) {
+      i++;
+      continue;
+    }
+    if (c === ";") {
+      while (i < end && text.charAt(i) !== "\n") i++;
+      continue;
+    }
+    const top = stack[stack.length - 1] ?? root;
+    if (c === ")") {
+      if (stack.length === 1) {
+        if (!partial) return null;
+      } else stack.pop();
+      i++;
+      continue;
+    }
+    if (++nodes > MAX_READ_NODES || stack.length > MAX_READ_DEPTH) return partial ? root : null;
+    if (c === "(") {
+      const list: Sx[] = [];
+      top.push(list);
+      stack.push(list);
+      i++;
+      continue;
+    }
+    if (c === '"') {
+      let s = "";
+      let closed = false;
+      i++;
+      while (i < end) {
+        const d = text.charAt(i);
+        if (d === "\\") {
+          const e = text.charAt(i + 1);
+          s += e === "n" ? "\n" : e === "t" ? "\t" : e;
+          i += 2;
+          continue;
+        }
+        i++;
+        if (d === '"') {
+          closed = true;
+          break;
+        }
+        s += d;
+      }
+      if (!closed && !partial) return null;
+      top.push({ s });
+      continue;
+    }
+    let j = i;
+    while (j < end && !/[\s()'";]/.test(text.charAt(j))) j++;
+    const word = text.slice(i, j);
+    i = j;
+    top.push(/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(word) ? Number(word) : word.toUpperCase());
+  }
+  return stack.length > 1 && !partial ? null : root;
+}
+
+/** `(quote x)` is `x` (the reader already drops the `'` form). */
+const unquote = (x: Sx | undefined): Sx | undefined => (isList(x) && x.length === 2 && x[0] === "QUOTE" ? x[1] : x);
+
+/** An alist's pairs: `(KEY . value)` and `(KEY a b …)` (the same thing in Lisp) both give `[KEY, value]`. */
+function pairsOf(x: Sx | undefined): [string, Sx][] {
+  const list = unquote(x);
+  if (!isList(list)) return [];
+  const out: [string, Sx][] = [];
+  for (const item of list) {
+    if (!isList(item)) continue;
+    const key = item[0];
+    if (typeof key !== "string") continue;
+    const rest = item.slice(1);
+    const dotted = rest[0] === ".";
+    const value = dotted ? rest.slice(1) : rest;
+    out.push([key, dotted && value.length === 1 ? (unquote(value[0]) ?? []) : value]);
+  }
+  return out;
+}
+
+const valueOf = (pairs: readonly [string, Sx][], key: string): Sx | undefined => pairs.find(([k]) => k === key)?.[1];
+
+/** A pair's value as one number: `5`, or the `(5)` an undotted pair reads as. */
+function numberOf(pairs: readonly [string, Sx][], key: string): number | null {
+  const v = valueOf(pairs, key);
+  const x = isList(v) && v.length === 1 ? v[0] : v;
+  return typeof x === "number" && Number.isFinite(x) ? x : null;
+}
+
+/** A pair's value as one text. */
+function textOf(pairs: readonly [string, Sx][], key: string): string | null {
+  const v = valueOf(pairs, key);
+  const x = isList(v) && v.length === 1 ? v[0] : v;
+  return isText(x) && x.s.trim() !== "" ? oneLine(x.s) : null;
+}
+
+const oneLine = (s: string): string => s.replace(/\s+/g, " ").trim();
+
+/** The longest one argument and one whole sentence may run before they are cut with an ellipsis. */
+const MAX_ARG_CHARS = 32;
+const MAX_SENTENCE_CHARS = 140;
+/** How many arguments a sentence names, and how many commands a list of them names. */
+const MAX_ARGS = 3;
+const MAX_NAMES = 4;
+
+/**
+ * A number as the status bar writes one: plain decimals, at most four of them, no trailing zeros,
+ * no exponent, no "-0". One too large to write that way says so instead of printing its digits.
+ */
+export function shortNumber(x: number): string {
+  if (!Number.isFinite(x) || Math.abs(x) >= 1e15) return "a very large number";
+  const fixed = x.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+  return fixed === "-0" ? "0" : fixed;
+}
+
+const objects = (n: number): string => (n === 1 ? "1 object" : `${count(n)} objects`);
+
+const isPoint = (x: Sx | undefined): x is number[] => isList(x) && x.length >= 2 && x.length <= 3 && x.every((n) => typeof n === "number");
+const pointText = (p: readonly number[]): string => p.map(shortNumber).join(", ");
+
+/** One parameter as a few words: "radius 0.6", "center 3, 2.5", "3 objects", "points 0, 0 to 10, 0". */
+function argText(key: string, v: Sx): string {
+  const name = key.toLowerCase().replace(/[_-]+/g, " ");
+  if (typeof v === "number") return `${name} ${shortNumber(v)}`;
+  if (isText(v)) return key === "HANDLE" ? objects(1) : `${name} ${clip(oneLine(v.s), MAX_ARG_CHARS)}`;
+  if (typeof v === "string") return v === "T" ? name : v === "NIL" ? `no ${name}` : `${name} ${clip(v.toLowerCase(), MAX_ARG_CHARS)}`;
+  if (v.length === 0) return `no ${name}`;
+  if (v.length === 1 && (typeof v[0] === "number" || (isText(v[0]) && key !== "HANDLES"))) return argText(key, v[0]);
+  if (isPoint(v)) return `${name} ${pointText(v)}`;
+  if (v.every((n) => typeof n === "number")) return `${name} ${count(v.length)} values`;
+  if (v.every(isText)) return key === "HANDLES" ? objects(v.length) : `${name} ${count(v.length)} items`;
+  if (v.every(isPoint)) return v.length === 2 ? `${name} ${pointText(v[0] ?? [])} to ${pointText(v[1] ?? [])}` : `${count(v.length)} ${name}`;
+  return `${name} …`;
+}
+
+/** The telling arguments of a command: the first few, each a few words, then an ellipsis for the rest. */
+function argTexts(params: readonly [string, Sx][], skip: readonly string[] = []): string[] {
+  const told = params.filter(([k]) => !skip.includes(k));
+  const out = told.slice(0, MAX_ARGS).map(([k, v]) => argText(k, v));
+  if (told.length > MAX_ARGS) out.push("…");
+  return out;
+}
+
+/** Whether a sentence says what was done, or what is being done now (the run row's status). */
+export type ActivityTense = "past" | "present";
+
+/** Each verb in both tenses. */
+const VERBS = {
+  ran: ["Ran", "Running"],
+  typed: ["Typed", "Typing"],
+  selected: ["Selected", "Selecting"],
+  cleared: ["Cleared", "Clearing"],
+  set: ["Set", "Setting"],
+  added: ["Added", "Adding"],
+  deleted: ["Deleted", "Deleting"],
+  changed: ["Changed", "Changing"],
+  measured: ["Measured", "Measuring"],
+  read: ["Read", "Reading"],
+  looked: ["Looked up", "Looking up"],
+  listed: ["Listed", "Listing"],
+  inspected: ["Inspected", "Inspecting"],
+  defined: ["Defined", "Defining"],
+  forgot: ["Forgot", "Forgetting"],
+  rendered: ["Rendered", "Rendering"],
+} as const satisfies Record<string, readonly [string, string]>;
+
+type Verb = keyof typeof VERBS;
+
+/** One thing a program does. */
+interface Step {
+  verb: Verb;
+  /** A command's name, set in the mono face after the verb ("CIRCLE"). */
+  name?: string;
+  /** Plain words after the verb (and the name). */
+  words?: string;
+  /** The telling arguments, each after a middle dot. */
+  args: string[];
+  /** It only reads (the drawing, the command list): never the telling step beside one that acts. */
+  reads: boolean;
+  /** It acts, but not on the drawing's objects (a selection, a measurement, the view): no word about change. */
+  quiet: boolean;
+}
+
+/** The commands that act without changing the drawing's objects. */
+const QUIET_COMMANDS: readonly string[] = ["select", "qselect", "selectall", "selectsimilar", "ai_deselect", "dist", "area", "id", "list", "zoom", "pan", "regen", "redraw", "view"];
+
+const upper = (id: string): string => clip(oneLine(id), MAX_ARG_CHARS).toUpperCase();
+
+/** One `(cmd "id" params)`, in words. `result` is the report's alist when this command produced it. */
+function commandStep(id: string, params: readonly [string, Sx][], result: readonly [string, Sx][] | null): Step {
+  const key = id.trim().toLowerCase();
+  const quiet = QUIET_COMMANDS.includes(key);
+  const layer = textOf(params, "LAYER");
+  const name = textOf(params, "NAME");
+  if (key === "ai_deselect" || (key === "select" && valueOf(params, "CLEAR") === "T")) return { verb: "cleared", words: "the selection", args: [], reads: false, quiet: true };
+  if (key === "select" || key === "qselect" || key === "selectall" || key === "selectsimilar") {
+    const handles = valueOf(params, "HANDLES");
+    const n = (result === null ? null : numberOf(result, "SELECTED")) ?? (key === "select" && isList(handles) && handles.length > 0 ? handles.length : null);
+    const type = textOf(params, "TYPE");
+    const what = n !== null ? objects(n) : key === "selectall" ? "all objects" : "objects";
+    return { verb: "selected", words: `${what}${type === null ? "" : ` of type ${clip(type, MAX_ARG_CHARS)}`}${layer === null ? "" : ` on layer ${clip(layer, MAX_ARG_CHARS)}`}`, args: [], reads: false, quiet: true };
+  }
+  if (key === "dist") {
+    const d = result === null ? null : numberOf(result, "DISTANCE");
+    return { verb: "measured", words: d === null ? "a distance" : `distance ${shortNumber(d)}`, args: [], reads: false, quiet: true };
+  }
+  if (key === "describe") return { verb: "measured", words: "the drawing", args: [], reads: true, quiet: true };
+  if (key === "entities") {
+    const n = result === null ? null : numberOf(result, "COUNT");
+    return { verb: "read", words: n === null ? "the objects" : objects(n), args: argTexts(params), reads: true, quiet: true };
+  }
+  if (name !== null && key.startsWith("layer.")) {
+    const which = `layer ${clip(name, MAX_ARG_CHARS)}`;
+    if (key === "layer.current") return { verb: "set", words: `${which} current`, args: [], reads: false, quiet: false };
+    if (key === "layer.new") return { verb: "added", words: which, args: argTexts(params, ["NAME"]), reads: false, quiet: false };
+    if (key === "layer.delete") return { verb: "deleted", words: which, args: [], reads: false, quiet: false };
+    if (key === "layer.set") return { verb: "changed", words: which, args: argTexts(params, ["NAME"]), reads: false, quiet: false };
+  }
+  return { verb: "ran", name: upper(id), args: argTexts(params), reads: false, quiet };
+}
+
+/** The steps of one form: what it is when the namespace names it, else what the forms inside it are. */
+function stepsOf(form: Sx | undefined, result: readonly [string, Sx][] | null, out: Step[], depth: number): void {
+  const f = unquote(form);
+  if (!isList(f) || depth > MAX_READ_DEPTH) return;
+  const head = f[0];
+  const first = f[1];
+  const said = isText(first) ? oneLine(first.s) : null;
+  const plain = (verb: Verb, words: string, reads: boolean): void => void out.push({ verb, words, args: [], reads, quiet: true });
+  if (head === "CMD" && said !== null) out.push(commandStep(said, pairsOf(f[2]), result));
+  else if (head === "CMDLINE" && said !== null) {
+    const answers = f.slice(2).map((a) => (isText(a) ? clip(oneLine(a.s), MAX_ARG_CHARS) : typeof a === "number" ? shortNumber(a) : "…"));
+    out.push({ verb: "typed", name: upper(said), args: answers.filter((a) => a !== "").slice(0, MAX_ARGS).concat(answers.length > MAX_ARGS ? ["…"] : []), reads: false, quiet: QUIET_COMMANDS.includes(said.toLowerCase()) });
+  } else if (head === "COMMANDS") plain(said === null ? "listed" : "looked", said === null ? "the commands" : `the commands matching “${clip(said, MAX_ARG_CHARS)}”`, true);
+  else if (head === "DESCRIBE" && said !== null) out.push({ verb: "looked", name: upper(said), args: [], reads: true, quiet: true });
+  else if (head === "INSPECT") plain("inspected", "the drawing", true);
+  else if (head === "KEPT") plain("listed", "the kept helpers", true);
+  else if (head === "VALUES") plain("listed", "the named values", true);
+  else if (head === "MAN") plain("read", "the manual", true);
+  else if (head === "FORGET" && said !== null) plain("forgot", `the helper ${upper(said)}`, false);
+  else if (head === "RENDER") plain("rendered", "the drawing", false);
+  else if (head === "DEFUN" && typeof first === "string") plain("defined", `the helper ${clip(first, MAX_ARG_CHARS)}`, false);
+  // Anything else is glue around the calls inside it (`setq`, `progn`, `cdr`, a loop): they are the steps.
+  else for (const inner of f) stepsOf(inner, null, out, depth + 1);
+}
+
+/** The report's value as an alist: what follows `=> ` (`reportText`), or nothing. */
+function resultPairs(report: string): [string, Sx][] {
+  const at = report.startsWith("=> ") ? 0 : report.indexOf("\n=> ");
+  if (at < 0) return [];
+  return pairsOf((readForms(report.slice(at + (at === 0 ? 3 : 4)), true) ?? [])[0]);
+}
+
+/** A program as its steps, or null when it cannot be read. `single` is the result's alist when one command, alone, produced it. */
+function readProgram(code: string, report: string): { steps: Step[]; forms: number; single: [string, Sx][] | null } | null {
+  const forms = readForms(code, false);
+  if (forms === null) return null;
+  const last = unquote(forms[forms.length - 1]);
+  const direct = report !== "" && isList(last) && last[0] === "CMD";
+  const result = direct ? resultPairs(report) : null;
+  const steps: Step[] = [];
+  forms.forEach((form, i) => stepsOf(form, i === forms.length - 1 ? result : null, steps, 0));
+  return { steps, forms: forms.length, single: direct && steps.length === 1 ? result : null };
+}
+
+const stepParts = (step: Step, tense: ActivityTense): InlinePart[] => {
+  const parts: InlinePart[] = [{ kind: "text", text: VERBS[step.verb][tense === "past" ? 0 : 1] }];
+  if (step.name !== undefined) parts.push({ kind: "text", text: " " }, { kind: "code", text: step.name });
+  const tail = `${step.words === undefined ? "" : ` ${step.words}`}${step.args.map((a) => ` · ${a}`).join("")}`;
+  if (tail !== "") parts.push({ kind: "text", text: tail });
+  return parts;
+};
+
+/** A step as the few words a list of steps names it by. */
+const stepName = (step: Step): InlinePart => (step.name !== undefined ? { kind: "code", text: step.name } : { kind: "text", text: `${VERBS[step.verb][0].toLowerCase()} ${step.words ?? ""}`.trim() });
+
+/** The verb, the code's first line, clipped, and how many more follow: what a program that cannot be read shows. */
+function codeFallback(code: string, tense: ActivityTense): InlinePart[] {
   const lines = code
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l !== "");
-  const first = lines[0];
-  if (first === undefined) return "Read the manual";
-  return lines.length > 1 ? `${first}  +${lines.length - 1}` : first;
+  const parts: InlinePart[] = [
+    { kind: "text", text: `${VERBS.ran[tense === "past" ? 0 : 1]} ` },
+    { kind: "code", text: clip(lines[0] ?? "", MAX_SENTENCE_CHARS - 24) },
+  ];
+  if (lines.length > 1) parts.push({ kind: "text", text: ` +${count(lines.length - 1)} ${lines.length === 2 ? "line" : "lines"}` });
+  return parts;
+}
+
+/** Cut a sentence's parts at [`MAX_SENTENCE_CHARS`], with an ellipsis where it was cut. */
+function clipParts(parts: readonly InlinePart[]): InlinePart[] {
+  const out: InlinePart[] = [];
+  let room = MAX_SENTENCE_CHARS;
+  for (const part of parts) {
+    const size = [...part.text].length;
+    if (size <= room) {
+      out.push(part);
+      room -= size;
+      continue;
+    }
+    out.push({ kind: part.kind, text: clip(part.text, Math.max(0, room)) });
+    break;
+  }
+  return out;
+}
+
+/**
+ * What a tool call does, as a sentence in parts: plain words, with only a command's name as
+ * `code` ("Ran `CIRCLE` · center 3, 2.5 · radius 0.6", "Selected 4 objects on layer Hatch",
+ * "Ran 3 commands: `LINE`, `LINE`, `CIRCLE`"). One step that acts beside steps that only read back
+ * is the sentence; `report` (the call's result, once there is one) fills in what only the result
+ * knows (how many were selected, the distance measured). Empty code asks for the manual. A program
+ * that cannot be read (malformed, too long, or nothing the namespace names) is its first line,
+ * clipped. Never throws.
+ */
+export function activityParts(code: string, report: string = "", tense: ActivityTense = "past"): InlinePart[] {
+  if (code.trim() === "") return [{ kind: "text", text: tense === "past" ? "Read the manual" : "Reading the manual" }];
+  const program = readProgram(code, report);
+  if (program === null || program.steps.length === 0) return codeFallback(code, tense);
+  const acting = program.steps.filter((s) => !s.reads);
+  const only = acting.length === 1 ? acting[0] : undefined;
+  if (only !== undefined) return clipParts(stepParts(only, tense));
+  const first = program.steps[0];
+  if (acting.length === 0 && first !== undefined) {
+    const more = program.steps.length - 1;
+    return clipParts([...stepParts(first, tense), ...(more === 0 ? [] : [{ kind: "text" as const, text: `, then ${more === 1 ? "1 more lookup" : `${count(more)} more lookups`}` }])]);
+  }
+  const commands = acting.every((s) => s.name !== undefined);
+  const parts: InlinePart[] = [{ kind: "text", text: `${VERBS.ran[tense === "past" ? 0 : 1]} ${count(acting.length)} ${commands ? "commands" : "steps"}: ` }];
+  acting.slice(0, MAX_NAMES).forEach((step, i) => {
+    if (i > 0) parts.push({ kind: "text", text: ", " });
+    parts.push(stepName(step));
+  });
+  if (acting.length > MAX_NAMES) parts.push({ kind: "text", text: `, and ${count(acting.length - MAX_NAMES)} more` });
+  return clipParts(parts);
+}
+
+/** [`activityParts`] as one line of text: the run row's status and the changes row's list. */
+export function activityLine(code: string, report: string = "", tense: ActivityTense = "past"): string {
+  return activityParts(code, report, tense)
+    .map((p) => p.text)
+    .join("");
+}
+
+/** What a call changed in the drawing, measured around it: objects more or fewer, and undo steps
+ *  added (null when the facade does not say how deep its undo stack is). */
+export interface DrawingDelta {
+  objects: number;
+  steps: number | null;
+}
+
+/** An engine or interpreter error in plain words: its first line, without the prefixes the report carries. */
+function plainError(text: string): string {
+  const line = oneLine((text.split("\n").find((l) => l.trim() !== "") ?? "").replace(/^error:\s*/i, ""))
+    .replace(/^invalid parameters for `run`:\s*/i, "")
+    .replace(/^;\s*error:\s*/i, "");
+  const unknown = /^unknown command `([^`]*)`/i.exec(line);
+  if (unknown !== null) return `There is no command named ${clip(unknown[1] ?? "", MAX_ARG_CHARS)}`;
+  const undefinedFn = /^no function definition:\s*(.+)$/i.exec(line);
+  if (undefinedFn !== null) return `There is no function named ${clip(undefinedFn[1] ?? "", MAX_ARG_CHARS)}`;
+  if (/^malformed (list|string)|unexpected end/i.test(line)) return "The code is incomplete: a bracket or a quote is not closed";
+  const params = /^invalid parameters for `([^`]*)`:\s*(.+)$/i.exec(line);
+  if (params !== null) return clip(`${upper(params[1] ?? "")} needs other parameters: ${params[2] ?? ""}`, 160);
+  return line === "" ? "It failed without saying why" : clip(line.charAt(0).toUpperCase() + line.slice(1), 160);
+}
+
+/**
+ * The note beside a tool row's sentence: what the result says changed ("1 object added",
+ * "3 objects moved", "Drawing unchanged"), the error in plain words, or nothing when there is
+ * nothing to say (a lookup, a selection, a measurement the sentence already holds). `delta` is the
+ * drawing measured before and after the call, when the caller could measure it. Never throws.
+ */
+export function resultNote(code: string, report: string, ok: boolean, delta: DrawingDelta | null = null): string {
+  if (!ok || /^error:/i.test(report)) return plainError(report);
+  if (code.trim() === "") return "";
+  const program = readProgram(code, report);
+  if (program === null || program.steps.length === 0) {
+    // Plain code: its value is the news, when it is a short one.
+    const value = (readForms(report.startsWith("=> ") ? report.slice(3) : (report.split("\n=> ")[1] ?? ""), true) ?? [])[0];
+    if (delta !== null && delta.objects !== 0) return `${objects(Math.abs(delta.objects))} ${delta.objects > 0 ? "added" : "removed"}`;
+    if (typeof value === "number") return shortNumber(value);
+    return isText(value) ? clip(oneLine(value.s), MAX_ARG_CHARS) : "";
+  }
+  const acting = program.steps.filter((s) => !s.reads);
+  // One command alone says what it did in its own word: `((MOVED . 3))` is "3 objects moved".
+  const single = acting.length === 1 && acting[0]?.quiet === false ? program.single : null;
+  for (const [key, value] of single ?? []) {
+    const n = isList(value) && value.length === 1 ? value[0] : value;
+    if (/^[A-Z]{2,24}ED$/.test(key) && typeof n === "number" && Number.isInteger(n) && n >= 0) return `${objects(n)} ${key.toLowerCase()}`;
+  }
+  if (delta === null) return "";
+  if (delta.objects !== 0) return `${objects(Math.abs(delta.objects))} ${delta.objects > 0 ? "added" : "removed"}`;
+  if (delta.steps === null) return "";
+  if (delta.steps > 0) {
+    const handles = single === null ? undefined : (valueOf(single, "HANDLES") ?? valueOf(single, "HANDLE"));
+    const n = isList(handles) ? handles.length : isText(handles) ? 1 : 0;
+    return n > 0 ? `${objects(n)} changed` : "Drawing changed";
+  }
+  return acting.some((s) => !s.quiet) ? "Drawing unchanged" : "";
 }
 
 /** One block of a reply's prose: a heading, a list, or a paragraph. */

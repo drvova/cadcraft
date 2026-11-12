@@ -446,10 +446,10 @@ export default function ReadOnly() {
   - Don't: `<Field type="text" ariaLabel="Email" />`
   - Do: `<Field type="email" ariaLabel="Email" />`
 
-- `rule/field-described-by`: When a line of help or an error sits under a field, give the line an `id` and pass it as `describedBy`, and pass `invalid` while the value is refused, because a line that only sits near the input is read 0 times by a screen reader that lands on the input by Tab. Evidence: single use `src/components/AssistantPane.tsx:732`, the API key's "Stored in this browser" line, untied today. Check: test `src/ui/Field.test.tsx`.
+- `rule/field-described-by`: When a line of help or an error sits under a field, give the line an `id` and pass it as `describedBy`, and pass `invalid` while the value is refused, because a line that only sits near the input is read 0 times by a screen reader that lands on the input by Tab. Evidence: single use `src/components/AssistantPane.tsx:812`, the API key's "Stored in this browser" line, untied today. Check: test `src/ui/Field.test.tsx`.
   - Don't: `<Field ariaLabel="API key" /><span class="hint">Stored in this browser, not encrypted.</span>`
   - Do: `<Field ariaLabel="API key" describedBy="key-help" /><span id="key-help">Stored in this browser, not encrypted.</span>`
-- `rule/field-secret-not-remembered`: When a field holds a key, a token or a password, pass `autocomplete="off"` and `spellcheck={false}` for every `type` it takes, because a secret shown with `type="text"` is 1 ordinary text value to the platform, which offers it to autofill and sends it to the spelling checker. Evidence: single use `src/components/AssistantPane.tsx:717`, the API key field, which sets `autocomplete` from outside through a wrapper `ref`. Check: test `src/ui/Field.test.tsx`.
+- `rule/field-secret-not-remembered`: When a field holds a key, a token or a password, pass `autocomplete="off"` and `spellcheck={false}` for every `type` it takes, because a secret shown with `type="text"` is 1 ordinary text value to the platform, which offers it to autofill and sends it to the spelling checker. Evidence: single use `src/components/AssistantPane.tsx:721`, the API key field, which sets `autocomplete` from outside through a wrapper `ref`. Check: test `src/ui/Field.test.tsx`.
   - Don't: `<Field type={shown() ? "text" : "password"} ariaLabel="API key" />`
   - Do: `<Field type={shown() ? "text" : "password"} ariaLabel="API key" autocomplete="off" spellcheck={false} />`
 - `rule/field-inline-in-row`: When a typed value sits in a dense list row beside its label, pass `variant="inline" size="sm"`, and `align="end"` when the rows form a column of values, because a stroked 24px field in each of 8 rows of 22px draws 8 boxes where the row should read as text, and pushes every row 2px taller. Evidence: measured 20px box at 1px from the top of a 22px row, the same box the palette's hand-drawn input measured, in the browser 2026-11-11, `docs/system/decisions.md`. Check: test `src/ui/Field.test.tsx`.
@@ -463,7 +463,7 @@ export default function ReadOnly() {
   - Do: `<Field ariaLabel="Search commands" role="combobox" expanded={open} controls="palette-list" activeDescendant={activeId} autocompleteKind="list" />`
 
 ### Content
-- `rule/field-placeholder-example`: When a placeholder is written, show a real example value rather than an instruction (0,0 — not "Enter a point"), because the placeholder is read as the value's shape, and the instruction belongs in a label. Evidence: single use `src/components/AssistantPane.tsx:615`, the provider popover's Base URL placeholder. Check: review `src/components/AssistantPane.tsx`.
+- `rule/field-placeholder-example`: When a placeholder is written, show a real example value rather than an instruction (0,0 — not "Enter a point"), because the placeholder is read as the value's shape, and the instruction belongs in a label. Evidence: single use `src/components/AssistantPane.tsx:681`, the provider popover's Base URL placeholder. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Field placeholder="Type your point here" />`
   - Do: `<Field ariaLabel="Base point" placeholder="0,0" />`
 

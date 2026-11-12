@@ -41,6 +41,7 @@ Surface levels (which surface a floating thing sits on) are the colour tokens `-
 ## Usage
 
 - Corners are ladder steps, never eyeballed: a control is `--radius-control`, a chip `--radius-small` or `--radius-round`, a card `--radius-card`, because mixed corners read as mixed components.
+- A state fill that stays (a selected icon button, an on word of a text toggle) takes `--radius-control`, because the round fill is the pointer's passing hover and a fill that says on must be a shape of its own.
 - The largest corner is the popover's 14px (`--radius-popover`), because the large radius is what marks a surface that floats. The assistant's composer is docked in its panel, so its card takes `--radius-block`, the corner of the prompt bubble and of the stack that sits on it. The 20px `--radius-elevated` was removed on 2026-11-11: nothing had drawn it since the composer docked.
 - One stroke width: every border is `--hairline`; a heavier stroke is a different control, not a different border, because a 2px border reads as focus.
 - The focus ring is 1px, inset (`--focus-outline-offset: -1px`), in `--accent`, because an outset ring shifts a row and an inset ring never does.

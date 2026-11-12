@@ -220,6 +220,42 @@ export function resizeView(rect: Rect, from: ScreenBox, to: ScreenBox): Rect {
   return rectIsDegenerate(next) ? rect : next;
 }
 
+/**
+ * How much of a fitted view's own height may slip under a bottom edge that moved up when the
+ * drawing's extents are not known: the breathing room a fit leaves around the drawing, so what
+ * slips out of sight is margin and never geometry.
+ */
+export const FIT_SLACK = 0.04;
+
+/** The most the canvas may grow taller, as a fraction of the height the view was fitted at, and
+ *  still leave a fitted view where it is: past it the drawing would sit visibly high. */
+export const FIT_HOLD = 0.25;
+
+/**
+ * Whether a view fitted to the box `fit` stays where it is when the canvas becomes `to`, instead
+ * of being fitted again. It does when only the bottom edge moved (the command line grew or shrank
+ * by a row: same left, top and width) and nothing of the drawing goes out of sight for it: the
+ * bottom of `content` (the drawing's extents) still shows, or, where the extents are unknown or
+ * already reach below the fitted view, the fitted rectangle does but for [`FIT_SLACK`] of its
+ * height. Then the top-left corner and the scale are kept (`resizeView` from the fit), so the
+ * point about to be picked does not move under the pointer when a command starts and its prompt
+ * takes a row. Any other change fits the view again: a width change, the top edge, a bottom edge
+ * that would cover geometry, a canvas grown taller by more than [`FIT_HOLD`].
+ */
+export function holdsFit(fitted: Rect, fit: ScreenBox, to: ScreenBox, content: Rect | null = null): boolean {
+  const numbers = [fit.w, fit.h, to.w, to.h, fit.left, fit.top, to.left, to.top];
+  if (!numbers.every((n) => Number.isFinite(n)) || !(fit.w > 0) || !(fit.h > 0) || !(to.w > 0) || !(to.h > 0)) return false;
+  if (rectIsDegenerate(fitted)) return false;
+  const moved = (a: number, b: number): boolean => Math.abs(a - b) > 0.5;
+  if (moved(to.left, fit.left) || moved(to.top, fit.top) || moved(to.w, fit.w)) return false;
+  if (to.h - fit.h > FIT_HOLD * fit.h) return false;
+  const shown = fitAspect(fitted, fit);
+  const bottom = shown.y1 - (to.h * (shown.y1 - shown.y0)) / fit.h;
+  const margin = fitted.y0 + FIT_SLACK * (fitted.y1 - fitted.y0);
+  const floor = content !== null && Number.isFinite(content.y0) ? Math.max(content.y0, margin) : margin;
+  return bottom <= floor;
+}
+
 /** The centre of two screen points and the distance between them (a two-finger gesture's state). */
 export function pinchOf(a: Point, b: Point): { centre: Point; spread: number } {
   return { centre: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, spread: Math.hypot(b.x - a.x, b.y - a.y) };

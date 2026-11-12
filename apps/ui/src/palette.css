@@ -89,9 +89,20 @@
   color: var(--text-faint);
 }
 
+/* The list ends on a whole row: its height is the box's room (the cap above, less the field, the
+   foot and the box's two hairlines) rounded down to a number of rows, so the last row at rest is
+   never cut in half. Where `round()` is not known the box's own cap still holds. */
 .palette-list {
+  --palette-row: var(--control-h-row);
   flex: 1 1 auto;
   min-height: 0;
+  max-height: calc(
+    round(
+        down,
+        min(60dvh, 100dvh - var(--gap-6) - var(--gap-8)) - var(--control-h-tab) - var(--control-h-button) - 2 * var(--hairline) - 2 * var(--gap-4),
+        var(--palette-row)
+      ) + 2 * var(--gap-4)
+  );
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: var(--gap-4);
@@ -104,6 +115,7 @@
 
 @media (pointer: coarse) {
   .palette-list {
+    --palette-row: var(--control-h-input);
     scroll-padding-block: calc(var(--control-h-input) + var(--gap-4));
   }
 }
@@ -162,7 +174,9 @@
   white-space: nowrap;
 }
 
-/* The name gives way before the keycap does: the caps keep one right edge down the list. */
+/* The name gives way before the keycap does: the caps keep one right edge down the list. It is
+   read (it is what the command line takes), so it keeps the quiet ink: the disabled ink measures
+   3.0:1 here and 2.3 in light, and the quiet ink is the faintest that holds 4.5. */
 .palette-id {
   flex: 0 1 auto;
   min-width: 0;

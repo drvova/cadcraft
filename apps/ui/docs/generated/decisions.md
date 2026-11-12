@@ -103,9 +103,11 @@ Each change and the gate that decided it (cursor-recipes §1 / §5):
 ## What follows the drawing
 
 Tokens left untouched because they describe the document, not the chrome: `--canvas`,
-`--grid-minor`, `--grid-major`, `--axis-x`, `--axis-y`, `--layer-current`, `--icon-layer-*`,
+`--grid-minor`, `--grid-major`, `--axis-x`, `--axis-y`, `--icon-layer-*`,
 `--icon-locked`, `--swatch-border`, `--control`, `--control-hover`, `--cmd-bg`, `--cmd-border`,
-and the dark `--warn` / `--error` / `--toggle-on` (already Cursor's, §1). Geometry that was not
+and the dark `--warn` / `--error` / `--toggle-on` (already Cursor's, §1). History: `--layer-current`
+stood in this list until 2026-11-11 ("The quiet pass" below removed it), and the light `--control`,
+`--control-hover`, `--cmd-bg` and `--cmd-border` were retuned in the same pass. Geometry that was not
 re-measured also stays: `--dur-med`, `--ease-out`, the other radii, the gaps, control heights,
 fonts. `src/canvas.ts` reads the model-space colours (`--canvas`, `--grid-*`, `--axis-*`,
 `--selection`) from the CSS custom properties at runtime, so the drawing and the chrome cannot
@@ -123,12 +125,13 @@ invites a second way to do a thing the layer already does.
 | token | what it was for | what does the job |
 |---|---|---|
 | `--crosshair`, `--paper`, `--grip-hot`, `--snap` | the egui canvas's cursor, sheet, hot grip and snap marker | nothing yet: the web canvas draws none of them; the one that does adds its token with its reader in `src/canvas.ts` |
-| `--icon-accent`, `--icon-point`, `--icon-current` | glyph inks carried over from the egui theme | `--text-accent` (an accent glyph), `--warn` (an attention glyph, the same value in both themes), `--layer-current` (the current layer) |
+| `--icon-accent`, `--icon-point`, `--icon-current` | glyph inks carried over from the egui theme | `--text-accent` (an accent glyph), `--warn` (an attention glyph, the same value in both themes), `--layer-current` (the current layer; itself removed later that day, last row) |
 | `--cmd-history` | the egui command line's recalled row | `--cmd-bg`; the history is the panel's own text |
 | `--shadow` | the flat shadow colour | `--shadow-popover` and `--tooltip-shadow`, the measured ladders |
 | `--radius-elevated`, `--radius-pill` | the 20px glass corner, the 11px pill | `--radius-popover` and `--radius-block`; `--radius-round` |
 | `--gap-5`, `--gap-default`, `--card-padding` | an odd step, an alias of `--gap-4`, an alias of `--gap-16` | `--gap-4`, `--gap-6`, `--gap-16` |
 | `--dur-instant`, `--ease-collapse`, `--hover-opacity` | a 50ms state, the chevron's curve, a hover fade | `--dur-press` (the same 50ms); hover is a fill (`--hover`), never a fade, and no chevron rotates |
+| `--layer-current` | the current layer's name in green (dark `#4cc25a`; in light it held a pale fill no rule painted, and the name took `--toggle-on` mixed toward the ink) | `--text` on the selected fill beside the accent bar ("The quiet pass" below) |
 
 Kept, though nothing draws them yet:
 
@@ -285,7 +288,8 @@ list's three state keys per row and the status bar's eleven drafting toggles: fo
   And its box is a circle, where the key is a 20 by 22 cell as tall as the row.
 - **The state is the face's alone.** No fill at rest, on or off. A glyph toggle swaps its glyph
   (`icon`, `iconOn`) and takes the tone's ink; a text toggle takes the full ink and a hairline
-  rule in `--toggle-on` under the word. Neither is colour alone. The fills are the layer's own:
+  rule in `--toggle-on` under the word (history: the word's rule became a chip later that day,
+  "The quiet pass" below; the glyph face is as written here). Neither is colour alone. The fills are the layer's own:
   `.08` under the pointer and `.14` while held, which the layer keys did not have before.
 - **`tone` is a closed set of four, mapped to tokens the app already had.** `neutral`: off
   `--text-faint`, on `--text`. `absent`: on `--icon`, off `--icon-layer-off` stepped 15% to the
@@ -461,3 +465,98 @@ Decided 2026-11-11, with `Select`, `Checkbox` and `TextArea`.
 - **Section labels are not tracked.** `typography.md` asked for `0.05em` to `0.06em` on uppercase
   section labels; the measured header (research §2: 11px, weight 700, capitals) has none and the
   layer never drew any. The page moved, as it did for the hover easing.
+
+## The quiet pass
+
+Decided 2026-11-11 (the tenth pass), after a review of the whole product against the Cursor
+captures (`.design-system/review/wF9-*.png`). Its verdict: a real, restrained shell in which the
+type was not one system, the chrome claimed attention the drawing should have, and the left insets
+did not agree. Before and after captures are `.design-system/review/wE10-*.png`.
+
+### One type scale
+
+- **Four sizes on screen: 11, 12, 13 and the 12px mono.** 11 is `--font-chip` (section labels,
+  counts, key caps, chips, the status bar's toggles, the small button). 12 is `--font-label`
+  (secondary text: menu titles, the command centre, the status bar's facts, a hint, the palette's
+  menu path). 13 is `--font-body` (everything read or typed). The mono is `--font-mono`.
+- **The shell's scale won over Cursor's composer.** The tokens were measured from Cursor 3.27.22,
+  whose composer and transcript are 15px on a 24px line, whose button is 14px and whose small
+  text is 11.5px. That measurement is the history of `--composer-font`, `--composer-leading`,
+  `--font-button` and `--font-small`. Beside a 13px shell the result was six sizes (11, 11.5, 12,
+  13, 14, 15) in 19 size, weight and leading combinations, and the assistant read as a second
+  product in the same window. Cursor's 15px sits in an editor whose code is 13 to 14px; ours sits
+  beside a drawing whose chrome is 13px and should stay behind it. The owner has not chosen
+  between the two; the default taken here is the shell's, and the choice is two lines of
+  `src/tokens.css` to reverse.
+- **How.** `--composer-font` is `var(--font-body)` and `--composer-leading` is `20px` (13px on
+  20px is the 1.54 ratio of 15 on 24, on a whole pixel). `--font-button` is `var(--font-body)`.
+  `--font-small` is `var(--font-label)`: an alias kept for the sheets that name it, holding no
+  size of its own. The status bar's facts and the command line's error moved from 11.5 to 12; the
+  compact tab from 11.5 to 12; the command line's prompt mark from 14 to the mono's 12.
+- **Sizes that did not move.** Button 28 and 24, Field 24, rows 22, the bars 35, 28, 35 and 22:
+  every height is a token of its own and none was derived from a type size (measured in the
+  browser before and after).
+
+### On is a fill and an ink, never a hue
+
+- **A text toggle that is on is a chip.** The on word was the full ink over a 1px rule in
+  `--toggle-on`: white text with a green underline, which read as a link and was the brightest
+  text in the status bar. It is now `--text-dim` on a chip (`--fill-active`, `--radius-control`,
+  3px shorter than the line at each end), and off is `--text-faint` on nothing. The two differ by
+  the fill and by lightness. The chip is the word's `::before`, so the button still takes no
+  state fill and the target is still the whole line; the word's hover and press are drawn on the
+  same chip. Measured on the status bar: off 6.48 (dark) and 5.68 (light), on 7.23 and 6.37.
+  The glyph face is unchanged: a glyph has a second glyph to change to, a word does not.
+- **A selected icon button is the full ink on the `.08` fill, squared.** It was the `.14` fill
+  at the button's round radius. Its three call sites are the title bar's layout keys, two of
+  which are on at rest: two filled discs were the second most salient thing in the bar. Ink
+  alone was considered (`--text` against `--icon`, 14.1 against 9.4 on the bar) and is too close
+  to tell on from off without a second key to compare with, so the fill stays, one step fainter,
+  and takes `--radius-control` so that on is a shape of its own and not a hover that stuck. It
+  is the layer's one `selected` recipe, not a variant: no call site wants the louder one.
+- **The current layer is the selected fill, the accent bar and `--text`.** Its name was green
+  too (a third mark in dark; in light the green was mixed toward the ink to pass). Green was
+  also "on" under every toggle. Neither is any more: `--layer-current` is removed, and
+  `--toggle-on` is the engine badge's dot alone.
+- **The prompt mark takes the accent only while a command runs.** At rest it is `--text-faint`
+  (6.16 dark, 5.79 light on the band); with a command running, `--text-accent` (5.98, 6.37).
+- **Two ink steps under the text, not three.** `.74`, `.66` and `.60` could not be told apart.
+  `--icon` is `var(--text-dim)` in both themes. The dark `--text-faint` was to move to about
+  `.52` and could not: it is text on the selected fill (a key cap in a lit row, a neutral chip
+  while pressed), where it measures 4.54 at `.60` over the elevated surface, 4.45 at `.59` and
+  3.83 at `.52`. `.60` is its floor, so the ladder is `.74` and `.60`.
+
+### Light surfaces
+
+- `--control` `#e8e8e8` to `#F3F3F3`: a resting field on the `#FCFCFC` pane (1.19:1) read as
+  disabled, and the assistant's queue tray sat grey under a white composer. A placeholder on the
+  new fill measures 5.68. `--control-hover` takes `#e8e8e8` (it was `#dedede`), which is the `.08`
+  hover over the pane, so the properties palette's hovered row matches the layer list's.
+- `--cmd-bg` is `var(--chrome)` and `--cmd-border` is `var(--border)`: as `#ebebeb` under
+  `#c9c9c9` the command line was the darkest chrome on the page.
+
+### The sidebar's columns
+
+- **One text column.** A property's label started at 8px while the headings' labels and the
+  layers' names started at 24px. The rail names the column once (`--rail-text` on `.sidebar`:
+  the heading's inset, its fold key and the gap after it) and the property rows start on it.
+- **One right edge for values.** A choice's value ended 16px before a read-only one (the arrow
+  and its gap). Every value now ends one arrow's slot before the column's end, and only a
+  choice's arrow stands in the slot. The arrow stays at rest: it was put there so a choice never
+  reads as a fixed value, and hiding it until hover would have undone that.
+- **A layer's keys show its unusual states.** Each row drew three keys, nearly all in their
+  ordinary state: twenty-seven glyphs on a nine-layer list, in which the one layer that was off
+  was hard to find. A key in its ordinary state (on, thawed, unlocked) is drawn only on the row
+  under the pointer or holding the keyboard; off, frozen and locked are always drawn. The hidden
+  keys are faded, not removed: they keep their cells, names and Tab stops, and a finger (no
+  hover) gets all of them.
+
+### The status bar stands still
+
+The review saw the toggles shift about 59px when the pointer entered the drawing. Measured, the
+coordinates were not the cause (their box already had a reserved width): the selection count
+was. It stood after the coordinates and pushed the whole run 60px each time something was
+selected. It is now the last of the facts at the start of the bar, so nothing that comes and
+goes sits between the toggles and the bar's end. The order in which the bar gives up room is
+unchanged, and the sweep was run again from 300 to 1300 wide with ordinary and long content: no
+toggle is clipped at any width.

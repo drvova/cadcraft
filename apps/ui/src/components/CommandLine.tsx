@@ -123,7 +123,7 @@ export function CommandLine(props: CommandLineProps): JSX.Element {
         </div>
       </Show>
       <div class="cmd-entry">
-        <span class="cmd-caret" aria-hidden="true">
+        <span class={state().running !== null ? "cmd-caret is-running" : "cmd-caret"} aria-hidden="true">
           ›
         </span>
         <input

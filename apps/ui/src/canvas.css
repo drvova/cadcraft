@@ -33,6 +33,43 @@
   cursor: crosshair;
 }
 
+/* What follows the pointer (the hover outline, a command's rubber band, the object-snap marker)
+   is drawn on a canvas of its own over the drawing, so a pointer move repaints a few strokes and
+   never the display list. It takes nothing from the pointer: the drawing under it does. */
+.canvas-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* The object snap's name beside its marker: the system's hint box (the tooltip's surface, rule,
+   radius and type), placed by a transform the frame sets, so it moves without layout. It arrives
+   and leaves at once: it follows the pointer many times a second, and a fade would trail it. */
+.canvas-snap-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  padding: var(--gap-2) var(--gap-6);
+  border: var(--hairline) solid var(--tooltip-border);
+  border-radius: var(--radius-small);
+  background: var(--tooltip-bg);
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--font-small);
+  line-height: var(--gap-16);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.canvas-snap-label[hidden] {
+  display: none;
+}
+
 /* The selection rectangle, over the canvas and outside its drawing: dragging it repaints one box,
    not the display list. A window (left to right, objects wholly inside) is a solid rule over a
    fuller wash; a crossing (right to left, objects touched) is a dashed rule over a fainter one.

@@ -13,6 +13,13 @@
  * typed takes nothing from the left button. The middle button and the wheel work throughout, and
  * a right click is `onContext` (the shell's Enter), with the browser's menu kept off the canvas.
  *
+ * What follows a mouse or a pen is the engine's answer, asked at most once a frame and drawn on a
+ * second canvas over the drawing: at rest and while a command wants objects, the outline of what a
+ * click would pick; while a command runs, its rubber band (the dragged objects are the display
+ * list's own primitives under the engine's matrix) and, when it wants a point, the object-snap
+ * marker with its name, at the point the click will take. It is cleared when the pointer leaves
+ * and when the command ends. The engine is told the canvas's size whenever it changes.
+ *
  * The component owns the pointer state, the device-pixel-ratio sizing and the frame: however many
  * wheel, pointer or resize events arrive between two frames, the shell hears of one view and the
  * display list is drawn once, and nothing is drawn while nothing changes. The drawing lives in
@@ -30,11 +37,11 @@
 
 import { createEffect, createUniqueId, onCleanup, onMount, type Accessor, type JSX } from "solid-js";
 import type { DisplayList } from "../display";
-import type { AppFacade } from "../facade";
-import { drawDisplay, paletteFrom, samePalette, type Palette } from "../canvas";
+import { EMPTY_PREVIEW, type AppFacade, type CommandPreview, type SnapPoint } from "../facade";
+import { drawDisplay, drawOverlay, overlayIsEmpty, paletteFrom, samePalette, SNAP_MARKER_HALF, type Palette } from "../canvas";
 import type { PointerWants } from "../prompt";
 import { clickSlop, dragKind, pickReach, sameSelection } from "../selection";
-import { fitAspect, panBy, pinchOf, pinchView, resizeView, screenToWorld, wheelZoomFactor, zoomAt, type Point, type Rect, type ScreenBox, type ScreenSize } from "../view";
+import { fitAspect, holdsFit, panBy, pinchOf, pinchView, resizeView, screenToWorld, wheelZoomFactor, worldToScreen, zoomAt, type Point, type Rect, type ScreenBox, type ScreenSize } from "../view";
 import "../canvas.css";
 
 export { CLICK_SLOP } from "../selection";
@@ -45,7 +52,8 @@ export interface CanvasViewProps {
   display: DisplayList | Accessor<DisplayList>;
   /** Handles to highlight (the engine's hex strings); absent highlights nothing. */
   selection?: readonly string[] | Accessor<readonly string[]>;
-  onViewChange: (rect: Rect) => void;
+  /** The view the pointer or a resize made, and the canvas's size in CSS px it is shown on. */
+  onViewChange: (rect: Rect, screen: ScreenSize) => void;
   onNotice: (message: string | null) => void;
   /**
    * A click that did not move the view: the world point, whether Shift was held, and the world
@@ -62,6 +70,11 @@ export interface CanvasViewProps {
    * rectangle (the engine's `select {window, crossing}`) and leaves panning to the middle button.
    */
   onSelectRect?: (rect: Rect, kind: "window" | "crossing", shift: boolean, worldPerPixel: number) => void;
+  /**
+   * The drawing's extents, when the shell knows them: a canvas whose bottom edge moves keeps a
+   * fitted view where it is while they still show (`holdsFit`).
+   */
+  extents?: Rect | null | Accessor<Rect | null>;
   /** What the pointer is for while the running command's prompt is up; absent is at rest. */
   wants?: PointerWants | Accessor<PointerWants>;
   /**
@@ -71,6 +84,18 @@ export interface CanvasViewProps {
   onPoint?: (point: Point, worldPerPixel: number) => void;
   /** A right click on the drawing: Enter, as CAD programs read it. */
   onContext?: () => void;
+  /**
+   * The engine's state as the shell last read it (the prompt, the drafting settings): any value
+   * that is a new one whenever a command, a click or a toggle may have changed what the engine
+   * would draw under the pointer. A change asks the engine again with the pointer where it is.
+   */
+  engineState?: Accessor<unknown>;
+  /**
+   * Called before the canvas asks the engine about the pointer (`pick`, `snap`, `preview`), so
+   * the shell can tell the engine the view on screen: the engine sizes its pick box and its snap
+   * aperture by it.
+   */
+  onBeforeQuery?: () => void;
 }
 
 const FALLBACK_PALETTE: Palette = { canvas: "#181818", gridMinor: "#202020", gridMajor: "#2a2a2a", axisX: "#552633", axisY: "#23412f", selection: "#81a1c1" };
@@ -118,6 +143,32 @@ interface Drag {
   moved: boolean;
 }
 
+/** What lies over the drawing under the pointer, as the engine last answered. */
+interface Under {
+  /** The handle a click would select, or null. */
+  hover: string | null;
+  /** The running command's rubber band; `EMPTY_PREVIEW` when there is none. */
+  preview: CommandPreview;
+  /** The object snap the pointer takes, or null. */
+  snap: SnapPoint | null;
+}
+
+const NOTHING_UNDER: Under = { hover: null, preview: EMPTY_PREVIEW, snap: null };
+
+/** What the engine was last asked with: asking again with the same is skipped. */
+interface Asked {
+  rect: Rect;
+  state: unknown;
+  wants: PointerWants;
+}
+
+/** How far the snap's label sits from the snapped point, in CSS px: clear of the marker. */
+const SNAP_LABEL_GAP = SNAP_MARKER_HALF + 8;
+
+function sameRect(a: Rect, b: Rect): boolean {
+  return a.x0 === b.x0 && a.y0 === b.y0 && a.x1 === b.x1 && a.y1 === b.y1;
+}
+
 /** What the last frame drew: a frame asked for with the same inputs draws nothing. */
 interface Drawn {
   list: DisplayList;
@@ -130,6 +181,10 @@ interface Drawn {
 
 export function CanvasView(props: CanvasViewProps): JSX.Element {
   let canvas: HTMLCanvasElement | undefined;
+  /** The canvas over the drawing that holds what follows the pointer (canvas.css). */
+  let overlay: HTMLCanvasElement | undefined;
+  /** The snap's name beside its marker. */
+  let snapLabel: HTMLDivElement | undefined;
   let stage: HTMLDivElement | undefined;
   let marquee: HTMLDivElement | undefined;
   const helpId = createUniqueId();
@@ -149,6 +204,18 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
    * the pointer moves the view this is null and a size change keeps the drawing where it is.
    */
   let fitted: Rect | null = null;
+  /** The box `fitted` was last fitted to: a row more or less of command line keeps that fit (`holdsFit`). */
+  let fitBox: ScreenBox | null = null;
+  /** Where a mouse or a pen is over the canvas (client px); null when it is not, and for a finger. */
+  let pointer: Point | null = null;
+  /** The pointer moved since the engine was last asked what is under it. */
+  let pointerMoved = false;
+  let under: Under = NOTHING_UNDER;
+  let asked: Asked | null = null;
+  /** What the overlay canvas shows; null when it is clear. */
+  let overlaid: { under: Under; list: DisplayList; rect: Rect; dpr: number; palette: Palette } | null = null;
+  /** The canvas size the engine was last told. */
+  let toldSize: ScreenSize = { w: 0, h: 0 };
   /** The pending animation frame, or 0. */
   let frame = 0;
   let drawn: Drawn | null = null;
@@ -221,6 +288,105 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     drawn = { list, rect, selection, pixels, dpr: scale, palette };
   };
 
+  /** Whether a press is being dragged (a pan, a rectangle) or fingers are down: no hover then. */
+  const inGesture = (): boolean => (drag !== null && drag.moved) || touches.size > 0;
+
+  /**
+   * Ask the engine what is under the pointer, at most once a frame and only when something
+   * changed. While a command runs: where the pointer is (direct distance entry reads it), the
+   * object snap it takes when the command wants a point, and the rubber band at the snapped
+   * point. While a command wants objects, and at rest: what a click would pick. At rest the
+   * pick is made when the pointer moves or the engine's state changes, never because the view
+   * did: a wheel zoom under a still pointer picks nothing, and the hover (which was true of the
+   * pick box at the old zoom) is dropped until the pointer moves again.
+   */
+  const ask = (): void => {
+    const world = pointer !== null && measured() ? worldAt(pointer.x, pointer.y) : null;
+    if (world === null) {
+      under = NOTHING_UNDER;
+      asked = null;
+      return;
+    }
+    const rect = view();
+    const want = wants();
+    const state = props.engineState?.();
+    const fresh = pointerMoved || asked === null || asked.state !== state || asked.wants !== want;
+    const viewMoved = asked !== null && !sameRect(asked.rect, rect);
+    pointerMoved = false;
+    asked = { rect, state, wants: want };
+    const facade = props.facade;
+    if (want !== "idle") {
+      if (!fresh && !viewMoved) return;
+      props.onBeforeQuery?.();
+      facade.setCursor(world);
+      const snap = want === "point" ? facade.snap(world) : null;
+      const preview = facade.preview(snap?.point ?? world);
+      const hover = want === "select" && !inGesture() ? (facade.pick(world)[0] ?? null) : null;
+      under = { hover, preview, snap };
+      return;
+    }
+    if (inGesture()) {
+      under = NOTHING_UNDER;
+      return;
+    }
+    if (fresh) {
+      props.onBeforeQuery?.();
+      under = { ...NOTHING_UNDER, hover: facade.pick(world)[0] ?? null };
+      return;
+    }
+    if (viewMoved) under = NOTHING_UNDER;
+  };
+
+  /** Put the snap's name beside its marker, kept inside the canvas; hidden with no snap. */
+  const placeSnapLabel = (snap: SnapPoint | null, rect: Rect): void => {
+    if (snapLabel === undefined) return;
+    if (snap === null || snap.name === "") {
+      if (!snapLabel.hidden) snapLabel.hidden = true;
+      return;
+    }
+    if (snapLabel.textContent !== snap.name) snapLabel.textContent = snap.name;
+    snapLabel.hidden = false;
+    const at = worldToScreen(rect, size, snap.point);
+    const w = snapLabel.offsetWidth;
+    const h = snapLabel.offsetHeight;
+    const x = at.x + SNAP_LABEL_GAP + w <= size.w ? at.x + SNAP_LABEL_GAP : at.x - SNAP_LABEL_GAP - w;
+    const y = at.y + SNAP_LABEL_GAP + h <= size.h ? at.y + SNAP_LABEL_GAP : at.y - SNAP_LABEL_GAP - h;
+    snapLabel.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+  };
+
+  /**
+   * Draw what follows the pointer on its own canvas, once, and only when it differs from what is
+   * there: a pointer crossing empty drawing at rest draws nothing, and the display list is not
+   * drawn again for a rubber band.
+   */
+  const paintOverlay = (): void => {
+    const list = read(props.display);
+    if (overlay === undefined || !measured() || list === undefined) return;
+    const rect = view();
+    const scale = dpr();
+    const empty = overlayIsEmpty(under);
+    const sized = overlay.width === pixels.w && overlay.height === pixels.h;
+    if (empty && overlaid === null && sized) return;
+    const was = overlaid;
+    if (was !== null && sized && was.under === under && was.list === list && was.palette === palette && was.dpr === scale && sameRect(was.rect, rect)) return;
+    if (overlay.width !== pixels.w) overlay.width = pixels.w;
+    if (overlay.height !== pixels.h) overlay.height = pixels.h;
+    placeSnapLabel(under.snap, rect);
+    const ctx = overlay.getContext("2d");
+    if (ctx === null) return;
+    if (empty) {
+      // Resizing cleared it already; a canvas that kept its size is wiped.
+      if (sized) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+      }
+      overlaid = null;
+      return;
+    }
+    drawOverlay(ctx, list, rect, { width: size.w, height: size.h, dpr: scale, palette, hover: under.hover, preview: under.preview, snap: under.snap });
+    overlaid = { under, list, rect, dpr: scale, palette };
+  };
+
   /**
    * The frame: hand the shell the view the pointer made, then draw once. A view whose shape is
    * not the canvas's would draw stretched (the first view of a drawing, a view an engine command
@@ -232,16 +398,19 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     frame = 0;
     if (measured() && isStretched(view(), size)) {
       fitted = view();
+      fitBox = shown;
       local = fitAspect(fitted, size);
     }
     if (local !== null) {
       const next = local;
       local = null;
-      props.onViewChange(next);
+      props.onViewChange(next, size);
       if (frame !== 0) cancelAnimationFrame(frame);
       frame = 0;
     }
     paint();
+    ask();
+    paintOverlay();
   };
 
   const schedule = (): void => {
@@ -261,6 +430,8 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     read(props.display);
     read(props.view);
     read(props.selection);
+    read(props.wants);
+    props.engineState?.();
     schedule();
   });
 
@@ -302,8 +473,19 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
         // The canvas changed size (a panel folded, a window resize): a view the hand has moved
         // stays where it is in the window, at its zoom; a view still as it was fitted is fitted
         // again. A first measure has no box to keep and goes to the fit.
-        if (shown !== null && (shown.w !== next.w || shown.h !== next.h)) local = fitted !== null ? fitAspect(fitted, next) : resizeView(view(), shown, next);
+        // A fitted view under which only the bottom edge moved a little (the command line took
+        // or gave back a row) stays put too, so a point about to be picked does not move.
+        if (shown !== null && (shown.w !== next.w || shown.h !== next.h)) {
+          if (fitted === null) local = resizeView(view(), shown, next);
+          else if (fitBox !== null && holdsFit(fitted, fitBox, next, read(props.extents) ?? null)) local = resizeView(fitAspect(fitted, fitBox), fitBox, next);
+          else {
+            local = fitAspect(fitted, next);
+            fitBox = next;
+          }
+        }
         shown = next;
+        // The engine sizes its pick box and its snap aperture by the canvas: tell it the truth.
+        if ((toldSize.w !== next.w || toldSize.h !== next.h) && props.facade.setViewport(next.w, next.h).ok) toldSize = { w: next.w, h: next.h };
         flush();
       };
       const observer = new ResizeObserver((entries) => measure(entries[entries.length - 1]));
@@ -408,7 +590,16 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
   };
 
+  /** Note where a mouse or a pen is, for the frame to ask the engine about. */
+  const track = (e: PointerEvent): void => {
+    if (e.pointerType === "touch") return;
+    pointer = { x: e.clientX, y: e.clientY };
+    pointerMoved = true;
+    schedule();
+  };
+
   const onPointerDown = (e: PointerEvent): void => {
+    track(e);
     if (e.pointerType === "touch") {
       // A third finger (or a palm) joins nothing: the first two hold the view.
       if (touches.size >= 2) return;
@@ -495,6 +686,7 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
 
   const onPointerMove = (e: PointerEvent): void => {
     movePointer(e);
+    track(e);
     // Reported after the move is applied: while panning, the point under the pointer is the one
     // that was grabbed, and the readout says so.
     const world = worldAt(e.clientX, e.clientY);
@@ -523,6 +715,8 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     setGesture(null);
     hideMarquee();
     release(e);
+    // The gesture is over: what is under the pointer shows again.
+    if (d.moved) track(e);
     if (!up || d.button !== 0 || !measured()) return;
     // The shell picks and selects through the engine's view: hand it the view first.
     flush();
@@ -556,8 +750,12 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
     props.onContext?.();
   };
 
+  /** The pointer left: what followed it is cleared at once, not at the next frame. */
   const onPointerLeave = (): void => {
     props.onCursor?.(null);
+    if (pointer === null) return;
+    pointer = null;
+    flush();
   };
 
   return (
@@ -574,6 +772,8 @@ export function CanvasView(props: CanvasViewProps): JSX.Element {
         onPointerLeave={onPointerLeave}
         onContextMenu={onContextMenu}
       />
+      <canvas ref={overlay} class="canvas-overlay" aria-hidden="true" />
+      <div class="canvas-snap-label" ref={snapLabel} hidden aria-hidden="true" />
       <div class="canvas-marquee" ref={marquee} hidden aria-hidden="true" />
       <p id={helpId} hidden>
         {CANVAS_HELP}

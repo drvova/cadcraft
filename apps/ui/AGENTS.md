@@ -20,14 +20,14 @@ Before you finish: run `bun run check`, and capture the changed screens at 390 a
 Before writing UI, read the page for what you touch in `docs/generated/` and the rules in `docs/generated/rules.md`. Use a listed component or token. If none fits, ask before adding one.
 
 Tokens by role (src/tokens.css):
-- color: --chrome, --chrome-dark, --panel, --tab-active, --control, --control-hover, --surface-elevated, --surface-inset, --border, --border-soft, --canvas, --grid-minor, --grid-major, --axis-x, --axis-y, --canvas-focus-ring, --text, --text-dim, --text-faint, --text-disabled, --text-accent, --icon, --accent, --accent-hover, and 28 more
+- color: --chrome, --chrome-dark, --panel, --tab-active, --control, --control-hover, --surface-elevated, --surface-inset, --border, --border-soft, --canvas, --grid-minor, --grid-major, --axis-x, --axis-y, --canvas-focus-ring, --text, --text-dim, --text-faint, --text-disabled, --text-accent, --accent, --accent-hover, --accent-pressed, and 26 more
 - type: --composer-font, --composer-leading, --font-button, --font-chip, --font-label, --font-small, --font-body, --font-mono, --font-family, --font-family-mono
 - space: --gap-2, --gap-3, --gap-4, --gap-6, --gap-8, --gap-10, --gap-12, --gap-14, --gap-16, --button-pad-x, --button-pad-y, --field-pad-x, --field-pad-y
 - radius: --radius-control, --radius-small, --radius-card, --radius-composer, --radius-popover, --radius-block, --radius-round
 - shadow: --shadow-popover, --tooltip-shadow
 - motion: --ease-standard, --ease-out, --ease-out-quint
 - size: --control-h-button, --control-h-input, --control-h-row, --control-h-chip, --control-h-tab, --control-h-suggestion, --block-max-height, --icon-size-sm, --icon-size-md, --icon-size-lg, --composer-min-height, --composer-toolbar-height
-- other: --focus-ring, --list-row, --dur-press, --dur-fast, --dur-med, --dur-slow, --hairline, --focus-outline-w, --focus-outline-offset
+- other: --icon, --focus-ring, --list-row, --dur-press, --dur-fast, --dur-med, --dur-slow, --hairline, --focus-outline-w, --focus-outline-offset
 
 Components (import, job):
 - Button `../../../../src/ui/Button`: It runs one action the moment its label says so: it never navigates and never holds a value.

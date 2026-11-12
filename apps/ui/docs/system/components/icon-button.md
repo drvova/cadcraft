@@ -26,7 +26,7 @@ Real uses, 24 call sites (`rg -c "<IconButton" src/components` → `src/componen
 | `docs/system/examples/icon-button/size-sm.tsx` | size=sm | The 20px circle with the 12px glyph. |
 | `docs/system/examples/icon-button/size-md.tsx` | size=md | The 24px circle with the 14px glyph. |
 | `docs/system/examples/icon-button/disabled.tsx` | state:disabled | A blocked tool at the disabled ink. |
-| `docs/system/examples/icon-button/selected.tsx` | state:selected | A toggled tool at the .14 fill, announced pressed. |
+| `docs/system/examples/icon-button/selected.tsx` | state:selected | A toggled tool: the full ink on the .08 fill, squared, announced pressed. |
 | `docs/system/examples/icon-button/expanded.tsx` | state:expanded | A fold key over the region it folds, announced expanded. |
 | `docs/system/examples/icon-button/popup-menu.tsx` | popup=menu | A key that opens a menu, announced as a collapsed menu button. |
 | `docs/system/examples/icon-button/matrix-variant-size.tsx` | matrix:variant,size | Every variant at both sizes. |
@@ -50,7 +50,7 @@ Real uses, 24 call sites (`rg -c "<IconButton" src/components` → `src/componen
 | Hover | The pointer is over the circle, on a device with a hover pointer. | Click it. | The fill steps up one rung; the cursor is a pointer. | by hand |
 | Pressed | The pointer is held down. | Release to run the action. | The next fill rung up. | by hand |
 | Focused | Keyboard focus arrives by Tab. | Enter or Space runs the action. | The 1px ring in the focus ink at offset -1, following the circle; on `inverted`, the ring is the glyph's ink drawn 3px inside the edge. | by hand |
-| Selected | The caller passes `selected` (a toggle). | Click it again to turn the tool off. | The `.14` fill, the full ink, and `aria-pressed="true"`. | test |
+| Selected | The caller passes `selected` (a toggle). | Click it again to turn the tool off. | The `.08` fill squared to the control radius (a resting key has no fill and a hovered one a round fill), the full ink, and `aria-pressed="true"`. | test |
 | Expanded | The caller passes `expanded` (a fold key), with `controls` naming the region. | Click it to fold the region away; click again to bring it back. | `aria-expanded="true"` while the region shows and `"false"` while it is folded, and `aria-controls` holding the region's `id`; the look is the variant's own. | test |
 | Hinted | A mouse or a pen rests on the circle for 0.4s (at once when another hint was up within the last 0.3s), or keyboard focus arrives. Never a finger. | Read the name; a press, a click or Escape puts the box away, and it stays away until the pointer or the focus moves to another control. | The layer's hint box holding the `title`, its shortcut as a key cap and the `description` on a second line, below the circle (above it at the window's foot), held inside the window's edges. | test |
 | Disabled | The caller's condition is false. | Tab to it and read its hint: the name, and why it is blocked when the caller passes `description`. No click by pointer, Enter or Space, and no hover fill. | The glyph drops to the disabled ink; the fill to the disabled step; `aria-disabled="true"`. | test |
@@ -58,7 +58,7 @@ Real uses, 24 call sites (`rg -c "<IconButton" src/components` → `src/componen
 ### State precedence
 - Hover and Focused: Focused wins. The ring stays drawn while the pointer is over the circle; hover only steps the fill.
 - Hover and Disabled: Disabled wins. A disabled circle keeps its resting look under the pointer and takes no click.
-- Selected and Hover: both show. The `.14` selected fill stays under the pointer; hover adds the pointer cursor and nothing to the fill.
+- Selected and Hover: both show. The squared `.08` selected fill stays under the pointer; hover adds the pointer cursor and nothing to the fill.
 - Selected and Expanded: Not applicable: a key is a toggle or a fold key, never both; the caller passes one of the two props.
 - Expanded and Disabled: Disabled wins. A disabled fold key keeps `aria-expanded` and takes no click.
 - Selected and Disabled: Disabled wins. A disabled toggle drops to the disabled ink and takes no click.
@@ -83,7 +83,7 @@ Real uses, 24 call sites (`rg -c "<IconButton" src/components` → `src/componen
 - `title`: the accessible name (`aria-label`) and the text of the layer's hint; an icon alone has no name without it. No native `title` attribute is rendered.
 - `variant`: the look; defaults to `ghost`.
 - `size`: the circle; `md` is 24px with a 14px glyph, `sm` is 20px with a 12px glyph.
-- `selected`: sets `aria-pressed` and the `.14` selected fill.
+- `selected`: sets `aria-pressed` and the selected look: the full ink on the `.08` fill, squared to `--radius-control`. It is the one selected recipe, in every variant; until 2026-11-11 it was the `.14` fill at the round radius, which in the title bar (its 3 call sites, 2 on at rest) drew filled discs louder than the title (`docs/system/decisions.md`, "The quiet pass"). A `soft` button rests on the same `.08` fill, so a selected `soft` one is told by its square corner and its ink alone: pick `ghost` for a key that toggles.
 - `expanded`: a fold key; sets `aria-expanded` to whether the region it folds is showing.
 - `controls`: the `id` of the region a fold key shows and hides, or of the popup a key opens; sets `aria-controls`.
 - `popup`: the key opens a popup of this kind; sets `aria-haspopup`. `menu` for a list of actions, `listbox` for a list of values to pick one from, `dialog` for a popover holding fields or other controls.
@@ -178,7 +178,7 @@ Rests on the native `<button>` element, with the drawn glyph hidden from assisti
 | The fill (`soft`) | hover | `--fill-active` |
 | The fill (`inverted`) | rest | `--text` |
 | The glyph (`inverted`) | rest | `--on-accent` |
-| The fill | selected | `--fill-active` |
+| The fill | selected | `--hover`, `--radius-control` |
 | The glyph | selected | `--text` |
 | The glyph | disabled | `--text-disabled` |
 | The fill | disabled | `--fill-disabled` |

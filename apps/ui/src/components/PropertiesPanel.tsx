@@ -204,7 +204,7 @@ function PropRowView(props: PropRowViewProps): JSX.Element {
             />
           </Match>
           <Match when={mode() === "choice"}>
-            <span class="prop-choice">
+            <span class="prop-choice prop-choice-arrow">
               <Select
                 variant="inline"
                 size="sm"

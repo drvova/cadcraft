@@ -23,7 +23,7 @@ Real uses, 4 call sites (`rg -c "<Toggle" src/components` → `src/components/La
 |---|---|---|
 | `docs/system/examples/toggle/default.tsx` | default | A glyph toggle that is off: the off glyph in the quiet ink. |
 | `docs/system/examples/toggle/variant-glyph.tsx` | variant=glyph | The glyph face: an icon for each state, the state in the glyph and its ink. |
-| `docs/system/examples/toggle/variant-text.tsx` | variant=text | The text face: a word in capitals, on with the full ink over the on-colour rule. |
+| `docs/system/examples/toggle/variant-text.tsx` | variant=text | The text face: a word in capitals, on as the secondary ink on a chip. |
 | `docs/system/examples/toggle/size-sm.tsx` | size=sm | The 20 by 22 cell of a list row, with the 12px glyph. |
 | `docs/system/examples/toggle/size-md.tsx` | size=md | The 24px control, with the 14px glyph. |
 | `docs/system/examples/toggle/tone-neutral.tsx` | tone=neutral | Neutral: on is the full ink over the quiet one. |
@@ -40,14 +40,14 @@ Real uses, 4 call sites (`rg -c "<Toggle" src/components` → `src/components/La
 
 ### variant
 - `glyph`: an icon that changes with the state (`icon` off, `iconOn` on), in the ink its `tone` picks; the default. Used at 3 call sites (a layer row's on, frozen and locked keys).
-- `text`: a short word in capitals; on, the full ink over a hairline rule in the on-colour. Used at 1 call site (the status bar's drafting settings, 11 rendered).
+- `text`: a short word in capitals; on, the secondary ink on a chip (the selected fill at the control radius, 3px shorter than the line at each end); off, the quiet ink on nothing. Used at 1 call site (the status bar's drafting settings, 11 rendered).
 
 ### size
 - `sm`: the cell of a dense surface. A glyph is 20px wide at the 22px row height with the 12px glyph; a word is 11px type as tall as the line that holds it (`--ui-toggle-line`, the row height when nothing sets it). Used at 4 call sites (all of them).
 - `md`: the 24px control beside a field or an icon button, with the 14px glyph or 12px type; the default. Used at 0 call sites: the size for a toggle outside a list row or a bar, which no surface has yet.
 
 ### tone
-- `neutral`: on is the full ink (`--text`) over the quiet one; the default, and the only tone of a `text` face. Used at 1 call site (the status bar's settings).
+- `neutral`: on is the full ink (`--text`) over the quiet one on a glyph, and the secondary ink (`--text-dim`) on its chip on a word; the default, and the only tone of a `text` face. Used at 1 call site (the status bar's settings).
 - `absent`: on is the ordinary state and stays at the glyph ink; off is the one to notice and takes the ink. Used at 1 call site (a layer's on key).
 - `info`: on is a fact to notice. Used at 1 call site (a layer's frozen key).
 - `caution`: on blocks something. Used at 1 call site (a layer's locked key).
@@ -55,18 +55,18 @@ Real uses, 4 call sites (`rg -c "<Toggle" src/components` → `src/components/La
 ## States
 | State | Trigger | What the user can do | Shown by, besides color | Checked by |
 |---|---|---|---|---|
-| Rest (off) | `pressed` is false. | Press it, or Tab to it and press Space or Enter, to ask for on. | The off glyph (`icon`), or the word with no rule under it; `aria-pressed="false"`. | test |
-| Pressed (on) | The caller passes `pressed`. | Press it to ask for off. | The on glyph (`iconOn`), or the 1px rule under the word; `aria-pressed="true"`. No fill in either state. | test |
-| Hover | The pointer is over the toggle, on a device with a hover pointer. | Press it. | The `.08` fill and the pointer cursor; an off toggle whose tone leaves it quiet steps to the full ink. | by hand |
-| Held | The pointer is held down. | Release to ask for the other state. | The `.14` fill. | by hand |
+| Rest (off) | `pressed` is false. | Press it, or Tab to it and press Space or Enter, to ask for on. | The off glyph (`icon`), or the word with no chip under it; `aria-pressed="false"`. | test |
+| Pressed (on) | The caller passes `pressed`. | Press it to ask for off. | The on glyph (`iconOn`) with no fill, or the chip under the word and its lighter ink; `aria-pressed="true"`. | test |
+| Hover | The pointer is over the toggle, on a device with a hover pointer. | Press it. | The `.08` fill (on a word, drawn as its chip) and the pointer cursor; a quiet face steps to the full ink. An on word keeps its `.14` chip. | by hand |
+| Held | The pointer is held down. | Release to ask for the other state. | The `.14` fill; on an on word, whose chip is already `.14`, the `.20` one. | by hand |
 | Focused | Keyboard focus arrives by Tab, or by an arrow key in a group that roves. | Space or Enter asks for the other state. | The 1px ring in the focus ink at offset -1, on the cell's edge. | by hand |
 | Hinted | A mouse or a pen rests on the toggle for 0.4s (at once when another hint was up within the last 0.3s), or keyboard focus arrives. Never a finger. | Read what a press does, or the full name of a terse word, and the shortcut. A press, a click or Escape puts the box away. | The layer's hint box holding `hint`, the `shortcut` as a key cap and the `description` on a second line. | test |
-| Disabled | The caller passes `disabled`. | Tab to it and read its hint and why it is blocked (`description`). No press by pointer, Enter or Space, and no fill under the pointer. | The face at the disabled ink, the word's rule in the same ink; the default cursor; `aria-disabled="true"`. | test |
+| Disabled | The caller passes `disabled`. | Tab to it and read its hint and why it is blocked (`description`). No press by pointer, Enter or Space, and no fill under the pointer. | The face at the disabled ink; an on word keeps a chip at the `.08` fill; the default cursor; `aria-disabled="true"`. | test |
 
 ### State precedence
-- Pressed and Hover: both show. The on ink stays under the pointer; hover adds only the fill.
+- Pressed and Hover: both show. An on glyph keeps its ink and gains the fill; an on word keeps its chip and steps to the full ink.
 - Rest and Hover: both show. The fill arrives, and the quiet ink steps to the full ink; an `absent` toggle that is off keeps its own ink, which is the state.
-- Held and Hover: Held wins. The `.14` fill replaces the `.08` one while the pointer is down.
+- Held and Hover: Held wins. The `.14` fill replaces the `.08` one while the pointer is down (`.20` replaces `.14` on an on word).
 - Held and Pressed: both show. The on face stays while the fill is held.
 - Focused and Hover: both show. The ring stays drawn while the fill steps.
 - Focused and Pressed: both show. The ring is on the cell's edge and the state is in the face.
@@ -78,13 +78,13 @@ Real uses, 4 call sites (`rg -c "<Toggle" src/components` → `src/components/La
 - Hinted and Disabled: both show. A disabled toggle still says what it is for, and why it is blocked when it has a `description`.
 - Disabled and Hover: Disabled wins. No fill and no ink change under the pointer.
 - Disabled and Held: Disabled wins. No fill, and the press is refused.
-- Disabled and Pressed: both show. The on glyph or the rule stays, at the disabled ink, and `aria-pressed` still says the state.
+- Disabled and Pressed: both show. The on glyph stays at the disabled ink, or the word keeps a chip at the `.08` fill, and `aria-pressed` still says the state.
 - Disabled and Focused: both show. A disabled toggle takes focus and the ring, so a keyboard user can reach its hint; Enter and Space do nothing.
 
 ### Motion
 | Trigger | Kind | Preset | Properties | Reduced motion |
 |---|---|---|---|---|
-| The pointer enters, presses or leaves, or the state changes | input | hover / focus feedback (`--dur-fast` + `--ease-standard`) | background-color, color | The fill and the ink change at once: the shell's `:root[data-animations="off"] *` rule removes the transition. The glyph and the rule swap at once in every setting. |
+| The pointer enters, presses or leaves, or the state changes | input | hover / focus feedback (`--dur-fast` + `--ease-standard`) | background-color, color | The fill and the ink change at once: the shell's `:root[data-animations="off"] *` rule removes the transition (the chip's too). The glyph swaps at once in every setting. |
 
 ## Props
 - `pressed`: whether the setting is on; the caller holds it. Sets `aria-pressed`.
@@ -108,7 +108,7 @@ Real uses, 4 call sites (`rg -c "<Toggle" src/components` → `src/components/La
 
 ### When to use
 - A setting of the thing in front of the person is on or off and takes effect the moment it is pressed: a layer is frozen, the grid is shown.
-- Several such settings repeat down a list or along a bar, most of them on, where a fill on each would be a row of fills.
+- Several such settings repeat down a list or along a bar: glyphs down a list, where a fill on each would be a column of fills, or short words along a bar, where the ones that are on are chips.
 
 ### When not to use
 - The value is applied with a form, or can be mixed across several objects. Use `Checkbox` instead.
@@ -120,7 +120,7 @@ Real uses, 4 call sites (`rg -c "<Toggle" src/components` → `src/components/La
 - `rule/toggle-name-fixed`: When a toggle is rendered, pass 1 `ariaLabel` that names the setting and is the same string in both states, and put the action in `hint`, because `aria-pressed` already says the state, and a name that flips between Freeze and Thaw is heard as 2 different buttons. Evidence: app 3/3 layer state keys, `src/components/LayersPanel.tsx`. Check: test `src/ui/Toggle.test.tsx`.
   - Don't: `<Toggle icon="layer.thawed" iconOn="layer.frozen" ariaLabel={frozen() ? "Thaw Outline" : "Freeze Outline"} pressed={frozen()} />`
   - Do: `<Toggle icon="layer.thawed" iconOn="layer.frozen" ariaLabel="Outline frozen" hint={frozen() ? "Thaw" : "Freeze"} pressed={frozen()} />`
-- `rule/toggle-state-in-face`: When a glyph toggle is rendered, pass 2 icons (`icon` for off, `iconOn` for on), because the toggle draws no fill at rest and the ink alone would carry the state by colour only. Evidence: app 3/3 layer state keys pass both, `src/components/LayersPanel.tsx`. Check: review `src/components/LayersPanel.tsx`.
+- `rule/toggle-state-in-face`: When a glyph toggle is rendered, pass 2 icons (`icon` for off, `iconOn` for on), because a glyph toggle draws no fill at rest and the ink alone would carry the state by colour only. Evidence: app 3/3 layer state keys pass both, `src/components/LayersPanel.tsx`. Check: review `src/components/LayersPanel.tsx`.
   - Don't: `<Toggle icon="layer.locked" tone="caution" ariaLabel="Outline locked" pressed={locked()} />`
   - Do: `<Toggle icon="layer.unlocked" iconOn="layer.locked" tone="caution" ariaLabel="Outline locked" pressed={locked()} />`
 - `rule/toggle-owns-nothing`: When `onChange` runs, set the caller's own value from its argument (or refuse it), because the toggle draws from `pressed` after every press and keeps 0 state of its own. Evidence: single use `src/ui/Toggle.tsx:97`, the `aria-pressed` the prop sets. Check: test `src/ui/Toggle.test.tsx`.
@@ -151,7 +151,7 @@ Real uses, 4 call sites (`rg -c "<Toggle" src/components` → `src/components/La
 - `rule/toggle-canonical-element`: When a surface needs an on-off key, render `Toggle` rather than a raw `<button aria-pressed>` with its own class, because the 2 replaced families (`.toggle`, `.status-toggle`) each carried their own hover, ring and state inks and neither had a disabled state or a touch target. Evidence: app 4/4 raw `aria-pressed` buttons in `src/components/LayersPanel.tsx` and `src/components/StatusBar.tsx` before 2026-11-11. Check: lint `node scripts/check-system.mjs --root .`.
   - Don't: `<button class="toggle is-frozen" type="button" aria-pressed="true" aria-label="Outline frozen">…</button>`
   - Do: `<Toggle size="sm" tone="info" icon="layer.thawed" iconOn="layer.frozen" ariaLabel="Outline frozen" pressed />`
-- `rule/toggle-no-fill`: When a toggle should look on, pass `pressed` and add 0 background rules of the surface's own, because the glyph, the ink or the rule already says so, and 1 fill per pressed key turns a list where nearly every row is on into a column of fills. Evidence: measured 0 fills at rest on the 38 toggles of the running shell, in both states, 2026-11-11. Check: test `src/ui/recipe.test.ts`.
+- `rule/toggle-no-fill`: When a toggle should look on, pass `pressed` and add 0 background rules of the surface's own, because the glyph and its ink, or the word's own chip, already says so, and 1 fill per pressed glyph turns a list where nearly every row is on into a column of fills (an on word's chip is the component's own `::before`, never the surface's). Evidence: measured 0 fills on the 38 toggle buttons of the running shell, in both states, 2026-11-11. Check: test `src/ui/recipe.test.ts`.
   - Don't: `.layer-toggles .ui-toggle[aria-pressed="true"] { background: var(--fill-active) }`
   - Do: `<Toggle tone="info" icon="layer.thawed" iconOn="layer.frozen" ariaLabel="Outline frozen" pressed />`
 
@@ -164,7 +164,7 @@ Real uses, 4 call sites (`rg -c "<Toggle" src/components` → `src/components/La
   - Do: `.status-toggles { --ui-toggle-line: var(--status-line) }`
 
 ## Accessibility
-Rests on the native `<button>` element with `aria-pressed`, the drawn glyph hidden from assistive tech. Disabled is the layer's own, shared with `Button` and `IconButton`: `aria-disabled="true"` with the click refused on the button itself (`docs/system/decisions.md`, "Disabled controls"). The state is never colour alone: the glyph changes, or the rule appears.
+Rests on the native `<button>` element with `aria-pressed`, the drawn glyph hidden from assistive tech. Disabled is the layer's own, shared with `Button` and `IconButton`: `aria-disabled="true"` with the click refused on the button itself (`docs/system/decisions.md`, "Disabled controls"). The state is never colour alone: the glyph changes, or the word's chip appears.
 
 ### Keyboard
 | Key | Where focus is | Effect | Focus after | Checked by |
@@ -194,15 +194,18 @@ Rests on the native `<button>` element with `aria-pressed`, the drawn glyph hidd
 | The word (`sm`) | all | `--font-chip`, `--font-family`, `--gap-4`, `--control-h-row` (the line, when the container sets none) |
 | The word (`md`) | all | `--font-label`, `--gap-6`, `--control-h-input` |
 | The face | off | `--text-faint` |
-| The face | on (`neutral`), and under the pointer | `--text` |
+| The face | on (`neutral` glyph), and under the pointer | `--text` |
+| The word | on | `--text-dim` |
+| The word's chip | on | `--fill-active`, `--radius-control`, `--gap-3` (its inset from the line's ends; `--gap-4` under a coarse pointer) |
+| The word's chip | on, held | `--fill-pressed` |
+| The word's chip | on, disabled | `--hover` |
 | The glyph (`absent`) | on | `--icon` |
 | The glyph (`absent`) | off | `--icon-layer-off` stepped toward `--text` (dark); `--text-dim` (light) |
 | The glyph (`info`) | on | `--icon-layer-frozen` (dark); `--text-accent` (light) |
 | The glyph (`caution`) | on | `--icon-locked` (dark); `--warn` stepped toward `--text` (light) |
-| The rule (`text`) | on | `--toggle-on`, `--hairline`, `--gap-3` |
 | The fill | hover | `--hover` |
 | The fill | held | `--fill-active` |
-| The face and the rule | disabled | `--text-disabled` |
+| The face | disabled | `--text-disabled` |
 | The ring | focus-visible | `--focus-outline-w`, `--focus-ring`, `--focus-outline-offset` |
 | The motion | hover, held, change | `--dur-fast`, `--ease-standard` |
 | The target | coarse pointer | `--control-h-input`, `--gap-8`, `--gap-6` |

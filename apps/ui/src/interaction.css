@@ -61,23 +61,27 @@
   display: flex;
   align-items: center;
   min-height: var(--control-h-row);
-  padding: 0 var(--gap-8);
+  padding: 0 var(--gap-8) 0 var(--rail-text, var(--gap-8));
   color: var(--text-faint);
   font-size: var(--font-body);
 }
 
-/* Two equal columns over one gutter: the label starts on the heading's inset, the value ends on
-   the column the heading's state and the layers' count end on. A row is the rail's list row: the
+/* Two equal columns over one gutter: the label starts on the rail's text column (`--rail-text`,
+   styles.css: where the headings' labels and the layers' names start), the value's glyph column
+   ends where the heading's state and the layers' count end. A row is the rail's list row: the
    layers' row height and the layers' type size, each text on a line as tall as the row, so the
    label and the value share the first line's baseline and a value that wraps adds whole rows. */
 .prop-row {
+  /* The room a choice's arrow takes at the end of the value column: the arrow and its gap. Every
+     value ends before it, so the values share one right edge and the arrows one column. */
+  --prop-arrow-slot: calc(var(--gap-4) + var(--icon-size-sm));
   flex: 0 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: start;
   column-gap: var(--gap-8);
   min-height: var(--control-h-row);
-  padding: 0 var(--gap-8);
+  padding: 0 var(--gap-8) 0 var(--rail-text, var(--gap-8));
   border-radius: 0;
   background: transparent;
 }
@@ -103,29 +107,38 @@
   text-overflow: ellipsis;
 }
 
+/* Every value ends one arrow's slot before the column's end: a read-only value, a typed one, a
+   tick and a choice's value all share that edge, and only a choice's arrow stands in the slot. */
 .prop-value {
   min-width: 0;
   min-height: var(--control-h-row);
+  padding-inline-end: var(--prop-arrow-slot);
   display: flex;
   align-items: center;
   justify-content: flex-end;
 }
 
-/* A choice is the layer's Select and a typed value its Field, both overhanging the column by the
-   same padding and border: its arrow ends on the edge the typed and the read-only values end on,
-   and its value ends a gap before the arrow. The figures line up with the typed ones. */
+/* A choice is the layer's Select and a typed value its Field, each overhanging its text by the
+   same padding and border, so the text ends on the values' edge. A choice (`prop-choice-arrow`)
+   runs on through the slot: its arrow ends on the column's end and its value a gap before the
+   arrow, which is the values' edge. The figures line up with the typed ones. */
 .prop-choice {
+  --prop-overhang: calc(var(--gap-4) + var(--hairline));
   flex: 0 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  width: calc(100% + var(--gap-4) + var(--hairline));
+  width: calc(100% + var(--prop-overhang));
   min-width: 0;
-  margin-right: calc(-1 * (var(--gap-4) + var(--hairline)));
+  margin-right: calc(-1 * var(--prop-overhang));
   font-variant-numeric: lining-nums tabular-nums;
   /* The value's line fills the box inside its hairlines, as a typed field's does: left at the
      face's own line it is centred half a pixel off the baseline the label and the typed values
      share. */
   line-height: calc(var(--control-h-chip) - 2 * var(--hairline));
+}
+
+.prop-choice-arrow {
+  --prop-overhang: calc(var(--prop-arrow-slot) + var(--gap-4) + var(--hairline));
 }
 
 /* A value that cannot be edited reads a step quieter than one that can. It cannot take the

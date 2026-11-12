@@ -93,7 +93,7 @@ Not applicable: no variant axes — a checkbox is one 14px box with or without a
   - Do: `<Checkbox checked={snap()} onChange={setSnap}>Snap</Checkbox>`
 
 ### Content
-- `rule/checkbox-label-positive`: When a checkbox's label is written, name what is true when the box is ticked, in 1 to 4 words in the positive form (Show the grid), because a ticked box beside a negative label has to be read twice. Evidence: single use `src/components/PropertiesPanel.tsx:207`, the palette's yes-or-no rows, labelled by the property's name. Check: review `src/components/PropertiesPanel.tsx`.
+- `rule/checkbox-label-positive`: When a checkbox's label is written, name what is true when the box is ticked, in 1 to 4 words in the positive form (Show the grid), because a ticked box beside a negative label has to be read twice. Evidence: single use `src/components/PropertiesPanel.tsx:225`, the palette's yes-or-no rows, labelled by the property's name. Check: review `src/components/PropertiesPanel.tsx`.
   - Don't: `<Checkbox checked={!grid()} onChange={(off) => setGrid(!off)}>Do not show the grid</Checkbox>`
   - Do: `<Checkbox checked={grid()} onChange={setGrid}>Show the grid</Checkbox>`
 

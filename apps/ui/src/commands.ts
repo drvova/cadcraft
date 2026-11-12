@@ -194,6 +194,42 @@ export function shortcutLabel(shortcut: string, mac: boolean): string {
   return `${shift}${cmd}${shortcut.replaceAll("Cmd+", "").replaceAll("Shift+", "")}`;
 }
 
+/** The parts of a key press a registry shortcut is matched against. */
+export interface KeyPress {
+  key: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+}
+
+/**
+ * A key press in the registry's own form ("Cmd+Shift+Z", "Cmd+N"), or null when it is not a
+ * command chord: only a press with Ctrl or Cmd held and no Alt is one, and its key must be a
+ * single character. Ctrl and Cmd both read as "Cmd", as the registry writes them.
+ */
+export function pressShortcut(press: KeyPress): string | null {
+  if (!(press.ctrlKey || press.metaKey) || press.altKey) return null;
+  if (press.key.length !== 1 || press.key === " ") return null;
+  return `Cmd+${press.shiftKey ? "Shift+" : ""}${press.key.toUpperCase()}`;
+}
+
+/** The chords a text field keeps for itself: its own undo, redo, select all and clipboard. */
+const FIELD_CHORDS: ReadonlySet<string> = new Set(["Cmd+Z", "Cmd+Shift+Z", "Cmd+Y", "Cmd+A", "Cmd+C", "Cmd+X", "Cmd+V"]);
+
+/**
+ * The id a chord runs: the first enabled command or shell item whose shortcut is that chord.
+ * A chord a text field owns is left to the field while the keyboard is in one.
+ */
+export function chordCommand(chord: string, commands: readonly { id: string; shortcut: string; enabled: boolean }[], items: readonly UiItem[], inField: boolean): string | null {
+  if (inField && FIELD_CHORDS.has(chord)) return null;
+  const same = (shortcut: string | undefined): boolean => shortcut !== undefined && shortcut.toLowerCase() === chord.toLowerCase();
+  const item = items.find((i) => same(i.shortcut));
+  if (item !== undefined) return item.id;
+  const command = commands.find((c) => c.enabled && same(c.shortcut));
+  return command === undefined ? null : command.id;
+}
+
 /** Whether the browser runs on macOS (the desktop decides the same way at runtime). */
 export function isMacPlatform(): boolean {
   return typeof navigator !== "undefined" && /mac/i.test(navigator.platform);

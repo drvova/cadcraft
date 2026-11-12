@@ -1,6 +1,9 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import {
   activityLine,
+  activityParts,
+  resultNote,
+  shortNumber,
   apiErrorText,
   atEnd,
   clampPanelWidth,
@@ -562,16 +565,152 @@ describe("runTurn", () => {
   });
 });
 
-describe("activityLine", () => {
-  test("one line is itself, trimmed", () => {
-    expect(activityLine("  (cmd \"circle\")  ")).toBe("(cmd \"circle\")");
+/** What the stand-in server makes the model run for "Draw a circle", and the start of what the engine answers. */
+const CIRCLE_PROGRAM = "(cmd \"circle\" '((CENTER . (3 2.5)) (RADIUS . 0.6)))\n(cmd \"describe\")";
+const CIRCLE_REPORT =
+  '=> ((BLOCKS) (CENTER 8.75 3.5) (COUNTS (CIRCLE . 8) (DIMENSION . 6) (HATCH . 4) (LINE . 16) (MTEXT . 1) (POLYLINE . 6) (TEXT . 6)) (DEGENERATE) (DIMENSIONS . 6) (EXTENTS (-0.5 -0.5) (18.0 7.5)) (GAPS) (MESSAGE . "model space holds 47 object(s): 16 lines, 8 circles.") (TOTAL . 47))\n';
+
+describe("activityLine: a tool call as a sentence", () => {
+  const added = { objects: 1, steps: 1 };
+  const same = { objects: 0, steps: 0 };
+
+  test("the stand-in server's real program: the command that acts, its arguments, and what the drawing gained", () => {
+    expect(activityLine(CIRCLE_PROGRAM, CIRCLE_REPORT)).toBe("Ran CIRCLE · center 3, 2.5 · radius 0.6");
+    expect(activityParts(CIRCLE_PROGRAM, CIRCLE_REPORT)).toEqual([
+      { kind: "text", text: "Ran" },
+      { kind: "text", text: " " },
+      { kind: "code", text: "CIRCLE" },
+      { kind: "text", text: " · center 3, 2.5 · radius 0.6" },
+    ]);
+    expect(resultNote(CIRCLE_PROGRAM, CIRCLE_REPORT, true, added)).toBe("1 object added");
+    expect(activityLine(CIRCLE_PROGRAM, "", "present")).toBe("Running CIRCLE · center 3, 2.5 · radius 0.6");
   });
-  test("more lines are counted, blank ones aside", () => {
-    expect(activityLine(["(setq r 5)", "", '(cmd "circle")', "  (inspect)", ""].join("\n"))).toBe("(setq r 5)  +2");
+
+  test("the engine's real answers: each command's own word, or the measured change", () => {
+    const rows: [string, string, { objects: number; steps: number | null } | null, string, string][] = [
+      ["(cmd \"circle\" '((CENTER . (3 2.5)) (RADIUS . 0.6)))", '=> ((HANDLE . "12E"))\n', added, "Ran CIRCLE · center 3, 2.5 · radius 0.6", "1 object added"],
+      ["(cmd \"line\" '((POINTS . ((0 0) (10 0) (10 5)))))", '=> ((HANDLES "12E" "12F"))\n', { objects: 2, steps: 1 }, "Ran LINE · 3 points", "2 objects added"],
+      ["(cmd \"line\" '((POINTS . ((0 0) (10 0)))))", '=> ((HANDLES "12E"))\n', added, "Ran LINE · points 0, 0 to 10, 0", "1 object added"],
+      ['(cmd "move" (quote ((HANDLES . ("101" "104" "107")) (DELTA . (1 0)))))', "=> ((MOVED . 3))\n", { objects: 0, steps: 1 }, "Ran MOVE · 3 objects · delta 1, 0", "3 objects moved"],
+      ["(cmd \"erase\" '((HANDLES . (\"101\" \"104\"))))", "=> ((ERASED . 2))\n", { objects: -2, steps: 1 }, "Ran ERASE · 2 objects", "2 objects erased"],
+      ["(cmd \"rotate\" '((HANDLES . (\"101\")) (BASE . (0 0)) (ANGLE . 30)))", '=> ((HANDLES "101"))\n', { objects: 0, steps: 1 }, "Ran ROTATE · 1 object · base 0, 0 · angle 30", "1 object changed"],
+      ["(cmd \"qselect\" '((LAYER . \"Hatch\")))", '=> ((HANDLES "118" "119" "11A" "11B") (MESSAGE . "4 item(s) selected") (SELECTED . 4))\n', same, "Selected 4 objects on layer Hatch", ""],
+      ['(cmd "selectall")', "=> ((SELECTED . 46))\n", same, "Selected 46 objects", ""],
+      ["(cmd \"select\" '((CLEAR . T)))", "=> ((SELECTED . 0))\n", same, "Cleared the selection", ""],
+      ["(cmd \"layer.current\" '((NAME . \"Notes\")))", "(the code ran and returned nil)\n", { objects: 0, steps: 1 }, "Set layer Notes current", "Drawing changed"],
+      ["(cmd \"dist\" '((P1 . (0 0)) (P2 . (3 4))))", '=> ((ANGLE . 53.1301) (DISTANCE . 4.25) (DX . 3.0) (MESSAGE . "Distance = 4.2500"))\n', same, "Measured distance 4.25", ""],
+      ["(cmd \"entities\" '((TYPE . \"Circle\")))", '=> ((COUNT . 7) (ENTITIES ((COLOR . "ByLayer") (GEOMETRY (CENTER (X . 2.0)', same, "Read 7 objects · type Circle", ""],
+      ['(cmd "describe")', CIRCLE_REPORT, same, "Measured the drawing", ""],
+      ['(cmdline "zoom" "e")', '=> ((PROMPT . "Command:") (RUNNING) (OUTPUT "Command: ZOOM"))\n', same, "Typed ZOOM · e", ""],
+      ['(cmdline "line" "0,0" "@10,0" "@0,5" "")', "=> ((RUNNING))\n", added, "Typed LINE · 0,0 · @10,0 · @0,5 · …", "1 object added"],
+      ['(commands "circ")', '=> (((ID . "circle")))\n', same, "Looked up the commands matching “circ”", ""],
+      ['(describe "move")', '=> ((ID . "move"))\n', same, "Looked up MOVE", ""],
+      ["(inspect)", "=> ((BLOCKS))\n", same, "Inspected the drawing", ""],
+      ["(setq r 5) (defun dbl (x) (* 2 x)) (dbl r)", "=> 10\nkept: R, DBL\n", same, "Defined the helper DBL", ""],
+      ["(+ 1 2)", "=> 3\n", same, "Ran (+ 1 2)", "3"],
+      ["(cmd \"offset\" '((HANDLES . (\"101\")) (DISTANCE . 2)))", '=> ((HANDLES "130"))\n', same, "Ran OFFSET · 1 object · distance 2", "Drawing unchanged"],
+      ["(cmd \"circle\" '((CENTER . (0 0)) (RADIUS . 1)))", '=> ((HANDLE . "1"))\n', null, "Ran CIRCLE · center 0, 0 · radius 1", ""],
+      ["(cmd \"circle\" '((CENTER . (0 0)) (RADIUS . 1)))", '=> ((HANDLE . "1"))\n', { objects: 0, steps: null }, "Ran CIRCLE · center 0, 0 · radius 1", ""],
+    ];
+    for (const [code, report, delta, sentence, note] of rows) {
+      expect(activityLine(code, report)).toBe(sentence);
+      expect(resultNote(code, report, true, delta)).toBe(note);
+    }
   });
-  test("empty code asks for the manual", () => {
+
+  test("several commands in one program are counted and named; a long run names the first four", () => {
+    const three = ["(cmd \"line\" '((POINTS . ((0 0) (1 0)))))", "(cmd \"line\" '((POINTS . ((1 0) (1 1)))))", "(cmd \"circle\" '((CENTER . (0 0)) (RADIUS . 1)))"].join("\n");
+    expect(activityLine(three)).toBe("Ran 3 commands: LINE, LINE, CIRCLE");
+    expect(activityLine(three, "", "present")).toBe("Running 3 commands: LINE, LINE, CIRCLE");
+    expect(
+      activityParts(three)
+        .filter((p) => p.kind === "code")
+        .map((p) => p.text),
+    ).toEqual(["LINE", "LINE", "CIRCLE"]);
+    expect(resultNote(three, '=> ((HANDLE . "9"))\n', true, { objects: 3, steps: 3 })).toBe("3 objects added");
+    expect(activityLine(Array.from({ length: 7 }, () => '(cmd "circle")').join(" "))).toBe("Ran 7 commands: CIRCLE, CIRCLE, CIRCLE, CIRCLE, and 3 more");
+    // Commands inside glue code are still the steps; a helper beside a command makes them "steps".
+    expect(activityLine('(progn (setq a (cmd "circle")) (cmd "line"))')).toBe("Ran 2 commands: CIRCLE, LINE");
+    expect(activityLine('(defun box () (cmd "line")) (cmd "circle") (render)')).toBe("Ran 3 steps: defined the helper BOX, CIRCLE, rendered the drawing");
+    expect(activityLine('(commands) (describe "circle") (kept)')).toBe("Listed the commands, then 2 more lookups");
+  });
+
+  test("a failure is said in plain words", () => {
+    expect(resultNote('(cmd "nosuch")', "error: unknown command `nosuch`\n; error: unknown command `nosuch`\n", true)).toBe("There is no command named nosuch");
+    expect(resultNote("(foo 1 2)", "error: no function definition: FOO\n", true)).toBe("There is no function named FOO");
+    expect(resultNote("(inspect", "error: invalid parameters for `run`: ; error: malformed list on input", false)).toBe("The code is incomplete: a bracket or a quote is not closed");
+    expect(resultNote("(cmd \"circle\" '((RADIUS . -1)))", "error: invalid parameters for `circle`: give {center, radius} or {p1, p2[, p3]}\n", true)).toBe("CIRCLE needs other parameters: give {center, radius} or {p1, p2[, p3]}");
+    expect(resultNote("x", "error: the engine is not loaded", false)).toBe("The engine is not loaded");
+    expect(resultNote("x", "", false)).toBe("It failed without saying why");
+    expect([...resultNote("x", `error: ${"y".repeat(5_000)}`, false)].length).toBeLessThanOrEqual(161);
+  });
+
+  test("empty code asks for the manual, and has no note", () => {
     expect(activityLine("")).toBe("Read the manual");
-    expect(activityLine(["", "  ", ""].join("\n"))).toBe("Read the manual");
+    expect(activityLine(["", "  ", ""].join("\n"), "", "present")).toBe("Reading the manual");
+    expect(resultNote("", "THE MANUAL\n", true, { objects: 0, steps: 0 })).toBe("");
+  });
+
+  test("a program it cannot read is its first line, clipped, with the lines after it counted", () => {
+    expect(activityLine('(cmd "circle"')).toBe('Ran (cmd "circle"');
+    expect(activityLine(["(setq r 5)", "", "(* r 2)", "  (+ r 1)", ""].join("\n"))).toBe("Ran (setq r 5) +2 lines");
+    expect(activityLine('(princ "never closed')).toBe('Ran (princ "never closed');
+    expect(activityLine("))) (cmd")).toBe("Ran ))) (cmd");
+    const long = activityLine(`(princ "${"a".repeat(5_000)}")`);
+    expect([...long].length).toBeLessThanOrEqual(141);
+    expect(long.endsWith("…")).toBe(true);
+    // Past the reader's bound a program is not read at all.
+    expect(activityLine(`(cmd "circle") ${"(+ 1 2) ".repeat(4_000)}`).startsWith('Ran (cmd "circle")')).toBe(true);
+  });
+
+  test("long and odd arguments are cut, and numbers are short", () => {
+    const longName = activityLine(`(cmd "layer.current" '((NAME . "${"N".repeat(400)}")))`);
+    expect([...longName].length).toBeLessThan(60);
+    expect(longName.endsWith("… current")).toBe(true);
+    expect([...activityLine(`(cmd "${"c".repeat(400)}")`)].length).toBeLessThan(40);
+    expect(activityLine("(cmd \"circle\" '((CENTER . (0.30000000000000004 -0.0)) (RADIUS . 1e-9) (A . 1) (B . 2)))")).toBe("Ran CIRCLE · center 0.3, 0 · radius 0 · a 1 · …");
+    expect(activityLine("(cmd \"scale\" '((FACTOR . 1e300) (COPY . T) (KEEP . nil)))")).toBe("Ran SCALE · factor a very large number · copy · no keep");
+    expect(activityLine("(cmd \"x\" '((DEEP . ((A . ((B . 1)))))))")).toBe("Ran X · deep …");
+    expect(shortNumber(1234.5)).toBe("1234.5");
+    expect(shortNumber(2.50004)).toBe("2.5");
+    expect(shortNumber(-0.00001)).toBe("0");
+    expect(shortNumber(Number.NaN)).toBe("a very large number");
+  });
+
+  test("hostile programs and reports never throw", () => {
+    const hostile = [
+      "(".repeat(50_000),
+      ")".repeat(50_000),
+      `${"(".repeat(200)}cmd "circle"${")".repeat(200)}`,
+      '(cmd "a" . . .)',
+      "(cmd)",
+      '(cmd "")',
+      "(cmd 5 5)",
+      "'",
+      '"',
+      "\\",
+      "(cmd \"x\" '((. . .) (()) (A . ) ( . B)))",
+      "(cmdline)",
+      '(cmdline "line" 5 (1 2))',
+      '\u0000‮(cmd "x")',
+      "; only a comment",
+      "(cmd \"circle\" '((CENTER . (1e999 -1e999))))",
+      "<img src=x onerror=alert(1)>",
+      "(describe)",
+      "(forget)",
+      "(defun)",
+    ];
+    for (const code of hostile) {
+      for (const report of ["", "=> ", "=> (((((", "=> )))", `=> ${"(A . 1) ".repeat(20_000)}`, "error:", "=> ((MOVED . -1) (ERASED . 1.5) (SELECTED))"]) {
+        expect(typeof activityLine(code, report)).toBe("string");
+        expect(typeof activityLine(code, report, "present")).toBe("string");
+        expect(typeof resultNote(code, report, true, { objects: 0, steps: 0 })).toBe("string");
+        expect(typeof resultNote(code, report, false, null)).toBe("string");
+        expect([...activityLine(code, report)].length).toBeLessThanOrEqual(141);
+      }
+    }
+    // Markup in a program is only ever text in a part: the pane renders parts, never HTML.
+    expect(activityParts("<img src=x onerror=alert(1)>").every((p) => p.kind === "text" || p.kind === "code")).toBe(true);
   });
 });
 

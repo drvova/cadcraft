@@ -149,6 +149,9 @@ body {
 /* The sidebar: one surface on the left, the palettes stacked in it and divided by a hairline,
    as the editor stacks its explorer's sections. */
 .sidebar {
+  /* The rail's one text column: where a heading's label starts (its inset, the fold key, the gap
+     after it) and so where a layer's name and a property's label start. */
+  --rail-text: calc(var(--gap-2) * 2 + var(--control-h-chip));
   flex: 0 0 auto;
   width: 252px;
   display: flex;
@@ -441,15 +444,11 @@ body {
   clip-path: inset(50%);
 }
 
+/* The current layer's name is the full ink, as any selected row's: the fill and the accent edge
+   mark it, in both themes. It was green too (a third mark in dark, a second in light), and green
+   was also "on": colour here is the accent alone. */
 .layer-row.is-current .ui-row {
-  color: var(--layer-current);
-}
-
-/* In the light theme `--layer-current` is the row's pale fill, not an ink: the current layer's
-   name takes the theme's own "on" green there, a quarter of the way to the ink: the green alone
-   measures 4.49:1 on the selected fill, under the 4.5 that text needs. */
-:root[data-theme="light"] .layer-row.is-current .ui-row {
-  color: color-mix(in srgb, var(--toggle-on) 75%, var(--text));
+  color: var(--text);
 }
 
 /* The status column: a small diamond, filled when the layer has objects and hollow when it does
@@ -482,6 +481,29 @@ body {
 @media (pointer: coarse) {
   .layer-toggles {
     gap: var(--gap-4);
+  }
+}
+
+/* A key in its ordinary state (on, thawed, unlocked) is drawn only on the row under the pointer
+   or holding the keyboard: twenty-seven such glyphs down a nine-layer list hid the one layer that
+   was off. A key in the state to notice (off, frozen, locked) is always drawn, in its ink. The
+   hidden keys keep their cells, their names and their place in the Tab order: they are faded,
+   not removed, so nothing moves when they show, and focus on one shows its row's. Where there is
+   no pointer to hover with (a finger), every key is drawn. */
+@media (hover: hover) and (pointer: fine) {
+  .layer-toggles .ui-toggle--absent[aria-pressed="true"],
+  .layer-toggles .ui-toggle--info[aria-pressed="false"],
+  .layer-toggles .ui-toggle--caution[aria-pressed="false"] {
+    opacity: 0;
+    transition:
+      opacity var(--dur-fast) var(--ease-standard),
+      background-color var(--dur-fast) var(--ease-standard),
+      color var(--dur-fast) var(--ease-standard);
+  }
+
+  .layer-row:hover .layer-toggles .ui-toggle,
+  .layer-row:focus-within .layer-toggles .ui-toggle {
+    opacity: 1;
   }
 }
 
@@ -559,14 +581,21 @@ body {
   gap: var(--gap-6);
 }
 
+/* The prompt mark is quiet while the line waits for a command and takes the accent while one is
+   running: the accent is a signal, and "a command wants an answer" is one. */
 .cmd-caret {
   flex: 0 0 auto;
   width: var(--icon-size-sm);
-  color: var(--text-accent);
+  color: var(--text-faint);
   font-family: var(--font-family-mono);
-  font-size: var(--font-button);
+  font-size: var(--font-mono);
   line-height: 1;
   text-align: center;
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+
+.cmd-caret.is-running {
+  color: var(--text-accent);
 }
 
 /* A recessed field on the panel: an edge at rest so it reads as editable, the focus edge and
@@ -608,7 +637,7 @@ body {
   /* The error ink alone measures 4.39:1 on the dark panel, under the 4.5 this small text needs:
      it steps a fifth of the way to the ink. */
   color: color-mix(in srgb, var(--error) 80%, var(--text));
-  font-size: var(--font-small);
+  font-size: var(--font-label);
   line-height: var(--gap-14);
   border-radius: var(--radius-small);
   /* A long error takes a second line before it is cut, in the room beside the field: the field

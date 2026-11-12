@@ -1,7 +1,7 @@
 /**
  * The status bar, as the editor's: at the start what the window is working on (which engine is
- * live, the current layer, how much the drawing holds), at the end the drafting toggles, the
- * coordinate readout and the selection count. The layout tabs (Model plus the drawing's layouts)
+ * live, the current layer, how much the drawing holds, how much of it is selected), at the end the
+ * drafting toggles and the coordinate readout. The layout tabs (Model plus the drawing's layouts)
  * are the editor tabs over the drawing: `LayoutTabs`, below, which the shell places there.
  *
  * A toggle click calls `onCommand(id, { on: !current })`: the shell flips the setting through the
@@ -165,6 +165,16 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
           {props.layerCount === 1 ? "1 layer" : `${count(props.layerCount)} layers`}
         </span>
       </span>
+      {/* A live region, there from the start so that what arrives in it is announced: the count is
+          said when the selection changes, politely, and nothing is said when it empties. It is the
+          last of the facts, before the toggles: what comes and goes stands where it moves nothing. */}
+      <span class="status-fit status-fit-selection" role="status">
+        <Show when={props.selectionCount > 0}>
+          <span class="status-item status-selection" data-hint="Objects in the selection" data-hint-placement="top">
+            {`${count(props.selectionCount)} selected`}
+          </span>
+        </Show>
+      </span>
       <div class="status-toggles" role="toolbar" aria-label="Drafting settings" ref={(element) => rovingBand(element, "button")}>
         <For each={STATUS_TOGGLES}>
           {(toggle) => (
@@ -189,15 +199,6 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
           <span class="status-label">Pointer position: </span>
           {coord()}
         </span>
-      </span>
-      {/* A live region, there from the start so that what arrives in it is announced: the count is
-          said when the selection changes, politely, and nothing is said when it empties. */}
-      <span class="status-fit status-fit-selection" role="status">
-        <Show when={props.selectionCount > 0}>
-          <span class="status-selection" data-hint="Objects in the selection" data-hint-placement="top">
-            {`${count(props.selectionCount)} selected`}
-          </span>
-        </Show>
       </span>
     </footer>
   );

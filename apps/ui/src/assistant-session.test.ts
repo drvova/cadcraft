@@ -182,6 +182,26 @@ describe("send", () => {
     expect(tool.report).not.toBe("");
     expect(fake.ran).toEqual(["(+ 1 2)"]);
     expect(changed).toBe(1);
+    // Plain code: the note is its value.
+    expect(tool.note).toBe("3");
+  });
+
+  test("a tool row's note is the drawing measured around the call, and a failure in plain words", async () => {
+    const fake = fakeFacade();
+    const session = sessionWith(scriptedFetch([toolReply('(cmd "circle")'), toolReply('(cmd "circle")'), toolReply("(cmd"), textReply("Done.")]).fetch, fake);
+    // The second call finds the undo stack's depth unknown: nothing is claimed about the drawing.
+    const execute = fake.facade.execute;
+    let calls = 0;
+    fake.facade.execute = (command, params) => {
+      calls += 1;
+      if (calls === 2) fake.setDepth(null);
+      if (calls === 3) return { ok: false, error: "invalid parameters for `run`: ; error: malformed list on input" };
+      return execute(command, params);
+    };
+    await say(session, "draw");
+    const notes = session.entries.flatMap((e) => (e.kind === "tool" ? [e.note] : []));
+    expect(notes).toEqual(["Drawing changed", "", "The code is incomplete: a bracket or a quote is not closed"]);
+    expect(session.entries.flatMap((e) => (e.kind === "tool" ? [e.ok] : []))).toEqual([true, true, false]);
   });
 
   test("the status says what the turn is doing: thinking, running a command by its name, writing", async () => {
@@ -362,7 +382,7 @@ describe("the checkpoint", () => {
   test("a turn that changed the drawing leaves the changes to keep or undo", async () => {
     const session = sessionWith(scriptedFetch(changing()).fetch);
     await say(session, "draw");
-    expect(session.changes()).toEqual({ depth: 0, steps: 1, labels: ['(cmd "circle")'] });
+    expect(session.changes()).toEqual({ depth: 0, steps: 1, labels: ["Ran CIRCLE"] });
   });
 
   test("a turn that changed nothing leaves no bar", async () => {
@@ -389,14 +409,14 @@ describe("the checkpoint", () => {
     session.keepChanges();
     expect(session.changes()).toBeNull();
     await say(session, "again");
-    expect(session.changes()).toEqual({ depth: 1, steps: 1, labels: ['(cmd "circle")'] });
+    expect(session.changes()).toEqual({ depth: 1, steps: 1, labels: ["Ran CIRCLE"] });
   });
 
   test("unresolved changes accumulate across turns", async () => {
     const session = sessionWith(scriptedFetch([...changing(), ...changing()]).fetch);
     await say(session, "draw");
     await say(session, "again");
-    expect(session.changes()).toEqual({ depth: 0, steps: 2, labels: ['(cmd "circle")', '(cmd "circle")'] });
+    expect(session.changes()).toEqual({ depth: 0, steps: 2, labels: ["Ran CIRCLE", "Ran CIRCLE"] });
   });
 
   test("a facade that names no depth never offers the bar", async () => {
