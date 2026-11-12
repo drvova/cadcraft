@@ -974,7 +974,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                   <div class="assistant-setup-chosen">
                     <h2 class="assistant-setup-title" data-hint="">{picked()?.label ?? ""}</h2>
                     <span class="assistant-setup-change">
-                      <Button variant="ghost" size="sm" title="Choose another provider" onClick={changeProvider}>
+                      <Button variant="quiet" size="sm" title="Choose another provider" onClick={changeProvider}>
                         Change
                       </Button>
                     </span>
@@ -998,9 +998,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 <Show when={keyWanted()}>
                   <div class="assistant-field">
                     <span>API key</span>
-                    {/* The show/hide key stands inside the field's end. `Field` has no slot for it,
-                        so this box places it over the field: after the field in the Tab order. */}
-                    <div class="assistant-field-box">
+                    {/* The show/hide key stands inside the field's end, after the field in the Tab order. */}
                     <Field
                       type={keyVisible() ? "text" : "password"}
                       value={draft().apiKey}
@@ -1014,11 +1012,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                         setDraft({ ...draft(), apiKey: v });
                         forgetCheck();
                       }}
+                      end={<IconButton icon={keyVisible() ? "eye" : "eye-off"} size="sm" title={keyVisible() ? "Hide the key" : "Show the key"} onClick={() => setKeyVisible(!keyVisible())} />}
                     />
-                    <span class="assistant-field-end">
-                      <IconButton icon={keyVisible() ? "eye" : "eye-off"} size="sm" title={keyVisible() ? "Hide the key" : "Show the key"} onClick={() => setKeyVisible(!keyVisible())} />
-                    </span>
-                    </div>
                     <span class="assistant-field-hint" id="assistant-key-hint">Stored in this browser, not encrypted.</span>
                   </div>
                 </Show>

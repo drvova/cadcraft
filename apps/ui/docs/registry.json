@@ -16,6 +16,7 @@
      "primary",
      "secondary",
      "ghost",
+     "quiet",
      "danger"
     ],
     "size": [
@@ -46,7 +47,8 @@
     "--focus-ring",
     "--dur-fast",
     "--ease-standard",
-    "--leading-ui"
+    "--leading-ui",
+    "--text-dim"
    ],
    "replaces": []
   },
@@ -154,7 +156,8 @@
     ],
     "variant": [
      "field",
-     "inline"
+     "inline",
+     "bare"
     ],
     "size": [
      "sm",
@@ -169,7 +172,8 @@
     "disabled",
     "invalid",
     "mixed",
-    "read-only"
+    "read-only",
+    "adorned"
    ],
    "tokens": [
     "--control-h-input",
@@ -189,7 +193,11 @@
     "--control-h-chip",
     "--gap-4",
     "--dur-fast",
-    "--ease-standard"
+    "--ease-standard",
+    "--gap-2",
+    "--icon",
+    "--icon-size-md",
+    "--icon-size-sm"
    ],
    "replaces": []
   },
@@ -324,7 +332,8 @@
     "--focus-ring",
     "--error",
     "--dur-fast",
-    "--ease-standard"
+    "--ease-standard",
+    "--border"
    ],
    "replaces": []
   },

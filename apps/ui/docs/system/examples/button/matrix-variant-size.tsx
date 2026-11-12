@@ -10,6 +10,8 @@ export default function MatrixVariantSize() {
       <Button variant="secondary" size="sm">Secondary sm</Button>
       <Button variant="ghost" size="md">Ghost md</Button>
       <Button variant="ghost" size="sm">Ghost sm</Button>
+      <Button variant="quiet" size="md">Quiet md</Button>
+      <Button variant="quiet" size="sm">Quiet sm</Button>
       <Button variant="danger" size="md">Danger md</Button>
       <Button variant="danger" size="sm">Danger sm</Button>
     </div>

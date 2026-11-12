@@ -29,6 +29,9 @@ export interface CheckboxProps {
   disabled?: boolean;
   /** The accessible name when the box has no visible label. Leave it out when `children` name it. */
   ariaLabel?: string;
+  /** The box's `id`, for a visible `<label for>` that stands apart from it (a row's own label in
+   *  another column): that label is then the name, and no `ariaLabel` is passed. */
+  id?: string;
   /** The `id` of a line of help beside the box (several, space-separated): sets `aria-describedby`. */
   describedBy?: string;
   /** The visible label. The whole of it is clickable. */
@@ -50,6 +53,7 @@ export function Checkbox(props: CheckboxProps): JSX.Element {
           ref={(el: HTMLInputElement) => createRenderEffect(() => show(el))}
           class="ui-checkbox-input"
           type="checkbox"
+          id={props.id}
           aria-label={props.ariaLabel}
           aria-describedby={props.describedBy}
           disabled={props.disabled}

@@ -137,4 +137,18 @@ describe("Checkbox", () => {
     expect(mark?.getAttribute("aria-hidden")).toBe("true");
     expect(mark?.previousElementSibling?.tagName).toBe("INPUT");
   });
+
+  test("takes an id for a label that stands apart from it, and writes none when it is not given", () => {
+    const container = mount(() => (
+      <div>
+        <label for="plot">Plot</label>
+        <Checkbox id="plot" checked />
+      </div>
+    ));
+    const input = inputIn(container);
+    expect(input.id).toBe("plot");
+    expect(container.querySelector("label[for]")?.getAttribute("for")).toBe(input.id);
+    expect(input.hasAttribute("aria-label")).toBe(false);
+    expect(inputIn(mount(() => <Checkbox>Snap</Checkbox>)).hasAttribute("id")).toBe(false);
+  });
 });

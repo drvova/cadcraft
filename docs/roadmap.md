@@ -1,6 +1,6 @@
 # CADCraft roadmap detail
 
-> **Last reviewed:** 2026-10-10 (hours, milestones) · 2026-11-11 (interface evidence) · **Last updated:** 2026-11-11 · **Change:** major (the egui interface was removed and the web interface replaced it: alpha-gate evidence, milestone notes and ready-for-real-work updated; then the pointer gained ortho, polar, grid snap and tracking; hours not re-estimated) · **Target:** Autodesk AutoCAD 2027
+> **Last reviewed:** 2026-10-10 (hours, milestones) · 2026-11-12 (interface evidence) · **Last updated:** 2026-11-12 · **Change:** minor (grips, right-click menus and the first dialog landed in the web interface: alpha-gate evidence and ready-for-real-work updated; on 2026-11-11, major: the egui interface was removed and the web interface replaced it; hours not re-estimated) · **Target:** Autodesk AutoCAD 2027
 
 Forward-looking plan: milestones with status, the current focus, and what comes next with
 estimates. The summary is [ROADMAP.md](../ROADMAP.md); the work items behind every line are in
@@ -12,8 +12,9 @@ Opus 5.5 agent-hours.
 **The interface changed on 2026-11-11.** The egui interface was removed; the interface is the
 SolidJS app in `apps/ui`, in a browser tab or in the desktop app's native webview. It draws and
 selects with the pointer and has the menus, tool strip, sidebar, command line, command palette
-and assistant, and the pointer follows ortho, polar, grid snap and object snap tracking. It does
-not yet have dialogs, grips, dynamic input, context menus, DWG, autosave or translations ([gaps.md](gaps.md#uiux) W1–W14). That work is not
+and assistant; the pointer follows ortho, polar, grid snap and object snap tracking; a selection
+has grips; a right click opens a menu; and there is one dialog, Drafting Settings. It does not
+yet have the other dialogs, dynamic input, DWG, autosave or translations ([gaps.md](gaps.md#uiux) W1–W14). That work is not
 ranked or estimated yet, and several items below assumed the old interface: where an item says
 a dialog or tracking is done, read the alpha gate table for what holds today.
 
@@ -41,16 +42,16 @@ webview, has been run on Windows only so far.)
 
 | Core workflow | Works end to end? | Evidence | Hours to pass |
 |---|---|---|---|
-| Draw and modify precisely with object snaps and tracking | **partial, blocking** | Typed coordinate entry, FROM, M2P, point filters and typed snap overrides work (engine); in the interface a click gives a command its point with a rubber band, running object snaps show a marker, and ortho, polar tracking, grid snap and object snap tracking constrain the click, with a label and the rays drawn (the engine's snapped cursor; tried in Chromium by its author; Extension and Parallel reached by the same call, read from the source only). There are no grips and no dynamic input (W2, W4), and no Tab snap cycling or snap menu (W3, W5); no TK; ellipse/spline intersections approximate ([ui-parity.md](ui-parity.md), [gaps.md](gaps.md) W2–W4, F1) | 35–50 (predates the interface change) |
-| Dimension and annotate | partial, not blocking | All core DIM types, associativity, DIMSTYLE variables (43 of ~80), TEXT/MTEXT, MLEADER, tables work at the command line; no dialogs at all in the interface (W1), so no DIMSTYLE dialog and no MTEXT editor; MLEADER thin (F7, F9, F10). A drafter can dimension a sheet end to end by typing; without grips a placed dimension cannot be dragged | 0 for the gate (beta work) |
+| Draw and modify precisely with object snaps and tracking | **partial, blocking** | Typed coordinate entry, FROM, M2P, point filters and typed snap overrides work (engine); in the interface a click gives a command its point with a rubber band, running object snaps show a marker, and ortho, polar tracking, grid snap and object snap tracking constrain the click, with a label and the rays drawn (the engine's snapped cursor; tried in Chromium by its author; Extension and Parallel reached by the same call, read from the source only). A selection shows its grips, which edit through the engine's grip command (stretch, move, rotate, scale, mirror, copy; every grip is drawn as a square and touch has none, W2), and a right click opens a menu, with Enter, Cancel and the prompt's keywords during a command. There is no dynamic input (W4), and no Tab snap cycling or snap menu (W3, W5); no TK; ellipse/spline intersections approximate ([ui-parity.md](ui-parity.md), [gaps.md](gaps.md) W2–W4, F1) | 35–50 (predates the interface change) |
+| Dimension and annotate | partial, not blocking | All core DIM types, associativity, DIMSTYLE variables (43 of ~80), TEXT/MTEXT, MLEADER, tables work at the command line; the interface's one dialog is Drafting Settings (W1), so no DIMSTYLE dialog and no MTEXT editor; MLEADER thin (F7, F9, F10). A drafter can dimension a sheet end to end by typing, and a placed dimension has grips (the engine's; not tried on a dimension in this pass) | 0 for the gate (beta work) |
 | Use blocks (insert library blocks, edit them, attributes, xrefs) | **partial, blocking** | Static BLOCK/INSERT/attributes, ATTSYNC, BATTMAN editing, xrefs (#525), the Block Editor commands (BEDIT/BSAVE/BCLOSE: every reference updates) and REFEDIT (#813) work in the engine; their dialogs and palettes (Edit Block Definition, External References, the Blocks window) were the egui interface's and are gone (W1); no XCLIP; dynamic blocks from other drawings lose their behaviour (F2, F3) | 35–55 |
 | Layers, layouts and plotting a sheet | **partial, blocking** | Layers, layouts, viewports, page setups, PDF output, plot styles (CTB/STB, #410), PUBLISH (#186) and plotter devices (#564) work in the engine and from `cadcraft-cli`; the Plot dialog (#160) and Plot Preview were the egui interface's and are gone, and plotting from the interface is not verified (W1, W14, P1); layouts are tabs over the drawing; printers only via PDF/PNG/SVG files (F14, H3) | 15–25 (predates the interface change) |
 | Save DWG that AutoCAD opens without loss, and reopen others' DWGs | **no** | DXF keeps what we don't model (#528) and writes native MULTILEADERs (#459, not yet tested through DWG); through DWG, acadrust drops custom-class entities and objects and some foreign data; never checked in AutoCAD; no real-file tests; a 10 MB DWG failed after ~2 min (#57) (FF1–FF6). **The interface opens and saves DXF only**: its WebAssembly engine has no DWG (W8, FF12); DWG goes through `cadcraft-cli convert` | 40–60 + owner (real-file corpus, AutoCAD check), plus FF12 |
 | **To alpha** | | | **≈ 125–190** |
 
-Ready for real work is ≈ 36% (it was ≈ 38% with the egui interface: UI/UX fidelity fell from 43%
-to ≈ 25% when the interface was replaced and is ≈ 31% with the snapped cursor back,
-[ui-parity.md](ui-parity.md)), under the ~40% alpha bar. The hours in this table were estimated for the old interface. They do not include bringing
+Ready for real work is ≈ 37% (it was ≈ 38% with the egui interface: UI/UX fidelity fell from 43%
+to ≈ 25% when the interface was replaced and is ≈ 37% with the snapped cursor, grips, right-click
+menus and the first dialog, [ui-parity.md](ui-parity.md)), under the ~40% alpha bar. The hours in this table were estimated for the old interface. They do not include bringing
 the new one to the same level, which is not estimated yet.
 
 ## Beta checklist
@@ -114,6 +115,7 @@ AutoLISP surface, AI features with openly licensed local models, and every remai
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | minor | Grips, right-click menus and the first dialog (Drafting Settings) landed in the web interface: the Current focus note and the first two alpha-gate rows' evidence updated; UI/UX ≈ 31% → ≈ 37%, ready for real work ≈ 36% → ≈ 37% (hand-assessed). The first row still fails the gate: no dynamic input, and the engine-side items it lists |
 | 2026-11-11 | minor | The interface's pointer follows ortho, polar, grid snap and object snap tracking (the engine's snapped cursor): the first alpha-gate row's evidence updated; UI/UX ≈ 25% → ≈ 31%, ready for real work ≈ 35% → ≈ 36% (hand-assessed). The row still fails the gate: no grips, no dynamic input |
 | 2026-11-11 | major | The egui interface was removed and the web interface (`apps/ui`, and the desktop app as its native webview) replaced it: a note under Current focus, alpha-gate evidence rewritten for what the interface does and does not do, ready for real work 38% → 35% (UI/UX 43% → 25%, hand-assessed), M0, M12, M13 and AI rows annotated. Statuses and hours are unchanged and predate the change |
 | 2026-10-12 | minor | Block Editor for static blocks landed: "Use blocks" evidence updated; status and hours unchanged (REFEDIT and dynamic blocks remain) |

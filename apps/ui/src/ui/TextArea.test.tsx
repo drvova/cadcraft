@@ -151,4 +151,18 @@ describe("TextArea", () => {
     expect(plain.hasAttribute("autocomplete")).toBe(false);
     expect(plain.hasAttribute("spellcheck")).toBe(false);
   });
+
+  test("takes an id for a visible label, and writes none when it is not given", () => {
+    const container = mount(() => (
+      <div>
+        <label for="notes">Notes</label>
+        <TextArea id="notes" />
+      </div>
+    ));
+    const area = areaIn(container);
+    expect(area.id).toBe("notes");
+    expect(container.querySelector("label")?.getAttribute("for")).toBe(area.id);
+    expect(area.hasAttribute("aria-label")).toBe(false);
+    expect(areaIn(mount(() => <TextArea ariaLabel="Notes" />)).hasAttribute("id")).toBe(false);
+  });
 });

@@ -15,7 +15,7 @@ Not applicable: hand-rolled — the pill radius, the 20px height and the accent 
 
 Real uses, 2 call sites (`rg -c "<Chip" src/components` → `src/components/AssistantPane.tsx:4`, `src/components/CommandLine.tsx:1`):
 - `src/components/AssistantPane.tsx:703` — the setup sheet's model chips: one per model the connection check listed, click to put it in the Model field; the one in the field takes `tone="accent"`, the rest `neutral`.
-- `src/components/CommandLine.tsx:115` — the command line's keyword row (`tone="accent"`): one chip per keyword the open command offers, click to submit it.
+- `src/components/CommandLine.tsx:133` — the command line's keyword row (`tone="accent"`): one chip per keyword the open command offers, click to submit it.
 
 ### Example files
 | File | Covers | Caption |
@@ -123,15 +123,15 @@ export default function ToneAccent() {
 - The value is editable. Use `Field` instead.
 
 ### Rules
-- `rule/chip-interactive-only-with-handler`: When a chip runs an action, pass `onClick` so it renders as a `<button>`; when it is a fact, pass nothing so it stays a `<span>`, because a fact in the tab order adds a stop that does nothing. Evidence: app 2/2 chip surfaces — 1 interactive and 1 static — `src/components/CommandLine.tsx:108` and `src/components/StatusBar.tsx:105` (the status bar's current-layer item, a static fact). Check: test `src/ui/Chip.test.tsx`.
+- `rule/chip-interactive-only-with-handler`: When a chip runs an action, pass `onClick` so it renders as a `<button>`; when it is a fact, pass nothing so it stays a `<span>`, because a fact in the tab order adds a stop that does nothing. Evidence: app 2/2 chip surfaces — 1 interactive and 1 static — `src/components/CommandLine.tsx:133` and `src/components/StatusBar.tsx:105` (the status bar's current-layer item, a static fact). Check: test `src/ui/Chip.test.tsx`.
   - Don't: `<Chip>26 objects</Chip>` inside an `onClick` wrapper `div`.
   - Do: `<Chip onClick={() => pick("line")}>line</Chip>`
-- `rule/chip-tone-meaning`: When a chip's tone is picked, use `accent` only for a keyword the user can pick and `neutral` for a value, because the accent tint is the app's signal for the accent role and 2 tinted chips in one row read as 2 selections. Evidence: app 2/2 chips, `accent` only on the keyword row, `src/components/CommandLine.tsx:108`. Check: review `src/ui/ui.css`.
+- `rule/chip-tone-meaning`: When a chip's tone is picked, use `accent` only for a keyword the user can pick and `neutral` for a value, because the accent tint is the app's signal for the accent role and 2 tinted chips in one row read as 2 selections. Evidence: app 2/2 chips, `accent` only on the keyword row, `src/components/CommandLine.tsx:133`. Check: review `src/ui/ui.css`.
   - Don't: `<Chip tone="accent">26 objects</Chip>`
   - Do: `<Chip>26 objects</Chip>`
 
 ### Content
-- `rule/chip-text-short`: When a chip's text is written, keep it to 1 word or a number plus its unit (26 objects, line, mm), because the pill is 20px tall and a third word starts wrapping the row. Evidence: single use `src/components/CommandLine.tsx:108`, the label "line". Check: review `src/components/CommandLine.tsx`.
+- `rule/chip-text-short`: When a chip's text is written, keep it to 1 word or a number plus its unit (26 objects, line, mm), because the pill is 20px tall and a third word starts wrapping the row. Evidence: single use `src/components/CommandLine.tsx:133`, the label "line". Check: review `src/components/CommandLine.tsx`.
   - Don't: `<Chip>The current drawing has 26 objects</Chip>`
   - Do: `<Chip>26 objects</Chip>`
 
@@ -144,7 +144,7 @@ export default function ToneAccent() {
 - `rule/chip-row-limit`: When a chip row holds more than 6 chips, wrap the row or move the rest behind a "More" chip, because the measured chip is 20px tall with 8px side padding and a 608px composer row fits 6 of them before the row wraps. Evidence: measured 20px chip and 608px composer, `docs/system/decisions.md`. Check: review `src/components/CommandLine.tsx`.
   - Don't: 9 chips in one unwrapped row.
   - Do: 6 chips and a "More" chip that opens the rest.
-- `rule/chip-touch-target`: When interactive chips sit in a row, keep at least 4px between them and between 2 rows of them, because under a coarse pointer each 20px pill keeps its drawn size and takes a 24px target from an invisible `::after` 2px past every edge, and closer pills overlap their targets. Evidence: measured 20px pill with a 24px `::after` target, `src/ui/ui.css:1418`. Check: review `src/ui/ui.css`.
+- `rule/chip-touch-target`: When interactive chips sit in a row, keep at least 4px between them and between 2 rows of them, because under a coarse pointer each 20px pill keeps its drawn size and takes a 24px target from an invisible `::after` 2px past every edge, and closer pills overlap their targets. Evidence: measured 20px pill with a 24px `::after` target, `src/ui/ui.css:1558`. Check: review `src/ui/ui.css`.
   - Don't: `.my-chips { display: flex; gap: 0 }`
   - Do: `.my-chips { display: flex; flex-wrap: wrap; gap: var(--gap-4) }`
 

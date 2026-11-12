@@ -26,14 +26,26 @@
  *
  * A field that drives a list (the command palette's input) is a combobox: `role`, `expanded`,
  * `controls`, `activeDescendant` and `autocompleteKind` say so, in the layer's own names.
+ *
+ * `variant="bare"` is the one line inside a box a surface draws itself (the palette's header, the
+ * command line's strip): no stroke, no fill, no inset, no ring, in the surface's own face and
+ * size, as `TextArea variant="bare"` is. The surface shows the focus.
+ *
+ * `start` and `end` are adornments inside the field's two ends: a glyph that says what the value
+ * is (a search field's lens), or one small control that acts on the value (show or hide a key).
+ * The field is then a `<span class="ui-field-box">` around the same `<input>`, which is still the
+ * whole box: the stroke, the focus ring and the error edge go around the adornments, and the
+ * input's padding grows by each adornment's measured width, so a long value scrolls beside them
+ * and never under them. A field with neither is the bare `<input>`, as before.
  */
 
-import type { JSX } from "solid-js";
+import { children, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { describeByHint, installHints } from "./Tooltip";
 
 /** `field` is the form control, stroked and filled at rest; `inline` is a value in a dense list
- *  row, which reads as text until the pointer or the keyboard is on it. */
-export type FieldVariant = "field" | "inline";
+ *  row, which reads as text until the pointer or the keyboard is on it; `bare` is the one line
+ *  inside a box the surface draws and whose focus the surface shows. */
+export type FieldVariant = "field" | "inline" | "bare";
 
 /** `md` is the 24px box; `sm` the 20px box that fits a 22px list row. */
 export type FieldSize = "sm" | "md";
@@ -114,6 +126,42 @@ export interface FieldProps {
   activeDescendant?: string;
   /** A combobox: what its list does with the typed text (`aria-autocomplete`). */
   autocompleteKind?: AutocompleteKind;
+  /** The native `autocapitalize`: `off` for a command, a code or a name a phone's keyboard must
+   *  not capitalise. Unset leaves it to the platform. */
+  autocapitalize?: "off" | "none" | "sentences" | "words" | "characters";
+  /** An adornment inside the field's leading end: a glyph that says what the value is. A press on
+   *  a glyph lands on the input; hide it from assistive tech (`ToolIcon` does). */
+  start?: JSX.Element;
+  /** An adornment inside the field's trailing end: a glyph, or one small control that acts on the
+   *  value (`<IconButton size="sm">`), which follows the input in the Tab order. */
+  end?: JSX.Element;
+}
+
+/**
+ * A slot's width, handed to the stylesheet as the padding the input grows by. It is measured (an
+ * adornment is a glyph, a 20px key or a few characters, and the layer cannot know which) once the
+ * slot is laid out and again whenever its box changes; until then, and where nothing is laid out,
+ * the stylesheet's own default (one small control) stands.
+ */
+function measured(side: "start" | "end"): (slot: HTMLElement) => void {
+  return (slot) => {
+    const measure = (): void => makeRoom(slot, side);
+    onMount(measure);
+    const watcher = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(measure);
+    watcher?.observe(slot);
+    onCleanup(() => {
+      watcher?.disconnect();
+      slot.parentElement?.style.removeProperty(`--ui-field-${side}`);
+    });
+  };
+}
+
+/** Writes a slot's laid-out width on its box, where the stylesheet reads it as the input's
+ *  padding on that side. A slot that is not laid out (no width) changes nothing. Exported for
+ *  the tests. */
+export function makeRoom(slot: HTMLElement, side: "start" | "end"): void {
+  const width = slot.offsetWidth;
+  if (width > 0) slot.parentElement?.style.setProperty(`--ui-field-${side}`, `${width}px`);
 }
 
 export function Field(props: FieldProps): JSX.Element {
@@ -121,7 +169,7 @@ export function Field(props: FieldProps): JSX.Element {
   // A press that brings the focus ends in a mouseup, which in WebKit drops the selection the
   // focus just made: that one mouseup is refused.
   let pressedIn = false;
-  return (
+  const input = (
     <input
       ref={(el: HTMLInputElement) => {
         describeByHint(el, () => props.title, () => props.describedBy);
@@ -148,6 +196,7 @@ export function Field(props: FieldProps): JSX.Element {
       aria-controls={props.controls}
       aria-activedescendant={props.activeDescendant}
       aria-autocomplete={props.autocompleteKind}
+      autocapitalize={props.autocapitalize}
       onInput={(event) => props.onInput?.(event.currentTarget.value)}
       onKeyDown={(event) => {
         // 229 is what a key reports while the input method holds it, in engines that do not set `isComposing` yet.
@@ -167,5 +216,33 @@ export function Field(props: FieldProps): JSX.Element {
       }}
       onBlur={(event) => props.onBlur?.(event)}
     />
+  );
+  // Whether the field is boxed is settled when it is made (the caller wrote `start` or `end`);
+  // what stands in a slot may come and go after that.
+  if (!("start" in props) && !("end" in props)) return input;
+  const start = children(() => props.start);
+  const end = children(() => props.end);
+  const filled = (slot: unknown): boolean => slot !== undefined && slot !== null && slot !== false;
+  return (
+    <span
+      class={`ui-field-box ui-field-box--${props.variant ?? "field"} ui-field-box--${props.size ?? "md"}`}
+      classList={{
+        "ui-field-box--start": filled(start()),
+        "ui-field-box--end": filled(end()),
+        "ui-field-box--disabled": props.disabled === true,
+      }}
+    >
+      <Show when={filled(start())}>
+        <span class="ui-field-slot ui-field-slot--start" ref={measured("start")}>
+          {start()}
+        </span>
+      </Show>
+      {input}
+      <Show when={filled(end())}>
+        <span class="ui-field-slot ui-field-slot--end" ref={measured("end")}>
+          {end()}
+        </span>
+      </Show>
+    </span>
   );
 }

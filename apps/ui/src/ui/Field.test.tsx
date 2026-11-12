@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { Field } from "./Field";
+import { Field, makeRoom } from "./Field";
 import { hintContent } from "./Tooltip";
 import { inputIn, mount, type } from "../test-utils";
 
@@ -216,5 +216,86 @@ describe("Field", () => {
     expect(shut.hasAttribute("aria-activedescendant")).toBe(false);
     const plain = inputIn(mount(() => <Field ariaLabel="Model" />));
     for (const attr of ["role", "aria-expanded", "aria-controls", "aria-activedescendant", "aria-autocomplete"]) expect(plain.hasAttribute(attr)).toBe(false);
+  });
+
+  test("a field with no adornment is the input alone, and one with an adornment is a box around the same input", () => {
+    const plain = mount(() => <Field ariaLabel="Model" />);
+    expect(plain.firstElementChild?.tagName).toBe("INPUT");
+    expect(plain.querySelector(".ui-field-box")).toBeNull();
+
+    const host = mount(() => (
+      <Field ariaLabel="API key" size="sm" variant="inline" invalid describedBy="key-help" end={<button type="button" aria-label="Show the key" />} />
+    ));
+    const box = host.firstElementChild as HTMLElement;
+    expect(box.tagName).toBe("SPAN");
+    expect(box.className).toBe("ui-field-box ui-field-box--inline ui-field-box--sm ui-field-box--end");
+    // The input is still the field: its classes, its name, its refused state and its description
+    // are on it, so the stroke, the ring and the error edge are drawn around the whole box.
+    const input = inputIn(host);
+    expect(input.parentElement).toBe(box);
+    expect(input.classList.contains("ui-field--inline")).toBe(true);
+    expect(input.getAttribute("aria-label")).toBe("API key");
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(input.getAttribute("aria-describedby")).toBe("key-help");
+    // The clipped-value hint still measures the input.
+    expect(input.getAttribute("data-hint")).toBe("");
+    // The adornment follows the input in the box, so it follows it in the Tab order.
+    expect([...box.children].map((el) => el.className || el.tagName)).toEqual([input.className, "ui-field-slot ui-field-slot--end"]);
+    expect(box.querySelector(".ui-field-slot--end button")?.getAttribute("aria-label")).toBe("Show the key");
+    // No role and no name of the box's own: assistive tech meets a text field and a button.
+    for (const attr of ["role", "aria-label", "aria-hidden", "tabindex"]) expect(box.hasAttribute(attr)).toBe(false);
+  });
+
+  test("a leading adornment comes before the input, and a slot with nothing in it is not drawn", () => {
+    const host = mount(() => <Field ariaLabel="Search layers" start={<svg aria-hidden="true" />} end={undefined} />);
+    const box = host.firstElementChild as HTMLElement;
+    expect(box.className).toBe("ui-field-box ui-field-box--field ui-field-box--md ui-field-box--start");
+    expect([...box.children].map((el) => el.tagName)).toEqual(["SPAN", "INPUT"]);
+    expect(box.firstElementChild?.className).toBe("ui-field-slot ui-field-slot--start");
+    expect(box.querySelector(".ui-field-slot--end")).toBeNull();
+  });
+
+  test("an adornment is the caller's own control: its press is its own, and never the input's", () => {
+    let presses = 0;
+    let typed = 0;
+    const host = mount(() => (
+      <Field ariaLabel="API key" value="sk-secret" onInput={() => typed++} end={<button type="button" aria-label="Show the key" onClick={(_event: MouseEvent) => presses++} />} />
+    ));
+    const input = inputIn(host);
+    const eye = host.querySelector("button") as HTMLButtonElement;
+    eye.focus();
+    eye.click();
+    expect(presses).toBe(1);
+    expect(typed).toBe(0);
+    expect(input.value).toBe("sk-secret");
+    // The press leaves the focus on the adornment: a second press toggles back without a Tab.
+    expect(document.activeElement).toBe(eye);
+    eye.blur();
+  });
+
+  test("the input makes room for an adornment by its laid-out width, and none for one that is not laid out", () => {
+    const host = mount(() => <Field ariaLabel="API key" start={<svg aria-hidden="true" />} end={<button type="button" aria-label="Show the key" />} />);
+    const box = host.firstElementChild as HTMLElement;
+    const start = box.querySelector(".ui-field-slot--start") as HTMLElement;
+    const end = box.querySelector(".ui-field-slot--end") as HTMLElement;
+    // Nothing is laid out in the test DOM: the stylesheet's default (one small control) stands.
+    makeRoom(end, "end");
+    expect(box.style.getPropertyValue("--ui-field-end")).toBe("");
+    Object.defineProperty(start, "offsetWidth", { configurable: true, value: 14 });
+    Object.defineProperty(end, "offsetWidth", { configurable: true, value: 20 });
+    makeRoom(start, "start");
+    makeRoom(end, "end");
+    expect(box.style.getPropertyValue("--ui-field-start")).toBe("14px");
+    expect(box.style.getPropertyValue("--ui-field-end")).toBe("20px");
+  });
+
+  test("bare is a variant of the same input, a disabled adorned field says so on its box, and autocapitalize passes through", () => {
+    const bare = inputIn(mount(() => <Field variant="bare" ariaLabel="Search commands" autocapitalize="off" />));
+    expect(bare.className).toBe("ui-field ui-field--bare ui-field--md ui-field--start");
+    expect(bare.getAttribute("autocapitalize")).toBe("off");
+    expect(inputIn(mount(() => <Field ariaLabel="Model" />)).hasAttribute("autocapitalize")).toBe(false);
+    const host = mount(() => <Field variant="bare" disabled ariaLabel="Search commands" start={<svg aria-hidden="true" />} />);
+    expect(host.firstElementChild?.className).toBe("ui-field-box ui-field-box--bare ui-field-box--md ui-field-box--start ui-field-box--disabled");
+    expect(inputIn(host).disabled).toBe(true);
   });
 });

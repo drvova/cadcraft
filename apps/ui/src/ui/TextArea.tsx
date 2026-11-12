@@ -46,6 +46,8 @@ export interface TextAreaProps {
   disabled?: boolean;
   /** The text is refused: sets `aria-invalid` and, on `field`, the error stroke. Say why in a line tied by `describedBy`. */
   invalid?: boolean;
+  /** The control's `id`, for a visible `<label for>` beside it or around it: the label is then the name, and no `ariaLabel` is passed. */
+  id?: string;
   /** The `id` of the help line or the error line beside the control (several, space-separated): sets `aria-describedby`. */
   describedBy?: string;
   /** The hint: a short line about the text, added to the accessible description after
@@ -171,6 +173,7 @@ export function TextArea(props: TextAreaProps): JSX.Element {
       rows={props.rows ?? TEXTAREA_ROWS}
       placeholder={props.placeholder}
       aria-label={props.ariaLabel}
+      id={props.id}
       aria-invalid={props.invalid ? "true" : undefined}
       disabled={props.disabled}
       data-hint={props.title}

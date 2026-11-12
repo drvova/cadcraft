@@ -13,13 +13,20 @@
  * field is an alert. A long error wraps to two lines and is then cut; it takes the focus (Tab, a
  * click) and shows its whole text while it has it; one cut by its width is the system's hint too.
  *
+ * The typed line is the system's `Field`, bare: the strip around it (`.cmd-field`) draws the
+ * edge, the fill and the focus, and sets the mono face the field takes; the prompt mark is the
+ * field's `start` adornment, so it stands in a gutter of its own and the typed text starts after
+ * it, on the panel's column. The field is not given a value: the history writes the element's
+ * own, as before, so nothing is assigned back while an input method is composing.
+ *
  * The props accept the value or the accessor form (Solid passes an attribute expression through
  * as written, so a parent may hand either); the component reads both.
  */
 
-import { createEffect, For, Show, type Accessor, type JSX } from "solid-js";
+import { createEffect, createSignal, For, onMount, Show, type Accessor, type JSX } from "solid-js";
 import { promptText, type PromptState } from "../prompt";
 import { Chip } from "../ui/Chip";
+import { Field } from "../ui/Field";
 
 export interface CommandLineProps {
   prompt: PromptState | Accessor<PromptState>;
@@ -41,8 +48,15 @@ export function CommandLine(props: CommandLineProps): JSX.Element {
   /** Submitted lines, most recent first; `walk` is the position the arrows are on (-1: none). */
   const history: string[] = [];
   let walk = -1;
+  /** The strip shows the field's focus (the field is bare and draws no ring of its own). */
+  const [focused, setFocused] = createSignal(false);
 
   const state = (): PromptState => read(props.prompt);
+
+  // The shell finds the field by this name (F6, Ctrl+J, typing from the drawing: `.cmd-input` in
+  // `app.tsx`). It is a hook only, added once the field has written its own classes: no rule
+  // styles it.
+  onMount(() => input?.classList.add("cmd-input"));
 
   // Follow the tail as output arrives.
   createEffect(() => {
@@ -123,22 +137,29 @@ export function CommandLine(props: CommandLineProps): JSX.Element {
         </div>
       </Show>
       <div class="cmd-entry">
-        <span class={state().running !== null ? "cmd-caret is-running" : "cmd-caret"} aria-hidden="true">
-          ›
-        </span>
-        <input
-          ref={input}
-          class="cmd-input"
-          type="text"
-          spellcheck={false}
-          autocomplete="off"
-          placeholder={promptText(state())}
-          aria-label="Command line"
-          onKeyDown={onKeyDown}
-          onInput={() => {
-            walk = -1;
-          }}
-        />
+        <div class="cmd-field" classList={{ "is-focused": focused() }}>
+          <Field
+            variant="bare"
+            ref={(el) => {
+              input = el;
+            }}
+            spellcheck={false}
+            autocomplete="off"
+            placeholder={promptText(state())}
+            ariaLabel="Command line"
+            onKeyDown={onKeyDown}
+            onInput={() => {
+              walk = -1;
+            }}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            start={
+              <span class={state().running !== null ? "cmd-caret is-running" : "cmd-caret"} aria-hidden="true">
+                ›
+              </span>
+            }
+          />
+        </div>
         <Show when={freshError()}>
           {(error) => (
             <span class="cmd-error" role="alert" data-hint="" tabindex="0">

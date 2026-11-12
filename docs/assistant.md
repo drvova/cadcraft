@@ -15,7 +15,9 @@ them.
 - **Window ▸ Assistant**, Ctrl+7 (⌘7 on macOS), or the assistant key at the end of the title bar.
   The same three close it. The chats outlive the panel: closing it hides them, it does not end
   them.
-- The first time, the panel says no model is connected and offers the setup sheet.
+- The first time, the composer itself is the way in: its model slot reads "Set up a model" and
+  opens the setup sheet. So does Send: a message typed before setup is kept and sent once the
+  setup is saved.
 
 There is no `assistant` command today. The egui interface had one (`assistant {ask, attach,
 stop, clear}`), and it was removed with that interface on 2026-11-11. A script or an MCP client
@@ -36,7 +38,8 @@ The panel is laid out like an agent panel, not a chat. It is
   reads as a sentence, what ran and what changed, and opens to the code and the whole result. A
   failure is a calm block that says what happened and the way out. A long chat draws its newest
   rows and keeps following the end while you are there.
-- **The composer.** Enter sends; Shift+Enter is a new line. A draft that starts with `/`
+- **The composer.** It rests on one line and grows with the draft. Enter sends; Shift+Enter is
+  a new line. A draft that starts with `/`
   searches the commands, and Enter runs the lit one as the command palette would. The selection
   on the canvas rides along as a chip. A context meter says how much the next request carries.
   A message too long to send is refused, never cut.
@@ -65,9 +68,11 @@ Setup is a sheet over the transcript, in two steps:
 
 1. **Provider.** A list of presets, each marked "needs a key" or "no key", and "Other" for any
    OpenAI-compatible server. Choosing one fills in its address and model.
-2. **Connection.** The base URL, the API key where the provider needs one, and the model.
-   **Check connection** asks the server for its models and lists them to pick from, or says why
-   it could not. **Save** says why it waits when something is missing.
+2. **Connection.** One form: the base URL, the API key where the provider needs one (the key
+   that shows or hides it sits inside the field), the model, one status line, and three
+   actions: Cancel, Check connection and Save. **Check connection** asks the server for its
+   models and lists them to pick from, or says why it could not. **Save** says why it waits when
+   something is missing.
 
 The presets are a convenience, not a limit: type any OpenAI-compatible base URL. A local server
 usually wants no key, and it must accept requests from the page's origin (`OLLAMA_ORIGINS` for
@@ -240,5 +245,6 @@ a provider's output, the queue and the changes row.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | minor | First run and setup as they are at 43dd130: the composer's "Set up a model" slot is the way in and a message typed before setup is sent after Save; step two is one form with one status line and Cancel, Check connection, Save; the composer rests on one line |
 | 2026-11-11 | minor | Replies draw links (http and https only) and turn a Markdown table into readable rows; the turn's status and Stop stay in view while the setup sheet is open |
 | 2026-11-11 | major | Rewritten for the web interface after the egui interface was removed: how to open the panel, the panel, setup in two steps with a connection check, where the key is kept and what protects it, the bounds on a provider, what the WebAssembly build changes. Removed: the `assistant {…}` command and the `options` assistant keys (both were the egui interface's), the `--connect` configuration as the default, `crates/ui-egui/src/assistant.rs` |

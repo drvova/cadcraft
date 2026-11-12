@@ -1,12 +1,13 @@
 # Where CADCraft falls short of AutoCAD
 
-> **Last reviewed:** 2026-10-10 (engine rows) · 2026-11-11 (interface rows) · **Last updated:** 2026-11-11 · **Change:** major (the egui interface was removed; the interface is the web interface in `apps/ui`; UI/UX rows W1–W14 added for what it does not do yet, and the rows that named egui dialogs marked; then W3 narrowed: the pointer is constrained by the engine's snapped cursor) · **Target:** Autodesk AutoCAD 2027
+> **Last reviewed:** 2026-10-10 (engine rows) · 2026-11-12 (interface rows) · **Last updated:** 2026-11-12 · **Change:** minor (W1, W2, W5 and W11 narrowed: the first dialog, grips on the drawing and right-click menus landed; on 2026-11-11, major: the egui interface was removed, the interface is the web interface in `apps/ui`, rows W1–W14 added) · **Target:** Autodesk AutoCAD 2027
 
 **The interface changed on 2026-11-11.** The egui interface was removed. The interface is the
 SolidJS app in `apps/ui`, in a browser tab or in the desktop app's native webview, over the
 engine compiled to WebAssembly. Engine rows below stand. A row that says a dialog, palette or
 editor "landed" describes the removed interface: the engine command is still there and runs as
-its command-line prompts, and the dialog is a gap again (W1). The measured state of the
+its command-line prompts, and the dialog is a gap again (W1; Drafting Settings is the one dialog
+the new interface has). The measured state of the
 interface is in [ui-parity.md](ui-parity.md).
 
 Every known shortfall, one row each, ranked within each section by user impact. This is the work
@@ -26,7 +27,7 @@ do them first.
 | 4 | **[alpha blocker]** **No dynamic blocks or REFEDIT; xrefs can't be edited in place or clipped** (xrefs, #525, groups, #417, and the Block Editor for static blocks landed) | Most production drawings use them | 55–90 | [features](#features) |
 | 5 | **No autosave in the interface** (the engine has SAVETIME autosave, Drawing Recovery, AUDIT and RECOVER since #406, and they need a file system; the interface runs the engine as WebAssembly, in the browser and in the desktop window alike) | Unsaved work is lost when the tab, the browser or the window goes down | 3–5 | [features](#features) |
 | 6 | **No CI runs the Rust tests on pull requests** (`cargo fmt` on main is fixed) | open PRs land without a gate; regressions go unseen | 2–3 | [stability](#stability) |
-| 7 | **The interface has no dialogs, grips, dynamic input or context menus, and opens no DWG** (W1, W2, W4–W8, FF12). Added 2026-11-11 and not yet ranked against the rows above; the next review re-ranks | A drafter can draw and select with the pointer, with ortho, polar and tracking, but cannot grip-edit, plot from a dialog, or open a colleague's DWG in the app | not estimated | [UI/UX](#uiux) |
+| 7 | **The interface has one dialog (Drafting Settings) and no dynamic input, and opens no DWG** (W1, W4, W6–W8, FF12). Added 2026-11-11 and not yet ranked against the rows above; the next review re-ranks. Grips and right-click menus landed on 2026-11-12 (W2 and W5 are now leftovers) | A drafter can draw, select and grip-edit with the pointer, with ortho, polar and tracking, but cannot plot or set options from a dialog, or open a colleague's DWG in the app | not estimated | [UI/UX](#uiux) |
 
 ## Features
 
@@ -68,17 +69,17 @@ the Rust interface and has not been redone for this one.
 
 | # | Gap | User impact | Est. |
 |---|---|---|---|
-| W1 | **No dialogs.** Options, Plot and Page Setup, Layer Properties Manager, Hatch and Gradient, Dimension Style, Units, Drafting Settings, External References, the Block Editor's dialogs, the in-place MTEXT editor, QSELECT, QuickCalc and the Command Aliases dialog were the egui interface's. Their commands run as command-line prompts | High: the settings a drafter reaches by dialog are reachable only by typing | not estimated |
-| W2 | **No grips.** The engine has them (`grips.rs`) and JSON grip commands; the interface draws none and cannot drag one | High | not estimated |
+| W1 | **One dialog so far.** Drafting Settings landed (Snap and Grid, Polar Tracking, Object Snap; Tools ▸ Drafting Settings..., DSETTINGS/DS/SE, a right click on a drafting toggle), on the design system's new Dialog component. Still missing: Options, Plot and Page Setup, Layer Properties Manager, Hatch and Gradient, Dimension Style, Units, External References, the Block Editor's dialogs, the in-place MTEXT editor, QSELECT, QuickCalc and the Command Aliases dialog, all of which were the egui interface's. Their commands run as command-line prompts | High: most settings a drafter reaches by dialog are reachable only by typing | not estimated |
+| W2 | Grip leftovers. A selection shows its grips and they edit through the engine's grip command: press-drag-release or click-move-click, Space to cycle Stretch, Move, Rotate, Scale and Mirror, the options as keywords, Shift for several hot grips, a multifunctional grip's menu on rest or right click. Left: every grip is a square (kinds are not distinguished) and there are no grip colours; no grips for touch; dynamic-block grips are unit-tested only and were never seen in a browser; no Ctrl to cycle a grip's options; no grip dimensional input (W4); the mock engine has no grips | Medium | not estimated |
 | W3 | Cursor-constraint leftovers. Ortho (Shift flips it), polar tracking, grid snap and object snap tracking now constrain a pointer click, with a label and the rays drawn (facade `pointer`, over `Session::snap_cursor`); Extension, Parallel and Apparent Intersection are reached by the same call. Left: no Tab to cycle snap candidates, no Shift+right-click snap menu (W5), no F5 isoplane key and no isometric crosshair, polar relative to the last segment and PolarSnap (engine), and checks not yet made: Extension, Parallel and Apparent Intersection in a browser, the deferred tangent and ARC's Ctrl switch outside Rust tests, any of it at narrow widths or with touch | Low-medium | not estimated |
 | W4 | **No dynamic input.** F12 sets DYNMODE and nothing draws | Medium | not estimated |
-| W5 | **No context menus**: a right click on the drawing is Enter; nothing has a menu of its own (drawing, command line, tabs, Layers rows, Properties), and there is no Shift+right-click snap menu | Medium | not estimated |
+| W5 | Right-click menu leftovers. Menus landed on the drawing (at rest: repeat, recent commands, undo, pan and zoom, select, paste, options; with a selection: the modify and clipboard commands, draw order, deselect, properties; during a command: Enter, Cancel, the prompt's keywords, transparent Pan and Zoom, where a quick right click is still Enter and a held one opens the menu), on grips, layer rows and layout tabs, also by the menu key, Shift+F10 and a long press. Left: the Shift+right-click snap menu and snap overrides in the command menu, Recent Input, menus on the command line and the Properties palette, in-place rename of a layer or a layout tab (Rename... finishes at the command line) | Low-medium | not estimated |
 | W6 | **One drawing at a time**: no file tabs, no Start tab, no recent files. Open is the page's file picker and Save is a download of DXF; in the desktop window the same, through the webview (not verified beyond Windows). The desktop binary takes no file argument, so a file association cannot open a drawing | High | not estimated |
 | W7 | **No autosave or recovery in the interface** (row 5, F4) | High | 3–5 (F4's) |
 | W8 | **No DWG in the interface** (FF12): the WebAssembly build has no DWG reader or writer; opening one says to save as DXF | High | 6–10 (FF12's) |
 | W9 | The grid on the canvas is the interface's own decade grid: it does not follow the Grid toggle, GRIDUNIT, limits or the isometric grid; no crosshair that follows the isoplane | Low-medium | not estimated |
 | W10 | Selection leftovers: no cycling list for overlapping objects, no lasso, no two-click window (PICKDRAG), the selection-area and preview system variables are not read, Delete does not erase | Medium | not estimated |
-| W11 | Sidebar leftovers: the Layers palette cannot create, rename or delete a layer or set its colour, linetype, lineweight or plot flag (the LAYER command line does); Properties edits the common properties only, no per-object geometry | Medium | not estimated |
+| W11 | Sidebar leftovers: the Layers palette cannot create a layer or set its colour, linetype, lineweight or plot flag (the LAYER command line does); a row's menu makes it current, turns it off, freezes, locks, selects or isolates its objects, deletes it, and starts a rename that is finished at the command line. Properties edits the common properties only, no per-object geometry | Medium | not estimated |
 | W12 | No Tool Sets palette, Blocks palette, ViewCube, tiled model viewports, command-line AutoComplete (the command palette searches instead) or F2 text window | Medium | not estimated |
 | W13 | **English only.** The interface catalogs (15 languages besides English) were the egui interface's and were removed with it; `apps/ui` has no string catalog | High outside English | not estimated (L1, L2) |
 | W14 | Not verified: touch on a real device (implemented, unit-tested); any browser but Chromium; the desktop webview on macOS, Linux and FreeBSD (Windows only); a screen reader; plotting from the interface (P1) | Unknown | not estimated |
@@ -86,7 +87,8 @@ the Rust interface and has not been redone for this one.
 ### Interaction leftovers from before the interface change
 
 These rows were written against the egui interface. The engine half of each still stands; the
-interface half is now covered by W1–W5 (the snapped cursor itself is back, W3).
+interface half is now covered by W1–W5 (the snapped cursor is back, W3; grips, W2; right-click
+menus, W5).
 
 | # | Gap | User impact | Est. |
 |---|---|---|---|
@@ -200,6 +202,7 @@ and MCP all reach them, and DESCRIBE reads jewelry out of any drawing.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | minor | Read at 43dd130: the first dialog (Drafting Settings), grips on the drawing and right-click menus landed in the web interface. W1 narrowed to the dialogs still missing, W2 to grip leftovers (one grip shape, no touch, dynamic-block grips untried in a browser), W5 to menu leftovers (snap menu, command line and Properties menus), W11 for the layer row's menu; top-10 row 7 reworded |
 | 2026-11-11 | minor | The interface resolves the pointer through the engine's snapped cursor: W3 narrowed from "the pointer is not constrained" to its leftovers and to what has not been checked; top-10 row 7 no longer lists cursor constraints. Menus are grouped and show typed names; the assistant draws links and tables (A2 unchanged) |
 | 2026-11-11 | major | The egui interface was removed (d5cad47); the interface is the web interface in `apps/ui`, and the desktop app is that interface in a native webview. Read from the source at ec61741: new rows W1–W14 (no dialogs, grips, dynamic input, context menus, cursor constraints, file tabs, autosave, DWG or languages in the interface; what is not verified), top-10 row 7, P3 rewritten, P4–P6, L0; rows 5, F4, F9, F20, E5 and A2 updated; the two egui notes above the UI/UX table removed (their features went with egui). What the interface gained is in [ui-parity.md](ui-parity.md): drawing and selecting with the pointer, the command palette, keyboard patterns, two themes, narrow-window behaviour, the assistant's setup. No hour estimates were added |
 | 2026-10-26 | minor | The assistant pane as an agent panel: attachments (paperclip, paste, drop) travel to the model as vision parts **and** as paths the code can measure — `imagetrace` turns an attached photograph into editable polylines at a requested size (proven live: a 320×200 silhouette became one 120-wide closed outline with its hole); messages typed while a turn runs queue (Enter) or steer it at the next tool call (⌘/Ctrl+Enter); every request records the drawing's undo depth and a hover control restores it (`undoto`, conversation kept); a context meter; the system prompt rewritten for the one-tool surface (it still named the dead catalog) and a test forbids naming a tool that no longer exists. `crates/ai/src/agent.rs` (`Steer`), `crates/ai/src/chat.rs` (vision parts, `images`), `crates/engine/src/cmd/edit.rs` (`undoto`), `crates/ui-egui/src/assistant.rs` |

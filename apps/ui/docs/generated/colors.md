@@ -390,6 +390,21 @@ The checkbox's empty box is edged in `--icon`, not in a hairline stroke: the edg
 
 The accent chip on the command line itself, read from the rendered chip (11px, `--cmd-bg`): light 3.37 before, 4.93 after; dark 5.01, unchanged.
 
+`Button variant="quiet"`, added on 2026-11-12, by the same method. "Rendered" is the setup sheet's Change in the running app, on `--panel`.
+
+| Component | Pair | Theme | Rendered | Lowest, on | Needs |
+| --- | --- | --- | --- | --- | --- |
+| Button quiet | rest label | dark | 9.17 | 8.31, `--surface-elevated` | 4.5 |
+| Button quiet | hover label | dark | 13.35 | 11.32, `--surface-elevated` | 4.5 |
+| Button quiet | pressed label | dark | 11.12 | 9.39, `--surface-elevated` | 4.5 |
+| Button quiet | disabled label | dark | 3.08 | 3.04, `--surface-elevated` | exempt |
+| Button quiet | focus ring vs surface | dark | 6.43 | 5.62, `--surface-elevated` | 3 |
+| Button quiet | rest label | light | 7.82 | 7.50, `--chrome-dark` | 4.5 |
+| Button quiet | hover label | light | 15.24 | 14.11, `--chrome-dark` | 4.5 |
+| Button quiet | pressed label | light | 13.37 | 12.40, `--chrome-dark` | 4.5 |
+| Button quiet | disabled label | light | 2.30 | 2.28, `--chrome-dark` | exempt |
+| Button quiet | focus ring vs surface | light | 6.60 | 6.10, `--chrome-dark` | 3 |
+
 ### The app's pairs
 
 The inks of `src/styles.css`, `src/interaction.css` and `src/palette.css`, measured in the running app on 2026-11-11 from the browser's computed colours (WCAG 2.x), each over the surface it is drawn on: the sidebar with one layer frozen, one locked and one off; everything selected, so the properties show fields and mixed values; a refused value; a running command with keyword chips; an unknown command; the palette with a query. A hovered or current-row pair is the same computed ink over that row's fill. Text needs 4.5:1; a glyph, a state mark, an edge and a focus ring need 3:1. Before is the app as it stood that morning (every ring `--accent`); after is the app with its rings on `--focus-ring`, its accent inks on `--text-accent`, the drawing's ring on `--canvas-focus-ring`, the palette's path and tag on `--text-faint`, and the three layer-state inks stepped. The layer keys' and the status toggles' inks are `Toggle`'s since that evening (`src/ui/ui.css`, the tones); the computed colours were compared key by key, state by state, and are the same.

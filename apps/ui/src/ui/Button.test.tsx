@@ -29,6 +29,12 @@ describe("Button", () => {
     const ghost = buttonIn(mount(() => <Button variant="ghost" size="sm">Cancel</Button>));
     expect(ghost.classList.contains("ui-button--ghost")).toBe(true);
     expect(ghost.classList.contains("ui-button--sm")).toBe(true);
+    // The quiet one is a variant like the rest: one class, and a button in every other respect.
+    const quiet = buttonIn(mount(() => <Button variant="quiet" size="sm" title="Choose another provider">Change</Button>));
+    expect(quiet.className).toBe("ui-button ui-button--quiet ui-button--sm");
+    expect(quiet.getAttribute("type")).toBe("button");
+    expect(quiet.textContent).toBe("Change");
+    expect(descriptionOf(quiet)).toBe("Choose another provider");
     const danger = buttonIn(mount(() => <Button variant="danger">Delete</Button>));
     expect(danger.classList.contains("ui-button--danger")).toBe(true);
   });

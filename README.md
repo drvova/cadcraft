@@ -48,7 +48,7 @@
 <br>
 
 <p align="center">
-  <img src="docs/images/ui-apartment.png" alt="CADCraft with an apartment floor plan open: hatched grey walls, blue windows, green door swings, furniture outlines, yellow room names with areas, a yellow room schedule table, a multileader note and cyan dimensions with architectural ticks; Tool Sets on the left, Layers and Properties on the right, the command line at the bottom" width="100%">
+  <img src="docs/images/ui-apartment.png" alt="CADCraft with an apartment floor plan open: grey walls, blue windows, green door swings, furniture outlines, yellow room names with areas, a yellow room schedule table, a multileader note and cyan dimensions; one door swing is selected and shows its grips; the menus and the drawing toolbar across the top, Layers and Properties in the sidebar on the left with the selected arc's properties, the Model and layout tabs over the drawing, the command line below it and the status bar's drafting toggles at the bottom" width="100%">
   <br><sub><b>Apartment plan</b> (<a href="examples/apartment.dxf">examples/apartment.dxf</a>): walls with pick-point hatching, TrueType MTEXT room labels, a TABLE, a multileader and architectural dimensions — built entirely from CADCraft commands.</sub>
 </p>
 
@@ -72,14 +72,14 @@
 
 ## Screenshots
 
-These three pictures were taken in the earlier interface, which has since been replaced by the
-one described below: the drawings are the same, the window around them is not (the sidebar is
-on the left now, and there is no Tool Sets palette or ViewCube). New captures are due.
+These pictures show the interface as it is now, taken in a browser at 1440 by 900: an example
+floor plan with a door selected, a paper-space layout of it, and the sample part while a line
+is being drawn.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/ui-layout.png" alt="A paper-space layout in CADCraft: a white sheet with a dashed printable area and a viewport showing the apartment plan at scale, the status bar showing the A1 Plan layout tab and a PAPER toggle"></td>
-    <td width="50%"><img src="docs/images/ui-bracket.png" alt="CADCraft with a mounting bracket part drawing: front view with bolt holes, centre lines and dimensions, a hatched section view, notes and a title block"></td>
+    <td width="50%"><img src="docs/images/ui-layout.png" alt="A paper-space layout in CADCraft: the Plan layout tab selected and a viewport showing the whole apartment plan at scale inside its border, the command history under the drawing"></td>
+    <td width="50%"><img src="docs/images/ui-bracket.png" alt="CADCraft with a mounting bracket part drawing (front view with bolt holes, centre lines and dimensions, a hatched section view, notes and a title block) while a line is being drawn: the rubber band runs from one bolt hole to another, an object-snap marker labelled Intersection sits at the pointer, and the command line asks for the next point with an Undo keyword chip above it"></td>
   </tr>
   <tr>
     <td><sub><b>Layouts</b>: paper space with viewports, page setups and PLOT to PDF. Double-click a viewport to work in model space through it.</sub></td>
@@ -115,8 +115,8 @@ the CLI and MCP alike.
 
 | Area | Status |
 |---|---|
-| The app's window | Laid out as an editor: menus and a command centre in the title bar, a drawing toolbar (draw, modify, dimension, zoom), Layers and Properties in a sidebar, layout tabs over the drawing, the command line as the bottom panel, an assistant panel, a status bar of drafting toggles, and a command palette (`Ctrl+Shift+P`). Drawing with the pointer: a click gives a running command its point, with a rubber band and an object-snap marker, held to ortho, polar tracking, grid snap and object snap tracking when they are on; hover highlight, window and crossing selection, right click as Enter, middle-button pan, wheel zoom, touch pan and pinch. Dark and light themes. Keyboard access through the whole window. [Details](apps/ui/README.md) |
-| Not in the app's window yet | Dialogs (Options, Plot, Layer Properties Manager, Hatch, the block and text editors), grips, dynamic input, right-click menus (a right click is Enter), DWG, autosave, file tabs, languages other than English. [The list](docs/gaps.md#uiux) |
+| The app's window | Laid out as an editor: menus and a command centre in the title bar, a drawing toolbar (draw, modify, dimension, zoom), Layers and Properties in a sidebar, layout tabs over the drawing, the command line as the bottom panel, an assistant panel, a status bar of drafting toggles, and a command palette (`Ctrl+Shift+P`). Drawing with the pointer: a click gives a running command its point, with a rubber band and an object-snap marker, held to ortho, polar tracking, grid snap and object snap tracking when they are on; grips on a selection (stretch, move, rotate, scale, mirror); right-click menus on the drawing, layer rows and layout tabs; a Drafting Settings dialog; hover highlight, window and crossing selection, right click as Enter, middle-button pan, wheel zoom, touch pan and pinch. Dark and light themes. Keyboard access through the whole window. [Details](apps/ui/README.md) |
+| Not in the app's window yet | Every dialog but Drafting Settings (Options, Plot, Layer Properties Manager, Hatch, the block and text editors), dynamic input, the snap menu, grips for touch, DWG, autosave, file tabs, languages other than English. [The list](docs/gaps.md#uiux) |
 | Command line | Prompts with keywords, history, aliases, `@dx,dy`, `@d<a`, `#x,y`, direct distance entry, Enter/space/right-click to repeat, transparent commands, scripts through the CLI |
 | Draw | LINE, PLINE (arcs, widths), CIRCLE (center/radius/diameter, 2P, 3P), ARC, RECTANG (fillet/chamfer), POLYGON, ELLIPSE (+arcs), SPLINE, POINT, XLINE, RAY, DONUT, TEXT, MTEXT |
 | Modify | ERASE, MOVE, COPY, ROTATE, SCALE, MIRROR, STRETCH, OFFSET, TRIM, EXTEND, FILLET, CHAMFER, BREAK, JOIN, EXPLODE, rectangular/polar ARRAY, draw order, OVERKILL |

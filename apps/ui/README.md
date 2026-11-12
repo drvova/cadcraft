@@ -71,7 +71,9 @@ What the facade answers (`crates/wasm/src/lib.rs`): `execute`, `cmdline`, `start
 `display`, `set_view`, `view`, `open_bytes`, `load_sample`, `save_bytes`, `digest`, and the
 pointer's calls: `set_viewport` (the canvas's size), `set_cursor`, `preview` (the running
 command's rubber band), `pick` (what is under the pointer and what a hover lights, leaving the
-selection alone), `snap` (the object snap at a point), `pointer` (the point a click will take
+selection alone), `snap` (the object snap at a point), the grip calls (`grips` lists a selection's grips, `gripAt`
+hit-tests them, `gripStart` starts an edit as the running command, `gripOptions` and `gripOption`
+give and run a multifunctional grip's options), `pointer` (the point a click will take
 under object snap, grid snap, polar and object snap tracking and ortho, what constrained it, a
 label, the rays to draw and the rubber band there, in one call a frame) and `click` (a point
 given to the running command, resolved as `pointer` reported). Each refuses a number that is
@@ -92,6 +94,8 @@ The window is laid out as an editor:
 | Assistant | The model's panel, on the right |
 | Status bar | The engine mode, the current layer, counts, the selection, the drafting toggles and the coordinates |
 | Command palette | Every command, searched by name, menu path or alias, the recently used first |
+| Right-click menus | On the drawing, a grip, a layer row and a layout tab (`context.ts`, `components/ContextMenu.tsx`) |
+| Drafting Settings | The one dialog: Snap and Grid, Polar Tracking, Object Snap (`components/DraftingSettings.tsx`, `drafting.ts`) |
 
 At narrow widths: at 900px and under the menus fold into one Main menu key, and the sidebar
 steps aside while the assistant is open; at 700px and under a submenu opens in place under its
@@ -108,19 +112,29 @@ clips a toggle.
 |---|---|---|
 | Left click | Picks the object under the pointer (adds; Shift removes, as `PICKADD` says) | Gives the command the point the engine resolved: the object snap the marker shows, else the grid point, the polar or tracking path, or the ortho axis; at "Select objects" it picks |
 | Left drag | A selection rectangle: to the right a window, to the left a crossing | The same rectangle, given to a command that asks for objects |
-| Pointer move | Lights what a click would select (not an object the selection-preview filter leaves out, such as one on a locked layer) | Draws the command's rubber band, the object-snap marker with its name, the ortho or polar ray with a label ("Polar: 4.2500 < 45°"), the grid dot, and the acquired tracking points with their paths |
+| Pointer move | Lights what a click would select, as a halo under it, so the object keeps its own colour (not an object the selection-preview filter leaves out, such as one on a locked layer) | Draws the command's rubber band, the object-snap marker with its name, the ortho or polar ray with a label ("Polar: 4.2500 < 45°"), the grid dot, and the acquired tracking points with their paths |
 | Shift, Ctrl | Shift removes from the selection | Shift flips ortho while held; Ctrl is passed to the engine (ARC's direction) |
-| Right click | Enter (repeats the last command) | Enter |
+| Left press on a grip | Starts the grip's edit: drag and release, or click, move and click. Shift collects the grip for the next edit | (the edit is the running command: Space or Enter cycles Stretch, Move, Rotate, Scale, Mirror; its options are keyword chips; Escape cancels) |
+| Pointer resting on a grip | Warms the grip; a grip with options shows their menu | |
+| Right click | Opens the drawing's menu: with nothing selected, Repeat, Recent Commands, Undo, Redo, Pan, Zoom, Select All, Quick Select, Paste, Options; with a selection, Erase, Move, Copy, Rotate, Scale, Mirror, the clipboard, Draw Order, Deselect All, Properties; on a grip, that grip's options | A quick click (under 250 ms, not moved) is Enter; a held one opens the command's menu: Enter, Cancel, the prompt's keywords, transparent Pan and Zoom |
 | Middle drag | Pan | Pan |
 | Two middle clicks | Zoom to the extents | Zoom to the extents |
 | Wheel | Zoom about the pointer | Zoom about the pointer |
-| One finger | Pan | Pan |
+| One finger | Pan; held still for half a second, it opens the drawing's menu | Pan; held still, the command's menu |
 | Two fingers | Pan and pinch about their centre | Pan and pinch |
 
 The drafting toggles act on the pointer at once, in the middle of a command too: F3 object snap,
 F8 ortho, F9 grid snap, F10 polar tracking, F11 object snap tracking.
 
-Not there yet: grips, a right-click menu, dynamic input, Tab to cycle snap candidates. The
+A layer row and a layout tab have right-click menus too: a layer's makes it current, turns it
+off, freezes, locks, selects or isolates its objects, renames (finished at the command line) and
+deletes it; a tab's makes a new layout, renames, deletes and opens Page Setup. A right click on a
+status-bar drafting toggle opens Drafting Settings on that toggle's page.
+
+Not there yet: dynamic input, Tab to cycle snap candidates, the Shift+right-click snap menu,
+menus on the command line and Properties. Grips have limits their author reported: every grip is
+drawn as a square whatever its kind, grips do not work for touch, dynamic-block grips are
+unit-tested only and were never seen in a browser, and the mock engine has none. The
 author of the constraint work tried ortho, polar, grid snap and tracking in Chromium on the wasm
 engine; the deferred tangent and ARC's Ctrl switch are covered by Rust tests only, and nothing
 was checked at narrow widths. Touch is implemented and covered by unit tests of the view math,
@@ -139,6 +153,8 @@ On macOS the chords use Cmd in place of Ctrl.
 | Ctrl+7 | Fold or show the assistant | Anywhere |
 | Ctrl+9 | Fold or show the command line | Anywhere (as Ctrl+1) |
 | F6, Shift+F6 | Move to the next or previous part: sidebar, drawing, command line, assistant | Anywhere |
+| Menu key, Shift+F10 | Open the right-click menu of what has the focus (on a status toggle: Drafting Settings, as its right click does) | The drawing, a layer row, a layout tab, a status toggle |
+| `DSETTINGS`, `DS` or `SE`, then Enter | Open Drafting Settings | The command line, with no command running |
 | F3 | Object snap on or off | Anywhere, and it acts in the middle of a command |
 | F7 | Grid (the setting only: the canvas draws its own grid) | Anywhere |
 | Shift (held) | Flip ortho | The drawing, while a command wants a point |
@@ -148,8 +164,8 @@ On macOS the chords use Cmd in place of Ctrl.
 | F11 | Object snap tracking | Anywhere, mid-command too |
 | F12 | Dynamic input (the setting only: the interface draws no dynamic input) | Anywhere |
 | Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Z, Ctrl+Shift+Z and every other chord a command carries | Run that command, as its menu item does | Anywhere but under an open menu, palette or sheet; a text field keeps its own undo, redo, select all and clipboard |
-| Escape | Cancel the running command; with none running, clear the selection | The drawing, or the command line when its field is empty |
-| Enter, Space | The command line's empty Enter: repeat the last command, or accept the running command's default | The drawing |
+| Escape | Cancel the running command (a grip edit included); with none running, clear the selection | The drawing, or the command line when its field is empty |
+| Enter, Space | The command line's empty Enter: repeat the last command, or accept the running command's default; during a grip edit, the next mode | The drawing |
 | Any character | Starts typing at the command line | The drawing, or with the focus on nothing editable |
 | Enter | Send the line | Command line |
 | Escape | Clear what is typed | Command line |
@@ -183,14 +199,17 @@ Window ▸ Assistant, Ctrl+7 or the title bar's key opens the panel. The model g
 `run`, which executes AutoLISP in the open drawing through the facade
 ([docs/assistant.md](../../docs/assistant.md)).
 
-Setting a model up is a sheet with two decisions:
+The composer is the way in. Before a model is set up, its model slot reads "Set up a model"
+and opens the setup sheet, and so does Send: the draft is kept and sent once the setup is
+saved. The sheet has two steps:
 
 1. **Provider.** Pick one of the presets (OpenAI, OpenRouter, Anthropic's OpenAI-compatible
    endpoint, DeepSeek, Groq, Mistral, xAI, Together, Ollama, LM Studio) or "Other". Picking one
    fills in its address and model.
-2. **Connection.** The base URL, the API key where the provider needs one, and the model.
-   **Check connection** asks the server for its models, lists them as chips to pick from, or says
-   why it could not. Save says why it waits when something is missing.
+2. **Connection.** One form: the base URL, the API key where the provider needs one (its
+   show/hide key sits inside the field), the model, one status line, and Cancel, Check
+   connection and Save. **Check connection** asks the server for its models, lists them as chips
+   to pick from, or says why it could not. Save says why it waits when something is missing.
 
 The setup is kept in this browser's `localStorage` (`cadcraft.assistant.provider`), key
 included, not encrypted. The key is sent only to the base URL, is never shown in an error
@@ -219,6 +238,8 @@ src/mock.ts            the canned facade
 src/commands.ts        what an invoked id means, the menu tree, the ui.* items, chords
 src/menu.ts            a menu's pure rules; src/roving.ts the arrow-key walks
 src/palette.ts         the command palette's items and ranking
+src/context.ts         what each right-click menu holds and what its rows do (pure)
+src/drafting.ts        Drafting Settings: reading the engine, checking the form, the calls it sends
 src/view.ts            world↔screen mapping, pan, zoom about the pointer, pinch (pure)
 src/display.ts         the display-list parser (the trust boundary for engine bytes)
 src/display-cache.ts   when a held display list still answers for the view
@@ -232,7 +253,7 @@ src/assistant-session.ts  one chat: its conversation, queue, changes and stored 
 src/icons.ts           every icon, drawn in code (24×24 paths, one 1.25px stroke; no image assets)
 src/components/        TopBar, MenuBar, Menu, ToolStrip, StatusBar (with the editor tabs),
                        CanvasView, LayersPanel, PropertiesPanel, CommandLine, CommandPalette,
-                       AssistantPane
+                       ContextMenu, DraftingSettings, AssistantPane
 src/ui/                the design system's components, their tests and their one sheet, ui.css
 src/tokens.css         the design tokens
 src/styles.css, chrome.css, interaction.css, canvas.css, palette.css, assistant.css
@@ -244,7 +265,7 @@ scripts/               check-system, check-spec, contrast-report, run-tests, ver
 
 ## The components
 
-`src/ui` holds the design system's thirteen components. New interface uses one of them and the
+`src/ui` holds the design system's fourteen components. New interface uses one of them and the
 tokens; each has a spec in `docs/system/components` and a test beside it.
 
 | Component | Its job |
@@ -257,7 +278,8 @@ tokens; each has a spec in `docs/system/components` and a test beside it.
 | TextArea | Takes several lines and grows to hold them, up to a limit |
 | Select | Picks one value from a short, known list |
 | Row | The full-width clickable band of a list: a menu item, a property row, a layer |
-| Tab | Brings one view of a strip to the front: a layout, a chat |
+| Tab | Brings one view of a strip to the front: a layout, a chat; with TabPanels, the pages of a dialog |
+| Dialog | A native modal with a title bar, a scrolling body and actions |
 | Chip | Shows one compact fact, a keyword or a suggestion |
 | Kbd | Shows the key that runs the action beside it |
 | SectionLabel | Names a panel's section as a real heading |
@@ -282,11 +304,11 @@ tokens".
 
 ## What this interface does not do yet
 
-- Dialogs: none. A command that had a dialog in the removed egui interface (Options, Plot, Layer
-  Properties Manager, Hatch and Gradient, the block and text editors) runs here as its
-  command-line prompt sequence only.
-- Grips, right-click menus (a right click is Enter), dynamic input, Tab to cycle snap
-  candidates.
+- Dialogs, but for Drafting Settings. A command that had a dialog in the removed egui interface
+  (Options, Plot, Layer Properties Manager, Hatch and Gradient, the block and text editors) runs
+  here as its command-line prompt sequence only.
+- Dynamic input, Tab to cycle snap candidates, the Shift+right-click snap menu, menus on the
+  command line and Properties, grips for touch, distinct grip shapes.
 - DWG. The wasm build has no DWG reader: opening one says to save as DXF. Save writes DXF.
 - Files are picked and downloaded through the page; there is no autosave and no list of recent
   files.

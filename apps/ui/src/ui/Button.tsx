@@ -16,8 +16,9 @@
 import type { JSX } from "solid-js";
 import { ariaKeyShortcuts, describeByHint, installHints, splitHint } from "./Tooltip";
 
-/** The purpose of the action; the token layer picks the look (never a style prop). */
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+/** The purpose of the action; the token layer picks the look (never a style prop). `quiet` is an
+ *  action that must not compete with what it stands beside: a title's "Change", a line's "Undo". */
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "quiet" | "danger";
 
 /** `md` is the 28px control; `sm` the 24px one that sits beside a field. */
 export type ButtonSize = "sm" | "md";

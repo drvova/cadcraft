@@ -101,6 +101,9 @@ describe("the layer's contrast, from the tokens", () => {
     ["the danger button's label, hovered", "on-error", ["error-hover"]],
     ["the danger button's label, pressed", "on-error", ["error-pressed"]],
     ["a row's label on the hover fill", "text-dim", ["hover"]],
+    ["the quiet button's label at rest, on the surface", "text-dim", []],
+    ["the quiet button's label under the pointer", "text", ["hover"]],
+    ["the quiet button's label while held", "text", ["fill-active"]],
     ["a key cap inside the selected row", "text-faint", ["fill-active"]],
     ["a select's value and a text area's text on the field fill", "text", ["control"]],
     ["a mixed select's placeholder and a text area's placeholder on the field fill", "text-faint", ["control"]],
@@ -239,7 +242,9 @@ describe("the app's own sheets speak the layer's colour vocabulary", () => {
     // another worker's: a key pressed while the pointer works in the drawing framed it). It is
     // drawn where the stage is marked as focused by the keyboard; the ink is the same.
     expect(rule(styles, ".canvas-stage[data-focus-ring]:focus")).toContain("solid var(--canvas-focus-ring)");
-    expect(rule(styles, ".cmd-input:focus")).toContain("border-color: var(--focus-ring)");
+    // The command line's field is the layer's bare Field; its strip shows the focus, edge and ring.
+    expect(rule(styles, ".cmd-field.is-focused::before")).toContain("border-color: var(--focus-ring)");
+    expect(rule(styles, ".cmd-field.is-focused")).toContain("outline: var(--focus-outline-w) solid var(--focus-ring)");
     // The properties palette's own field, for as long as it draws one (it is moving onto Field and Select).
     const propFocus = [...(sheets[1]?.[1] ?? "").matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => (m[1] ?? "").includes(".prop-input:focus-visible"));
     for (const m of propFocus) expect(m[2]).toContain("border-color: var(--focus-ring)");
@@ -319,7 +324,87 @@ describe("the layer's recipe, from the stylesheet", () => {
     expect(bare).toContain("background: transparent");
     expect(bare).toContain("font-size: inherit");
     expect(bare).toContain("outline-style: none");
-    expect([...uiCss.matchAll(/outline-style:\s*none/g)].length).toBe(1);
+    // Two controls draw no ring, and both are `bare`: the surface around each shows the focus.
+    expect([...uiCss.matchAll(/outline-style:\s*none/g)].length).toBe(2);
+    const bareField = rule(uiCss, ".ui-field--bare");
+    for (const line of ["padding: 0", "border: none", "font-family: inherit", "font-size: inherit"]) expect(bareField).toContain(line);
+    // It keeps the control's height and the layer's line: neither is restated.
+    expect(bareField).not.toContain("height");
+    // Focus and a refused value fill and ring a field; a bare one stays as it is in both. Those
+    // selectors carry no type size, which would outweigh the 16px a finger needs.
+    const bareStates = rule(uiCss, '.ui-field--bare, .ui-field--bare:focus, .ui-field--bare[aria-invalid="true"]');
+    expect(bareStates).toContain("background: transparent");
+    expect(bareStates).toContain("outline-style: none");
+    expect(bareStates).not.toContain("font-size");
+    const touch = uiCss.slice(uiCss.indexOf("@media (pointer: coarse)"));
+    expect(rule(touch, ".ui-field, .ui-textarea, .ui-select-control")).toContain("font-size: max(16px, 1em)");
+    expect(uiCss.indexOf("@media (pointer: coarse)")).toBeGreaterThan(uiCss.indexOf(".ui-field--bare {"));
+    // It comes after the states it must outlast (focus, a refused value, disabled).
+    expect(uiCss.indexOf(".ui-field--bare,")).toBeGreaterThan(uiCss.indexOf(".ui-field--inline:disabled"));
+  });
+
+  // An adornment stands inside the field's end over padding the input grows by its width, so the
+  // input is still the whole box: one stroke, one ring and one error edge around both.
+  test("an adorned field is one box: the slots stand inside the input's ends, and the input makes room for them", () => {
+    const box = rule(uiCss, ".ui-field-box");
+    expect(box).toContain("position: relative");
+    expect(box).toContain("--ui-field-slot-inset: calc((var(--control-h-input) - var(--control-h-chip)) / 2)");
+    const slot = rule(uiCss, ".ui-field-slot");
+    expect(slot).toContain("position: absolute");
+    expect(slot).toContain("min-width: var(--control-h-chip)");
+    // A glyph is not a control: the press lands on the input. A control in the slot takes it.
+    expect(slot).toContain("pointer-events: none");
+    expect(rule(uiCss, ".ui-field-slot :is(button, a, input, select)")).toContain("pointer-events: auto");
+    expect(rule(uiCss, ".ui-field-slot--start")).toContain("inset-inline-start: var(--ui-field-slot-inset)");
+    expect(rule(uiCss, ".ui-field-slot--end")).toContain("inset-inline-end: var(--ui-field-slot-inset)");
+    expect(rule(uiCss, ".ui-field-box--start > .ui-field")).toContain(
+      "padding-inline-start: calc(var(--ui-field-slot-inset) + var(--ui-field-start, var(--control-h-chip)) + var(--ui-field-slot-gap))",
+    );
+    expect(rule(uiCss, ".ui-field-box--end > .ui-field")).toContain(
+      "padding-inline-end: calc(var(--ui-field-slot-inset) + var(--ui-field-end, var(--control-h-chip)) + var(--ui-field-slot-gap))",
+    );
+    // No rule draws a stroke, a fill or a ring on the box or a slot: those are the input's.
+    for (const m of uiCss.matchAll(/([^{}]*\.ui-field-(?:box|slot)[^{}]*)\{([^{}]*)\}/g)) {
+      const head = (m[1] ?? "").trim();
+      if (head.includes("> .ui-field")) continue;
+      expect(`${head}: ${/(?:^|[\s;])(?:border|background|outline)[\w-]*\s*:/.test(m[2] ?? "")}`).toBe(`${head}: false`);
+    }
+    // In a bare field the surface owns the geometry: the adornment's own width, on the edge.
+    expect(rule(uiCss, ".ui-field-box--sm, .ui-field-box--bare")).toContain("--ui-field-slot-inset: 0px");
+    expect(rule(uiCss, ".ui-field-box--bare")).toContain("--ui-field-slot-gap: 0px");
+    expect(rule(uiCss, ".ui-field-box--bare > .ui-field-slot")).toContain("min-width: 0");
+    // Under a finger the small field is the control's height, and its cell stands off the edge again.
+    const coarse = uiCss.slice(uiCss.indexOf("@media (pointer: coarse)"));
+    expect(rule(coarse, ".ui-field-box--sm")).toContain("--ui-field-slot-inset: calc((var(--control-h-input) - var(--control-h-chip)) / 2)");
+  });
+
+  test("the quiet button is the secondary ink on nothing, and wakes to the full ink on ghost's ladder", () => {
+    const quiet = rule(uiCss, ".ui-button--quiet");
+    expect(quiet).toContain("background: transparent");
+    expect(quiet).toContain("color: var(--text-dim)");
+    const hover = rule(uiCss, '.ui-button--quiet:hover:not([aria-disabled="true"])');
+    expect(hover).toContain("background: var(--hover)");
+    expect(hover).toContain("color: var(--text)");
+    const pressed = rule(uiCss, '.ui-button--quiet:active:not([aria-disabled="true"])');
+    expect(pressed).toContain("background: var(--fill-active)");
+    expect(pressed).toContain("color: var(--text)");
+    const off = rule(uiCss, '.ui-button--quiet[aria-disabled="true"]');
+    expect(off).toContain("color: var(--text-disabled)");
+    expect(off).not.toContain("background");
+  });
+
+  // The setup sheet dimmed a ghost Button from its own stylesheet until the quiet variant: an ink
+  // set from outside reaches one state and misses the hover, the press and the disabled ink.
+  test("no surface's stylesheet sets an ink or a fill on a Button", () => {
+    const dir = join(import.meta.dir, "..");
+    for (const file of readdirSync(dir).filter((name) => name.endsWith(".css"))) {
+      const css = strip(readFileSync(join(dir, file), "utf8"));
+      for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const head = (m[1] ?? "").trim();
+        if (!head.includes(".ui-button")) continue;
+        expect(`${file} ${head}: ${/(?:^|[\s;])(?:color|background(?:-color)?)\s*:/.test(m[2] ?? "")}`).toBe(`${file} ${head}: false`);
+      }
+    }
   });
 
   test("an option paints no hover of its own, and is lit and blocked by its ARIA state", () => {
@@ -413,13 +498,16 @@ describe("the layer's recipe, from the stylesheet", () => {
   test("a field's resting edge is an ink of its own: the hairline stroke, and the default stroke in the light theme", () => {
     expect(rule(uiCss, ".ui-field")).toContain("--ui-field-edge: var(--border-soft)");
     expect(rule(uiCss, ".ui-field")).toContain("border: var(--hairline) solid var(--ui-field-edge)");
-    const light = rule(uiCss, ':root[data-theme="light"] .ui-field, :root[data-theme="light"] .ui-select');
+    const light = rule(uiCss, ':root[data-theme="light"] .ui-field, :root[data-theme="light"] .ui-select, :root[data-theme="light"] .ui-textarea');
     expect(light).toContain("--ui-field-edge: var(--border)");
     expect(light).not.toContain("border-color");
     expect(rule(uiCss, ".ui-field--inline:hover")).toContain("border-color: var(--ui-field-edge)");
     // The select is the same box and reads the same ink, with the dark stroke where none is set.
     expect(rule(uiCss, ".ui-select")).toContain("border: var(--hairline) solid var(--ui-field-edge, var(--border-soft))");
     expect(rule(uiCss, ".ui-select--inline:hover")).toContain("border-color: var(--ui-field-edge, var(--border-soft))");
+    // So is the text area: its field variant drew the hairline stroke in both themes until 2026-11-12.
+    expect(rule(uiCss, ".ui-textarea")).toContain("border: var(--hairline) solid var(--ui-field-edge, var(--border-soft))");
+    expect(uiCss).not.toMatch(/border:\s*var\(--hairline\) solid var\(--border-soft\);[^}]*resize/);
   });
 
   test("the small field is the small select's box, a value on the far side lines its figures up, and a mixed one reads quieter", () => {

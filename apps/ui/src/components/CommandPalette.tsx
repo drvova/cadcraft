@@ -24,6 +24,7 @@ import { createEffect, createMemo, createSignal, For, on, Show, type Accessor, t
 import { isMacPlatform, shortcutLabel } from "../commands";
 import { ToolIcon } from "../icons";
 import { highlight, PALETTE_LIMIT, rankCommands, recentItems, rowName, stepActive, type PaletteItem, type PaletteMatch } from "../palette";
+import { Field } from "../ui/Field";
 import { Kbd } from "../ui/Kbd";
 import { Row } from "../ui/Row";
 import "../palette.css";
@@ -194,33 +195,38 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
     >
       <div class="palette-box">
         <div class="palette-field">
-          <span class="palette-field-icon">
-            <ToolIcon id="search" />
-          </span>
-          <input
-            class="palette-input"
-            ref={input}
-            type="text"
+          {/* The system's bare field: the box around it is the palette's, and the palette shows
+              no ring on a field the focus never leaves. The lens is its leading adornment. */}
+          <Field
+            variant="bare"
+            ref={(el) => {
+              input = el;
+            }}
             role="combobox"
-            aria-expanded={matches().length > 0}
-            aria-controls="palette-list"
-            aria-activedescendant={current() === undefined ? undefined : optionId(active())}
-            aria-autocomplete="list"
-            aria-label="Search commands"
-            aria-describedby="palette-status"
+            expanded={matches().length > 0}
+            controls="palette-list"
+            activeDescendant={current() === undefined ? undefined : optionId(active())}
+            autocompleteKind="list"
+            ariaLabel="Search commands"
+            describedBy="palette-status"
             placeholder="Search commands by name"
             autocomplete="off"
             autocapitalize="off"
             spellcheck={false}
             value={query()}
-            onInput={(e) => {
-              setQuery(e.currentTarget.value);
+            onInput={(value) => {
+              setQuery(value);
               setShown(PALETTE_LIMIT);
               light(0);
               // The best match is the first row: the list starts again from its top.
               if (list !== undefined) list.scrollTop = 0;
             }}
             onKeyDown={onKeyDown}
+            start={
+              <span class="palette-field-icon">
+                <ToolIcon id="search" />
+              </span>
+            }
           />
         </div>
         <div

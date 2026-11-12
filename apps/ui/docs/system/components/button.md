@@ -14,7 +14,7 @@ Not applicable: hand-rolled — the recipe is the app's own `src/ui/ui.css`, mea
 
 Real uses, 14 call sites (`rg -c "<Button" src/components` → `src/components/AssistantPane.tsx:9`, `src/components/DraftingSettings.tsx:4`, `src/components/TopBar.tsx:1`):
 - `src/components/DraftingSettings.tsx:337` — the Drafting Settings dialog's footer: Cancel (the default) and OK (`variant="primary" type="submit"`, so Enter in a field presses it); and Select all and Clear all over the object snap boxes (`variant="ghost" size="sm"`, `src/components/DraftingSettings.tsx:302`).
-- `src/components/AssistantPane.tsx` — the assistant's call sites: the empty state's Set up a model (`variant="primary"`, shown while no model is connected), the setup sheet's Check connection and Cancel (`variant="ghost"`) and Save (`variant="primary"`), and the stack over the composer: Stop on the run row and Undo all on the changes row (`variant="ghost" size="sm"`), and Keep beside it (`size="sm"`).
+- `src/components/AssistantPane.tsx` — the assistant's call sites: the empty state's Set up a model (`variant="primary"`, shown while no model is connected), the setup sheet's Change beside the chosen provider's name (`variant="quiet" size="sm"`), its Check connection and Cancel (`variant="ghost"`) and Save (`variant="primary"`), and the stack over the composer: Stop on the run row and Undo all on the changes row (`variant="ghost" size="sm"`), and Keep beside it (`size="sm"`).
 - `src/components/TopBar.tsx:42` — the title bar's command centre (`size="sm"`): the drawing's name, opening the command palette.
 
 ### Example files
@@ -24,6 +24,7 @@ Real uses, 14 call sites (`rg -c "<Button" src/components` → `src/components/A
 | `docs/system/examples/button/variant-primary.tsx` | variant=primary | The accent fill, the one action of a pane. |
 | `docs/system/examples/button/variant-secondary.tsx` | variant=secondary | The default quiet fill. |
 | `docs/system/examples/button/variant-ghost.tsx` | variant=ghost | A quiet action with no resting fill. |
+| `docs/system/examples/button/variant-quiet.tsx` | variant=quiet | An action that stands back beside the title it changes. |
 | `docs/system/examples/button/variant-danger.tsx` | variant=danger | The destructive action. |
 | `docs/system/examples/button/size-sm.tsx` | size=sm | The 24px button that sits beside a field. |
 | `docs/system/examples/button/size-md.tsx` | size=md | The 28px default control. |
@@ -36,7 +37,8 @@ Real uses, 14 call sites (`rg -c "<Button" src/components` → `src/components/A
 ### variant
 - `primary`: the one action of the pane or dialog; the accent fill. Used at 1 call site in the assistant (the setup sheet's Save), and the dialog's OK.
 - `secondary`: the default action; the `.08` fill that Cursor's own default button draws. Used at 3 call sites (the title bar's command centre, the setup sheet's Check connection and the changes row's Keep).
-- `ghost`: a quiet action on a tool bar or in a list; no resting fill. Used at 6 call sites (the transcript's Show earlier, the setup sheet's Change and Cancel, the two Stop buttons of a running turn and the changes row's Undo all).
+- `ghost`: a quiet action on a tool bar or in a list; no resting fill, the full ink. Used at 7 call sites (the transcript's Show earlier, the setup sheet's Cancel, the two Stop buttons of a running turn, the changes row's Undo all, and the dialog's Select all and Clear all).
+- `quiet`: an action that must not compete with what it stands beside, a title it changes or a line it follows; no resting fill and the secondary ink (`--text-dim`), waking to the full ink on ghost's own fills under the pointer and the press, as the ghost `IconButton` does. Measured on the setup sheet, dark and light: the label 9.17 and 7.82 at rest, 13.35 and 15.24 on the `.08` hover fill, 11.12 and 13.37 on the `.14` pressed fill; the ring 6.43 and 6.60 against the sheet; the disabled label 3.08 and 2.30, the layer's one disabled ink, which no contrast rule binds. Until 2026-11-12 the sheet dimmed a `ghost` from its own stylesheet, a colour set on a layer component from outside. Used at 1 call site (the setup sheet's Change).
 - `danger`: a destructive action; the error fill. Used at 0 call sites.
 
 ### size
@@ -69,6 +71,7 @@ Real uses, 14 call sites (`rg -c "<Button" src/components` → `src/components/A
 |---|---|---|---|---|
 | The pointer enters or leaves | input | hover / focus feedback (`--dur-fast` + `--ease-standard`) | background-color | The fill changes at once: the shell's `:root[data-animations="off"] *` rule removes the transition. |
 | The pointer presses down | input | hover / focus feedback (`--dur-fast` + `--ease-standard`) | background-color | The fill changes at once, by the same rule. |
+| The pointer enters, leaves or presses a `quiet` button | input | hover / focus feedback (`--dur-fast` + `--ease-standard`) | background-color, color | The fill and the ink change at once, by the same rule. |
 
 ## Props
 - `variant`: the purpose of the action; the token layer picks the look. Defaults to `secondary`.
@@ -92,9 +95,12 @@ Real uses, 14 call sites (`rg -c "<Button" src/components` → `src/components/A
 - The clickable band is a list item rather than an action. Use `Row` instead.
 
 ### Rules
-- `rule/button-variant-purpose`: When a surface needs a button, pick `variant` by the action's purpose — 1 `primary` per view, `secondary` for the default, `ghost` for a quiet action, `danger` for a destructive one — because two accent fills in one row leave no single action and Cursor's own default button is the quiet one. Evidence: app 4/4 variants, `docs/system/decisions.md`. Check: review `src/ui/ui.css`.
+- `rule/button-variant-purpose`: When a surface needs a button, pick `variant` by the action's purpose — 1 `primary` per view, `secondary` for the default, `ghost` for a quiet action, `quiet` for one that stands beside a title or a line and must read after it, `danger` for a destructive one — because two accent fills in one row leave no single action and Cursor's own default button is the quiet one. Evidence: app 5/5 variants, `docs/system/decisions.md`. Check: review `src/ui/ui.css`.
   - Don't: `<Button variant="primary">Cancel</Button>`
   - Do: `<Button>Cancel</Button>`
+- `rule/button-quiet-not-dimmed`: When an action must read after the text beside it, pass `variant="quiet"` and leave every ink and fill of a `Button` to the layer, because an ink set from a surface's stylesheet reaches 1 state: the dimmed `ghost` kept the secondary ink on the `.14` pressed fill, and a disabled one would have kept it too. Evidence: single use `src/components/AssistantPane.tsx:977`, the setup sheet's Change, dimmed until 2026-11-12 by `.assistant-setup-change .ui-button`. Check: test `src/ui/recipe.test.ts`.
+  - Don't: `.assistant-setup-change .ui-button { color: var(--text-dim) }`
+  - Do: `<Button variant="quiet" size="sm" title="Choose another provider">Change</Button>`
 - `rule/button-state-ladder`: When a button is hovered, step the fill one rung — `.08` to `.14` — and hold that rung while pressed, because the measured glass button adds no third step and a fill step reads as feedback without moving the label or the box. Evidence: measured .08/.14/.14, `docs/system/decisions.md`. Check: review `src/ui/ui.css`.
   - Don't: `.my-button:hover { color: var(--accent) }` — a colour change instead of a fill step.
   - Do: `.ui-button--secondary:hover { background: var(--fill-active) }`
@@ -158,7 +164,12 @@ Rests on the native `<button>` element: role, Enter and Space, and form behaviou
 | The fill (`danger`) | rest | `--error` |
 | The fill (`danger`) | hover | `--error-hover` |
 | The fill (`danger`) | pressed | `--error-pressed` |
+| The fill (`ghost`, `quiet`) | rest | none: transparent |
+| The fill (`ghost`, `quiet`) | hover | `--hover` |
+| The fill (`ghost`, `quiet`) | pressed | `--fill-active` |
 | The label | rest | `--text` |
+| The label (`quiet`) | rest | `--text-dim` |
+| The label (`quiet`) | hover, pressed | `--text` |
 | The label (`primary`) | rest | `--on-accent` |
 | The label (`danger`) | rest | `--on-error` |
 | The label | disabled | `--text-disabled` |
@@ -166,7 +177,7 @@ Rests on the native `<button>` element: role, Enter and Space, and form behaviou
 | The ring | focus-visible | `--focus-outline-w`, `--focus-ring`, `--focus-outline-offset` |
 | The ring (`primary`) | focus-visible | `--on-accent` |
 | The ring (`danger`) | focus-visible | `--on-error` |
-| The motion | hover, pressed | `--dur-fast`, `--ease-standard` |
+| The motion | hover, pressed | `--dur-fast`, `--ease-standard` (`quiet` eases its ink with its fill) |
 
 ## Related
 - `IconButton`: when the action is one glyph with a tooltip and no label.

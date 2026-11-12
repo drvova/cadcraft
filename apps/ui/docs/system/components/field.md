@@ -12,13 +12,13 @@ Not applicable: hand-rolled — the 24px height, the hairline stroke and the foc
 ## Examples
 `<Field value={name} ariaLabel="Layer name" onInput={setName} />` — the layer name, owned by the panel.
 
-Real uses, 6 call sites (`rg -c "<Field" src/components` → `src/components/AssistantPane.tsx:3`, `src/components/DraftingSettings.tsx:2`, `src/components/PropertiesPanel.tsx:1`; the provider sheet's Base URL, API key and Model, the palette's typed values, and the Drafting Settings dialog's spacings and angles):
+Real uses, 8 call sites (`rg -c "<Field" src/components`: `AssistantPane.tsx` 3, `DraftingSettings.tsx` 2, `PropertiesPanel.tsx` 1, `CommandLine.tsx` 1, `CommandPalette.tsx` 1; the provider sheet's Base URL, API key and Model, the properties palette's typed values, the Drafting Settings dialog's spacings and angles, the command line and the command palette's search):
 - `src/components/DraftingSettings.tsx:178` — the dialog's typed numbers (`align="end"`, `inputMode="decimal"`, `selectOnFocus`), each named by a visible `<label for>` through `id`, marked `invalid` with its refusal tied by `describedBy`.
 - `src/components/DraftingSettings.tsx:270` — the dialog's additional angles, a list typed in one field under its label, with a line of help tied by `describedBy`.
-- `src/components/AssistantPane.tsx` — the composer pilot: the provider popover's Base URL, Model and API key inputs; the composer's own multi-line editor is a bespoke `<textarea>` until it moves onto `TextArea`.
-- `src/components/PropertiesPanel.tsx:226` — the palette's typed values: `variant="inline" size="sm" align="end"`, `mixed` for `*VARIES*`, `invalid` while a value is refused, committing on Enter and on leaving the field.
-- (planned) `src/components/CommandLine.tsx` — `class="cmd-input"` (1 use) moves onto `<Field type="search">` in a later arc; the command line keeps its own input for now.
-- (planned) `src/components/CommandPalette.tsx` — the palette's search input is a combobox over its list and moves onto `<Field role="combobox" expanded controls activeDescendant autocompleteKind="list">`.
+- `src/components/AssistantPane.tsx` — the setup sheet's Base URL, API key and Model. The API key carries the show and hide key as its `end` adornment (`<IconButton size="sm">`): until 2026-11-12 a wrapper of the sheet's own placed that key over the field on a patch of the field's fill, and the last characters of a long key, and the caret after them, lay under the patch.
+- `src/components/PropertiesPanel.tsx` — the palette's typed values: `variant="inline" size="sm" align="end"`, `mixed` for `*VARIES*`, `invalid` while a value is refused, committing on Enter and on leaving the field.
+- `src/components/CommandLine.tsx` — the typed line: `variant="bare"` inside the panel's own strip, which draws the edge and the focus and sets the mono face; the prompt mark is the `start` adornment. The field takes no `value`: the history writes the element's own through `ref`, so nothing is assigned back during an input method's composition. Moved on 2026-11-12 from a hand-drawn `<input class="cmd-input">`.
+- `src/components/CommandPalette.tsx` — the search field: `variant="bare"` in the palette's header, `role="combobox"` with `expanded`, `controls`, `activeDescendant` and `autocompleteKind="list"`, `autocapitalize="off"`, the lens as its `start` adornment. Moved on 2026-11-12 from a hand-drawn `<input class="palette-input">`.
 
 ### Example files
 | File | Covers | Caption |
@@ -32,35 +32,40 @@ Real uses, 6 call sites (`rg -c "<Field" src/components` → `src/components/Ass
 | `docs/system/examples/field/invalid.tsx` | state:invalid | A refused address at the error stroke, with the line that says why. |
 | `docs/system/examples/field/variant-field.tsx` | variant=field | The form control, stroked and filled at rest. |
 | `docs/system/examples/field/variant-inline.tsx` | variant=inline | A value that reads as text until it is touched. |
-| `docs/system/examples/field/matrix-type-variant.tsx` | matrix:type,variant | Every input type in both looks. |
+| `docs/system/examples/field/variant-bare.tsx` | variant=bare | The one line inside a box its surface draws. |
+| `docs/system/examples/field/adornment-end.tsx` | state:adorned | A key field with its show and hide key inside the end. |
+| `docs/system/examples/field/adornment-start.tsx` | state:adorned | A search field with its lens inside the start. |
+| `docs/system/examples/field/matrix-type-variant.tsx` | matrix:type,variant | Every input type in each of the three looks. |
 | `docs/system/examples/field/size-md.tsx` | size=md | The 24px box of a form. |
 | `docs/system/examples/field/size-sm.tsx` | size=sm | The 20px box of a 22px list row. |
 | `docs/system/examples/field/align-start.tsx` | align=start | A value on the near side, as a form reads. |
 | `docs/system/examples/field/align-end.tsx` | align=end | A column of numbers ending on one edge. |
 | `docs/system/examples/field/mixed.tsx` | state:mixed | A value several objects disagree on, in the quiet ink. |
 | `docs/system/examples/field/read-only.tsx` | state:read-only | A value to select and copy, not to change. |
-| `docs/system/examples/field/combobox.tsx` | composition:CommandPalette | A search field driving a list of options. |
+| `docs/system/examples/field/combobox.tsx` | composition:CommandPalette | A bare search field driving a list of options, its lens in the start. |
+| `docs/system/examples/field/in-command-line.tsx` | composition:CommandLine | The typed line: a bare field in a strip, the prompt mark in the start. |
 | `docs/system/examples/field/in-properties-panel.tsx` | composition:PropertiesPanel | A value row of the properties palette: commits on Enter and on leaving, Escape restores. |
 
 ## Variants
 
 ### type
-- `text`: the default single-line field. Used at 2 call sites (the provider popover's Base URL and Model).
+- `text`: the default single-line field. Used at 7 call sites, and at the eighth while the API key is shown.
 - `email`: adds the email keyboard and autofill on phones. Used at 0 call sites.
 - `search`: adds the search keyboard and a clear affordance. Used at 0 call sites.
-- `password`: masks the value. Used at 1 call site (the provider popover's API key).
+- `password`: masks the value. Used at 1 call site (the setup sheet's API key, until its show key is pressed).
 
 ### variant
 - `field`: the default; the form control, stroked and filled at rest. The stroke is an ink of the field's own (`--ui-field-edge`): the hairline stroke (`--border-soft`) on the dark surfaces, where it measures 1.34 against the pane and 1.24 against the field's fill, and the default stroke (`--border`) on the light ones, 1.39 and 1.28. With the hairline stroke the light field measured 1.27 and 1.18 and read as a grey slab with no edge (`#F3F3F3` on `#FCFCFC`). The theme sets the ink, never `border-color`, so the inline, focused and refused strokes still win; `Select` reads the same ink. Used at 3 call sites (the provider form).
-- `inline`: a value in a dense list row; no stroke and no fill until the pointer or the keyboard is on it, as `Select variant="inline"`. Used at 0 call sites (planned: the properties palette's value rows).
+- `inline`: a value in a dense list row; no stroke and no fill until the pointer or the keyboard is on it, as `Select variant="inline"`. Used at 1 call site (the properties palette's value rows).
+- `bare`: the one line inside a box a surface draws itself; no stroke, no fill, no inset and no ring, in the surface's own face and size, as `TextArea variant="bare"`. The surface shows the focus. It keeps the control's 24px height and the layer's 16px line, so the value is centred wherever the surface puts it. Used at 2 call sites (the command line's strip, the command palette's header).
 
 ### size
-- `md`: the default 24px box. Used at 3 call sites.
-- `sm`: the 20px box that fits a 22px list row, on the row's 4px inset; 24px under a coarse pointer, as `Select size="sm"`. Used at 0 call sites (planned: the properties palette).
+- `md`: the default 24px box. Used at 7 call sites.
+- `sm`: the 20px box that fits a 22px list row, on the row's 4px inset; 24px under a coarse pointer, as `Select size="sm"`. Used at 1 call site (the properties palette).
 
 ### align
-- `start`: the default; the value starts on the near side. Used at 3 call sites.
-- `end`: the value ends on the far side, with lining tabular figures, for a column of values. Used at 0 call sites (planned: the properties palette).
+- `start`: the default; the value starts on the near side. Used at 6 call sites.
+- `end`: the value ends on the far side, with lining tabular figures, for a column of values. Used at 2 call sites (the properties palette, the dialog's typed numbers).
 
 ## States
 | State | Trigger | What the user can do | Shown by, besides color | Checked by |
@@ -73,6 +78,7 @@ Real uses, 6 call sites (`rg -c "<Field" src/components` → `src/components/Ass
 | Disabled | The caller passes `disabled`. | Nothing: no typing, no focus. | The value at the disabled ink; no focus ring. | test |
 | Mixed | The caller passes `mixed`: the field stands for several things whose values differ. | Type a value, which replaces them all. | The stand-in the caller passes as the value ("*VARIES*") in the quiet ink. | test |
 | Read-only | The caller passes `readOnly`. | Focus it, select and copy; no typing. | The value at the full ink with no caret; it stays a Tab stop. | test |
+| Adorned | The caller passes `start` or `end`. | Type as in any field; press a control in the adornment, or Tab to it after the input. A press on a glyph lands on the input. | The adornment inside the box's end, and the value ending before it: the input's padding on that side is the adornment's measured width. | test |
 
 ### State precedence
 - Focused and Hover: Focused wins. The accent stroke and the ring stay while the pointer is over the field.
@@ -87,6 +93,10 @@ Real uses, 6 call sites (`rg -c "<Field" src/components` → `src/components/Ass
 - Read-only and Focused: both show. The ring draws; the value does not change.
 - Read-only and Disabled: Disabled wins. A disabled field takes no focus at all.
 - Invalid and Disabled: Disabled wins. A disabled field cannot be corrected, so the caller clears `invalid` before it locks the field.
+- Adorned and Focused: both show. The stroke and the ring are the input's, and the input is the whole box, so they go around the adornment; a control in the adornment draws its own ring while it has the focus, and the box draws none then.
+- Adorned and Invalid: both show. The error stroke goes around the adornment.
+- Adorned and Disabled: Disabled wins for a glyph, which takes the disabled ink. A control in the adornment is the caller's to disable.
+- Adorned and Filled: both show. A value longer than the room between the adornments ends in an ellipsis at rest and scrolls under the caret while edited; it never runs under an adornment.
 
 ### Motion
 | Trigger | Kind | Preset | Properties | Reduced motion |
@@ -107,7 +117,7 @@ Real uses, 6 call sites (`rg -c "<Field" src/components` → `src/components/Ass
 - `spellcheck`: switches the platform's spelling checker. Unset leaves it to the platform, except `type="password"`, which is never checked.
 - `invalid`: the value is refused; sets `aria-invalid="true"` and the error stroke.
 - `describedBy`: the `id` of the help line or the error line under the field (several, space-separated); sets `aria-describedby`.
-- `variant`: `field` or `inline`; defaults to `field`.
+- `variant`: `field`, `inline` or `bare`; defaults to `field`.
 - `size`: `sm` or `md`; defaults to `md`.
 - `align`: `start` or `end`; defaults to `start`.
 - `mixed`: the value is a stand-in for several that differ; it reads in the quiet ink.
@@ -124,6 +134,9 @@ Real uses, 6 call sites (`rg -c "<Field" src/components` → `src/components/Ass
 - `controls`: the `id` of a combobox's list (`aria-controls`).
 - `activeDescendant`: the `id` of the option the arrow keys are on (`aria-activedescendant`); unset when none is.
 - `autocompleteKind`: what the list does with the typed text (`aria-autocomplete`): `list`, `inline`, `both` or `none`.
+- `autocapitalize`: the native attribute, passed through; `off` for a command, a code or a name a phone's keyboard must not capitalise. Unset leaves it to the platform. Used at 1 call site (the command palette).
+- `start`: an adornment inside the field's leading end, before the input in the box: a glyph that says what the value is. Used at 2 call sites (the command line's prompt mark, the palette's lens).
+- `end`: an adornment inside the field's trailing end, after the input in the box and in the Tab order: a glyph, or one `<IconButton size="sm">` that acts on the value. Used at 1 call site (the API key's show and hide key).
 
 ## Usage
 
@@ -160,6 +173,15 @@ Real uses, 6 call sites (`rg -c "<Field" src/components` → `src/components/Ass
 - `rule/field-combobox-complete`: When a field drives a list of matches, pass `role="combobox"` with `expanded`, `controls` and `activeDescendant` together, and none of them on any other field, because a combobox with 0 of the three is announced as one and then leads nowhere, and `aria-activedescendant` on a plain text field is ignored. Evidence: app 5/5 combobox props defined together in `src/ui/Field.tsx`. Check: test `src/ui/Field.test.tsx`.
   - Don't: `<Field ariaLabel="Search commands" role="combobox" />`
   - Do: `<Field ariaLabel="Search commands" role="combobox" expanded={open} controls="palette-list" activeDescendant={activeId} autocompleteKind="list" />`
+- `rule/field-adornment-slot`: When a glyph or a key belongs inside a field's end, pass it as `start` or `end`, so the field holds it, because the input makes room only for an adornment it holds: placed over the field from a wrapper, the show key covered the last 3 characters of a 203-character key and the caret after them. Evidence: measured 24px of end padding on the adopted key field against 6px under the wrapper's patch, the eye at the same 1237, 240 before and after, in the browser 2026-11-12 (the captures wE14-setup-longkey-before and wE14-setup-longkey-after), `docs/system/decisions.md`. Check: test `src/ui/Field.test.tsx`.
+  - Don't: `<div class="key-box"><Field ariaLabel="API key" /><span class="key-end"><IconButton icon="eye" size="sm" title="Show the key" /></span></div>`
+  - Do: `<Field ariaLabel="API key" end={<IconButton icon="eye" size="sm" title="Show the key" onClick={toggle} />} />`
+- `rule/field-adornment-one-control`: When an adornment acts on the value, make it 1 `IconButton size="sm"` with a name of its own, and keep a glyph that only decorates hidden from assistive tech, because the box is a `<span>` with no role: a screen reader meets the text field and then whatever stands in the slot, and 2 controls in a 24px end leave no room for the value. Evidence: single use `src/components/AssistantPane.tsx:1015`, the API key's show and hide key, named "Show the key" and "Hide the key". Check: test `src/ui/Field.test.tsx`.
+  - Don't: `<Field ariaLabel="API key" end={<span onClick={toggle}>show</span>} />`
+  - Do: `<Field ariaLabel="API key" end={<IconButton icon="eye" size="sm" title="Show the key" onClick={toggle} />} />`
+- `rule/field-bare-surface-focus`: When a field is `bare`, draw the focus on the surface around it and give that surface the edge and the fill, because the bare field draws 0 rings and 0 strokes: with nothing around it a keyboard user cannot see where the caret is. Evidence: app 2/2 bare fields sit in a surface that shows the focus (the command line's strip takes the ring through `is-focused`, and the palette's field never loses the focus while its dialog is open), `src/styles.css`, `src/palette.css`. Check: review `src/styles.css`.
+  - Don't: `<Field variant="bare" ariaLabel="Command line" />` alone on a pane.
+  - Do: `<div class="cmd-field" classList={{ "is-focused": focused() }}><Field variant="bare" ariaLabel="Command line" onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} /></div>`
 
 ### Content
 - `rule/field-placeholder-example`: When a placeholder is written, show a real example value rather than an instruction (0,0 — not "Enter a point"), because the placeholder is read as the value's shape, and the instruction belongs in a label. Evidence: single use `src/components/AssistantPane.tsx:681`, the provider popover's Base URL placeholder. Check: review `src/components/AssistantPane.tsx`.
@@ -189,12 +211,17 @@ Rests on the native `<input>` element: typing, selection, IME and autofill come 
 | Tab or a click, with `selectOnFocus` | Arriving on the input. | The whole value is selected, so typing replaces it. A second click places the caret. | On the input. | test |
 | Any key during an input method's composition | The focused input. | The input method's own; `onKeyDown` is not called. | Stays on the input. | test |
 | ArrowDown, ArrowUp, Enter (combobox) | The focused input. | The caller's `onKeyDown` moves `activeDescendant` through the list or runs the active option; the field moves no focus. | Stays on the input. | by hand |
+| Tab (an `end` control) | The focused input. | Moves focus to the control in the end adornment, which draws its own ring. | On the adornment's control. | by hand |
+| Enter or Space (an `end` control) | The adornment's control. | Runs the control's action (show or hide the key); the input keeps its value. | Stays on the adornment's control. | test |
 
 ### ARIA
 | Part | Role | Accessible name from | States and properties | Announced | Checked by |
 |---|---|---|---|---|---|
 | The input | `textbox` (native) | `aria-label`, or the label tied to it | `disabled` when blocked; the native `type`; `aria-invalid="true"` while the value is refused; `aria-describedby` naming the help line or the error line, then the `title`'s words when it has one | "Base point, edit text" / "Base URL, invalid entry, edit text, Start the address with http:// or https://" | test |
 | The input as a combobox | `combobox` (`role`) | `aria-label` | `aria-expanded`, `aria-controls` naming the list, `aria-activedescendant` naming the active option, `aria-autocomplete` | "Search commands, combo box, expanded" then each option as the keys reach it | test |
+| The box around an adorned field | none (a `<span>`) | none | none: no role, no name, no `tabindex`, not hidden | Nothing: the input and the adornment are met as they are | test |
+| A control in an adornment | `button` (the caller's `IconButton`) | Its own `title` | Its own | "Show the key, button" after the field | test |
+| A glyph in an adornment | none | none | `aria-hidden="true"`, from `ToolIcon` or the caller | Nothing | by hand |
 
 ## Tokens
 | Part | State | Token |
@@ -214,6 +241,13 @@ Rests on the native `<input>` element: typing, selection, IME and autofill come 
 | The stroke and the fill | `inline`, rest | none: both transparent |
 | The stroke and the fill | `inline`, hover or focus | `--border-soft`, `--control` |
 | The text | mixed | `--text-faint` |
+| The stroke, the fill, the inset and the ring | `bare` | none: the surface draws them |
+| The type | `bare` | inherited from the surface |
+| An adornment's cell | `field` and `inline` | `--control-h-chip` wide, `--control-h-input` less `--control-h-chip`, halved, from the box's edge (none of it at `sm`) |
+| The gap from an adornment to the value | `field` and `inline` | `--gap-2` |
+| An adornment's cell | `bare` | none: the adornment's own width, on the edge |
+| A glyph in an adornment | rest | `--icon`, `--icon-size-md` (`--icon-size-sm` at `sm`) |
+| A glyph in an adornment | disabled | `--text-disabled` |
 
 ## Related
 - `TextArea`: when the text runs to several lines.

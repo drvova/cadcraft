@@ -1311,10 +1311,6 @@ ol.assistant-list li::before {
   display: inline-flex;
 }
 
-.assistant-setup-change .ui-button {
-  color: var(--text-dim);
-}
-
 /* The preset rows are the system's `Row`; its children carry the two inks. */
 .assistant-preset-label {
   flex: 1 1 auto;
@@ -1353,31 +1349,6 @@ ol.assistant-list li::before {
    name and hint, so each name reads with the field under it and not the hint above it. */
 .assistant-field + .assistant-field {
   margin-top: var(--gap-4);
-}
-
-/* The key's show/hide key stands inside the field, at its end, so the key field is one box as
-   wide as the two around it. `Field` has no end slot, so this box is the positioning parent and
-   the field itself is left exactly as the layer draws it. The key's small circle sits in a patch
-   of the field's own fill, one hairline inside the field's stroke on three sides: a long key ends
-   at the patch instead of running under the glyph. (The field cannot be given end padding from
-   here without restyling it, so the last characters of a key longer than the box, and the caret
-   after them, are under the patch until the layer's Field takes an end adornment.) */
-.assistant-field-box {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.assistant-field-end {
-  position: absolute;
-  top: var(--hairline);
-  right: var(--hairline);
-  bottom: var(--hairline);
-  display: flex;
-  align-items: center;
-  padding: 0 var(--hairline) 0 var(--gap-2);
-  border-radius: 0 calc(var(--radius-control) - var(--hairline)) calc(var(--radius-control) - var(--hairline)) 0;
-  background: var(--control);
 }
 
 /* Help is read, so it takes the quiet ink, not the disabled one (11px at .36 is below reading

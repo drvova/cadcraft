@@ -374,10 +374,10 @@ Not applicable: no motion — the dialog arrives and leaves at once (`docs/syste
 
 ### Limits
 - Follows `rule/button-row-limit`.
-- `rule/dialog-size-by-content`: When a dialog holds 1 column of fields, use `md` (or `sm` for a question or a single field) and keep `lg` for 2 columns or a table, because a column of labels and values stretched to `lg` leaves each label 500px from its value. Evidence: measured 364px, 533px and 729px boxes for `sm`, `md` and `lg` at 1280px, `src/ui/ui.css:1169`. Check: review `src/ui/ui.css`.
+- `rule/dialog-size-by-content`: When a dialog holds 1 column of fields, use `md` (or `sm` for a question or a single field) and keep `lg` for 2 columns or a table, because a column of labels and values stretched to `lg` leaves each label 500px from its value. Evidence: measured 364px, 533px and 729px boxes for `sm`, `md` and `lg` at 1280px, `src/ui/ui.css:1309`. Check: review `src/ui/ui.css`.
   - Don't: `<Dialog size="lg" title="Rename Layout"><Field ariaLabel="Layout name" /></Dialog>`
   - Do: `<Dialog size="sm" title="Rename Layout"><Field ariaLabel="Layout name" /></Dialog>`
-- `rule/dialog-narrow-one-column`: When a dialog's body is laid out, let it fall to 1 column at 358px, because at a window of 560px or less the dialog is a sheet as wide as the window and its body is the window less 16px on each side. Evidence: measured 390px sheet with a 358px body at 390 by 700, `src/ui/ui.css:1281`. Check: review `src/dialogs.css`.
+- `rule/dialog-narrow-one-column`: When a dialog's body is laid out, let it fall to 1 column at 358px, because at a window of 560px or less the dialog is a sheet as wide as the window and its body is the window less 16px on each side. Evidence: measured 390px sheet with a 358px body at 390 by 700, `src/ui/ui.css:1421`. Check: review `src/dialogs.css`.
   - Don't: `.my-form { display: grid; grid-template-columns: 240px 240px }`
   - Do: `.my-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(24ch, 1fr)) }`
 

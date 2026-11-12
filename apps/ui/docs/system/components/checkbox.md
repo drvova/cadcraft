@@ -66,6 +66,7 @@ Not applicable: no variant axes — a checkbox is one 14px box with or without a
 - `mixed`: the box stands for values that disagree; sets `indeterminate` and `aria-checked="mixed"`.
 - `disabled`: the native attribute; blocks the press and drops the ink.
 - `ariaLabel`: the accessible name when the box has no visible label.
+- `id`: the box's `id`, for a visible `<label for>` that stands apart from it (a row's own label in another column); that label is then the name and no `ariaLabel` is passed. A label passed as children needs none: it wraps the box. Used at 0 call sites.
 - `describedBy`: the `id` of a line of help (several, space-separated); sets `aria-describedby`.
 - `children`: the visible label. The whole of it is clickable.
 
@@ -81,16 +82,16 @@ Not applicable: no variant axes — a checkbox is one 14px box with or without a
 - The control is a glyph that switches a mode on a tool bar. Use `IconButton` with `selected` instead.
 
 ### Rules
-- `rule/checkbox-name`: When a checkbox is rendered, give it a visible label as its children or, where the row already shows the name, an `ariaLabel`, because a box with neither is announced as 1 unnamed check box. Evidence: single use `src/ui/Checkbox.tsx:53`, the `aria-label` the prop sets beside the wrapping `<label>`. Check: test `src/ui/Checkbox.test.tsx`.
+- `rule/checkbox-name`: When a checkbox is rendered, give it a visible label as its children or, where the row already shows the name, an `ariaLabel`, because a box with neither is announced as 1 unnamed check box. Evidence: single use `src/ui/Checkbox.tsx:57`, the `aria-label` the prop sets beside the wrapping `<label>`. Check: test `src/ui/Checkbox.test.tsx`.
   - Don't: `<Checkbox checked={closed()} onChange={setClosed} />`
   - Do: `<Checkbox ariaLabel="Closed" checked={closed()} onChange={setClosed} />`
-- `rule/checkbox-label-inside`: When a checkbox has a visible label, pass the words as the children of `Checkbox` rather than as a sibling element, because the component's `<label>` wraps the box and the words, which makes all of them 1 target, and a sibling `<span>` leaves a dead gap that reads as broken. Evidence: single use `src/ui/Checkbox.tsx:47`, the wrapping `<label>`. Check: test `src/ui/Checkbox.test.tsx`.
+- `rule/checkbox-label-inside`: When a checkbox has a visible label, pass the words as the children of `Checkbox` rather than as a sibling element, because the component's `<label>` wraps the box and the words, which makes all of them 1 target, and a sibling `<span>` leaves a dead gap that reads as broken. Evidence: single use `src/ui/Checkbox.tsx:50`, the wrapping `<label>`. Check: test `src/ui/Checkbox.test.tsx`.
   - Don't: `<Checkbox checked={grid()} onChange={setGrid} /><span>Show the grid</span>`
   - Do: `<Checkbox checked={grid()} onChange={setGrid}>Show the grid</Checkbox>`
-- `rule/checkbox-mixed-three-states`: When one box stands for several objects, pass `mixed` while they disagree and set it to `false` in `onChange`, because the first press on a mixed box asks for ticked and all 3 states must be reachable: mixed to ticked, ticked to empty, empty to ticked. Evidence: single use `src/ui/Checkbox.tsx:42`, the `indeterminate` property the prop sets. Check: test `src/ui/Checkbox.test.tsx`.
+- `rule/checkbox-mixed-three-states`: When one box stands for several objects, pass `mixed` while they disagree and set it to `false` in `onChange`, because the first press on a mixed box asks for ticked and all 3 states must be reachable: mixed to ticked, ticked to empty, empty to ticked. Evidence: single use `src/ui/Checkbox.tsx:45`, the `indeterminate` property the prop sets. Check: test `src/ui/Checkbox.test.tsx`.
   - Don't: `<Checkbox checked={false} ariaLabel="Annotative" onChange={setAll} />` for objects that disagree.
   - Do: `<Checkbox mixed={disagree()} checked={all()} ariaLabel="Annotative" onChange={setAll} />`
-- `rule/checkbox-owns-nothing`: When `onChange` runs, set the caller's own value from its argument (or refuse it), because the box redraws from `checked` and `mixed` after every press and keeps 0 state of its own. Evidence: single use `src/ui/Checkbox.tsx:59`, the redraw after the caller has heard the press. Check: test `src/ui/Checkbox.test.tsx`.
+- `rule/checkbox-owns-nothing`: When `onChange` runs, set the caller's own value from its argument (or refuse it), because the box redraws from `checked` and `mixed` after every press and keeps 0 state of its own. Evidence: single use `src/ui/Checkbox.tsx:63`, the redraw after the caller has heard the press. Check: test `src/ui/Checkbox.test.tsx`.
   - Don't: `<Checkbox onChange={() => save()}>Snap</Checkbox>` with no `checked`.
   - Do: `<Checkbox checked={snap()} onChange={setSnap}>Snap</Checkbox>`
 

@@ -43,50 +43,32 @@
      between the key and the field reads as lag. */
 }
 
+/* The header is the box around the system's bare `Field`: it sets the field's type and the
+   caret's ink (both inherited), and the field fills its width. A press anywhere in it puts the
+   keyboard in the field (the dialog's own click does). */
 .palette-field {
   flex: 0 0 auto;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  gap: var(--gap-8);
   height: var(--control-h-tab);
   padding: 0 var(--gap-12);
   border-bottom: var(--hairline) solid var(--border-soft);
+  caret-color: var(--accent);
+  font-family: var(--font-family);
+  font-size: var(--font-body);
 }
 
+/* The lens is the field's leading adornment: its box carries the gap to the typed text. */
 .palette-field-icon {
-  flex: 0 0 auto;
   display: inline-flex;
+  padding-right: var(--gap-8);
   color: var(--icon);
 }
 
 .palette-field-icon .tool-icon {
   width: var(--icon-size-md);
   height: var(--icon-size-md);
-}
-
-.palette-input {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 100%;
-  padding: 0;
-  border: none;
-  outline: none;
-  background: transparent;
-  color: var(--text);
-  caret-color: var(--accent);
-  font-family: var(--font-family);
-  /* Never under 16px on a touch screen, or the browser zooms the page into the field. */
-  font-size: max(16px, 1em);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .palette-input {
-    font-size: var(--font-body);
-  }
-}
-
-.palette-input::placeholder {
-  color: var(--text-faint);
 }
 
 /* The list ends on a whole row: its height is the box's room (the cap above, less the field, the

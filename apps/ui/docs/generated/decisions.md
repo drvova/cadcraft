@@ -12,10 +12,10 @@ The web UI grows fourteen canonical components under `src/ui/`, each a thin wrap
 element. The per-surface hand-rolled classes they replace are named below; a class loses because it
 is a one-off with no shared API and no states.
 
-- **Button** — pick `ui/Button.tsx` (native `<button>`). Variants `primary | secondary | ghost | danger`, default `secondary` (Cursor's own default button). Loses: `.button` (TopBar — one call site), `.assistant-send` / `.assistant-save` / `.assistant-ghost` (assistant-only, their own colours), `.assistant-preset` (a suggestion chip wearing a button), `.tool-button` (ToolStrip — a grid cell, no variants), `.menu-row` (a menu item, not a general button).
+- **Button** — pick `ui/Button.tsx` (native `<button>`). Variants `primary | secondary | ghost | quiet | danger`, default `secondary` (Cursor's own default button); `quiet` joined on 2026-11-12 ("Inside a field, and the last two inputs" below). Loses: `.button` (TopBar — one call site), `.assistant-send` / `.assistant-save` / `.assistant-ghost` (assistant-only, their own colours), `.assistant-preset` (a suggestion chip wearing a button), `.tool-button` (ToolStrip — a grid cell, no variants), `.menu-row` (a menu item, not a general button).
 - **IconButton** — pick `ui/IconButton.tsx` (native `<button>`, a drawn icon + label). Variants `ghost | soft | inverted`; sizes `md` (24px) and `sm` (20px). Loses: `.assistant-icon` (three uses, fixed 24px, no variant), `.assistant-attachment-x` (one-off). The layer list's state keys and the status bar's drafting toggles were listed here as its losers until 2026-11-11 and never moved: they are `Toggle`'s (below).
 - **Chip** — pick `ui/Chip.tsx` (native `<button>` when interactive, `<span>` when not). Loses: `.chip` (TopBar — a static fact, no interaction), `.keyword-chip` (CommandLine — interactive, no tone/size API), `.cmd-chips` (a container, not a chip).
-- **Field** — pick `ui/Field.tsx` (native `<input>`, single-line). Variants `field | inline`, sizes `md` (24px) and `sm` (20px), `align` `start | end`, as Select ("A value in a dense row" below). Loses: `.assistant-input`, `.cmd-input`, `.prop-input` (each one surface's own padding and border), `.assistant-field` (a label wrapper, not the control). The composer's auto-growing `<textarea>` and the properties palette's `<select>` were found-not-fixed here until 2026-11-11; `TextArea` and `Select` below are their picks.
+- **Field** — pick `ui/Field.tsx` (native `<input>`, single-line). Variants `field | inline | bare`, sizes `md` (24px) and `sm` (20px), `align` `start | end`, as Select ("A value in a dense row" below), and an adornment inside either end (`start`, `end`). `.cmd-input` and the palette's `.palette-input` moved onto it on 2026-11-12. Loses: `.assistant-input`, `.cmd-input`, `.prop-input` (each one surface's own padding and border), `.assistant-field` (a label wrapper, not the control). The composer's auto-growing `<textarea>` and the properties palette's `<select>` were found-not-fixed here until 2026-11-11; `TextArea` and `Select` below are their picks.
 - **Select** — pick `ui/Select.tsx` (a native `<select>` under a drawn face: keyboard, type-ahead, a phone's picker and every system webview's own list are the platform's; no hand-built listbox). Variants `field | inline`, sizes `md` (24px) and `sm` (20px), `align` `start | end`. The value is drawn in a `<span>` over the control, which is what lets it end in an ellipsis before the arrow, end on the arrow's side and read quieter while `mixed` the same way in all three webviews. Loses: `.prop-select` (PropertiesPanel — `appearance: none` with no arrow drawn in its place, a long value cut with no ellipsis, the off-list option and the `*VARIES*` ink done by hand).
 - **Checkbox** — pick `ui/Checkbox.tsx` (a native `<input type="checkbox">` inside its `<label>`, the box and the mark drawn from tokens). No variants; states `checked`, `mixed`, `disabled`. Loses: `.prop-check` (PropertiesPanel — the platform's own box tinted with `accent-color`, a different shape and tick in each webview, 13px with no touch target).
 - **TextArea** — pick `ui/TextArea.tsx` (a native `<textarea>` that measures its own height between `rows` and `maxRows`). Variants `field | bare`. Loses: `.assistant-input` with its `grow` function (AssistantPane — the limits fixed at 64px and 240px beside a type size that can change).
@@ -29,7 +29,7 @@ is a one-off with no shared API and no states.
 
 ## Prop vocabulary
 
-- `variant`: `primary | secondary | ghost | danger` (default `secondary`) — purpose, not appearance.
+- `variant`: `primary | secondary | ghost | quiet | danger` (default `secondary`) — purpose, not appearance. `quiet` is the action that must read after the text it stands beside; it is a value of `variant` and not a `tone` on `ghost`, because a second prop would give the button two axes of emphasis and four of their eight pairs would mean nothing (a quiet primary).
 - `size`: `sm | md` (default `md`).
 - plus `disabled`, `selected`, `title`.
 - IconButton `expanded` and `controls`: a fold key says whether the region it folds is showing (`aria-expanded`) and which region it is (`aria-controls`, the region's `id`). A key is a fold key or a `selected` toggle, never both.
@@ -42,7 +42,9 @@ is a one-off with no shared API and no states.
 - Field `invalid` and `describedBy`: a refused value says so (`aria-invalid="true"`, the error stroke), and the help line or the error line under a field is tied to it by `id` (`aria-describedby`). `describedBy` is the layer's name for that tie on any component that grows one, as `ariaLabel` is for the name.
 - Button `ariaLabel` (the name Field already uses for the same job): the accessible name, only where the visible label is a value rather than the action; it starts with the action and holds the visible text.
 - `ariaLabel`, `describedBy`, `invalid` and `title` mean on Select and TextArea what they mean on Field; Checkbox takes `ariaLabel` (when it has no visible label) and `describedBy`.
-- `variant` on the value controls names where the control sits, not how it looks: Select and Field `field | inline` (a form control; a value in a dense list row that reads as text until touched), TextArea `field | bare` (a form control; the editor inside a card that draws the box and shows the focus itself).
+- `variant` on the value controls names where the control sits, not how it looks: Select and Field `field | inline` (a form control; a value in a dense list row that reads as text until touched), TextArea and Field `field | bare` (a form control; the editor inside a box a surface draws, which shows the focus itself).
+- Field `start` and `end`: an adornment inside the field's leading or trailing end, as an element. A glyph that says what the value is, or one `IconButton size="sm"` that acts on it. The field makes room for it; a surface never positions one over a field from outside.
+- Field `autocapitalize`: the native attribute, passed through, as `autocomplete` and `spellcheck` are.
 - Select and Field `align`: `start | end`, the side of the box the value sits on (`end` in a column of values; on Field it also sets lining tabular figures, so a column of numbers lines up).
 - `mixed` (Select, Checkbox, Field): the control stands for several things whose values differ. Select shows its `placeholder`, which is never a choice; Checkbox sets `indeterminate` and `aria-checked="mixed"`; Field draws the stand-in the caller passes as its value in the quiet ink.
 - Field `readOnly`, `maxLength`, `inputMode`: the native attributes, passed through. `readOnly` is not `disabled`: the value can be focused, selected and copied.
@@ -65,7 +67,7 @@ is a one-off with no shared API and no states.
 - Dialog `describedBy`: what it means on Field (`aria-describedby`). The brief that asked for the component called it `ariaDescribedBy`; the layer already had a name for the tie, and a second name for it would be the first prop to break "one name per job".
 - Dialog `initialFocus` (a selector, an element or a function), `footer` (the actions, or a function handed `done`) and `dismissOnBackdrop` (default true).
 - Dialog `size`: `sm | md | lg`. The layer's other components stop at `sm | md`; a dialog's third step is a width, not a control height, and it is the only component that has one.
-- Field and Select `id`: the control's `id`, for a visible `<label for>` beside it. A form in a dialog shows its labels, and `ariaLabel` beside a visible label would say the name twice in two places that can drift.
+- Field, Select, TextArea and Checkbox `id`: the control's `id`, for a visible `<label for>` beside it. A form in a dialog shows its labels, and `ariaLabel` beside a visible label would say the name twice in two places that can drift. TextArea and Checkbox took it on 2026-11-12: a text area's label is as often around it as beside it (the composer's card), and a checkbox whose label is its children needs none, but one named by a row's label in another column does.
 - Tab `id`, `controls`, `tabIndex`: what a tab with a panel needs (`aria-labelledby` back from the panel, `aria-controls`, one Tab stop per strip). `TabPanels` sets all three; a bare strip may.
 - No boolean style props (`round`, `big`, `blue`): a prop names a purpose; the token layer picks the look.
 
@@ -499,8 +501,9 @@ Decided 2026-11-11, with `Select`, `Checkbox` and `TextArea`.
   would be the accent ring on the accent fill.
 - **One line of a TextArea is a Field's height** (a 16px line, the field's padding less the
   hairline: 24px), so the two can share a row.
-- **A bare TextArea draws no ring.** It is the only control in the layer without one, and only
-  because its card shows the focus; `src/ui/recipe.test.ts` holds `ui.css` to that one exception.
+- **A bare TextArea draws no ring.** It was the only control in the layer without one, and only
+  because its card shows the focus; since 2026-11-12 the bare `Field` is the second, for the same
+  reason, and `src/ui/recipe.test.ts` holds `ui.css` to those two.
 - **16px under a finger.** Under `pointer: coarse` the field, the text area and the select's
   native control take `font-size: max(16px, 1em)`, the size below which a phone zooms the page
   into the control. `Field` joined them on 2026-11-11 (it was left open here until its one form
@@ -572,7 +575,8 @@ did not agree. Before and after captures are `.design-system/review/wE10-*.png`.
   The light theme sets the edge's ink (`--ui-field-edge`) to `--border`: 1.39 against the pane,
   1.28 against the fill. It is an ink and not `border-color`, so the inline variant's
   transparent edge, the focus ink and the error ink still win by their place in the sheet.
-  `TextArea`'s field variant still draws `--border-soft` in both themes and should follow.
+  `TextArea`'s field variant drew `--border-soft` in both themes until 2026-11-12 and reads the
+  same ink now.
 - **A selected icon button is the full ink on the `.08` fill, squared.** It was the `.14` fill
   at the button's round radius. Its three call sites are the title bar's layout keys, two of
   which are on at rest: two filled discs were the second most salient thing in the bar. Ink
@@ -709,3 +713,129 @@ interface surface that reads the engine's state and acts through `execute`. Capt
   its verb.
 - **The snap markers are the canvas's.** Each box shows `snapGlyph(bit)` from `src/canvas.ts` as
   SVG paths, at the canvas's 12px and 1.5px stroke: one table of figures, drawn in two places.
+
+## Inside a field, and the last two inputs
+
+Decided 2026-11-12. Workers on the two passes before reported what the layer lacked, and each had
+worked around it in a surface's stylesheet. The gaps are closed in the layer and the workarounds
+are deleted. Captures are `.design-system/review/wE14-*.png`.
+
+### An adornment inside a field
+
+- **What was wrong.** The API key's show and hide key stood inside the field's end from a wrapper
+  of the setup sheet's own, on a patch of the field's fill. The field could not be given end
+  padding from outside without restyling it, so the last 3 characters of a 203-character key, and
+  the caret after them, lay under the patch.
+- **The pick.** `Field` takes `start` and `end`. With either, the field is a
+  `<span class="ui-field-box">` around the same `<input>`, and the input is still the whole box:
+  the adornments stand inside its two ends, over padding the input grows by each one's width. So
+  there is one stroke, one focus ring and one error edge, drawn around the adornments by the
+  rules every field already has, in every variant and size; the clipped-value hint measures the
+  same input; and nothing is duplicated for a second box. A field with neither prop is the bare
+  `<input>` it was, so no other call site's markup or selectors changed.
+- **Why the width is measured.** An adornment is a 20px key, a 14px glyph, a mark in a gutter or
+  a few characters, and the stylesheet cannot know which. `Field.tsx` writes each slot's laid-out
+  width on the box (`--ui-field-start`, `--ui-field-end`) when it is laid out and when it
+  changes; until then the stylesheet's default is one small control, the common case. The other
+  offer was a box that draws the stroke itself around a strokeless input: it needs every state
+  rule twice and `:has()` to tell the input's focus from the adornment's.
+- **The cell.** In `field` and `inline` an adornment's cell is the small control (20px), centred
+  in the box and 2px from its edge at `md`: an `IconButton size="sm"` is concentric with the 24px
+  field, and a glyph sits in the middle of the cell. The value ends 2px before it. In `bare` the
+  surface owns the geometry: the cell is the adornment's own width, on the edge, with no gap.
+- **A glyph is not a control.** The slot passes the pointer through, so a press on a glyph lands
+  on the input; only a control in the slot takes it. Under a coarse pointer the small icon button
+  takes its 24 by 24 target from the layer's own rule, inside the field's height.
+- **Measured.** The key field keeps its box (297 by 24 at 962, 238) and the eye its place (20 by
+  20 at 1237, 240) before and after; the input's end padding is 24px where it was 6px; a
+  203-character key ends before the eye with the caret after its last character; the eye toggles
+  and keeps the focus.
+
+### The quiet button
+
+- **What was wrong.** The setup sheet's Change was a `ghost` dimmed by
+  `.assistant-setup-change .ui-button { color: var(--text-dim) }`: a colour set on a layer
+  component from outside, which reached one state.
+- **The pick: `variant="quiet"`.** No resting fill and the secondary ink; the full ink on ghost's
+  own fills under the pointer and the press, as the ghost `IconButton` wakes. One new value on
+  the prop the button already has.
+- **Why not `tone="quiet"` on `ghost`.** A second prop gives the button two axes, and the pairs
+  it creates mean nothing (a quiet primary, a quiet danger). `variant` already names purpose, and
+  "must read after the text beside it" is a purpose.
+- **Why not `link`.** A button drawn as a link promises navigation, and the action stays on the
+  sheet (`trap/link-as-button` is the trap's name). A link ink would also be the accent, which the
+  system keeps for signals.
+- **Measured, dark and light.** The label 9.17 and 7.82 at rest, 13.35 and 15.24 on the hover
+  fill, 11.12 and 13.37 on the pressed fill; the focus ring 6.43 and 6.60 against the sheet; the
+  disabled label 3.08 and 2.30 (the layer's one disabled ink). One thing differs from the dimmed
+  ghost: under the pointer and the press the label is the full ink, where it stayed dim.
+- `src/ui/recipe.test.ts` now fails any surface stylesheet that sets a colour or a fill on
+  `.ui-button`.
+
+### A bare field, and the two inputs still drawn by hand
+
+- **`variant="bare"`.** The command line's input and the palette's search input both sit in a
+  box their surface draws, and neither is the 24px stroked form control or the inline value of a
+  list row: the command line's is mono on the recessed fill, and the palette's shows no ring,
+  because its field holds the focus for as long as the dialog is open. `TextArea` already had the
+  answer and the word. A bare `Field` draws no stroke, no fill, no inset and no ring, takes the
+  surface's face and size, and keeps the control's height and the layer's line. A `mono` or
+  `recessed` prop was the other offer and is a style prop.
+- **The palette moved with no change to see.** The lens at 386.7, 17 and the typed text at 408.7
+  before and after; the caret in the accent (inherited from the header); `role="combobox"` with
+  `aria-expanded`, `aria-controls`, `aria-activedescendant`, `aria-autocomplete` and
+  `aria-describedby` as before; the query kept and selected on reopening. `autocapitalize` joined
+  the pass-throughs for it. Under a coarse pointer the 16px type is the layer's rule now
+  (`pointer: coarse`), where the palette's own asked for a fine pointer with hover.
+- **The command line moved, and its line became a strip.** The prompt mark stood in an 8px
+  gutter, its own width, so it read as part of the text ("›Command:"), and the box stood 3px from
+  the pane on one side and 8px on the other. Both follow from one constraint: the typed text
+  stays on the editor's column, 12px from the pane, and a box inset from the pane leaves the
+  mark less than that. So the box gave way: the typed line is a strip from one edge of the pane
+  to the other, a hairline above and below it, and the mark has the whole column to stand in.
+  Measured at 1280 (pane at 252): the text at 264 before and after; the mark's cell 256.5 to
+  263.5 before and 254.5 to 261.5 now, 2.5px and then 4.5px clear of the text and of the edge on
+  its other side; the field 255 to 1272 before (3px and 8px from the pane) and 252 to 1280 now;
+  the panel 37px tall before and after. The strip shows the focus (the focus ink on its
+  hairlines and the ring around it), told by the component, not by `:focus-within`, because the
+  error beside it takes the focus too. An error still stands on the band, and the strip is
+  closed with a hairline where it stops short of the pane's edge.
+- **What held.** Typing from the drawing lands its first character in the field; Enter submits;
+  Escape clears typed text and then cancels the command; Up and Down walk the history; the
+  keyword chips' words are on the column; F6 and Ctrl+J reach the field. The field takes no
+  `value`: the history writes the element's own, as before, so nothing is assigned back while an
+  input method is composing, and `Field` no longer hands `onKeyDown` a key an input method is
+  using (the hand-drawn input did, so Enter that confirmed a composition also submitted).
+- **One hook stays.** `src/app.tsx` finds the field as `.cmd-input` (F6, Ctrl+J, typing from the
+  drawing). `Field` takes no class, so the command line adds that name to the element once it is
+  mounted, with no rule on it. When the shell asks for `.cmdline input` instead, the hook goes.
+
+### Two raw buttons that stay
+
+Looked at for `Row`, `Chip` and the quiet `Button`, and left: the checker still pins 2 raw
+buttons in `src/components/AssistantPane.tsx`.
+
+- **The tool row** (`.assistant-tool`). `Row` is a 22px band of one line with a hover fill. The
+  tool row is a line of prose that wraps to a second line for its note, opens in place, has no
+  fill (its ink steps instead) and carries the transcript's 20px leading and inset. `Row` could
+  be given `expanded`, but every other value of its recipe would then be overridden from the
+  assistant's stylesheet, which is the thing a component is for preventing. It is a disclosure
+  row, and it has one use; a `Disclosure` is a component when a second surface folds a region
+  from a line of text. One thing it lacks today, found and left because the move was to change
+  nothing: it says `aria-expanded` and names no region (`aria-controls`).
+- **The model slot** (`.assistant-ghost`). It is a pill: 24px tall, 13px type at the secondary
+  ink, an 8px inset, a round corner, a label that gives way to an ellipsis, a chevron, and a
+  two-line hint. A `Chip` is 20px at 11px in the quiet ink; a quiet `Button size="sm"` is the
+  right height, type and ink, but has a 2px corner and a 6px inset, does not shrink, and takes
+  no `expanded`, `controls` or second hint line. Adopting either changes the corner and the
+  inset, and the brief was no change. What would make it fit: `expanded` and `controls` on
+  `Button` (small, and `IconButton` has them), a label that clips inside the button, and a
+  decision that the composer's model key is a 2px-cornered button like the rest of the layer's
+  rather than Cursor's pill.
+
+### The hint inside a dialog
+
+Verified in the browser with Drafting Settings open, by the pointer and by the keyboard, on the
+close key and on an object snap box given a hint for the test: the box is a child of the open
+dialog, is drawn over its footer and past its edge, and is not clipped. Nothing changed. No
+object snap box carries a hint today: `Checkbox` takes no `title`.

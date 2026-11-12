@@ -136,6 +136,34 @@
   color: var(--text-disabled);
 }
 
+/* quiet — an action that must not compete with what it stands beside (the title it changes, the
+   line it follows): no resting fill and the secondary ink, as the ghost icon button. Under the
+   pointer and the press it wakes to the full ink on ghost's own ladder, so the label on the .14
+   fill is never the secondary ink. */
+.ui-button--quiet {
+  background: transparent;
+  color: var(--text-dim);
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard);
+}
+
+@media (hover: hover) {
+  .ui-button--quiet:hover:not([aria-disabled="true"]) {
+    background: var(--hover);
+    color: var(--text);
+  }
+}
+
+.ui-button--quiet:active:not([aria-disabled="true"]) {
+  background: var(--fill-active);
+  color: var(--text);
+}
+
+.ui-button--quiet[aria-disabled="true"] {
+  color: var(--text-disabled);
+}
+
 /* danger — the error fill, stepped 10% away from the surface on hover, 20% pressed */
 .ui-button--danger {
   background: var(--error);
@@ -568,15 +596,19 @@
 
 /* The light theme's edge: one step up the stroke ladder (1.39 against the pane, 1.28 against the
    fill). It is set as the edge's ink, never as `border-color`, so the inline, focus, refused and
-   disabled rules below still win by their place in the file. The select is the same box and
-   reads the same ink. */
+   disabled rules below still win by their place in the file. The select and the text area are
+   the same box and read the same ink. */
 :root[data-theme="light"] .ui-field,
-:root[data-theme="light"] .ui-select {
+:root[data-theme="light"] .ui-select,
+:root[data-theme="light"] .ui-textarea {
   --ui-field-edge: var(--border);
 }
 
+/* One engine draws a placeholder at about half strength unless told otherwise; the quiet ink is
+   already the measured one. */
 .ui-field::placeholder {
   color: var(--text-faint);
+  opacity: 1;
 }
 
 /* sm — the 20px box of a 22px list row, on the row's own 4px inset, as the small select. The
@@ -639,6 +671,112 @@
 .ui-field--inline:disabled {
   border-color: transparent;
   background: transparent;
+}
+
+/* bare — the one line inside a box a surface draws itself (the command palette's header, the
+   command line's strip): no stroke, no fill, no inset, the surface's own face and size, and no
+   ring, because the surface shows the focus (`:focus-within`) and a second ring inside it would
+   be a box in a box. It keeps the control's height and the layer's line, so the value is centred
+   wherever the surface puts it, and it comes after every state above: focus, a refused value and
+   disabled change nothing but the ink. The type is set by the first rule alone, so the 16px a
+   finger needs (the last section) still outweighs it while the field has the focus. */
+.ui-field--bare {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.ui-field--bare,
+.ui-field--bare:focus,
+.ui-field--bare[aria-invalid="true"] {
+  background: transparent;
+  outline-style: none;
+}
+
+/* ---- Field with an adornment: <span class="ui-field-box ui-field-box--{variant} ui-field-box--{size}">
+        around <span class="ui-field-slot ui-field-slot--start">, the <input class="ui-field"> and
+        <span class="ui-field-slot ui-field-slot--end"> ---- */
+
+/* The input is still the whole box: its stroke, fill, focus ring and error edge are drawn around
+   the adornments, which stand inside its two ends over padding the input grows by their width
+   (`--ui-field-start` and `--ui-field-end`, measured by `Field.tsx`; one small control's width
+   until then). So a value never runs under an adornment, the caret scrolls in the room between
+   them, and the clipped-value hint measures the same input. An adornment's cell is the small
+   control (20px), centred in the box: a 20px icon button is concentric with a 24px field, and a
+   glyph sits in the middle of its cell. In a `bare` field the surface owns the geometry, so the
+   cell is the adornment's own width, on the edge, with no gap. */
+.ui-field-box {
+  --ui-field-slot-inset: calc((var(--control-h-input) - var(--control-h-chip)) / 2);
+  --ui-field-slot-gap: var(--gap-2);
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.ui-field-box--sm,
+.ui-field-box--bare {
+  --ui-field-slot-inset: 0px;
+}
+
+.ui-field-box--bare {
+  --ui-field-slot-gap: 0px;
+}
+
+/* A glyph in a slot is not a control: a press on it lands on the input under it. Only a control
+   of the adornment's own takes the pointer. */
+.ui-field-slot {
+  position: absolute;
+  inset-block: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--control-h-chip);
+  color: var(--icon);
+  pointer-events: none;
+}
+
+.ui-field-box--bare > .ui-field-slot {
+  min-width: 0;
+}
+
+.ui-field-slot :is(button, a, input, select) {
+  pointer-events: auto;
+}
+
+.ui-field-slot--start {
+  inset-inline-start: var(--ui-field-slot-inset);
+}
+
+.ui-field-slot--end {
+  inset-inline-end: var(--ui-field-slot-inset);
+}
+
+.ui-field-slot > .tool-icon {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+}
+
+.ui-field-box--sm > .ui-field-slot > .tool-icon {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+}
+
+.ui-field-box--start > .ui-field {
+  padding-inline-start: calc(var(--ui-field-slot-inset) + var(--ui-field-start, var(--control-h-chip)) + var(--ui-field-slot-gap));
+}
+
+.ui-field-box--end > .ui-field {
+  padding-inline-end: calc(var(--ui-field-slot-inset) + var(--ui-field-end, var(--control-h-chip)) + var(--ui-field-slot-gap));
+}
+
+/* A glyph beside a value that cannot be typed reads at the value's own disabled ink. */
+.ui-field-box--disabled > .ui-field-slot {
+  color: var(--text-disabled);
 }
 
 /* ---- Select: <span class="ui-select ui-select--{variant} ui-select--{size} ui-select--{align}">
@@ -915,7 +1053,8 @@
   min-width: 0;
   margin: 0;
   padding: calc(var(--field-pad-y) - var(--hairline)) var(--field-pad-x);
-  border: var(--hairline) solid var(--border-soft);
+  /* The field's edge (the Field section sets its ink for the light theme). */
+  border: var(--hairline) solid var(--ui-field-edge, var(--border-soft));
   border-radius: var(--radius-control);
   background: var(--control);
   color: var(--text);
@@ -928,6 +1067,7 @@
 
 .ui-textarea::placeholder {
   color: var(--text-faint);
+  opacity: 1;
 }
 
 .ui-textarea--field:focus {
@@ -1463,6 +1603,13 @@
   .ui-select--sm,
   .ui-field--sm {
     height: var(--control-h-input);
+  }
+
+  /* The small field is the control's height here, so its adornment's cell stands off the edge as
+     in the 24px field. An icon button in a slot is the small one, and takes its 24 by 24 target
+     from the rule at the top of this section, inside the field's own height. */
+  .ui-field-box--sm {
+    --ui-field-slot-inset: calc((var(--control-h-input) - var(--control-h-chip)) / 2);
   }
 
   /* The 14px box keeps its size and the label its line: the target is the whole label, at least

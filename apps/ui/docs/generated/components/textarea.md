@@ -14,7 +14,7 @@ Not applicable: hand-rolled — a native `<textarea>` in Field's measured recipe
 `<TextArea value={notes()} onInput={setNotes} ariaLabel="Notes" />` — a notes field: two lines tall when empty, growing to eight.
 
 Real uses, 1 call site (`rg -c "<TextArea" src/components` → `src/components/AssistantPane.tsx:1`):
-- `src/components/AssistantPane.tsx:1142` — the composer's editor: `variant="bare"` inside the card, two rows growing to nine, the combobox of the slash list while that list shows.
+- `src/components/AssistantPane.tsx:1137` — the composer's editor: `variant="bare"` inside the card, two rows growing to nine, the combobox of the slash list while that list shows.
 
 ### Example files
 | File | Covers | Caption |
@@ -64,7 +64,7 @@ export default function InAssistantPane() {
 ## Variants
 
 ### variant
-- `field`: the form control, with Field's stroke, fill, padding and type; one line is exactly a Field's 24px. The default. Used at 0 call sites.
+- `field`: the form control, with Field's stroke, fill, padding and type; one line is exactly a Field's 24px. Its stroke is the field's own edge ink (`--ui-field-edge`): the hairline stroke on the dark surfaces and the default stroke on the light ones, where the hairline measured 1.18 against the fill; until 2026-11-12 it drew the hairline stroke in both themes. The default. Used at 0 call sites.
 - `bare`: no stroke, no fill, no padding and no ring, with the type of the element around it; for an editor inside a card that draws those itself. Used at 0 call sites (the assistant's composer is planned).
 
 Example: The form control: stroked and filled. (`docs/system/examples/textarea/variant-field.tsx`)
@@ -163,6 +163,7 @@ export default function Invalid() {
 | `describedBy?` | `string` |  | The `id` of the help line or the error line beside the control (several, space-separated): sets `aria-describedby`. |
 | `disabled?` | `boolean` |  | Blocks typing and drops the ink to the disabled step. |
 | `expanded?` | `boolean` |  | A combobox: whether its list is showing now (`aria-expanded`). |
+| `id?` | `string` |  | The control's `id`, for a visible `<label for>` beside it or around it: the label is then the name, and no `ariaLabel` is passed. |
 | `invalid?` | `boolean` |  | The text is refused: sets `aria-invalid` and, on `field`, the error stroke. |
 | `maxRows?` | `number` |  | The most lines it grows to before it scrolls. |
 | `onInput?` | `((value: string) => void)` |  | Runs on every edit with the new text. |
@@ -186,6 +187,7 @@ export default function Invalid() {
 - `maxRows`: the most lines it grows to before it scrolls; defaults to 8.
 - `disabled`: the native attribute; blocks typing and drops the ink.
 - `invalid`: the text is refused; sets `aria-invalid="true"` and, on `field`, the error stroke.
+- `id`: the control's `id`, for a visible `<label for>` beside it or around it; the label is then the name and no `ariaLabel` is passed. Used at 0 call sites: the composer's card is a `<label for>` and still writes the `id` on the element through `ref`, which this prop replaces.
 - `describedBy`: the `id` of the help line or the error line (several, space-separated); sets `aria-describedby`.
 - `title`: the hint, in the layer's hint box and in the accessible description after `describedBy`. Never the name, and no native `title` is rendered.
 - `autoFocus`: focuses the control when it mounts.
@@ -212,19 +214,19 @@ export default function Invalid() {
 - The text is a fact to read rather than to edit. Use `Chip` instead.
 
 ### Rules
-- `rule/textarea-label-bound`: When a text area is rendered without a visible `<label>`, pass `ariaLabel`, because a placeholder disappears at the first character and leaves 1 unnamed text box. Evidence: single use `src/components/AssistantPane.tsx:1122`, the composer's editor, named "Ask the assistant" with a placeholder beside it. Check: test `src/ui/TextArea.test.tsx`.
+- `rule/textarea-label-bound`: When a text area is rendered without a visible `<label>`, pass `ariaLabel`, because a placeholder disappears at the first character and leaves 1 unnamed text box. Evidence: single use `src/components/AssistantPane.tsx:1117`, the composer's editor, named "Ask the assistant" with a placeholder beside it. Check: test `src/ui/TextArea.test.tsx`.
   - Don't: `<TextArea placeholder="Ask, or / for commands" value={draft()} onInput={setDraft} />`
   - Do: `<TextArea ariaLabel="Ask the assistant" placeholder="Ask, or / for commands" value={draft()} onInput={setDraft} />`
-- `rule/textarea-rows-not-height`: When a text area needs a smallest or a largest size, pass `rows` and `maxRows` rather than a `height`, `min-height` or `max-height` in a stylesheet, because the component sets the height itself from the measured text on every edit and a second height fights it by 1 line or more. Evidence: single use `src/ui/TextArea.tsx:113`, the one place the height is set. Check: test `src/ui/TextArea.test.tsx`.
+- `rule/textarea-rows-not-height`: When a text area needs a smallest or a largest size, pass `rows` and `maxRows` rather than a `height`, `min-height` or `max-height` in a stylesheet, because the component sets the height itself from the measured text on every edit and a second height fights it by 1 line or more. Evidence: single use `src/ui/TextArea.tsx:115`, the one place the height is set. Check: test `src/ui/TextArea.test.tsx`.
   - Don't: `.my-notes .ui-textarea { min-height: 64px; max-height: 240px }`
   - Do: `<TextArea rows={2} maxRows={9} ariaLabel="Notes" value={notes()} onInput={setNotes} />`
-- `rule/textarea-enter-in-keydown`: When Enter sends the text, handle it in `onKeyDown` and call `preventDefault`, leaving Shift+Enter to break the line, because `onKeyDown` hears 0 keys while an input method is composing and a handler on a wrapper would send a half-composed word. Evidence: single use `src/ui/TextArea.tsx:191`, the composition guard. Check: test `src/ui/TextArea.test.tsx`.
+- `rule/textarea-enter-in-keydown`: When Enter sends the text, handle it in `onKeyDown` and call `preventDefault`, leaving Shift+Enter to break the line, because `onKeyDown` hears 0 keys while an input method is composing and a handler on a wrapper would send a half-composed word. Evidence: single use `src/ui/TextArea.tsx:194`, the composition guard. Check: test `src/ui/TextArea.test.tsx`.
   - Don't: `<div onKeyDown={(e) => e.key === "Enter" && send()}><TextArea ariaLabel="Ask" value={draft()} onInput={setDraft} /></div>`
   - Do: `<TextArea ariaLabel="Ask" value={draft()} onInput={setDraft} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />`
-- `rule/textarea-bare-card-focus`: When `variant="bare"` is used, give the card around it the focus cue with `:focus-within`, because the bare editor draws 0 rings of its own and a keyboard user would otherwise see no focus at all. Evidence: single use `src/ui/ui.css:954`, the bare recipe, which drops the ring. Check: review `src/assistant.css`.
+- `rule/textarea-bare-card-focus`: When `variant="bare"` is used, give the card around it the focus cue with `:focus-within`, because the bare editor draws 0 rings of its own and a keyboard user would otherwise see no focus at all. Evidence: single use `src/ui/ui.css:1094`, the bare recipe, which drops the ring. Check: review `src/assistant.css`.
   - Don't: `<div class="card"><TextArea variant="bare" ariaLabel="Ask" /></div>` with no `.card:focus-within` rule.
   - Do: `.card:focus-within { border-color: var(--composer-border-active) }` around `<TextArea variant="bare" ariaLabel="Ask" />`
-- `rule/textarea-described-by`: When a line of help, a count or an error sits beside a text area, give the line an `id` and pass it as `describedBy`, and pass `invalid` while the text is refused, because a line that only sits near the control is read 0 times by a screen reader that lands on it by Tab. Evidence: single use `src/ui/TextArea.tsx:167`, the tie `Field` makes the same way (`rule/field-described-by`). Check: test `src/ui/TextArea.test.tsx`.
+- `rule/textarea-described-by`: When a line of help, a count or an error sits beside a text area, give the line an `id` and pass it as `describedBy`, and pass `invalid` while the text is refused, because a line that only sits near the control is read 0 times by a screen reader that lands on it by Tab. Evidence: single use `src/ui/TextArea.tsx:169`, the tie `Field` makes the same way (`rule/field-described-by`). Check: test `src/ui/TextArea.test.tsx`.
   - Don't: `<TextArea ariaLabel="Ask" invalid /><div>120 characters too long to send</div>`
   - Do: `<TextArea ariaLabel="Ask" invalid describedBy="ask-over" /><div id="ask-over">120 characters too long to send</div>`
 
@@ -276,7 +278,7 @@ Rests on the native `<textarea>` element: typing, selection, IME, undo and `disa
 | The type | field | `--font-body`, `--leading-ui` (the line; a quarter taller under a coarse pointer, for its 16px type) |
 | The type | bare | inherited from the card: its size, its line, its family |
 | The fill | field | `--control` |
-| The stroke | rest | `--border-soft` |
+| The stroke | rest | `--border-soft` (dark), `--border` (light): the field's own edge ink, `--ui-field-edge`, shared with `Field` and `Select` since 2026-11-12 |
 | The stroke | focus | `--focus-ring` |
 | The stroke | invalid | `--error` |
 | The text | all | `--text` |
