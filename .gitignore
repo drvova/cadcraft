@@ -13,6 +13,10 @@
 node_modules/
 /apps/ui/dist/
 /apps/ui/src/wasm/
+# The Slab toolchain built by scripts/build-slab.mjs at the commit apps/ui/slab.lock.json pins, and
+# what it generates from apps/ui/slab/*.slab. Third-party artifacts: never committed.
+/apps/ui/src/slab-vendor/
+/apps/ui/slab/gen/
 /.claude/worktrees/
 
 # Unlazy orchestration state (gates, leases, logs): local only.

@@ -10,7 +10,7 @@
  * local signals; anything else classified "none" does nothing.
  */
 
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, untrack, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, untrack, type Component, type JSX } from "solid-js";
 import { AppFacade, type CommandInfo, type DrawingState, type Grip, type GripOption, type LayerInfo, type SampleName, type ScriptReport, type SettingsState } from "./facade";
 import type { DisplayList } from "./display";
 import { padView, regionCovers, regionOf, VIEW_PAD, viewScale, type DisplayRegion } from "./display-cache";
@@ -39,7 +39,7 @@ import { PropertiesPanel } from "./components/PropertiesPanel";
 import { SourcePanel } from "./components/SourcePanel";
 import { Viewport3D } from "./components/Viewport3D";
 import { TechSheet } from "./components/TechSheet";
-import { BenchPanel } from "./components/BenchPanel";
+import { BenchPanel, type BenchPanelProps } from "./components/BenchPanel";
 import { ObjectsPanel } from "./components/ObjectsPanel";
 import { OBJECTS_LIMIT, parseObjects, type ObjectList } from "./objects";
 import { PiecePanel } from "./components/PiecePanel";
@@ -53,9 +53,17 @@ import { PriceBookDialog } from "./components/PriceBookDialog";
 import { LayerManager } from "./components/LayerManager";
 import { TemplateGallery } from "./components/TemplateGallery";
 import { opensLayerManager } from "./layer-manager";
+import type { SlabParts } from "./slab/parts";
 
 export interface AppProps {
   facade: AppFacade;
+  /**
+   * The Slab shell's parts (`?shell=slab`: `./slab/parts`), loaded by main.tsx. Absent, the
+   * shell is the standard one below and nothing of Slab is in the page.
+   */
+  slab?: SlabParts;
+  /** Said once beside the command field: why the shell that was asked for is not the one shown. */
+  shellNotice?: string;
 }
 
 type ThemeChoice = "dark" | "light" | "system";
@@ -184,7 +192,7 @@ export function App(props: AppProps): JSX.Element {
   const [layers, setLayers] = createSignal<LayerInfo[]>([]);
   const [display, setDisplay] = createSignal<DisplayList>({ revision: 0, bounds: UNIT_RECT, verts: [], prims: [] });
   const [view, setView] = createSignal<Rect>(UNIT_RECT);
-  const [notice, putNotice] = createSignal<string | null>(null);
+  const [notice, putNotice] = createSignal<string | null>(props.shellNotice ?? null);
   const [commands, setCommands] = createSignal<CommandInfo[]>([]);
   const [settings, setSettings] = createSignal<SettingsState>({
     grid: false,
@@ -1304,149 +1312,169 @@ export function App(props: AppProps): JSX.Element {
 
   const currentLayer = createMemo(() => drawing()?.currentLayer ?? layers().find((l) => l.current)?.name ?? "0");
 
-  return (
-    <div class="app">
-      <TopBar
-        drawing={drawing}
-        menu={
-          <Show when={showMenubar()}>
-            <MenuBar commands={commands()} onInvoke={onInvoke} />
-          </Show>
-        }
-        paletteShortcut={shortcutLabel("Cmd+Shift+P", isMacPlatform())}
-        onOpenPalette={() => setPaletteOpen(true)}
-        sidebarOpen={showSidebar}
-        onToggleSidebar={() => setShowSidebar((v) => !v)}
-        panelOpen={showCmdline}
-        onTogglePanel={() => setShowCmdline((v) => !v)}
-        assistantOpen={showAssistant}
-        onToggleAssistant={() => setShowAssistant((v) => !v)}
+  /**
+   * The shell's regions, composed once and placed by whichever shell is on: the standard one
+   * below (a grid of bars and a flex workspace, `styles.css`), or the Slab shell, which hands
+   * each region to a hole of `slab/shell.slab` (`./slab/SlabShell`). Neither forks a component.
+   */
+  const topBar = (): JSX.Element => (
+    <TopBar
+      drawing={drawing}
+      menu={
+        <Show when={showMenubar()}>
+          <MenuBar commands={commands()} onInvoke={onInvoke} />
+        </Show>
+      }
+      paletteShortcut={shortcutLabel("Cmd+Shift+P", isMacPlatform())}
+      onOpenPalette={() => setPaletteOpen(true)}
+      sidebarOpen={showSidebar}
+      onToggleSidebar={() => setShowSidebar((v) => !v)}
+      panelOpen={showCmdline}
+      onTogglePanel={() => setShowCmdline((v) => !v)}
+      assistantOpen={showAssistant}
+      onToggleAssistant={() => setShowAssistant((v) => !v)}
+    />
+  );
+  const ribbon = (): JSX.Element => (
+    <Show when={showToolbar()}>
+      <ToolStrip onInvoke={onInvoke} commands={commands()} />
+    </Show>
+  );
+  /** The sidebar is on screen: its switch is on and it has a section to show. */
+  const sidebarShown = (): boolean => showSidebar() && (showPiece() || showLayers() || showObjects() || showProperties() || showBench());
+  const railSections = (): JSX.Element => (
+    <>
+      <Show when={showPiece()}>
+        <PiecePanel state={piece()} choices={pieceChoices()} onRun={onPieceRun} onNotice={onPropertyNotice} onTemplates={() => setShowTemplates(true)} />
+      </Show>
+      <Show when={showLayers()}>
+        <LayersPanel layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} onMenu={(name, at) => openContext({ kind: "layer", name }, at)} />
+      </Show>
+      <Show when={showObjects()}>
+        <ObjectsPanel list={objects()} available={objectsAvailable()} selection={selection()} onSelect={onBenchSelect} />
+      </Show>
+      <Show when={showProperties()}>
+        <PropertiesPanel properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={onPropertyNotice} />
+      </Show>
+    </>
+  );
+  /** The Bench section, drawn by `Panel`: the SolidJS one, or the one ported to Slab. */
+  const benchSection = (Panel: Component<BenchPanelProps>): JSX.Element => (
+    <Show when={showBench()}>
+      <Panel sheet={bench()} selection={selection()} onSelect={onBenchSelect} canPrice={canPrice()} onEditPrices={() => setPricebookOpen(true)} />
+    </Show>
+  );
+  const recoveryBar = (): JSX.Element => <RecoveryBar {...recovery.bar} />;
+  const layoutTabs = (): JSX.Element => (
+    <LayoutTabs
+      layouts={layouts()}
+      space={space()}
+      onLayout={(name) => {
+        // Back from the 3D view to the space that was under it: nothing is asked of the
+        // engine, so the drawing is exactly as it was left.
+        const from3d = stage3d();
+        setStage3d(false);
+        if (!from3d || name.toLowerCase() !== space().toLowerCase()) onLayout(name);
+      }}
+      onMenu={(name, at) => openContext({ kind: "layout", name }, at)}
+      view3d={stage3d()}
+      onView3d={() => setStage3d(true)}
+    />
+  );
+  const editorRow = (): JSX.Element => (
+    <div class="editor-row">
+    <main class="stage">
+      <CanvasView
+        facade={props.facade}
+        view={view}
+        display={display}
+        selection={selection}
+        extents={() => unionRects(drawing()?.extents ?? null, display().sheet?.paper ?? null)}
+        onViewChange={onViewChange}
+        onNotice={setNotice}
+        onPick={onPick}
+        onSelectRect={onSelectRect}
+        wants={wants}
+        onPoint={onPoint}
+        onMenu={onDrawingMenu}
+        engineState={engineState}
+        base={() => prompt().anchor.base}
+        gripEditing={() => prompt().running === "grip"}
+        onGripStart={onGripStart}
+        onGripMenu={onGripMenu}
+        onBeforeQuery={tellView}
+        onCursor={setCursor}
       />
-      <Show when={showToolbar()}>
-        <ToolStrip onInvoke={onInvoke} commands={commands()} />
+      {/* Over the drawing, which stays mounted under it at its own view. */}
+      <Show when={stage3d()}>
+        <Viewport3D execute={(command, params) => props.facade.execute(command, params)} revision={drawing()?.revision ?? 0} onNotice={setNotice} />
       </Show>
-      <div class={showAssistant() ? "workspace has-assistant" : "workspace"}>
-        <Show when={showSidebar() && (showPiece() || showLayers() || showObjects() || showProperties() || showBench())}>
-          <aside class="sidebar" aria-label="Drawing">
-            <Show when={showPiece()}>
-              <PiecePanel state={piece()} choices={pieceChoices()} onRun={onPieceRun} onNotice={onPropertyNotice} onTemplates={() => setShowTemplates(true)} />
-            </Show>
-            <Show when={showLayers()}>
-              <LayersPanel layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} onMenu={(name, at) => openContext({ kind: "layer", name }, at)} />
-            </Show>
-            <Show when={showObjects()}>
-              <ObjectsPanel list={objects()} available={objectsAvailable()} selection={selection()} onSelect={onBenchSelect} />
-            </Show>
-            <Show when={showProperties()}>
-              <PropertiesPanel properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={onPropertyNotice} />
-            </Show>
-            <Show when={showBench()}>
-              <BenchPanel sheet={bench()} selection={selection()} onSelect={onBenchSelect} canPrice={canPrice()} onEditPrices={() => setPricebookOpen(true)} />
-            </Show>
-          </aside>
-        </Show>
-        <div class="editor">
-          <RecoveryBar {...recovery.bar} />
-          <LayoutTabs
-            layouts={layouts()}
-            space={space()}
-            onLayout={(name) => {
-              // Back from the 3D view to the space that was under it: nothing is asked of the
-              // engine, so the drawing is exactly as it was left.
-              const from3d = stage3d();
-              setStage3d(false);
-              if (!from3d || name.toLowerCase() !== space().toLowerCase()) onLayout(name);
-            }}
-            onMenu={(name, at) => openContext({ kind: "layout", name }, at)}
-            view3d={stage3d()}
-            onView3d={() => setStage3d(true)}
-          />
-          <div class="editor-row">
-          <main class="stage">
-            <CanvasView
-              facade={props.facade}
-              view={view}
-              display={display}
-              selection={selection}
-              extents={() => unionRects(drawing()?.extents ?? null, display().sheet?.paper ?? null)}
-              onViewChange={onViewChange}
-              onNotice={setNotice}
-              onPick={onPick}
-              onSelectRect={onSelectRect}
-              wants={wants}
-              onPoint={onPoint}
-              onMenu={onDrawingMenu}
-              engineState={engineState}
-              base={() => prompt().anchor.base}
-              gripEditing={() => prompt().running === "grip"}
-              onGripStart={onGripStart}
-              onGripMenu={onGripMenu}
-              onBeforeQuery={tellView}
-              onCursor={setCursor}
-            />
-            {/* Over the drawing, which stays mounted under it at its own view. */}
-            <Show when={stage3d()}>
-              <Viewport3D execute={(command, params) => props.facade.execute(command, params)} revision={drawing()?.revision ?? 0} onNotice={setNotice} />
-            </Show>
-            <InlineAsk
-              open={askOpen()}
-              draft={assistant()?.input() ?? ""}
-              onDraft={(text) => assistant()?.setInput(text)}
-              selected={selection().length}
-              ready={assistant()?.ready() ?? false}
-              onSend={sendAsk}
-              onClose={closeAsk}
-              offer={prompt().running === null && !stage3d()}
-              onOpen={() => setAskOpen(true)}
-              shortcut={shortcutLabel("Cmd+K", isMacPlatform())}
-            />
-          </main>
-          <SourcePanel
-            open={showSource()}
-            stamp={sourceStamp()}
-            readSource={() => props.facade.scriptSource()}
-            onApply={applySource}
-            onClose={() => setShowSource(false)}
-            applyShortcut={shortcutLabel("Cmd+Enter", isMacPlatform())}
-          />
-          </div>
-          <Show when={showCmdline()}>
-            <CommandLine prompt={prompt} notice={notice} onSubmit={onCommand} />
-          </Show>
-        </div>
-        <Show when={showAssistant() ? assistant() : undefined} keyed>
-          {(chat) => (
-            <AssistantPane
-              session={chat}
-              selection={selection}
-              layers={layers().map((l) => l.name)}
-              bench={bench()}
-              commands={palette}
-              onRunCommand={onPaletteRun}
-              chats={() => chats().map((c) => c.title())}
-              chatIndex={chatIndex}
-              onSelectChat={setChatIndex}
-              onNewChat={onNewChat}
-              onCloseChat={onCloseChat}
-              onClose={() => setShowAssistant(false)}
-            />
-          )}
-        </Show>
-      </div>
-      <Show when={showStatusbar()}>
-        <StatusBar
-          settings={settings()}
-          mode={props.facade.mode}
-          currentLayer={currentLayer()}
-          entityCount={drawing()?.entityCount ?? 0}
-          layerCount={drawing()?.layerCount ?? 0}
-          cursor={cursor()}
-          formatPoint={coordText}
-          selectionCount={selection().length}
-          onCommand={onStatusCommand}
-          onSettings={(id) => openDrafting(draftingTabFor(id))}
+      <InlineAsk
+        open={askOpen()}
+        draft={assistant()?.input() ?? ""}
+        onDraft={(text) => assistant()?.setInput(text)}
+        selected={selection().length}
+        ready={assistant()?.ready() ?? false}
+        onSend={sendAsk}
+        onClose={closeAsk}
+        offer={prompt().running === null && !stage3d()}
+        onOpen={() => setAskOpen(true)}
+        shortcut={shortcutLabel("Cmd+K", isMacPlatform())}
+      />
+    </main>
+    <SourcePanel
+      open={showSource()}
+      stamp={sourceStamp()}
+      readSource={() => props.facade.scriptSource()}
+      onApply={applySource}
+      onClose={() => setShowSource(false)}
+      applyShortcut={shortcutLabel("Cmd+Enter", isMacPlatform())}
+    />
+    </div>
+  );
+  const commandLine = (): JSX.Element => (
+    <Show when={showCmdline()}>
+      <CommandLine prompt={prompt} notice={notice} onSubmit={onCommand} />
+    </Show>
+  );
+  const assistantPane = (): JSX.Element => (
+    <Show when={showAssistant() ? assistant() : undefined} keyed>
+      {(chat) => (
+        <AssistantPane
+          session={chat}
+          selection={selection}
+          layers={layers().map((l) => l.name)}
+          bench={bench()}
+          commands={palette}
+          onRunCommand={onPaletteRun}
+          chats={() => chats().map((c) => c.title())}
+          chatIndex={chatIndex}
+          onSelectChat={setChatIndex}
+          onNewChat={onNewChat}
+          onCloseChat={onCloseChat}
+          onClose={() => setShowAssistant(false)}
         />
-      </Show>
+      )}
+    </Show>
+  );
+  const statusBar = (): JSX.Element => (
+    <Show when={showStatusbar()}>
+      <StatusBar
+        settings={settings()}
+        mode={props.facade.mode}
+        currentLayer={currentLayer()}
+        entityCount={drawing()?.entityCount ?? 0}
+        layerCount={drawing()?.layerCount ?? 0}
+        cursor={cursor()}
+        formatPoint={coordText}
+        selectionCount={selection().length}
+        onCommand={onStatusCommand}
+        onSettings={(id) => openDrafting(draftingTabFor(id))}
+      />
+    </Show>
+  );
+  const overlays = (): JSX.Element => (
+    <>
       <LayerManager facade={props.facade} open={layerManager()} onClose={() => setLayerManager(false)} onChanged={refresh} />
       <RingDialog facade={props.facade} open={jewelry() === "ring"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
       <GemDialog facade={props.facade} open={jewelry() === "gem"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
@@ -1471,6 +1499,65 @@ export function App(props: AppProps): JSX.Element {
       />
       <CommandPalette open={paletteOpen} items={palette} recent={recentCommands} onRun={onPaletteRun} onClose={() => setPaletteOpen(false)} />
       <ContextMenu menu={contextMenu} onInvoke={onContextInvoke} onClose={() => setContextAt(null)} />
+    </>
+  );
+
+  const slab = props.slab;
+  if (slab !== undefined) {
+    return (
+      <div class="app" data-shell="slab">
+        <slab.Shell
+          regions={{
+            topbar: topBar,
+            ribbon,
+            rail: () => (
+              <Show when={sidebarShown()}>
+                <aside class="sidebar" aria-label="Drawing">
+                  {railSections()}
+                  {slab.Bench === undefined ? benchSection(BenchPanel) : null}
+                </aside>
+              </Show>
+            ),
+            bench: () => <Show when={sidebarShown() && slab.Bench}>{(Bench) => benchSection(Bench())}</Show>,
+            recovery: recoveryBar,
+            tabs: layoutTabs,
+            stage: editorRow,
+            cmdline: commandLine,
+            assistant: assistantPane,
+            status: statusBar,
+          }}
+          sidebar={sidebarShown}
+          assistant={showAssistant}
+          toolbar={showToolbar}
+          cmdline={showCmdline}
+          statusbar={showStatusbar}
+        />
+        {overlays()}
+      </div>
+    );
+  }
+
+  return (
+    <div class="app">
+      {topBar()}
+      {ribbon()}
+      <div class={showAssistant() ? "workspace has-assistant" : "workspace"}>
+        <Show when={sidebarShown()}>
+          <aside class="sidebar" aria-label="Drawing">
+            {railSections()}
+            {benchSection(BenchPanel)}
+          </aside>
+        </Show>
+        <div class="editor">
+          {recoveryBar()}
+          {layoutTabs()}
+          {editorRow()}
+          {commandLine()}
+        </div>
+        {assistantPane()}
+      </div>
+      {statusBar()}
+      {overlays()}
     </div>
   );
 }

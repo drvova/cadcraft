@@ -30,6 +30,29 @@ cargo run --release -p cadcraft       # shows the build embedded from apps/ui/di
 
 Without `dist/` the desktop binary still builds, and its window says how to make the build.
 
+## The Slab shell (behind `?shell=slab`)
+
+The outer layout and the Bench section can be drawn by [Slab](https://github.com/stencil-hq/slab)
+(MIT, pre-alpha) instead of the SolidJS shell. Nothing of Slab is a dependency and nothing of it
+is committed: `scripts/build-slab.mjs` builds it from source at the commit `slab.lock.json` pins.
+
+```sh
+bun run build:slab    # fetch the pinned commit, apply slab/patches, build, compile slab/*.slab (~4 min cold, ~1.6 GB scratch)
+bun run slab:docs     # recompile slab/*.slab and the tokens only (no Rust; after editing a .slab or tokens.css)
+bun run slab:verify   # compare src/slab-vendor/ with the checksums in slab.lock.json
+```
+
+- Sources (committed): `slab/*.slab`, `slab/patches/`, `slab.lock.json`, `src/slab/` (the one boundary).
+- Generated (git-ignored): `src/slab-vendor/` (runtime, kernel wasm, compiler wasm, the `slab`
+  command line, the compiled documents, the upstream licences) and `slab/gen/tokens.slab` (made
+  from `src/tokens.css`).
+- Without the artifacts the interface builds and runs as always; `?shell=slab` then shows the
+  standard shell and says why in one line beside the command field.
+- It needs git, cargo with rustup (upstream pins its own nightly) and bun. A wasm-bindgen of the
+  version upstream locks is installed into the scratch directory, never over the one on PATH.
+- To move the pin: `bun ../../scripts/build-slab.mjs --commit <hash> --update-lock`, then run the
+  tests and look at the shell. Findings and limits: `docs/slab-foundation.md`.
+
 ## The gates
 
 | Command | What it checks |

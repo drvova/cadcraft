@@ -1,0 +1,33 @@
+{
+  "repo": "https://github.com/stencil-hq/slab",
+  "commit": "65747371a18da9a54a94955473d0ec7f7fd07d5f",
+  "patches": [
+    {
+      "file": "0001-web-host-owned-font-metrics.patch",
+      "sha256": "cf7bac27fdf03dc64b9db84c8a495b82e20fd0995f9ea6391ffe0d6378f4579a"
+    }
+  ],
+  "versions": {
+    "rust": "nightly-2026-07-28",
+    "slab": "slab 0.1.0 (65747371a)",
+    "wasm-bindgen": "0.2.126"
+  },
+  "artifacts": {
+    "compiler/slab_wasm.js": {
+      "bytes": 30747,
+      "sha256": "9052621bcfce1c210aee7dd2b75eae07fa123dbcbb2d458b8d9738cc2e6cb015"
+    },
+    "compiler/slab_wasm_bg.wasm": {
+      "bytes": 11514461,
+      "sha256": "6bbb8e5c6a3c26065b08474326980e917d076a6b3c25250f4055c89efec20a47"
+    },
+    "slab-runtime.js": {
+      "bytes": 86535,
+      "sha256": "bec5cde5c9cb0954fc661f6d369432e8d85dbf1058d6cd6b3364fc72e8f2af7d"
+    },
+    "wasm/slab_kernel_bg.wasm": {
+      "bytes": 4338926,
+      "sha256": "f5f9d28ed8659c6d1a189d8285b051398a7e5ca4e8945aab751b40ffbbd9277a"
+    }
+  }
+}

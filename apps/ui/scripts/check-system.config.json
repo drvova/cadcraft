@@ -1,6 +1,6 @@
 {
   "include": ["src"],
-  "exclude": ["src/wasm"],
+  "exclude": ["src/wasm", "src/slab-vendor"],
   "tokenSources": ["src/tokens.css"],
   "uiDir": "src/ui",
   "examplesDir": "docs/system/examples",

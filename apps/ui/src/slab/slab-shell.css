@@ -1,0 +1,65 @@
+/*
+ * The Slab shell's page side (`SlabShell.tsx`): how the interface's own components sit in the
+ * holes of `slab/shell.slab`. The kernel sizes every hole; these rules only make a region's
+ * content take the hole it was given, and take back the widths and edges the standard shell's
+ * sheet gives the side panes (the document draws those).
+ */
+
+/* The standard shell is a grid of bars and a workspace; here one element has the window. */
+.app[data-shell="slab"] {
+  display: block;
+}
+
+.slab-shell {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Until the first frame that has the bars' heights and the panes' widths: nothing half laid out. */
+.slab-shell:not([data-ready]) {
+  visibility: hidden;
+}
+
+.slab-slot {
+  min-width: 0;
+}
+
+/* A region the kernel gave no room: out of the page and out of the Tab order. */
+.slab-slot[hidden] {
+  display: none;
+}
+
+/* A bar is as tall as its content; the host reports that height to the kernel. */
+.slab-bar {
+  display: block;
+}
+
+/* A pane's content fills the hole. */
+.slab-fill {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.slab-fill > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The side panes are as wide as their pane, and the document draws the seams. */
+.slab-shell .sidebar,
+.slab-shell .assistant-panel {
+  width: auto;
+  border-inline: none;
+}
+
+/* The assistant's own resize strip gives way to the kernel's divider. */
+.slab-shell .assistant-resize {
+  display: none;
+}
+
+.slab-bench {
+  display: block;
+}
