@@ -6,6 +6,8 @@
  */
 
 import { isRecord } from "./json";
+import type { GemStone } from "./jewelry-dialog";
+import { numberText, readNumber } from "./props";
 
 export interface BenchLine {
   /** What the line counts: a cut and size, or a band. */
@@ -27,6 +29,37 @@ export interface BenchSheet {
   lines: BenchLine[];
   /** What the engine found wrong with a stone's record. */
   warnings: string[];
+  /** The estimated cost, when the engine priced one (a price book is set, or prices were passed).
+   *  Optional so a stand-in sheet can leave it out; `parseBench` always sets it (null when none). */
+  cost?: BenchCost | null;
+  /** The alloys the drawing's bands are in (the engine's own names), for the Price Book editor. */
+  alloys?: string[];
+  /** The specific gravities of the drawing's stones, so the editor can name their materials. */
+  stoneSgs?: number[];
+}
+
+/** One line of the cost: what it is, how much of it, and its amount (null when unpriced). */
+export interface BenchCostLine {
+  what: string;
+  /** The quantity in the trade's words ("3.86 g", "18 pc · 0.15 ct"). */
+  detail: string;
+  /** The money, formatted; null when the engine could not price the line. */
+  amount: string | null;
+  /** Why a line is unpriced, in the engine's words; null on a priced line. */
+  note: string | null;
+}
+
+/** The estimated cost of a piece, every figure the engine's and formatted in its currency. */
+export interface BenchCost {
+  currency: string;
+  metal: string;
+  stones: string;
+  /** The labor figure, formatted; null when the book sets none. */
+  labor: string | null;
+  total: string;
+  /** How many lines the engine could not price (shown but left out of the total). */
+  unpriced: number;
+  lines: BenchCostLine[];
 }
 
 /** The most lines and warnings a sheet shows; a drawing with more says how many it left out. */
@@ -81,6 +114,32 @@ export function metalText(metal: string): string {
 
 const capital = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
+/** A currency code as the reply writes it: a short run of letters or digits. */
+const CURRENCY_RE = /^[A-Za-z0-9]{1,8}$/;
+
+/** The decimal places a currency's minor unit has, mirroring the engine; 2 for most. */
+const CURRENCY_DIGITS: Readonly<Record<string, number>> = { JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, XOF: 0, XAF: 0, BHD: 3, KWD: 3, OMR: 3, JOD: 3, TND: 3, IQD: 3 };
+
+/** The currency's minor-unit places. */
+function minorDigits(currency: string): number {
+  return CURRENCY_DIGITS[currency.toUpperCase()] ?? 2;
+}
+
+/**
+ * An amount in its currency, as money: the platform's own formatting for an ISO code ("$161.00",
+ * "€40.00"), else the code and the number ("GOLD 1.00"). Never throws on an odd code.
+ */
+export function formatMoney(amount: number, currency: string): string {
+  if (!Number.isFinite(amount)) return "";
+  const code = (CURRENCY_RE.test(currency) ? currency : "USD").toUpperCase();
+  const digits = minorDigits(code);
+  try {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: code, minimumFractionDigits: digits, maximumFractionDigits: digits }).format(amount);
+  } catch {
+    return `${code} ${amount.toFixed(digits)}`;
+  }
+}
+
 function stoneLine(group: unknown): BenchLine | null {
   if (!isRecord(group)) return null;
   const count = finite(group["count"]);
@@ -110,6 +169,46 @@ function bandLine(band: unknown): { line: BenchLine; grams: number } | null {
   return { line: { label: `${capital(metal)} band`, value: `${size}${trim(grams, 2)} g`, note: null, handles: handlesOf([band["handle"]]) }, grams };
 }
 
+/** A line of the `cost` object, narrowed; null when it cannot be read. */
+function costLine(value: unknown, currency: string): BenchCostLine | null {
+  if (!isRecord(value)) return null;
+  const what = typeof value["what"] === "string" && value["what"] !== "" ? value["what"].slice(0, 80) : "item";
+  const unit = typeof value["unit"] === "string" ? value["unit"] : "";
+  const qty = finite(value["qty"]);
+  const carat = finite(value["carat"]);
+  let detail = "";
+  if (unit === "g" && qty !== null) detail = `${trim(qty, 2)} g`;
+  else if (unit === "ct") detail = `${qty === null ? 0 : Math.round(qty)} pc${carat === null ? "" : ` · ${caratText(carat)}`}`;
+  else if (unit === "pc" && qty !== null) detail = `${Math.round(qty)} pc`;
+  const amountValue = finite(value["amount"]);
+  const amount = amountValue === null ? null : formatMoney(amountValue, currency);
+  const note = typeof value["note"] === "string" && value["note"] !== "" ? value["note"].slice(0, 160) : null;
+  return { what: capital(what), detail, amount, note };
+}
+
+/** Read the `cost` object of a `techsheet` reply; null when the reply carries none. */
+export function parseCost(value: unknown): BenchCost | null {
+  if (!isRecord(value)) return null;
+  const currency = typeof value["currency"] === "string" && CURRENCY_RE.test(value["currency"]) ? value["currency"] : "USD";
+  const total = finite(value["total"]);
+  if (total === null) return null;
+  const money = (v: unknown): string => formatMoney(finite(v) ?? 0, currency);
+  const lines: BenchCostLine[] = [];
+  for (const raw of (Array.isArray(value["lines"]) ? value["lines"] : []).slice(0, MAX_BENCH_LINES)) {
+    const line = costLine(raw, currency);
+    if (line !== null) lines.push(line);
+  }
+  return {
+    currency,
+    metal: money(value["metal"]),
+    stones: money(value["stones"]),
+    labor: "labor" in value && finite(value["labor"]) !== null ? money(value["labor"]) : null,
+    total: formatMoney(total, currency),
+    unpriced: Math.max(0, Math.round(finite(value["unpriced"]) ?? 0)),
+    lines,
+  };
+}
+
 /** Read a `techsheet` reply; null when it is not one. */
 export function parseBench(result: unknown): BenchSheet | null {
   if (!isRecord(result) || !isRecord(result["stones"])) return null;
@@ -123,20 +222,171 @@ export function parseBench(result: unknown): BenchSheet | null {
     if (lines.length < MAX_BENCH_LINES) lines.push(line);
     else left++;
   };
+  const stoneSgs: number[] = [];
   for (const group of groups.slice(0, MAX_BENCH_READ)) {
     const line = stoneLine(group);
-    if (line !== null) put(line);
+    if (line === null) continue;
+    put(line);
+    if (isRecord(group)) {
+      const sg = finite(group["sg"]);
+      if (sg !== null && sg > 0 && !stoneSgs.some((s) => Math.abs(s - sg) < 1e-3)) stoneSgs.push(sg);
+    }
   }
   let grams = 0;
+  const alloys: string[] = [];
   for (const band of bands.slice(0, MAX_BENCH_READ)) {
     const read = bandLine(band);
     if (read === null) continue;
     grams += read.grams;
     put(read.line);
+    if (isRecord(band) && typeof band["metal"] === "string") {
+      const alloy = band["metal"].trim().toLowerCase().slice(0, 24);
+      if (alloy !== "" && alloy !== "?" && !alloys.includes(alloy)) alloys.push(alloy);
+    }
   }
   const warnings = (Array.isArray(result["warnings"]) ? result["warnings"] : []).filter((w): w is string => typeof w === "string").slice(0, MAX_BENCH_LINES).map((w) => w.slice(0, 240));
   if (left > 0) warnings.push(`${left.toLocaleString("en-US")} more ${left === 1 ? "line is" : "lines are"} on the full sheet (TECHSHEET).`);
-  return { stones: Math.max(0, Math.round(finite(stones["count"]) ?? 0)), carat: Math.max(0, finite(stones["carat"]) ?? 0), grams, lines, warnings };
+  return { stones: Math.max(0, Math.round(finite(stones["count"]) ?? 0)), carat: Math.max(0, finite(stones["carat"]) ?? 0), grams, lines, warnings, cost: parseCost(result["cost"]), alloys, stoneSgs };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The Price Book editor
+// ---------------------------------------------------------------------------------------------
+
+/** One thing the editor asks a price for: the engine's own key, and the words shown for it. */
+export interface PriceAsk {
+  value: string;
+  label: string;
+}
+
+/** The metals and stone materials the editor asks about, read from the drawing (never hardcoded). */
+export interface PriceAsks {
+  metals: PriceAsk[];
+  materials: PriceAsk[];
+}
+
+/** How a labor figure is charged. */
+export type LaborMode = "none" | "flat" | "perStone" | "perGram";
+
+/** The Price Book editor's form: a price per metal and per material, a currency, and one labor figure. */
+export interface PriceForm {
+  currency: string;
+  /** Alloy key → price-per-gram, as typed. */
+  metals: Record<string, string>;
+  /** Material key (and `default`) → price-per-carat, as typed. */
+  stones: Record<string, string>;
+  laborMode: LaborMode;
+  laborAmount: string;
+}
+
+/** The id the editor gives a field, to tie a refusal to it. */
+export const metalFieldId = (alloy: string): string => `metal:${alloy}`;
+export const stoneFieldId = (material: string): string => `stone:${material}`;
+export const LABOR_FIELD = "labor";
+export const CURRENCY_FIELD = "currency";
+
+/** The words for a value that is not a price. */
+export const NOT_A_PRICE = "Enter a price: a number, 0 or more.";
+
+/**
+ * What the editor should ask about, from the bench sheet and the engine's stone list (`gemlist`):
+ * the alloys the bands are in, priced per gram, and the materials the stones are, priced per
+ * carat (named from their specific gravity), plus a `default` catch-all for any the names miss.
+ * Nothing is hardcoded — an empty drawing asks for nothing but the catch-all.
+ */
+export function priceAsks(sheet: BenchSheet | null, stones: readonly GemStone[]): PriceAsks {
+  const metals: PriceAsk[] = (sheet?.alloys ?? []).map((alloy) => ({ value: alloy, label: capital(metalText(alloy)) }));
+  const materials: PriceAsk[] = [];
+  const add = (value: string, label: string): void => {
+    if (!materials.some((m) => m.value === value)) materials.push({ value, label });
+  };
+  for (const sg of sheet?.stoneSgs ?? []) {
+    // A material is only askable by name when the engine would know it; a gravity it does not
+    // name is left to the catch-all rather than offered as a key the engine would ignore.
+    const match = stones.find((s) => s.sg !== null && Math.abs(s.sg - sg) < 1e-3);
+    if (match !== undefined) add(match.name, capital(match.name));
+  }
+  add("default", "Other stones");
+  return { metals, materials };
+}
+
+/** A stored price as the field shows it; "" when the book sets none. */
+function priceString(value: unknown): string {
+  const n = finite(value);
+  return n === null ? "" : numberText(n);
+}
+
+/** The editor's opening form: the asks, prefilled from the stored book (a `pricebook` reply's `book`). */
+export function priceForm(book: unknown, asks: PriceAsks): PriceForm {
+  const b = isRecord(book) ? book : {};
+  const currency = typeof b["currency"] === "string" && CURRENCY_RE.test(b["currency"]) ? b["currency"].toUpperCase() : "USD";
+  const metalPrices = isRecord(b["metal"]) ? b["metal"] : {};
+  const stonePrices = isRecord(b["stone"]) ? b["stone"] : {};
+  const metals: Record<string, string> = {};
+  for (const ask of asks.metals) metals[ask.value] = priceString(metalPrices[ask.value]);
+  const stones: Record<string, string> = {};
+  for (const ask of asks.materials) stones[ask.value] = priceString(stonePrices[ask.value]);
+  const labor = isRecord(b["labor"]) ? b["labor"] : null;
+  const mode = labor === null ? "" : String(labor["mode"]);
+  const laborMode: LaborMode = mode === "flat" || mode === "perStone" || mode === "perGram" ? mode : "none";
+  return { currency, metals, stones, laborMode, laborAmount: labor === null ? "" : priceString(labor["amount"]) };
+}
+
+/** A typed price: the number, or that the field is empty or not a price. */
+function readPrice(text: string): number | "empty" | "bad" {
+  if (typeof text !== "string" || text.trim() === "") return "empty";
+  const read = readNumber(text);
+  if (!read.ok || !Number.isFinite(read.value) || read.value < 0) return "bad";
+  return read.value;
+}
+
+/** Whether the form has any price to save (so Save can be held back when it has none). */
+export function hasAnyPrice(form: PriceForm): boolean {
+  const some = (map: Record<string, string>): boolean => Object.values(map).some((t) => typeof readPrice(t) === "number");
+  return some(form.metals) || some(form.stones) || (form.laborMode !== "none" && typeof readPrice(form.laborAmount) === "number");
+}
+
+/** The `pricebook {set}` the form makes, or the fields that cannot be sent with the words for each. */
+export function planPriceBook(form: PriceForm): { ok: true; params: Record<string, unknown> } | { ok: false; errors: Record<string, string> } {
+  const errors: Record<string, string> = {};
+  const metal: Record<string, number> = {};
+  for (const [alloy, text] of Object.entries(form.metals)) {
+    const read = readPrice(text);
+    if (read === "empty") continue;
+    if (read === "bad") errors[metalFieldId(alloy)] = NOT_A_PRICE;
+    else metal[alloy] = read;
+  }
+  const stone: Record<string, number> = {};
+  for (const [material, text] of Object.entries(form.stones)) {
+    const read = readPrice(text);
+    if (read === "empty") continue;
+    if (read === "bad") errors[stoneFieldId(material)] = NOT_A_PRICE;
+    else stone[material] = read;
+  }
+  let labor: Record<string, number> | null = null;
+  if (form.laborMode !== "none") {
+    const read = readPrice(form.laborAmount);
+    if (read === "empty") errors[LABOR_FIELD] = "Enter a labor amount.";
+    else if (read === "bad") errors[LABOR_FIELD] = NOT_A_PRICE;
+    else labor = { [form.laborMode]: read };
+  }
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  const set: Record<string, unknown> = {};
+  if (CURRENCY_RE.test(form.currency)) set["currency"] = form.currency.toUpperCase();
+  if (Object.keys(metal).length > 0) set["metal"] = metal;
+  if (Object.keys(stone).length > 0) set["stone"] = stone;
+  if (labor !== null) set["labor"] = labor;
+  return { ok: true, params: { set } };
+}
+
+/** The field a `pricebook` refusal belongs beside, or null when it names none. */
+export function priceRefusalField(error: string): string | null {
+  if (typeof error !== "string") return null;
+  const named = /`(metal|stone|labor)\.([a-z0-9]+)`/i.exec(error);
+  if (named !== null) return named[1]?.toLowerCase() === "labor" ? LABOR_FIELD : `${named[1]?.toLowerCase()}:${named[2]?.toLowerCase()}`;
+  if (/`?currency`?/i.test(error) && /currency/i.test(error)) return CURRENCY_FIELD;
+  if (/\blabor\b/i.test(error)) return LABOR_FIELD;
+  return null;
 }
 
 /** The heading's summary: what the piece holds, in one line; empty when it holds no jewelry. */

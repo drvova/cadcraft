@@ -204,6 +204,7 @@ and MCP all reach them, and DESCRIBE reads jewelry out of any drawing.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | minor | Jewelry: PRICEBOOK and an estimated cost on the bench sheet; in the interface a rendered tech sheet, templates and the Cost group. No row closes |
 | 2026-11-12 | major | A parametric piece (PIECE) with a solid (PIECEMESH, STLOUT) and a 3D view in the interface; OBJECTS; in the interface a tabbed ribbon, Source, the Piece and Objects sections. J2 narrowed. New drawings in the interface are millimetres |
 | 2026-11-12 | minor | Jewelry: RINGSIZES measures a drawn ring (`handle`); PAVE and GEMFIT fit elongated cuts by their own outline at their rotation (`rotate`, `ratio`); a pavé fill no longer ignores the edge that closes its outline. J4 narrows to its prompt, J1 to `taper`. In the interface: Ring and Gem dialogs, `@` context in the assistant, the sidebar reachable at a phone's width |
 | 2026-11-12 | patch | Jewelry in the interface: a solitaire sample the interface opens on, a live Bench section in the sidebar, Ring, Gem, Setting and Pavé in the tool strip, the assistant briefed on the jewelry commands, Ctrl+K to ask it from the drawing. Three jewelry faults fixed in the engine (a stone named `diamond` did not read back; a halo was laid at the origin; settings and pavé were misplaced in an inch drawing). No row closes: J1–J3 stand ([jewelry.md](jewelry.md#revision-history)) |

@@ -15,7 +15,8 @@
  */
 
 import { createMemo, createSignal, For, Show, type JSX } from "solid-js";
-import { benchSummary, lineSelected, type BenchLine, type BenchSheet } from "../bench";
+import { benchSummary, lineSelected, type BenchCost, type BenchLine, type BenchSheet } from "../bench";
+import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
 import { Row } from "../ui/Row";
 import { SectionLabel } from "../ui/SectionLabel";
@@ -28,6 +29,55 @@ export interface BenchPanelProps {
   selection: readonly string[];
   /** Select these objects on the drawing; an empty list lets the selection go. */
   onSelect: (handles: readonly string[]) => void;
+  /** Whether the engine has the Price Book command (the running wasm may not yet): the cost
+   *  affordance shows only when it does. */
+  canPrice: boolean;
+  /** Open the Price Book editor. */
+  onEditPrices: () => void;
+}
+
+/** The estimated cost under the sheet: the metal, the stones, any labor, the total, and the
+ *  lines the engine could not price. Shown only when the engine priced a cost. */
+function CostGroup(props: { cost: BenchCost; onEdit: () => void }): JSX.Element {
+  const unpriced = () => props.cost.lines.filter((line) => line.amount === null);
+  return (
+    <div class="bench-cost" role="group" aria-label="Estimated cost">
+      <div class="bench-cost-head">
+        <SectionLabel>Cost</SectionLabel>
+        <Button variant="quiet" size="sm" title="Change the drawing's prices" onClick={() => props.onEdit()}>
+          Edit prices
+        </Button>
+      </div>
+      <dl class="bench-cost-rows">
+        <div class="bench-cost-row">
+          <dt>Metal</dt>
+          <dd>{props.cost.metal}</dd>
+        </div>
+        <div class="bench-cost-row">
+          <dt>Stones</dt>
+          <dd>{props.cost.stones}</dd>
+        </div>
+        <Show when={props.cost.labor !== null}>
+          <div class="bench-cost-row">
+            <dt>Labor</dt>
+            <dd>{props.cost.labor}</dd>
+          </div>
+        </Show>
+        <div class="bench-cost-row bench-cost-total">
+          <dt>Total</dt>
+          <dd>{props.cost.total}</dd>
+        </div>
+      </dl>
+      <For each={unpriced()}>
+        {(line) => (
+          <p class="bench-cost-unpriced">
+            {line.what} — unpriced{line.note === null ? "" : ` (${line.note})`}
+          </p>
+        )}
+      </For>
+      <p class="bench-cost-note">An estimate from the prices you set, not a market quote.</p>
+    </div>
+  );
 }
 
 export function BenchPanel(props: BenchPanelProps): JSX.Element {
@@ -75,6 +125,14 @@ export function BenchPanel(props: BenchPanelProps): JSX.Element {
         <For each={props.sheet?.warnings ?? []}>{(warning) => <div class="properties-empty bench-warning">{warning}</div>}</For>
         <Show when={empty()}>
           <div class="properties-empty">No stones or bands yet.</div>
+        </Show>
+        <Show when={props.sheet?.cost ?? null}>{(cost) => <CostGroup cost={cost()} onEdit={() => props.onEditPrices()} />}</Show>
+        <Show when={props.canPrice && !empty() && (props.sheet?.cost ?? null) === null}>
+          <div class="bench-set">
+            <Button variant="quiet" size="sm" title="Price the metal and stones to estimate what the piece costs" onClick={() => props.onEditPrices()}>
+              Set prices to estimate cost
+            </Button>
+          </div>
         </Show>
       </div>
     </aside>

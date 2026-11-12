@@ -80,6 +80,66 @@
   line-height: var(--leading-ui);
 }
 
+/* The estimated cost under the stones and bands: a short group of money, then any lines the engine
+   could not price. It is the user's own prices, said to be an estimate, never a market quote. */
+.bench-cost {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-4);
+  margin-top: var(--gap-4);
+  padding: var(--gap-8) var(--rail-text, var(--gap-8)) var(--gap-6);
+  border-top: var(--hairline) solid var(--border-soft);
+}
+.bench-cost-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-8);
+}
+.bench-cost-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-2);
+  margin: 0;
+}
+.bench-cost-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--gap-8);
+  font-size: var(--font-label);
+  line-height: var(--leading-ui);
+  color: var(--text-dim);
+}
+.bench-cost-row dt {
+  min-width: 0;
+}
+.bench-cost-row dd {
+  margin: 0;
+  font-variant-numeric: lining-nums tabular-nums;
+  white-space: nowrap;
+}
+.bench-cost-total {
+  color: var(--text);
+  font-weight: 600;
+}
+.bench-cost-unpriced {
+  margin: 0;
+  color: var(--warn);
+  font-size: var(--font-chip);
+  line-height: var(--leading-ui);
+}
+.bench-cost-note {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--font-chip);
+  line-height: var(--leading-ui);
+}
+.bench-set {
+  flex: 0 0 auto;
+  padding: var(--gap-6) var(--rail-text, var(--gap-8));
+}
+
 .properties-head {
   flex: 0 0 auto;
   display: flex;

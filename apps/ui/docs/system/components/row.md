@@ -12,7 +12,7 @@ Not applicable: hand-rolled — the 22px row, the 4px inset and the .14 selected
 ## Examples
 `<Row onClick={pick}>Layer 1</Row>` — one layer in the layers list.
 
-Real uses, 9 call sites (`rg -c "<Row" src` → `src/components/AssistantPane.tsx:4`, `src/components/BenchPanel.tsx:1`, `src/components/CommandPalette.tsx:1`, `src/components/DynamicInput.tsx:1`, `src/components/LayersPanel.tsx:1`, `src/components/Menu.tsx:1`):
+Real uses, 12 call sites (`rg -c "<Row" src` → `src/components/AssistantPane.tsx:4`, `src/components/BenchPanel.tsx:1`, `src/components/CommandPalette.tsx:1`, `src/components/DynamicInput.tsx:1`, `src/components/LayersPanel.tsx:1`, `src/components/Menu.tsx:1`):
 - `src/components/AssistantPane.tsx` — the `@` list's options (`option`, in a `role="listbox"` the composer drives): the selection, the bench sheet's lines and the layers a draft's `@word` matches. Added 2026-11-12.
 - `src/components/BenchPanel.tsx` — each line of the bench sheet that names its objects (a cut and size, or a band, with its count and weight trailing): a press selects those objects on the drawing, a second press lets them go, and `selected` marks the line whose objects are all selected. Added 2026-11-12.
 - `src/components/AssistantPane.tsx` — the empty state's example rows (a glyph, the prompt and a chevron; a press puts the prompt in the composer), the setup sheet's provider rows and the composer's slash list (the commands a `/word` draft matches; `selected` marks the one the arrow keys are on); the chat tabs in the header moved onto `Tab`; the transcript's tool rows and the composer's toolbar row stay bespoke (the toolbar is a container, and the tool row carries a disclosure arrow and a note).

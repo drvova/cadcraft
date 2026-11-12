@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { benchSummary, caratText, lineSelected, MAX_BENCH_LINES, MAX_LINE_HANDLES, metalText, parseBench, trim } from "./bench";
+import { benchSummary, caratText, formatMoney, hasAnyPrice, lineSelected, MAX_BENCH_LINES, MAX_LINE_HANDLES, metalText, parseBench, parseCost, planPriceBook, priceAsks, priceForm, priceRefusalField, trim } from "./bench";
+import type { GemStone } from "./jewelry-dialog";
 
 /** The solitaire sample's sheet, as the engine replies. */
 const SOLITAIRE = {
@@ -48,7 +49,7 @@ describe("the bench sheet", () => {
 
   test("a drawing with no jewelry is an empty sheet with nothing to say", () => {
     const sheet = parseBench({ stones: { count: 0, carat: 0, groups: [] }, bands: [], warnings: [] });
-    expect(sheet).toEqual({ stones: 0, carat: 0, grams: 0, lines: [], warnings: [] });
+    expect(sheet).toEqual({ stones: 0, carat: 0, grams: 0, lines: [], warnings: [], cost: null, alloys: [], stoneSgs: [] });
     expect(benchSummary(sheet)).toBe("");
     expect(benchSummary(null)).toBe("");
   });
@@ -103,5 +104,158 @@ describe("the bench sheet", () => {
     expect(metalText("gold18")).toBe("18k gold");
     expect(metalText("platinum")).toBe("platinum");
     expect(metalText("?")).toBe("metal");
+  });
+});
+
+/** A techsheet reply that carries a cost, as the engine replies when a price book is set. */
+const PRICED = {
+  stones: { count: 2, carat: 1.62, groups: [{ cut: "emerald", width: 5, length: 7, sg: 3.52, count: 2, carat: 1.62, calibrated: false }] },
+  bands: [{ block: "RING-16.51x2", size: "US 6", mm: 16.51, metal: "gold18", grams: 3.22, width: 2, wall: 1.8 }],
+  warnings: [],
+  metal: null,
+  table: null,
+  message: "",
+  cost: {
+    currency: "USD",
+    metal: 161,
+    stones: 810,
+    labor: 100,
+    total: 1071,
+    unpriced: 0,
+    lines: [
+      { what: "gold18 band (US 6)", metal: "gold18", qty: 3.22, unit: "g", rate: 50, amount: 161 },
+      { what: "diamond emerald 7×5 mm", material: "diamond", qty: 2, carat: 1.62, unit: "ct", rate: 500, amount: 810 },
+      { what: "labor (flat)", qty: 1, unit: "flat", rate: 100, amount: 100 },
+    ],
+  },
+};
+
+describe("the cost on the bench sheet", () => {
+  test("a reply with no cost has none", () => {
+    expect(parseBench(SOLITAIRE)?.cost).toBeNull();
+  });
+
+  test("reads the cost, formatted in its currency", () => {
+    const cost = parseBench(PRICED)?.cost;
+    expect(cost?.currency).toBe("USD");
+    expect(cost?.metal).toBe("$161.00");
+    expect(cost?.stones).toBe("$810.00");
+    expect(cost?.labor).toBe("$100.00");
+    expect(cost?.total).toBe("$1,071.00");
+    expect(cost?.unpriced).toBe(0);
+    expect(cost?.lines).toEqual([
+      { what: "Gold18 band (US 6)", detail: "3.22 g", amount: "$161.00", note: null },
+      { what: "Diamond emerald 7×5 mm", detail: "2 pc · 1.62 ct", amount: "$810.00", note: null },
+      { what: "Labor (flat)", detail: "", amount: "$100.00", note: null },
+    ]);
+  });
+
+  test("an unpriced line keeps its quantity and its note, but has no amount", () => {
+    const cost = parseCost({
+      currency: "USD",
+      metal: 0,
+      stones: 0,
+      total: 0,
+      unpriced: 1,
+      lines: [{ what: "sapphire round 3 mm", material: "sapphire", qty: 1, carat: 0.2, unit: "ct", note: "no stone price for sapphire" }],
+    });
+    expect(cost?.lines[0]).toEqual({ what: "Sapphire round 3 mm", detail: "1 pc · 0.20 ct", amount: null, note: "no stone price for sapphire" });
+    expect(cost?.total).toBe("$0.00");
+  });
+
+  test("no labor figure, no labor line in the cost", () => {
+    const cost = parseCost({ currency: "USD", metal: 10, stones: 0, total: 10, unpriced: 0, lines: [] });
+    expect(cost?.labor).toBeNull();
+  });
+
+  test("a reply that is not a cost is none", () => {
+    expect(parseCost(null)).toBeNull();
+    expect(parseCost({ currency: "USD" })).toBeNull(); // no total
+    expect(parseCost("cost")).toBeNull();
+  });
+
+  test("money honours the currency and never throws on an odd code", () => {
+    expect(formatMoney(1071, "USD")).toBe("$1,071.00");
+    expect(formatMoney(40, "EUR")).toBe("€40.00");
+    expect(formatMoney(1200, "JPY")).toBe("¥1,200"); // no minor unit
+    expect(formatMoney(1, "GOLD")).toBe("GOLD 1.00"); // not an ISO code: the code and the number
+    expect(formatMoney(Number.NaN, "USD")).toBe("");
+  });
+});
+
+describe("the Price Book editor", () => {
+  const stones: GemStone[] = [
+    { name: "diamond", sg: 3.52 },
+    { name: "sapphire", sg: 4.0 },
+    { name: "ruby", sg: 4.0 },
+  ];
+
+  test("asks about the alloys and materials the drawing uses, plus a catch-all, never a hardcoded list", () => {
+    const sheet = parseBench({
+      stones: { count: 3, carat: 1, groups: [{ cut: "round", width: 3, sg: 3.52, count: 1, carat: 0.5 }, { cut: "oval", width: 4, length: 5, sg: 4.0, count: 2, carat: 0.5 }] },
+      bands: [{ grams: 3, metal: "gold18", size: "US 6" }, { grams: 2, metal: "platinum", size: "US 6" }],
+    });
+    const asks = priceAsks(sheet, stones);
+    expect(asks.metals).toEqual([
+      { value: "gold18", label: "18k gold" },
+      { value: "platinum", label: "Platinum" },
+    ]);
+    // sg 3.52 → diamond, sg 4.0 → the first stone of that gravity (sapphire), then the catch-all.
+    expect(asks.materials).toEqual([
+      { value: "diamond", label: "Diamond" },
+      { value: "sapphire", label: "Sapphire" },
+      { value: "default", label: "Other stones" },
+    ]);
+    // An empty drawing asks for nothing but the catch-all.
+    expect(priceAsks(parseBench({ stones: { count: 0, carat: 0, groups: [] }, bands: [] }), stones).materials).toEqual([{ value: "default", label: "Other stones" }]);
+    expect(priceAsks(null, stones).metals).toEqual([]);
+  });
+
+  test("prefills the form from the stored book", () => {
+    const asks = priceAsks(parseBench(PRICED), stones);
+    const form = priceForm({ currency: "EUR", metal: { gold18: 50 }, stone: { diamond: 500 }, labor: { mode: "perStone", amount: 5 } }, asks);
+    expect(form.currency).toBe("EUR");
+    expect(form.metals["gold18"]).toBe("50");
+    expect(form.stones["diamond"]).toBe("500");
+    expect(form.laborMode).toBe("perStone");
+    expect(form.laborAmount).toBe("5");
+    // No stored book: empty fields, USD, no labor.
+    const empty = priceForm(null, asks);
+    expect(empty.currency).toBe("USD");
+    expect(empty.metals["gold18"]).toBe("");
+    expect(empty.laborMode).toBe("none");
+  });
+
+  test("builds the set payload, and refuses a field that is not a price", () => {
+    const base = { currency: "USD", metals: { gold18: "50" }, stones: { diamond: "500", default: "" }, laborMode: "flat" as const, laborAmount: "100" };
+    const plan = planPriceBook(base);
+    expect(plan.ok).toBe(true);
+    if (plan.ok) expect(plan.params).toEqual({ set: { currency: "USD", metal: { gold18: 50 }, stone: { diamond: 500 }, labor: { flat: 100 } } });
+    // An empty field is simply left out; a bad one is a field error.
+    const bad = planPriceBook({ ...base, metals: { gold18: "lots" } });
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.errors["metal:gold18"]).toBeDefined();
+    // Labor on, amount missing: a labor error.
+    const noAmount = planPriceBook({ ...base, laborAmount: "" });
+    expect(noAmount.ok).toBe(false);
+    if (!noAmount.ok) expect(noAmount.errors["labor"]).toBeDefined();
+    // Negative is not a price.
+    const negative = planPriceBook({ ...base, stones: { diamond: "-5" } });
+    expect(negative.ok).toBe(false);
+  });
+
+  test("knows when there is a price to save", () => {
+    expect(hasAnyPrice({ currency: "USD", metals: {}, stones: {}, laborMode: "none", laborAmount: "" })).toBe(false);
+    expect(hasAnyPrice({ currency: "USD", metals: { gold18: "50" }, stones: {}, laborMode: "none", laborAmount: "" })).toBe(true);
+    expect(hasAnyPrice({ currency: "USD", metals: {}, stones: {}, laborMode: "flat", laborAmount: "100" })).toBe(true);
+    expect(hasAnyPrice({ currency: "USD", metals: { gold18: "" }, stones: {}, laborMode: "none", laborAmount: "" })).toBe(false);
+  });
+
+  test("maps a refusal to its field", () => {
+    expect(priceRefusalField("pricebook: `metal.gold18` must be a price from 0 to a sane maximum")).toBe("metal:gold18");
+    expect(priceRefusalField("pricebook: `stone.diamond` must be a price from 0 to a sane maximum")).toBe("stone:diamond");
+    expect(priceRefusalField("pricebook: `labor.perStone` must be a number from 0 to a sane maximum")).toBe("labor");
+    expect(priceRefusalField("pricebook: `currency` must be a short code such as \"USD\"")).toBe("currency");
+    expect(priceRefusalField("pricebook: something else entirely")).toBeNull();
   });
 });

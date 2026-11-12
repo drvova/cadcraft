@@ -17,6 +17,7 @@ use serde_json::{Value, json};
 
 use super::super::*;
 use super::gem;
+use super::pricing;
 use super::*;
 
 pub fn specs() -> Vec<CommandSpec> {
@@ -40,6 +41,10 @@ struct Group {
     count: usize,
     /// How the depth and gravity were read: `name`, `block` or `default`.
     source: &'static str,
+    /// The stones' material, for pricing: the name its block carries (`sapphire`), `diamond` when
+    /// a stone carries no material (the default), or `None` when the group's stones disagree or
+    /// were given only by specific gravity.
+    material: Option<String>,
     /// The stones themselves, so a sheet's line can be found on the drawing (the first
     /// [`MAX_STONES`] of them).
     handles: Vec<String>,
@@ -52,6 +57,8 @@ pub(crate) struct JewelryFacts {
     pub carat: f64,
     /// The inserts behind each group, in the groups' order.
     pub group_handles: Vec<Vec<String>>,
+    /// Each group's material for pricing, in the groups' order (never part of the sheet's JSON).
+    pub materials: Vec<Option<String>>,
     /// Bands whose block carries its own size, metal and weight (`RING-…`), each with its
     /// insert's `handle`.
     pub bands: Vec<Value>,
@@ -147,12 +154,22 @@ pub(crate) fn jewelry_facts(d: &cadcraft_doc::Drawing, entities: &[&std::sync::A
             Some(m) if m.carat > 0.0 => m.carat,
             _ => gem::carat(cut, name.length, name.width, depth, sg),
         };
+        // The material for pricing: the name's own, or diamond when the stone carries none (the
+        // default), or unknown when it was given only by specific gravity.
+        let material = match &name.material {
+            Some(m) => Some(m.clone()),
+            None if (sg - 3.52).abs() < 1e-6 => Some("diamond".to_string()),
+            None => None,
+        };
         match groups
             .iter_mut()
             .find(|g| g.cut == cut.name && (g.width - name.width).abs() < 1e-6 && (g.length - name.length).abs() < 1e-6 && (g.sg - sg).abs() < 1e-6)
         {
             Some(g) => {
                 g.count += 1;
+                if g.material != material {
+                    g.material = None; // stones of one group that name different materials: unknown
+                }
                 if g.handles.len() < MAX_STONES {
                     g.handles.push(e.handle.hex());
                 }
@@ -166,6 +183,7 @@ pub(crate) fn jewelry_facts(d: &cadcraft_doc::Drawing, entities: &[&std::sync::A
                 carat_each,
                 count: 1,
                 source,
+                material,
                 handles: vec![e.handle.hex()],
             }),
         }
@@ -191,7 +209,8 @@ pub(crate) fn jewelry_facts(d: &cadcraft_doc::Drawing, entities: &[&std::sync::A
         })
         .collect();
     let group_handles = groups.iter().map(|g| g.handles.clone()).collect();
-    JewelryFacts { groups: group_json, group_handles, stones, carat: (carat * 1000.0).round() / 1000.0, bands, warnings }
+    let materials = groups.iter().map(|g| g.material.clone()).collect();
+    JewelryFacts { groups: group_json, group_handles, materials, stones, carat: (carat * 1000.0).round() / 1000.0, bands, warnings }
 }
 
 /// A band's own record, as `RING` wrote it into its block description:
@@ -242,6 +261,11 @@ fn run_techsheet(s: &mut Session, p: &Value) -> Result<Value> {
     let facts = jewelry_facts(d, &entities);
     // An empty sum of floats is negative zero; adding zero makes it the zero a sheet prints.
     let (groups, total_stones, total_carat, warnings) = (&facts.groups, facts.stones, facts.carat + 0.0, facts.warnings.clone());
+
+    // Pricing: the drawing's price book, with any prices passed inline in this call merged over
+    // it. Read while the drawing is still borrowed; the costing below works from owned data. A
+    // hostile inline price is refused here, before anything is reported.
+    let book = pricing::with_inline(cmd, pricing::stored_book(d), p.get("price"))?;
 
     // The metal, from the band's cross-section.
     let mut metal_json = Value::Null;
@@ -361,12 +385,23 @@ fn run_techsheet(s: &mut Session, p: &Value) -> Result<Value> {
             g
         })
         .collect();
-    Ok(json!({
+    // The cost, when the price book (or the inline prices) knows any. The cross-section band this
+    // call weighed is costed alongside the drawing's own bands. Absent entirely when no prices
+    // are known, so the sheet is byte-for-byte unchanged.
+    let section_metal =
+        metal_json.get("metal").and_then(Value::as_str).map(|m| (m.to_string(), metal_json.get("grams").and_then(Value::as_f64).unwrap_or(0.0)));
+    let cost = pricing::cost_for(&book, &facts, section_metal);
+
+    let mut out = json!({
         "stones": { "groups": groups, "count": total_stones, "carat": total_carat },
         "bands": facts.bands,
         "warnings": warnings,
         "metal": metal_json,
         "table": table_handle,
         "message": message,
-    }))
+    });
+    if let (Some(cost), Some(obj)) = (cost, out.as_object_mut()) {
+        obj.insert("cost".into(), cost);
+    }
+    Ok(out)
 }

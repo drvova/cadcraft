@@ -27,6 +27,7 @@ mod piece_params;
 #[cfg(test)]
 #[path = "jewelry/piece_tests.rs"]
 mod piece_tests;
+mod pricing;
 mod setting;
 mod sizes;
 #[cfg(test)]
@@ -48,6 +49,7 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(pave::specs());
     v.extend(setting::specs());
     v.extend(bench::specs());
+    v.extend(pricing::specs());
     v.extend(piece::specs());
     v.extend(mesh::specs());
     v

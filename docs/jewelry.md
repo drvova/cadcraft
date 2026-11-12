@@ -170,6 +170,23 @@ a stone's name is reported as a warning instead of being silently believed.
 Set `table: true` to draw the sheet as a table in the drawing at `at`, which is what goes on a job
 bag with the piece.
 
+### Pricing
+
+`PRICEBOOK` stores a per-drawing price book: metal priced per gram per alloy, stones per carat per
+material (with an optional `default` for materials the book does not name), and one labor figure
+(`flat`, `perStone` or `perGram`). `PRICEBOOK {set:{…}}` merges prices in, `{}` or `{query:true}`
+reads the book back, `{clear:true}` empties it. The book is kept as the block `JEWELRY_PRICEBOOK`
+(no geometry, its description one line of JSON), so a DXF save and open carries it. There are
+**no market prices in the code**: every price is one the user supplied.
+
+When a price book is set (or prices are passed as `techsheet {price:{…}}`), the bench sheet's
+reply gains a `cost`: `{currency, metal, stones, labor?, total, lines, unpriced, note}`, with
+`metal = Σ grams × price per gram`, `stones = Σ carats × price per carat`, and labor per the chosen
+model, rounded to the currency's minor unit. A size 6 band of 3.22 g in 18k at 50 a gram is 161.00
+of metal. A material the book cannot price is listed in `lines` with its quantity and carats but
+no amount, and left out of the total, never guessed. These are estimates from the user's own
+prices, not market quotes. With no prices known there is no `cost` and the reply is unchanged.
+
 ## A parametric piece
 
 `PIECE {kind: band|solitaire|eternity, …}` draws one ring per drawing as a sheet: the front view
@@ -251,6 +268,14 @@ commands on this page, so its bench sheet reads back: 33 stones, 1.36 ct, a 3.86
   position, and shows the engine's worked example for the cut. OK runs the command; a refusal
   stays in the dialog beside the field it names. The weight is not shown before OK (the engine
   weighs only what it draws); it is read on the Bench section afterwards.
+- **Cost.** With prices set, the Bench section shows a Cost group: metal, stones, any labor, the
+  total, and any unpriced lines flagged. "Set prices to estimate cost" opens a Price Book editor
+  whose metal and stone fields are the materials actually in the piece.
+- **Tech Sheet** (the ribbon's tool, or Window ▸ Tech Sheet) is a page to print: the piece
+  rendered from the top, the front, the side and in perspective, its sizes, the metal, the stones
+  and the checks, on one printed page. Typed at the command line, `TECHSHEET` draws its table.
+- **Templates** (the Piece section's empty state, or Window ▸ Templates…) is a gallery of rings
+  to start from, each a named set of the piece's parameters with a rendered thumbnail.
 - **The Piece section** of the sidebar starts a band, a solitaire or an eternity band and edits
   its numbers in place; each edit rebuilds the sheet, and the engine's weight, stones and checks
   are under the numbers. A refusal marks the row it names.
@@ -292,6 +317,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | minor | `PRICEBOOK` and a `cost` on the bench sheet, from the user's own prices; in the interface a Cost group and Price Book editor, a rendered Tech Sheet, and a gallery of templates |
 | 2026-11-12 | major | A parametric piece: `PIECE` (sheet, stored parameters, checks), `PIECEMESH` and `STLOUT` (the solid), one shared definition for both; `OBJECTS`. In the interface: the Piece section, the 3D tab with display modes, the Objects section, Source, a tabbed ribbon; new drawings are millimetres |
 | 2026-11-12 | minor | `RINGSIZES` measures a drawn ring (`handle`); `PAVE` and `GEMFIT` fit cuts that are not round by their own outline at their rotation (`rotate`, `ratio`); a region fill no longer ignores the edge that closes its outline (round stones could hang over it), and square cuts are no longer fitted as circles |
 | 2026-11-12 | patch | Ring and Gem dialogs in the interface; the sidebar is reachable at a phone's width |

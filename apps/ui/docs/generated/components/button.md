@@ -13,7 +13,7 @@ Not applicable: hand-rolled — the recipe is the app's own `src/ui/ui.css`, mea
 ## Examples
 `<Button variant="primary">Save</Button>` — the one action of a dialog or a pane.
 
-Real uses, 40 call sites (`rg -c "<Button" src` → `src/components/AssistantPane.tsx:9`, `src/components/DraftingSettings.tsx:4`, `src/components/InlineAsk.tsx:1`, `src/components/JewelryDialog.tsx:2`, `src/components/LayerManager.tsx:7`, `src/components/RecoveryBar.tsx:6`, `src/components/TopBar.tsx:1`):
+Real uses, 44 call sites (`rg -c "<Button" src` → `src/components/AssistantPane.tsx:9`, `src/components/DraftingSettings.tsx:4`, `src/components/InlineAsk.tsx:1`, `src/components/JewelryDialog.tsx:2`, `src/components/LayerManager.tsx:7`, `src/components/RecoveryBar.tsx:6`, `src/components/TopBar.tsx:1`):
 - `src/components/JewelryDialog.tsx` — the Ring and Gem dialogs' footer: Cancel (the default) and OK (`variant="primary" type="submit"`). Added 2026-11-12.
 - `src/components/InlineAsk.tsx` — the offer over a selection on the drawing ("Ask about 18 selected objects", `variant="quiet" size="sm"`, `shortcut` the key that opens the same line): it stands in a small box of the elevated surface that the surface draws, and opens the inline ask. Added 2026-11-12.
 - `src/components/DraftingSettings.tsx:337` — the Drafting Settings dialog's footer: Cancel (the default) and OK (`variant="primary" type="submit"`, so Enter in a field presses it); and Select all and Clear all over the object snap boxes (`variant="ghost" size="sm"`, `src/components/DraftingSettings.tsx:302`).

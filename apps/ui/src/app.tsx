@@ -49,6 +49,7 @@ import { parseBench, type BenchSheet } from "./bench";
 import { CommandLine } from "./components/CommandLine";
 import { createRecovery, RecoveryBar } from "./components/RecoveryBar";
 import { GemDialog, RingDialog } from "./components/JewelryDialog";
+import { PriceBookDialog } from "./components/PriceBookDialog";
 import { LayerManager } from "./components/LayerManager";
 import { TemplateGallery } from "./components/TemplateGallery";
 import { opensLayerManager } from "./layer-manager";
@@ -243,6 +244,10 @@ export function App(props: AppProps): JSX.Element {
   const [bench, setBench] = createSignal<BenchSheet | null>(null);
   /** The revision and space the bench sheet was counted at: a refresh that changed nothing counts nothing. */
   let benchAt: string | null = null;
+  /** Whether the Price Book editor is open. */
+  const [pricebookOpen, setPricebookOpen] = createSignal(false);
+  /** Whether the engine has the Price Book command (the running wasm may not yet). */
+  const canPrice = createMemo(() => commands().some((c) => c.id === "pricebook"));
   /** The Piece section: the drawing's parametric ring, as the engine last described it. */
   const [showPiece, setShowPiece] = createSignal(true);
   const [piece, setPiece] = createSignal<PieceState>(NO_PIECE);
@@ -1336,7 +1341,7 @@ export function App(props: AppProps): JSX.Element {
               <PropertiesPanel properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={onPropertyNotice} />
             </Show>
             <Show when={showBench()}>
-              <BenchPanel sheet={bench()} selection={selection()} onSelect={onBenchSelect} />
+              <BenchPanel sheet={bench()} selection={selection()} onSelect={onBenchSelect} canPrice={canPrice()} onEditPrices={() => setPricebookOpen(true)} />
             </Show>
           </aside>
         </Show>
@@ -1445,6 +1450,16 @@ export function App(props: AppProps): JSX.Element {
       <LayerManager facade={props.facade} open={layerManager()} onClose={() => setLayerManager(false)} onChanged={refresh} />
       <RingDialog facade={props.facade} open={jewelry() === "ring"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
       <GemDialog facade={props.facade} open={jewelry() === "gem"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
+      <PriceBookDialog
+        facade={props.facade}
+        open={pricebookOpen()}
+        sheet={bench()}
+        onClose={() => setPricebookOpen(false)}
+        onSaved={() => {
+          benchAt = null;
+          readBench(drawing());
+        }}
+      />
       <TemplateGallery open={showTemplates()} onClose={() => setShowTemplates(false)} execute={(command, params) => props.facade.execute(command, params)} onChoose={onTemplateChoose} />
       <TechSheet open={showTechSheet()} execute={(command, params) => props.facade.execute(command, params)} revision={drawing()?.revision ?? 0} onClose={() => setShowTechSheet(false)} />
       <DraftingSettings

@@ -13,7 +13,7 @@ Not applicable: hand-rolled — a native `<select>` under a drawn face in Field'
 ## Examples
 `<Select value={layer} options={layers} ariaLabel="Layer" onChange={setLayer} />` — the layer an object is on, picked from the drawing's layers.
 
-Real uses, 15 call sites (`rg -c "<Select" src` → `src/components/DraftingSettings.tsx:1`, `src/components/JewelryDialog.tsx:4`, `src/components/LayerManager.tsx:4`, `src/components/PropertiesPanel.tsx:1`):
+Real uses, 16 call sites (`rg -c "<Select" src` → `src/components/DraftingSettings.tsx:1`, `src/components/JewelryDialog.tsx:4`, `src/components/LayerManager.tsx:4`, `src/components/PropertiesPanel.tsx:1`):
 - `src/components/JewelryDialog.tsx` — the Ring dialog's size system and metal, the Gem dialog's cut and stone: each list is the engine's own, named by its row's `<label for>`. Added 2026-11-12.
 - `src/components/DraftingSettings.tsx:244` — the Drafting Settings dialog's increment angle (`variant="field"`, `size="md"`): the usual angles and Custom, named by a visible `<label for>` through `id`.
 - `src/components/PropertiesPanel.tsx:252` — the palette's choice rows (layer, linetype, colour): `variant="inline" size="sm" align="end"`, `mixed` with the `*VARIES*` placeholder when the picked objects disagree.

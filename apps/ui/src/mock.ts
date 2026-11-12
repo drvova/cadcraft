@@ -32,6 +32,19 @@ type Entity =
   | { kind: "line"; layer: string; color: Rgb; x0: number; y0: number; x1: number; y1: number }
   | { kind: "rect"; layer: string; color: Rgb; x0: number; y0: number; x1: number; y1: number };
 
+/** The mock's price book: prices per gram and per carat, a currency and one labor figure. */
+interface MockBook {
+  currency?: string;
+  metal: Record<string, number>;
+  stone: Record<string, number>;
+  labor?: { mode: "flat" | "perStone" | "perGram"; amount: number };
+}
+
+/** The alloys and materials the mock prices (a small stand-in for the engine's full tables). */
+const MOCK_METALS = new Set(["gold24", "gold22", "gold18", "gold14", "gold10", "gold9", "platinum", "palladium", "silver", "steel", "titanium", "brass", "copper", "wax"]);
+const MOCK_STONES = new Set(["diamond", "cz", "moissanite", "sapphire", "ruby", "emerald", "morganite", "aquamarine", "amethyst", "topaz", "garnet", "opal", "default"]);
+const MOCK_PRICE_MAX = 1e12;
+
 const SEGMENTS = 64;
 const DEFAULT_COLOR: Rgb = [212, 212, 212];
 const AMBER: Rgb = [241, 180, 103];
@@ -78,6 +91,8 @@ export class MockFacade implements RawFacade {
   private selected: string[] = [];
   /** The mock's parametric ring (`piece`): its parameters, or null when the drawing has none. */
   private piece: Record<string, unknown> | null = null;
+  /** The mock's price book (`pricebook`): the jeweler's own prices, or null when none are set. */
+  private priceBook: MockBook | null = null;
   /** The canvas size in CSS pixels (`set_viewport`); the engine's default until it is told. */
   private viewport: [number, number] = [1200, 800];
   /** The drafting toggles the status bar shows (GRID, SNAP, ORTHO). */
@@ -507,6 +522,10 @@ export class MockFacade implements RawFacade {
             ["ruby", 4.0],
           ],
         });
+      case "techsheet":
+        return this.techSheet();
+      case "pricebook":
+        return this.priceBookCommand(params);
       case "circle":
         return envelope(false, { error: "circle: use the command line (`cmdline`) or centre/radius params in the mock" });
       default:
@@ -598,6 +617,178 @@ export class MockFacade implements RawFacade {
       checks,
       at: [0, 0],
     };
+  }
+
+  /**
+   * The mock's bench sheet: a canned piece of diamonds in a gold band, plus the estimated `cost`
+   * when a price book is set. Nothing here is a real weight or carat; it is enough to exercise the
+   * Bench section and the Price Book editor at `?mock=1`.
+   */
+  private techSheet(): string {
+    const metal = typeof this.piece?.["metal"] === "string" ? this.piece["metal"] : "gold18";
+    const groups = [
+      { cut: "round", width: 6.5, length: 6.5, depth: 4, sg: 3.52, count: 1, caratEach: 1.031, carat: 1.031, depthFrom: "name", calibrated: false, handles: [] as string[] },
+      { cut: "round", width: 1.3, length: 1.3, depth: 0.8, sg: 3.52, count: 18, caratEach: 0.008, carat: 0.149, depthFrom: "default", calibrated: true, handles: [] as string[] },
+    ];
+    const bands = [{ block: "RING-16.51x2.4", size: "US 6", mm: 16.51, metal, grams: 3.86, width: 2.4, wall: 1.8, handle: "A1" }];
+    const reply: Record<string, unknown> = {
+      stones: { groups, count: 19, carat: 1.18 },
+      bands,
+      warnings: [],
+      metal: null,
+      table: null,
+      message: `19 stones, 1.18 ct total; band US 6 — ${metal}, 3.86 g`,
+    };
+    const cost = this.priceBook === null ? null : this.mockCost(this.priceBook, groups, bands);
+    if (cost !== null) reply["cost"] = cost;
+    return envelope(true, reply);
+  }
+
+  /** The cost the mock totals from a book, mirroring the engine's shape. */
+  private mockCost(book: MockBook, groups: { cut: string; width: number; sg: number; count: number; carat: number }[], bands: { size: string; metal: string; grams: number }[]): Record<string, unknown> {
+    const currency = book.currency ?? "USD";
+    const digits = ["JPY", "KRW", "VND", "CLP"].includes(currency) ? 0 : 2;
+    const scale = 10 ** digits;
+    const round = (x: number): number => Math.round(x * scale) / scale;
+    const lines: Record<string, unknown>[] = [];
+    let metalTotal = 0;
+    let stoneTotal = 0;
+    let unpriced = 0;
+    let grams = 0;
+    let stoneCount = 0;
+    for (const b of bands) {
+      grams += b.grams;
+      const rate = book.metal[b.metal];
+      if (rate !== undefined) {
+        const amount = round(b.grams * rate);
+        metalTotal += amount;
+        lines.push({ what: `${b.metal} band (${b.size})`, metal: b.metal, qty: b.grams, unit: "g", rate, amount });
+      } else {
+        unpriced++;
+        lines.push({ what: `${b.metal} band (${b.size})`, metal: b.metal, qty: b.grams, unit: "g", note: `no metal price for ${b.metal}` });
+      }
+    }
+    for (const g of groups) {
+      stoneCount += g.count;
+      const material = Math.abs(g.sg - 3.52) < 1e-6 ? "diamond" : null;
+      const rate = (material !== null ? book.stone[material] : undefined) ?? book.stone["default"];
+      const what = `${material ?? "stone"} ${g.cut} ${g.width} mm`;
+      if (rate !== undefined) {
+        const amount = round(g.carat * rate);
+        stoneTotal += amount;
+        lines.push({ what, material, qty: g.count, carat: g.carat, unit: "ct", rate, amount });
+      } else {
+        unpriced++;
+        lines.push({ what, material, qty: g.count, carat: g.carat, unit: "ct", note: material === null ? "no stone price (material unspecified)" : `no stone price for ${material}` });
+      }
+    }
+    let labor: number | undefined;
+    if (book.labor !== undefined) {
+      const { mode, amount } = book.labor;
+      const figure = mode === "perStone" ? amount * stoneCount : mode === "perGram" ? amount * grams : amount;
+      labor = round(figure);
+      lines.push({ what: `labor (${mode})`, qty: mode === "perStone" ? stoneCount : mode === "perGram" ? grams : 1, unit: mode === "perStone" ? "pc" : mode === "perGram" ? "g" : "flat", rate: amount, amount: labor });
+    }
+    const total = round(metalTotal + stoneTotal + (labor ?? 0));
+    const cost: Record<string, unknown> = { currency, metal: round(metalTotal), stones: round(stoneTotal), total, lines, unpriced, note: "Estimate from the prices you set, not a market quote." };
+    if (labor !== undefined) cost["labor"] = labor;
+    return cost;
+  }
+
+  /** The `pricebook` command: set merges, clear empties, a read returns the stored book. */
+  private priceBookCommand(params: Record<string, unknown>): string {
+    const bad = (error: string): string => envelope(false, { error: `pricebook: ${error}` });
+    const flag = (key: string): boolean | string => {
+      const v = params[key];
+      if (v === undefined || v === null) return false;
+      return typeof v === "boolean" ? v : `\`${key}\` must be true or false`;
+    };
+    const clear = flag("clear");
+    const query = flag("query");
+    if (typeof clear === "string") return bad(clear);
+    if (typeof query === "string") return bad(query);
+    const set = params["set"];
+    if (clear && set !== undefined && set !== null) return bad("give `set` or `clear`, not both");
+    if (clear) {
+      this.priceBook = null;
+      this.touch();
+      return envelope(true, { book: this.bookJson(), message: "Price book cleared." });
+    }
+    if (set !== undefined && set !== null) {
+      const patch = this.normalizeSet(set);
+      if (typeof patch === "string") return bad(patch);
+      const base: MockBook = this.priceBook ?? { metal: {}, stone: {} };
+      this.priceBook = {
+        currency: patch.currency ?? base.currency,
+        metal: { ...base.metal, ...patch.metal },
+        stone: { ...base.stone, ...patch.stone },
+        labor: patch.labor ?? base.labor,
+      };
+      this.touch();
+      return envelope(true, { book: this.bookJson(), message: "Price book updated." });
+    }
+    return envelope(true, { book: this.bookJson(), message: this.priceBook === null ? "No prices set yet." : "Price book." });
+  }
+
+  /** Validate a `set` payload into a mock book, or the words for why it is refused. */
+  private normalizeSet(raw: unknown): MockBook | string {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return "`set` must be an object of prices";
+    const obj = raw as Record<string, unknown>;
+    const out: MockBook = { metal: {}, stone: {} };
+    const currency = obj["currency"];
+    if (currency !== undefined && currency !== null) {
+      if (typeof currency !== "string" || !/^[A-Za-z0-9]{1,8}$/.test(currency.trim())) return '`currency` must be a short code such as "USD"';
+      out.currency = currency.trim().toUpperCase();
+    }
+    const price = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= MOCK_PRICE_MAX ? v : null);
+    const read = (key: "metal" | "stone", known: Set<string>): string | null => {
+      const map = obj[key];
+      if (map === undefined || map === null) return null;
+      if (typeof map !== "object" || Array.isArray(map)) return `\`${key}\` must be an object of prices`;
+      for (const [name, value] of Object.entries(map as Record<string, unknown>)) {
+        const norm = name.trim().toLowerCase();
+        if (!known.has(norm)) continue; // unknown key: ignored
+        const p = price(value);
+        if (p === null) return `\`${key}.${name}\` must be a price from 0 to a sane maximum`;
+        out[key][norm] = p;
+      }
+      return null;
+    };
+    const metalError = read("metal", MOCK_METALS);
+    if (metalError !== null) return metalError;
+    const stoneError = read("stone", MOCK_STONES);
+    if (stoneError !== null) return stoneError;
+    const labor = obj["labor"];
+    if (labor !== undefined && labor !== null) {
+      if (typeof labor === "number") {
+        const p = price(labor);
+        if (p === null) return "`labor` must be a number from 0 to a sane maximum";
+        out.labor = { mode: "flat", amount: p };
+      } else if (typeof labor === "object" && !Array.isArray(labor)) {
+        for (const mode of ["flat", "perStone", "perGram"] as const) {
+          const v = (labor as Record<string, unknown>)[mode];
+          if (v !== undefined && v !== null) {
+            const p = price(v);
+            if (p === null) return `\`labor.${mode}\` must be a number from 0 to a sane maximum`;
+            out.labor = { mode, amount: p };
+            break;
+          }
+        }
+      } else {
+        return "`labor` must be a number, or {flat|perStone|perGram: amount}";
+      }
+    }
+    return out;
+  }
+
+  /** The stored book as the engine's `book` reply shapes it (always with metal and stone maps). */
+  private bookJson(): Record<string, unknown> {
+    const b = this.priceBook;
+    if (b === null) return { metal: {}, stone: {} };
+    const out: Record<string, unknown> = { metal: { ...b.metal }, stone: { ...b.stone } };
+    if (b.currency !== undefined) out["currency"] = b.currency;
+    if (b.labor !== undefined) out["labor"] = { mode: b.labor.mode, amount: b.labor.amount };
+    return out;
   }
 
   /**
@@ -776,6 +967,8 @@ export class MockFacade implements RawFacade {
       { id: "layer.current", label: "Make Current", menu: [], shortcut: "", aliases: [], params: "{name}", enabled: true },
       { id: "piece", label: "Piece", menu: [], shortcut: "", aliases: [], params: "{kind?: band|solitaire|eternity, metal?: gold24|22|18|14|platinum|silver (default gold18), query?, remove?} → {piece}", enabled: true },
       { id: "objects", label: "Objects", menu: [], shortcut: "", aliases: [], params: "{limit?: n (default 2000, at most 5000)} → {objects: [{handle, kind, layer, size?}], total, truncated, space}", enabled: true },
+      { id: "techsheet", label: "Tech Sheet", menu: ["Inquiry", "Tech Sheet"], shortcut: "", aliases: ["bom", "stonesheet"], params: "{handles?, metal?, section?, size?, system?, price?} → {stones, bands, metal, cost?, message}", enabled: true },
+      { id: "pricebook", label: "Price Book", menu: ["Inquiry", "Price Book"], shortcut: "", aliases: [], params: "{set?: {currency?, metal?: {gold18|platinum|…: price per gram}, stone?: {diamond|…|default: price per carat}, labor?: number | {flat|perStone|perGram: amount}}, query?, clear?} → {book, message}", enabled: true },
     ]);
   }
 
