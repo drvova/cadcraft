@@ -34,7 +34,7 @@ import { AssistantPane } from "./components/AssistantPane";
 import { createAssistantSession, type AssistantSession } from "./assistant-session";
 import { assistantStartsOpen } from "./assistant";
 import { CanvasView } from "./components/CanvasView";
-import { LayersPanel } from "./components/LayersPanel";
+import { LayersPanel, type LayersPanelProps } from "./components/LayersPanel";
 import { PropertiesPanel } from "./components/PropertiesPanel";
 import { SourcePanel } from "./components/SourcePanel";
 import { Viewport3D } from "./components/Viewport3D";
@@ -1342,13 +1342,15 @@ export function App(props: AppProps): JSX.Element {
   );
   /** The sidebar is on screen: its switch is on and it has a section to show. */
   const sidebarShown = (): boolean => showSidebar() && (showPiece() || showLayers() || showObjects() || showProperties() || showBench());
+  /** The Layers section's panel: the SolidJS one, or the one ported to Slab when its document loaded. */
+  const Layers: Component<LayersPanelProps> = props.slab?.Layers ?? LayersPanel;
   const railSections = (): JSX.Element => (
     <>
       <Show when={showPiece()}>
         <PiecePanel state={piece()} choices={pieceChoices()} onRun={onPieceRun} onNotice={onPropertyNotice} onTemplates={() => setShowTemplates(true)} />
       </Show>
       <Show when={showLayers()}>
-        <LayersPanel layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} onMenu={(name, at) => openContext({ kind: "layer", name }, at)} />
+        <Layers layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} onMenu={(name, at) => openContext({ kind: "layer", name }, at)} />
       </Show>
       <Show when={showObjects()}>
         <ObjectsPanel list={objects()} available={objectsAvailable()} selection={selection()} onSelect={onBenchSelect} />

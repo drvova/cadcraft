@@ -1,0 +1,34 @@
+/*
+ * The Slab Layers section's page side (`SlabLayers.tsx`): the frame around the surface, where it
+ * stands in the rail as `.layers` does (styles.css), and the invisible parts the host keeps for
+ * it. The document draws everything that shows.
+ */
+
+/* As `.layers`: its own height, never squeezed by the sections under it. The surface caps and
+   scrolls its own list (the host tells it its share of the rail). */
+.slab-layers {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.slab-layers > slab-layers-panel {
+  display: block;
+}
+
+/* Over one part of the surface, for the hint and the menu that are placed beside it. It never
+   takes the pointer: the surface under it does. */
+.slab-anchor {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* The key inks as the page's `Toggle` resolves them in this theme (ui.css: `.ui-toggle--absent`,
+   `--info`, `--caution`), read by the host and handed to the document as colours. Never shown. */
+.slab-ink--off {
+  color: var(--ui-toggle-ink-off);
+}
+
+.slab-ink--on {
+  color: var(--ui-toggle-ink-on);
+}

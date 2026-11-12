@@ -10,6 +10,7 @@ declare module "solid-js" {
     interface IntrinsicElements {
       "cadcraft-shell": HTMLAttributes<HTMLElement>;
       "slab-bench-panel": HTMLAttributes<HTMLElement>;
+      "slab-layers-panel": HTMLAttributes<HTMLElement>;
     }
   }
 }

@@ -1,0 +1,192 @@
+// The Layers section of the sidebar: a heading with the fold key and the count, then a row per
+// layer (colour swatch, name, the on / frozen / locked keys, the "has objects" mark). The view
+// only: the layers are the engine's, shaped in TypeScript (src/slab/layers-params.ts), and every
+// press comes back as a signal.
+//
+// Measures follow src/styles.css (.layers-head, .layer-row and its tracks): the heading is 24
+// high, a row 22; the swatch stands under the fold key, the name starts on the rail's text column
+// (24 in), then three keys 20 wide and the mark's 12, a gap of 2 between tracks, 8 before the edge.
+import "gen/tokens.slab"
+
+tokens {
+  layer {
+    // The name's track inside the row-wide button: from the rail's text column to the keys' cell.
+    name-start 24
+    name-end 84
+    // The swatch (10) is centred in a 12 track that starts 6 in.
+    swatch 10
+    swatch-start 7
+    // The mark is a 7 square on its corner.
+    mark 7
+    // The current row's accent edge.
+    edge 2
+  }
+}
+
+// The glyphs are the interface's own (src/icons.ts: chevron-down and the six layer.* paths, held
+// equal to it by src/slab/layers.test.ts), on its 24 grid. The stroke is 2.5 of the grid: the
+// interface's 1.25 px at the 12 px these are drawn at.
+icon chevron viewbox=24 {
+  path "M6 9l6 6 6-6" bg=none stroke=current stroke-w=2.5
+}
+icon layer-on viewbox=24 {
+  path "M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z M12 9.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5z" bg=none stroke=current stroke-w=2.5
+}
+icon layer-off viewbox=24 {
+  path "M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z M4 4l16 16" bg=none stroke=current stroke-w=2.5
+}
+icon layer-frozen viewbox=24 {
+  path "M12 3v18 M4.2 7.5l15.6 9 M19.8 7.5l-15.6 9 M9.5 4.5L12 7l2.5-2.5 M9.5 19.5L12 17l2.5 2.5" bg=none stroke=current stroke-w=2.5
+}
+icon layer-thawed viewbox=24 {
+  path "M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8z M12 2v3 M12 19v3 M2 12h3 M19 12h3 M5 5l2 2 M17 17l2 2 M19 5l-2 2 M7 17l-2 2" bg=none stroke=current stroke-w=2.5
+}
+icon layer-locked viewbox=24 {
+  path "M6 11h12v9H6z M8.5 11V8a3.5 3.5 0 0 1 7 0v3" bg=none stroke=current stroke-w=2.5
+}
+icon layer-unlocked viewbox=24 {
+  path "M6 11h12v9H6z M8.5 11V8a3.5 3.5 0 0 1 6.8-1" bg=none stroke=current stroke-w=2.5
+}
+
+// One layer. The name's button is the whole row, laid under the swatch, the keys and the mark, so
+// its fill, its focus ring and its press are the row's. A key in its ordinary state (on, thawed,
+// unlocked) is drawn only while the host says the row is `shown` (under the pointer or holding
+// the keyboard): the three `*_quiet` flags are that, per key, decided by the host.
+//
+// `head` and `tail` are the name as the row draws it: a head that gives way with an ellipsis and
+// a tail that never does (`split`; a name that fits is all head). The button's name for a screen
+// reader is the whole name.
+def LayerRow(name="", head="", tail="", split=false, said="", about="", tone=#00000000, tone_name="", \
+             current=false, used=false, on=true, frozen=false, locked=false, \
+             on_name="", frozen_name="", locked_name="", \
+             on_quiet=false, frozen_quiet=false, locked_quiet=false, \
+             off_ink=#00000000, frozen_ink=#00000000, locked_ink=#00000000) export {
+  stack #row w=fill h=size.control-h-row role=listitem desc=about {
+    // The pointer anywhere on the row: one fill, the row's width. The current layer's selected
+    // fill and its accent edge are children under everything else (a child a `when` adds would
+    // be painted last, over the name), so the two fills add up and nothing in the row moves.
+    when hover { bg=color.hover }
+    rect w=fill h=fill inert {
+      when current { bg=color.list-row }
+    }
+    rect w=layer.edge h=fill inert {
+      when current { bg=color.accent }
+    }
+    row #name w=fill h=fill pad=0,layer.name-end,0,layer.name-start align=center radius=radius.card \
+        act=make_current role=button label=name desc=said color=color.text-dim transition=dur.fast {
+      when current { color=color.text }
+      when pressed { bg=color.fill-active }
+      when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+      row #track w=fill h=fill align=center clip {
+        row w=fill h=fill align=center pack=end clip {
+          when !split { max-w=0 }
+          text head style=text.body nowrap ellipsis
+        }
+        text tail style=text.body nowrap
+        when !split { text head style=text.body nowrap ellipsis }
+      }
+    }
+    row #swatchcell self=start h=fill pad=0,0,0,layer.swatch-start align=center {
+      rect #swatch w=layer.swatch h=layer.swatch radius=radius.small bg=tone stroke=color.swatch-border \
+           stroke-align=inside role=img label=tone_name
+    }
+    row #keys self=end h=fill pad=0,space.g8,0,0 gap=space.g2 align=center {
+      row h=fill {
+        row #on w=size.control-h-chip h=fill radius=radius.small align=center pack=center \
+            act=toggle_on role=switch label=on_name checked=on color=off_ink transition=dur.fast {
+          when on { color=color.icon }
+          when hover { bg=color.hover }
+          when pressed { bg=color.fill-active }
+          when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+          when on {
+            icon layer-on size=size.icon-size-sm transition=dur.fast {
+              when on_quiet { opacity=0 }
+            }
+          }
+          when !on {
+            icon layer-off size=size.icon-size-sm transition=dur.fast {
+              when on_quiet { opacity=0 }
+            }
+          }
+        }
+        row #frozen w=size.control-h-chip h=fill radius=radius.small align=center pack=center \
+            act=toggle_frozen role=switch label=frozen_name checked=frozen color=color.text-faint transition=dur.fast {
+          when hover { bg=color.hover color=color.text }
+          when pressed { bg=color.fill-active }
+          when frozen { color=frozen_ink }
+          when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+          when frozen {
+            icon layer-frozen size=size.icon-size-sm transition=dur.fast {
+              when frozen_quiet { opacity=0 }
+            }
+          }
+          when !frozen {
+            icon layer-thawed size=size.icon-size-sm transition=dur.fast {
+              when frozen_quiet { opacity=0 }
+            }
+          }
+        }
+        row #locked w=size.control-h-chip h=fill radius=radius.small align=center pack=center \
+            act=toggle_locked role=switch label=locked_name checked=locked color=color.text-faint transition=dur.fast {
+          when hover { bg=color.hover color=color.text }
+          when pressed { bg=color.fill-active }
+          when locked { color=locked_ink }
+          when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+          when locked {
+            icon layer-locked size=size.icon-size-sm transition=dur.fast {
+              when locked_quiet { opacity=0 }
+            }
+          }
+          when !locked {
+            icon layer-unlocked size=size.icon-size-sm transition=dur.fast {
+              when locked_quiet { opacity=0 }
+            }
+          }
+        }
+      }
+      row #used w=size.icon-size-sm h=fill align=center pack=center role=img label="No objects" {
+        when used { label="Has objects" }
+        rect w=layer.mark h=layer.mark radius=1 rotate=45 stroke=color.text-faint stroke-align=inside {
+          when used { bg=color.icon stroke=color.icon }
+        }
+      }
+    }
+  }
+}
+
+def LayersPanel(open=true, count="0", count_said="0 layers", more="", capped=false, cap=100000, \
+                rows=list(LayerRow)) export {
+  col w=fill bg=color.panel {
+    row #head w=fill h=size.control-h-input pad=0,space.g8,0,space.g2 gap=space.g2 align=center \
+        stroke=color.border stroke-sides=b {
+      row #fold w=size.control-h-chip h=size.control-h-chip radius=radius.round align=center pack=center \
+          act=fold role=button label="Hide the layers" expanded=open color=color.text-dim transition=dur.fast {
+        when !open { label="Show the layers" }
+        when hover { bg=color.hover color=color.text }
+        when pressed { bg=color.fill-active }
+        when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+        icon chevron size=size.icon-size-sm {
+          when !open { rotate=-90 }
+        }
+      }
+      text "LAYERS" style=text.chip weight=700 color=color.text-faint nowrap role=heading level=2 label="Layers"
+      spacer
+      row #count h=fill align=center role=img label=count_said {
+        text count style=text.chip color=color.text-faint nowrap
+      }
+    }
+    // Folded, the host hands over no rows: the body is empty, to the eye and to a screen reader.
+    // Open, it is as tall as its rows up to `cap` (the host's share of the rail), then it scrolls.
+    col #body w=fill max-h=cap pad=space.g2,0 scroll scrollbar=auto scrollbar-fg=color.scrollbar {
+      when !open { max-h=0 pad=0 }
+      col #list w=fill role=list label="Layers" {
+        each rows
+      }
+      when capped {
+        row w=fill h=size.control-h-row pad=0,space.g8,0,layer.name-start align=center {
+          text more style=text.chip color=color.text-faint nowrap ellipsis
+        }
+      }
+    }
+  }
+}

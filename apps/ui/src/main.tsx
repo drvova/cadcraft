@@ -36,5 +36,15 @@ async function loadSlabParts(): Promise<SlabBoot> {
   return { parts: { Shell: SlabShell, Bench: SlabBench } };
 }
 
-const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts() : Promise.resolve<SlabBoot>({})]);
+/** The Layers section, added to the parts when its document loads; the SolidJS one shows when it does not. */
+async function withLayers(boot: SlabBoot): Promise<SlabBoot> {
+  if (boot.parts === undefined) return boot;
+  const { loadSlab } = await import("./slab/loader");
+  const layers = await loadSlab("layers");
+  if (!layers.ok) return { ...boot, notice: boot.notice ?? layers.reason };
+  const { SlabLayers } = await import("./slab/SlabLayers");
+  return { ...boot, parts: { ...boot.parts, Layers: SlabLayers } };
+}
+
+const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers) : Promise.resolve<SlabBoot>({})]);
 render(() => <App facade={facade} slab={slab.parts} shellNotice={slab.notice} />, root);

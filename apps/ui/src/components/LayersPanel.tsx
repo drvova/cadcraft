@@ -174,3 +174,6 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
     </aside>
   );
 }
+
+/** The name's hint, for the same panel drawn by Slab (`../slab/layers-params`): one wording, said once. */
+export { layerHint };
