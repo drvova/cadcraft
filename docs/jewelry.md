@@ -24,6 +24,9 @@ millimetres.
 | `GEMFIT` | For each calibrated melee size, how many stones a region takes — and the largest that fits at all. |
 | `SETTING` | Prongs at the stone's tips and shoulders, a bezel wall around its girdle, a halo of melee, or channel rails. |
 | `TECHSHEET` | The bench sheet: stones by cut and size with carats, and the metal in grams. |
+| `PIECE` | A parametric ring (a band, a solitaire or an eternity band) drawn as a sheet from a handful of numbers, and rebuilt when one of them changes. |
+| `PIECEMESH` | The same piece as closed shells of triangles, for a 3D view. |
+| `STLOUT` | The same solid as a binary or ASCII STL in millimetres, the metal only unless `stones` is set. |
 
 `DESCRIBE` reads any drawing that holds jewelry the same way, and the MCP `bench_sheet` tool does
 it for an agent in one call.
@@ -167,6 +170,66 @@ a stone's name is reported as a warning instead of being silently believed.
 Set `table: true` to draw the sheet as a table in the drawing at `at`, which is what goes on a job
 bag with the piece.
 
+## A parametric piece
+
+`PIECE {kind: band|solitaire|eternity, …}` draws one ring per drawing as a sheet: the front view
+(the finger and outside circles, as the block `RING-PIECE`, which the bench sheet reads as a
+band), the section beside it, the plan under it, and for an eternity band the stones laid out on
+the unrolled band. Give it again with only what changed (`PIECE {size: 7}`) and the keys are
+merged over the stored piece, the old sheet is erased and the new one drawn in one undo step.
+`PIECE {query: true}` reads the piece back and changes nothing; `PIECE {remove: true}` takes it
+away. A request that cannot be built is refused and nothing changes. The piece is kept as the
+group `JEWELRY_PIECE` (its objects, and its parameters in the description), so undo, redo and a
+DXF save and open keep the geometry and the numbers together; a rebuild lands where the band is
+now unless `at` is given.
+
+The parameters: `size` (with `system`), `wall`, `width`, `profile` (`flat` or `dome`), `metal`;
+for a solitaire `cut`, `stone`, `stoneWidth`, `stoneLength`, `prongs` (3 to 8) and `halo` (off, or
+the melee's width); for an eternity band `cut`, `stone`, `melee`, `count` (none: as many as fit)
+and `gap`. `params.size` is the US number with `system: "us"`; `sizeSystem` names the system the
+piece was given in and survives a round trip.
+
+The reply carries the parameters, every object's handle, the size in every system, the band's
+weight, the stone count and carats, and five checks in a jeweler's words: `wall` (at least 0.8 mm
+to cast), `stone-seat`, `spacing`, `calibrated` and `size`. A failed check is information, not a
+refusal. The seat thresholds (a quarter of the stone's length for a solitaire's band, 0.3 mm of
+metal each side of an eternity stone) are this project's rules of thumb, not a cited standard.
+
+One definition serves the sheet and the solid (`piece_params.rs`), and a test builds over a
+thousand pieces both ways to hold them to it:
+
+- **Dome.** A half-round (D-section): a circular arc over the full width rising to the wall; when
+  the wall is more than half the width, straight sides of `wall − width/2` under a semicircle.
+- **Weight.** The band alone: its section's area swept around the finger at the section's
+  centroid, at the alloy's density. Prongs and the head are not weighed, and the seats cut for
+  stones are not taken off. `PIECE` and `PIECEMESH` report the same `metal.grams`; `PIECEMESH`'s
+  `metal.shells` is the sum of its tessellated shells, overlaps counted twice, an approximation.
+- **Eternity.** The stones are the piece's `cut`, `melee` wide, tables level with the band's
+  outside, girdles on a circle of radius `outer/2 − 0.28 × depth`. With no `count` the band takes
+  the most that keep `gap` between neighbouring girdles: a size 6 band with a 1.8 mm wall takes 30
+  stones of 1.8 mm at 0.2 mm, and at size 7, 31. `PIECE` refuses a `count` over that number;
+  `PIECEMESH` still builds it, reports `fits` and says so in `notes`.
+- **Solitaire.** The centre stone's culet stands 0.5 mm over the band. The prong wire is 15 % of
+  the stone's lesser dimension, between 0.8 and 1.2 mm; prongs stand centred on the girdle where
+  `SETTING` puts them and reach 1.15 wire diameters over it.
+- **Halo.** Round diamonds of the `halo` width on the girdle offset by half the prong wire + `gap`
+  + half a melee, as many as keep `gap` between every pair (19 of 1.3 mm around a 6.5 mm round).
+- **Stone proportions.** Depth is the cut's usual proportion of its width, split crown 26 %,
+  girdle 4 %, pavilion 70 %; the table is the fraction `GEM` draws.
+
+**The solid.** `PIECEMESH` and `STLOUT` take the piece's parameters directly and change nothing in
+the drawing. The finger's axis is Z, the ring lies in the XY plane about the origin and the head
+is at +Y. The band is its section revolved; a round stone is a brilliant; every other cut is its
+girdle outline tapered to a table and to a culet or keel, not its real facet pattern. Each part is
+a closed shell wound counter-clockwise from outside; shells pass through each other where they
+join and no seats are cut, which a slicer unions. A reply holds at most 150,000 triangles; a
+larger piece is tessellated more coarsely and `notes` says so. `STLOUT` defaults to fine quality,
+binary, metal only; an ASCII STL is limited to 30,000 triangles.
+
+`OBJECTS` (an inquiry command) lists what a space holds for the interface's Objects section: each
+object's handle, kind, layer, block, first words, one telling size and its groups, capped at
+5,000, and it changes nothing.
+
 ## In the interface
 
 The interface opens on a jewelry drawing: a size 6 solitaire in 18k gold (Help ▸ Open Sample
@@ -188,6 +251,21 @@ commands on this page, so its bench sheet reads back: 33 stones, 1.36 ct, a 3.86
   position, and shows the engine's worked example for the cut. OK runs the command; a refusal
   stays in the dialog beside the field it names. The weight is not shown before OK (the engine
   weighs only what it draws); it is read on the Bench section afterwards.
+- **The Piece section** of the sidebar starts a band, a solitaire or an eternity band and edits
+  its numbers in place; each edit rebuilds the sheet, and the engine's weight, stones and checks
+  are under the numbers. A refusal marks the row it names.
+- **The 3D tab** over the drawing shows the piece as a solid: orbit, pan and zoom, the standard
+  views, a gizmo that flies to a view along an axis, Shaded, Wireframe, Ghosted and X-ray, labels
+  for the ring's regions, the part under the pointer named, and Download STL.
+- **The Objects section** lists the piece and its parts, the stones by cut and size, the bands
+  and everything else by layer and kind, with a search; a press on a row selects it on the
+  drawing and a selection on the drawing marks its row.
+- **Source** (Ctrl+U) shows the drawing as its script beside the drawing and applies an edit. The
+  script rebuilds lines, polylines, circles, arcs, points, text and layers; blocks (rings and
+  stones among them), dimensions and hatches are comments in it and are left as they are.
+- **The ribbon** has a Jewelry tab: Ring, Gem, Setting, Pavé; Ring Sizes, Gem Fit; Tech Sheet and
+  the Bench section.
+- **A new drawing is millimetres.**
 - **On a phone** the sidebar, with the Bench section, takes the workspace when its title-bar key
   is on, and starts closed.
 - **The assistant** is told these commands and the trade's units at the start of every turn, and
@@ -214,6 +292,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-12 | major | A parametric piece: `PIECE` (sheet, stored parameters, checks), `PIECEMESH` and `STLOUT` (the solid), one shared definition for both; `OBJECTS`. In the interface: the Piece section, the 3D tab with display modes, the Objects section, Source, a tabbed ribbon; new drawings are millimetres |
 | 2026-11-12 | minor | `RINGSIZES` measures a drawn ring (`handle`); `PAVE` and `GEMFIT` fit cuts that are not round by their own outline at their rotation (`rotate`, `ratio`); a region fill no longer ignores the edge that closes its outline (round stones could hang over it), and square cuts are no longer fitted as circles |
 | 2026-11-12 | patch | Ring and Gem dialogs in the interface; the sidebar is reachable at a phone's width |
 | 2026-11-12 | patch | A bench line selects what it counts (`TECHSHEET` groups carry `handles`, bands a `handle`); the sample is dimensioned and its layers recoloured |

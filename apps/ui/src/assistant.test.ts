@@ -262,7 +262,7 @@ describe("the tool surface", () => {
 
   test("the system prompt names the jewelry commands and the trade's units", () => {
     const p = systemPrompt(BRIEFING);
-    for (const id of ["ringsizes", "ring", "gem", "gemlist", "setting", "pave", "gemfit", "techsheet"]) expect(p).toContain(`\`${id}\``);
+    for (const id of ["piece", "ringsizes", "ring", "gem", "gemlist", "setting", "pave", "gemfit", "techsheet"]) expect(p).toContain(`\`${id}\``);
     expect(p).toContain("finger sizes, millimetres, carats and grams");
     // The jewelry section stands between how the tool works and how to report.
     expect(p.indexOf("Fine jewelry is drafted")).toBeGreaterThan(p.indexOf("You have exactly one tool"));

@@ -474,6 +474,9 @@ export function systemPrompt(b: Briefing): string {
     "handle.\n" +
     "- `pave` lays calibrated melee along a path or through a closed region; `gemfit` says how many\n" +
     "stones of each size fit before anything is placed.\n" +
+    "- `piece` is a whole ring from a few numbers (a band, a solitaire or an eternity band): give\n" +
+    "it again with only what changed and the sheet rebuilds; its reply carries the weight, the\n" +
+    "stones and five checks. Prefer it to drawing a ring by hand.\n" +
     "- `techsheet` is the bench sheet: the stones by cut and size with their carats, and the bands\n" +
     "with their grams. Read it after a change to a piece and report its numbers.\n" +
     "A jeweler speaks in finger sizes, millimetres, carats and grams: answer in those, and say when\n" +
