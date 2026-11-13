@@ -20,7 +20,7 @@ const runtimeGlob: Record<string, Importer> = import.meta.glob("../slab-vendor/s
 const documentGlob: Record<string, Importer> = import.meta.glob(["../slab-vendor/*.js", "!../slab-vendor/slab-runtime.js"]);
 
 /** The documents the interface mounts, by file stem, and the element each defines. */
-export const SLAB_TAGS = { shell: "cadcraft-shell", bench: "slab-bench-panel", layers: "slab-layers-panel", piece: "slab-piece-panel", objects: "cadcraft-objects", properties: "slab-properties-panel", statusbar: "cadcraft-statusbar", tabs: "cadcraft-tabs", pricebook: "cadcraft-pricebook", "jewelry-dialog": "cadcraft-jewelry-dialog", ribbon: "cadcraft-ribbon" } as const;
+export const SLAB_TAGS = { shell: "cadcraft-shell", bench: "slab-bench-panel", layers: "slab-layers-panel", piece: "slab-piece-panel", objects: "cadcraft-objects", properties: "slab-properties-panel", statusbar: "cadcraft-statusbar", tabs: "cadcraft-tabs", pricebook: "cadcraft-pricebook", "jewelry-dialog": "cadcraft-jewelry-dialog", ribbon: "cadcraft-ribbon", topbar: "cadcraft-topbar" } as const;
 export type SlabDocument = keyof typeof SLAB_TAGS;
 
 export type SlabLoad = { ok: true } | { ok: false; reason: string };

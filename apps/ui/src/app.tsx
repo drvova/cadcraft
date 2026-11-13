@@ -54,7 +54,7 @@ import { PriceBookDialog } from "./components/PriceBookDialog";
 import { LayerManager } from "./components/LayerManager";
 import { TemplateGallery } from "./components/TemplateGallery";
 import { opensLayerManager } from "./layer-manager";
-import type { RibbonProps, SlabParts } from "./slab/parts";
+import type { RibbonProps, SlabParts, TitleBarProps } from "./slab/parts";
 
 export interface AppProps {
   facade: AppFacade;
@@ -1318,9 +1318,10 @@ export function App(props: AppProps): JSX.Element {
    * below (a grid of bars and a flex workspace, `styles.css`), or the Slab shell, which hands
    * each region to a hole of `slab/shell.slab` (`./slab/SlabShell`). Neither forks a component.
    */
-  const topBar = (): JSX.Element => (
-    <TopBar
+  const topBar = (Bar: Component<TitleBarProps> = TopBar): JSX.Element => (
+    <Bar
       drawing={drawing}
+      menus={showMenubar() ? { commands: commands(), onInvoke } : null}
       menu={
         <Show when={showMenubar()}>
           <MenuBar commands={commands()} onInvoke={onInvoke} />
@@ -1524,7 +1525,7 @@ export function App(props: AppProps): JSX.Element {
       <div class="app" data-shell="slab">
         <slab.Shell
           regions={{
-            topbar: topBar,
+            topbar: () => topBar(slab.TopBar),
             ribbon: () => ribbon(slab.Ribbon),
             rail: () => (
               <Show when={sidebarShown()}>

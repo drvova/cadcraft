@@ -35,7 +35,7 @@
 import { createMemo, createSignal, Index, onCleanup, Show, type JSX } from "solid-js";
 import type { CommandInfo } from "../facade";
 import { buildMenu, UI_ITEMS } from "../commands";
-import { isTypeaheadKey, rovingIndex, typeaheadIndex } from "../roving";
+import { isTypeaheadKey, rovingIndex, typeaheadIndex, type TypedKey } from "../roving";
 import { hovers, keyed, Menu, MenuKey, type MenuDismiss, type MenuHandle } from "./Menu";
 import "../chrome.css";
 
@@ -50,8 +50,23 @@ const COMPACT = -1;
  * room beside the titles: a window 700px wide or less, or one so short that they would need a
  * third column.
  */
-const COMPACT_QUERY = "(max-width: 900px)";
-const STACKED_QUERY = "(max-width: 700px), (max-width: 900px) and (max-height: 520px)";
+export const COMPACT_QUERY = "(max-width: 900px)";
+export const STACKED_QUERY = "(max-width: 700px), (max-width: 900px) and (max-height: 520px)";
+
+/** What a key pressed on a title of the bar asks for; the bar drawn by Slab (`../slab/SlabTopBar`) asks here too. */
+export type TitleKeyAction = { kind: "close" } | { kind: "open"; last: boolean } | { kind: "move"; to: number };
+
+/**
+ * The bar's own keys, on the title at `index` of `labels`: Escape closes the open menu, Down opens
+ * the title's menu on its first row and Up on its last, Left, Right, Home, End and a letter move
+ * along the titles. Null for a key the bar leaves alone.
+ */
+export function titleKeyAction(event: TypedKey & { key: string }, index: number, labels: readonly string[], open: boolean): TitleKeyAction | null {
+  if (event.key === "Escape") return open ? { kind: "close" } : null;
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") return { kind: "open", last: event.key === "ArrowUp" };
+  const next = isTypeaheadKey(event) ? typeaheadIndex(labels, index, event.key) : rovingIndex(event.key, index, labels.length, "horizontal");
+  return next === null ? null : { kind: "move", to: next };
+}
 
 export interface MenuBarProps {
   commands: CommandInfo[];
@@ -134,24 +149,21 @@ export function MenuBar(props: MenuBarProps): JSX.Element {
   });
 
   const onTitleKey = (event: KeyboardEvent, index: number): void => {
-    if (event.key === "Escape") {
-      if (openIndex() === null) return;
-      event.preventDefault();
-      close();
-      return;
-    }
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      openInto(index, event.key === "ArrowUp");
-      return;
-    }
-    const labels = tree().map((title) => title.label);
-    const next = isTypeaheadKey(event) ? typeaheadIndex(labels, index, event.key) : rovingIndex(event.key, index, labels.length, "horizontal");
-    if (next === null) return;
+    const action = titleKeyAction(
+      event,
+      index,
+      tree().map((title) => title.label),
+      openIndex() !== null,
+    );
+    if (action === null) return;
     event.preventDefault();
-    // A menu that is open follows the focus along the bar, as it follows the pointer.
-    if (openIndex() !== null) open(next);
-    titles[next]?.focus();
+    if (action.kind === "close") close();
+    else if (action.kind === "open") openInto(index, action.last);
+    else {
+      // A menu that is open follows the focus along the bar, as it follows the pointer.
+      if (openIndex() !== null) open(action.to);
+      titles[action.to]?.focus();
+    }
   };
 
   // The titles are kept by their place, not by their node: the tree is built anew whenever the

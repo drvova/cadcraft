@@ -114,5 +114,15 @@ async function withRibbon(boot: SlabBoot): Promise<SlabBoot> {
   return { ...boot, parts: { ...boot.parts, Ribbon: SlabRibbon } };
 }
 
-const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts).then(withDialogs).then(withRibbon) : Promise.resolve<SlabBoot>({})]);
+/** The title bar, added to the parts when its document loads; the SolidJS bar shows when it does not. */
+async function withTopBar(boot: SlabBoot): Promise<SlabBoot> {
+  if (boot.parts === undefined) return boot;
+  const { loadSlab } = await import("./slab/loader");
+  const topbar = await loadSlab("topbar");
+  if (!topbar.ok) return { ...boot, notice: boot.notice ?? slabPartNotice("title bar", topbar.reason) };
+  const { SlabTopBar } = await import("./slab/SlabTopBar");
+  return { ...boot, parts: { ...boot.parts, TopBar: SlabTopBar } };
+}
+
+const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts).then(withDialogs).then(withRibbon).then(withTopBar) : Promise.resolve<SlabBoot>({})]);
 render(() => <App facade={facade} slab={slab.parts} shellNotice={slab.notice} />, root);

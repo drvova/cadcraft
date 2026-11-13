@@ -44,6 +44,7 @@ import { pageMeasure, type TextMeasure } from "./measure";
 import type { RibbonProps } from "./parts";
 import { controlAt, foldSaid, groupParams, keyGoes, nextStop, pressedTab, pressedTool, pressTab, RIBBON_METRICS, ribbonMetrics, stopOfKey, tabParams, tabTools, toolHintFor, toolsShown, type RibbonHead, type RibbonStop } from "./ribbon-params";
 import { isSlabControlHost, itemOfKey, keysWithRole, ringForKeysOnly, sceneNode, type SlabControlHost } from "./scene";
+import { roundStrokes } from "./strokes";
 import { attachSurface } from "./surface";
 import { signalDetail } from "./types";
 import "./slab-chrome.css";
@@ -72,33 +73,6 @@ function metaNumber(event: Event, name: string): number | null {
 
 /** Whether a signal came from the keyboard (Enter or Space on the control): it carries no pointer position. */
 const byKeyboard = (event: Event): boolean => (metaNumber(event, "x") ?? -1) < 0;
-
-/**
- * The interface's glyphs are drawn with round ends and round corners (`../icons`: `ToolIcon`), and
- * a point of a figure is a subpath of no length, which only a round end draws. The web driver at
- * the pinned commit strokes a path with the browser's defaults (flat ends, sharp corners; its SVG
- * export rounds both), and the language has no attribute for either. The surface's shadow tree is
- * open, so the two properties are given to its paths there. Nothing else in this surface is a path.
- */
-const ROUND_STROKES = ".slab-ops svg path { stroke-linecap: round; stroke-linejoin: round; }";
-
-function roundStrokes(host: HTMLElement): void {
-  const root = host.shadowRoot;
-  if (root === null) return;
-  if (typeof CSSStyleSheet === "function" && "adoptedStyleSheets" in root) {
-    try {
-      const sheet = new CSSStyleSheet();
-      sheet.replaceSync(ROUND_STROKES);
-      root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
-      return;
-    } catch {
-      // An engine that refuses a constructed sheet takes the element below.
-    }
-  }
-  const style = host.ownerDocument.createElement("style");
-  style.textContent = ROUND_STROKES;
-  root.appendChild(style);
-}
 
 /** The keys of the tool bar's own controls, in the order drawn: the tools, then the overflow key. */
 const barKeys = (host: SlabControlHost): string[] => keysWithRole(host, "button").filter((key) => stopOfKey(key) === "tools");

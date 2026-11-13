@@ -1,0 +1,145 @@
+// The title bar: the menus' titles at the start (one Main menu key in their place in a narrow
+// window), the command centre in the middle (a magnifier, the drawing's name, a dot while it has
+// unsaved changes), and at the end the three keys that fold the window's parts away. The view
+// only: how wide each of the three parts is, what the titles are and what each control says is
+// shaped in TypeScript (src/slab/topbar-params.ts, over what the SolidJS bar draws:
+// src/components/TopBar.tsx, MenuBar.tsx); a press comes back as a signal. The menus themselves
+// and the command palette are the interface's own components, opened by the host.
+//
+// As in the ribbon, no node binds `pointer-move` and none eases with `transition=`: each would
+// have the kernel solve the bar again per step. A control's glyph and label are `inert`.
+//
+// Measures follow src/styles.css (.titlebar, .command-center), src/chrome.css (.menubar-title)
+// and src/ui/ui.css (.ui-button--sm, .ui-icon-button): the band is a tab high with its bottom
+// hairline; a title is a row high with 12px type on an 8 inset; the command centre is an input
+// high on the faint fill; a key is an input's square, round until it is on.
+import "gen/tokens.slab"
+
+tokens {
+  topbar {
+    // The band over its bottom hairline (--control-h-tab less the hairline).
+    band 34
+    // The unsaved dot (styles.css: `.command-center-dirty`).
+    dot 6
+    // The press of an icon key (ui.css: `.ui-icon-button:active`).
+    press 0.98
+  }
+}
+
+// ---- glyphs: generated from src/icons.ts by src/slab/ribbon-icons.ts; do not edit ----
+icon glyph-search viewbox=24 {
+  path "M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13 M15.5 15.5L20 20" bg=none stroke=current stroke-w=2.5
+}
+icon glyph-list viewbox=24 {
+  path "M4 5h2v2H4z M4 11h2v2H4z M4 17h2v2H4z M9 6h11 M9 12h11 M9 18h11" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-ui-toggle-palettes viewbox=24 {
+  path "M4 5h16v14H4z M9 5v14" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-layout-bottom viewbox=24 {
+  path "M4 5h16v14H4z M4 14.5h16" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-assistant viewbox=24 {
+  path "M11 4l1.8 5.2L18 11l-5.2 1.8L11 18l-1.8-5.2L4 11l5.2-1.8z M19 15v4 M17 17h4" bg=none stroke=current stroke-w=2.1429
+}
+// ---- end of the generated glyphs ----
+
+// One title of the menu bar. `open` is the one whose menu is open: it reads pressed.
+def TitleBarMenu(name="", open=false) export {
+  row h=fill align=center {
+    row h=size.control-h-row pad=0,space.g8 align=center radius=radius.card color=color.text-dim \
+        role=menuitem label=name expanded=open act=title {
+      when coarse { h=size.control-h-button }
+      when hover { bg=color.hover color=color.text }
+      when open { bg=color.fill-active color=color.text }
+      when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+      text name style=text.label nowrap inert
+    }
+  }
+}
+
+params {
+  // The titles are drawn (the in-window menus are shown, and the window has room for them), or
+  // the one key that stands for them is (a narrow window). Neither when the menus are hidden.
+  bar bool = false
+  key bool = false
+  key_open bool = false
+  titles list(TitleBarMenu) = []
+  // The three parts' widths, and the width of the drawing's name in the middle one.
+  start_w num = 0
+  centre_w num = 0
+  end_w num = 0
+  name_w num = 0
+  // The band's inset at its start: more where the titles are one key.
+  compact bool = false
+  // The drawing's name, the command centre's accessible name, and whether the dot is drawn.
+  name text = "Untitled"
+  said text = "Search commands, Untitled"
+  dirty bool = false
+  // Which of the window's parts are shown: the key of one that is reads on.
+  side bool = true
+  panel bool = true
+  chat bool = false
+}
+
+col #titlebar w=fill bg=color.chrome-dark role=banner {
+  row #band w=fill h=topbar.band pad=0,space.g8,0,space.g4 gap=space.g8 align=center {
+    when compact { pad=0,space.g8 }
+    // (A `when`'s children come after the node's own, so each part that comes and goes has a box
+    // of its own at its place.)
+    row #start w=param.start_w h=fill align=center {
+      when bar {
+        row #menubar h=fill align=center role=menubar label="Main menu" {
+          each param.titles
+        }
+      }
+      when key {
+        row #menukey w=size.control-h-input h=size.control-h-input radius=radius.round align=center pack=center \
+            color=color.icon role=button label="Main menu" expanded=param.key_open act=menukey {
+          when hover { bg=color.hover color=color.text }
+          when pressed { bg=color.fill-active color=color.text scale=topbar.press }
+          when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+          icon glyph-list size=size.icon-size-md inert
+        }
+      }
+    }
+    row #centre w=param.centre_w h=size.control-h-input pad=space.g2,space.g6 gap=space.g6 align=center pack=center \
+        radius=radius.control bg=color.hover color=color.text-dim role=button label=param.said act=palette {
+      when hover { bg=color.fill-active }
+      when pressed { bg=color.fill-active }
+      when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+      icon glyph-search size=size.icon-size-sm color=color.icon inert
+      text param.name style=text.label w=param.name_w nowrap ellipsis inert
+      when dirty {
+        rect #dirty w=topbar.dot h=topbar.dot radius=radius.round bg=color.warn inert
+      }
+    }
+    row #end w=param.end_w h=fill gap=space.g2 align=center pack=end {
+      row #side w=size.control-h-input h=size.control-h-input radius=radius.round align=center pack=center \
+          color=color.icon role=button label="Sidebar" act=side {
+        when hover { bg=color.hover color=color.text }
+        when side { radius=radius.control bg=color.hover color=color.text }
+        when pressed { bg=color.fill-active color=color.text scale=topbar.press }
+        when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+        icon glyph-ui-toggle-palettes size=size.icon-size-md inert
+      }
+      row #panel w=size.control-h-input h=size.control-h-input radius=radius.round align=center pack=center \
+          color=color.icon role=button label="Command line" act=panel {
+        when hover { bg=color.hover color=color.text }
+        when panel { radius=radius.control bg=color.hover color=color.text }
+        when pressed { bg=color.fill-active color=color.text scale=topbar.press }
+        when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+        icon glyph-layout-bottom size=size.icon-size-md inert
+      }
+      row #chat w=size.control-h-input h=size.control-h-input radius=radius.round align=center pack=center \
+          color=color.icon role=button label="Assistant" act=chat {
+        when hover { bg=color.hover color=color.text }
+        when chat { radius=radius.control bg=color.hover color=color.text }
+        when pressed { bg=color.fill-active color=color.text scale=topbar.press }
+        when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+        icon glyph-assistant size=size.icon-size-md inert
+      }
+    }
+  }
+  rect #edge w=fill h=size.hairline bg=color.border
+}

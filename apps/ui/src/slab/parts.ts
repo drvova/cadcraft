@@ -7,11 +7,13 @@
 import type { Component } from "solid-js";
 import type { BenchPanelProps } from "../components/BenchPanel";
 import type { LayersPanelProps } from "../components/LayersPanel";
+import type { MenuBarProps } from "../components/MenuBar";
 import type { PiecePanelProps } from "../components/PiecePanel";
 import type { ObjectsPanelProps } from "../components/ObjectsPanel";
 import type { PropertiesPanelProps } from "../components/PropertiesPanel";
 import type { LayoutTabsProps, StatusBarProps } from "../components/StatusBar";
 import type { ToolStripProps } from "../components/ToolStrip";
+import type { TopBarProps } from "../components/TopBar";
 import type { SlabShellProps } from "./SlabShell";
 import type { JewelryDialogProps } from "../components/JewelryDialog";
 import type { PriceBookDialogProps } from "../components/PriceBookDialog";
@@ -23,6 +25,15 @@ import type { PriceBookDialogProps } from "../components/PriceBookDialog";
  */
 export interface RibbonProps extends ToolStripProps {
   running?: string | null;
+}
+
+/**
+ * What the title bar is given: the SolidJS bar's props, and the menu bar's own (absent or null
+ * while the in-window menus are hidden), which only the bar drawn by Slab reads: its titles are
+ * part of its one surface. The SolidJS bar takes these props and draws the `menu` it is handed.
+ */
+export interface TitleBarProps extends TopBarProps {
+  menus?: MenuBarProps | null;
 }
 
 export interface SlabParts {
@@ -48,4 +59,6 @@ export interface SlabParts {
   Gem?: Component<JewelryDialogProps>;
   /** The ribbon; absent when its document did not load, and the SolidJS strip is shown. */
   Ribbon?: Component<RibbonProps>;
+  /** The title bar; absent when its document did not load, and the SolidJS bar is shown. */
+  TopBar?: Component<TitleBarProps>;
 }

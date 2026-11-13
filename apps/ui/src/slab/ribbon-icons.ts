@@ -61,8 +61,13 @@ export function gridStroke(px: number): string {
 
 /** The generated block, from marker to marker, with no newline after the last. A glyph with no path in `icons.ts` is left out (the test names it). */
 export function ribbonIconSource(): string {
+  return glyphBlock(ribbonGlyphs());
+}
+
+/** The same block for any document's glyphs (`./topbar-icons` declares the title bar's with it). */
+export function glyphBlock(glyphs: readonly RibbonGlyph[]): string {
   const lines = [ICONS_BEGIN];
-  for (const glyph of ribbonGlyphs()) {
+  for (const glyph of glyphs) {
     const path = Object.hasOwn(ICON_PATHS, glyph.id) ? ICON_PATHS[glyph.id] : undefined;
     // A path is our own text; one that could close the string it is written in is not written.
     if (path === undefined || !/^[MmLlHhVvCcSsQqTtAaZz0-9 .,-]+$/.test(path)) continue;

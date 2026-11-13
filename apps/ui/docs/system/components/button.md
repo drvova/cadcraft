@@ -17,7 +17,7 @@ Real uses, 48 call sites (`rg -c "<Button" src` → `src/components/AssistantPan
 - `src/components/InlineAsk.tsx` — the offer over a selection on the drawing ("Ask about 18 selected objects", `variant="quiet" size="sm"`, `shortcut` the key that opens the same line): it stands in a small box of the elevated surface that the surface draws, and opens the inline ask. Added 2026-11-12.
 - `src/components/DraftingSettings.tsx:337` — the Drafting Settings dialog's footer: Cancel (the default) and OK (`variant="primary" type="submit"`, so Enter in a field presses it); and Select all and Clear all over the object snap boxes (`variant="ghost" size="sm"`, `src/components/DraftingSettings.tsx:302`).
 - `src/components/AssistantPane.tsx` — the assistant's call sites: the empty state's Set up a model (`variant="primary"`, shown while no model is connected), the setup sheet's Change beside the chosen provider's name (`variant="quiet" size="sm"`), its Check connection and Cancel (`variant="ghost"`) and Save (`variant="primary"`), and the stack over the composer: Stop on the run row and Undo all on the changes row (`variant="ghost" size="sm"`), and Keep beside it (`size="sm"`).
-- `src/components/TopBar.tsx:42` — the title bar's command centre (`size="sm"`): the drawing's name, opening the command palette.
+- `src/components/TopBar.tsx:56` — the title bar's command centre (`size="sm"`): the drawing's name, opening the command palette.
 
 ### Example files
 | File | Covers | Caption |
@@ -110,7 +110,7 @@ Real uses, 48 call sites (`rg -c "<Button" src` → `src/components/AssistantPan
 - `rule/button-disabled-reason`: When a button is disabled by something the user can fix, pass the reason as `title` in 1 short sentence, because a disabled button stays focusable and hoverable for exactly this and a dead button with 0 words leaves the user guessing what to fill in. Evidence: single use `src/components/AssistantPane.tsx:808`, the setup sheet's Save with `title={blocker() ?? undefined}`. Check: test `src/ui/Button.test.tsx`.
   - Don't: `<Button variant="primary" disabled={blocker() !== null}>Save</Button>`
   - Do: `<Button variant="primary" disabled={blocker() !== null} title={blocker() ?? undefined}>Save</Button>`
-- `rule/button-title-adds`: When a button takes `title`, write what the label leaves out and 0 words that repeat it, because the label is the name and the hint is announced after it as the description: "Save, button, Save" says the same thing twice, and the layer draws no box for a repeat. Evidence: single use `src/components/TopBar.tsx:45`, the command centre's "Command palette" hint over a name that already says "Search commands". Check: test `src/ui/Button.test.tsx`.
+- `rule/button-title-adds`: When a button takes `title`, write what the label leaves out and 0 words that repeat it, because the label is the name and the hint is announced after it as the description: "Save, button, Save" says the same thing twice, and the layer draws no box for a repeat. Evidence: single use `src/components/TopBar.tsx:59`, the command centre's "Command palette" hint over a name that already says "Search commands". Check: test `src/ui/Button.test.tsx`.
   - Don't: `<Button title="Save">Save</Button>`
   - Do: `<Button title="Check the address and the key">Check connection</Button>`
 
@@ -118,7 +118,7 @@ Real uses, 48 call sites (`rg -c "<Button" src` → `src/components/AssistantPan
 - `rule/button-label-verb`: When the label is written, use a verb the user recognizes in sentence case — `Save`, `Delete`, `Undo all` — because the label is the action's name and the accessible name comes from it. Evidence: app 5/6 labels are verbs or verb phrases, `src/components/AssistantPane.tsx:1045`, the label "Undo all" (the sixth, the command centre, is labelled with the drawing's name and names its action in its `title`). Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Button>SAVE</Button>`
   - Do: `<Button>Save</Button>`
-- `rule/button-aria-label-value`: When a button's visible label is a value rather than its action, pass `ariaLabel` starting with the action and holding the visible text, and pass it on 0 other buttons, because a drawing's name alone is announced as "Bracket, button" with no action in it, while an `aria-label` over a verb label hides the word a speech-input user says to press it. Evidence: single use `src/components/TopBar.tsx:40`, the command centre labelled with the drawing's name. Check: test `src/ui/Button.test.tsx`.
+- `rule/button-aria-label-value`: When a button's visible label is a value rather than its action, pass `ariaLabel` starting with the action and holding the visible text, and pass it on 0 other buttons, because a drawing's name alone is announced as "Bracket, button" with no action in it, while an `aria-label` over a verb label hides the word a speech-input user says to press it. Evidence: single use `src/components/TopBar.tsx:59`, the command centre labelled with the drawing's name. Check: test `src/ui/Button.test.tsx`.
   - Don't: `<Button ariaLabel="Store the drawing">Save</Button>`
   - Do: `<Button size="sm" ariaLabel={"Search commands, " + title()}>{title()}</Button>`
 
