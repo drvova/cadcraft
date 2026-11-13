@@ -136,5 +136,15 @@ async function withMoreDialogs(boot: SlabBoot): Promise<SlabBoot> {
   return { parts, ...(notice === undefined ? {} : { notice }) };
 }
 
-const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts).then(withDialogs).then(withMoreDialogs).then(withRibbon).then(withTopBar) : Promise.resolve<SlabBoot>({})]);
+/** The command line, added to the parts when its document loads; the SolidJS one shows when it does not. */
+async function withCommandLine(boot: SlabBoot): Promise<SlabBoot> {
+  if (boot.parts === undefined) return boot;
+  const { loadSlab } = await import("./slab/loader");
+  const cmdline = await loadSlab("cmdline");
+  if (!cmdline.ok) return { ...boot, notice: boot.notice ?? slabPartNotice("command line", cmdline.reason) };
+  const { SlabCommandLine } = await import("./slab/SlabCommandLine");
+  return { ...boot, parts: { ...boot.parts, CommandLine: SlabCommandLine } };
+}
+
+const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts).then(withDialogs).then(withMoreDialogs).then(withRibbon).then(withTopBar).then(withCommandLine) : Promise.resolve<SlabBoot>({})]);
 render(() => <App facade={facade} slab={slab.parts} shellNotice={slab.notice} />, root);

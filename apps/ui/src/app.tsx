@@ -47,7 +47,7 @@ import { PiecePanel } from "./components/PiecePanel";
 import { NO_CHOICES, NO_PIECE, parsePieceReply, readPieceChoices, type PieceChoices, type PieceState } from "./piece";
 import { InlineAsk } from "./components/InlineAsk";
 import { parseBench, type BenchSheet } from "./bench";
-import { CommandLine } from "./components/CommandLine";
+import { CommandLine, type CommandLineProps } from "./components/CommandLine";
 import { createRecovery, RecoveryBar } from "./components/RecoveryBar";
 import { GemDialog, RingDialog } from "./components/JewelryDialog";
 import { PriceBookDialog } from "./components/PriceBookDialog";
@@ -1444,9 +1444,10 @@ export function App(props: AppProps): JSX.Element {
     />
     </div>
   );
-  const commandLine = (): JSX.Element => (
+  /** The command line, drawn by `Line`: the SolidJS one, or the one ported to Slab. */
+  const commandLine = (Line: Component<CommandLineProps> = CommandLine): JSX.Element => (
     <Show when={showCmdline()}>
-      <CommandLine prompt={prompt} notice={notice} onSubmit={onCommand} />
+      <Line prompt={prompt} notice={notice} onSubmit={onCommand} />
     </Show>
   );
   const assistantPane = (): JSX.Element => (
@@ -1541,7 +1542,7 @@ export function App(props: AppProps): JSX.Element {
             recovery: recoveryBar,
             tabs: () => layoutTabs(slab.Tabs),
             stage: editorRow,
-            cmdline: commandLine,
+            cmdline: () => commandLine(slab.CommandLine),
             assistant: assistantPane,
             status: () => statusBar(slab.StatusBar),
           }}

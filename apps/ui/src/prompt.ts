@@ -174,6 +174,17 @@ export function promptText(state: PromptState): string {
   return state.prompt.trim() !== "" ? state.prompt : IDLE_PROMPT;
 }
 
+/**
+ * The error to show beside the command field: the prompt's own, or else the shell's notice; none
+ * when the history's last line already says it.
+ */
+export function freshError(state: PromptState, notice: string | null | undefined): string | null {
+  const error = state.error ?? notice;
+  if (error === null || error === undefined || error === "") return null;
+  const last = (state.output[state.output.length - 1] ?? "").trim();
+  return last !== "" && (last === error.trim() || last.includes(error.trim())) ? null : error;
+}
+
 /** The keyword hint ("Close/Undo"), or null when the prompt offers none. */
 export function keywordHint(state: PromptState): string | null {
   return state.keywords.length > 0 ? state.keywords.join(" / ") : null;

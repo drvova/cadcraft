@@ -15,6 +15,7 @@ import type { LayoutTabsProps, StatusBarProps } from "../components/StatusBar";
 import type { ToolStripProps } from "../components/ToolStrip";
 import type { TopBarProps } from "../components/TopBar";
 import type { SlabShellProps } from "./SlabShell";
+import type { CommandLineProps } from "../components/CommandLine";
 import type { JewelryDialogProps } from "../components/JewelryDialog";
 import type { PriceBookDialogProps } from "../components/PriceBookDialog";
 import type { DraftingSettingsProps } from "../components/DraftingSettings";
@@ -67,4 +68,6 @@ export interface SlabParts {
   Ribbon?: Component<RibbonProps>;
   /** The title bar; absent when its document did not load, and the SolidJS bar is shown. */
   TopBar?: Component<TitleBarProps>;
+  /** The command line; absent when its document did not load, and the SolidJS one is shown. */
+  CommandLine?: Component<CommandLineProps>;
 }
