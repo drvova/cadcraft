@@ -238,7 +238,13 @@ Every region of the shell has a Slab part now. What is still SolidJS, and why:
    crossed by the pointer cost about 9 ms of script against under 1, and an arrow key 9 against
    0.6. The cost is the driver's: each frame it solves, serialises the whole scene and syncs an
    accessibility node per scene node (230 for Draw). Kept outside the repository as a patch.
-   **The tech sheet**: not attempted.
+   **The tech sheet**: built in Slab, measured, and not shipped. A surface cannot print it: it
+   keeps its screen layout and came out as two pages with the right-hand values cut off, so the
+   Slab sheet printed through the SolidJS page all the same. On screen it opened in 26 ms against
+   21.5 (median) and a display-mode switch cost 40 to 48 ms of script against 5 (each arriving
+   still is a list write and the driver decodes images a frame late). Its state is
+   `src/techsheet-state.ts` since then, which the SolidJS sheet runs on. Kept outside the
+   repository as a patch.
 2. **Text**: every free-text field, the assistant's conversation and editor. These wait on the
    kernel: word selection, a placeholder, copy that follows paragraphs, links, variable-height
    virtual rows (`setItemExtent` on the web element).
