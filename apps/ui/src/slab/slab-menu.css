@@ -1,0 +1,54 @@
+/*
+ * The page side of the menu drawn by Slab (`SlabMenu.tsx`): the boxes its surfaces stand in.
+ * Everything that is drawn inside them is the document's (`slab/menu.slab`).
+ *
+ * The menu's own box keeps chrome.css's `.menu-drop` (where it hangs from what opened it, the pull
+ * back inside the window, its least width, its greatest height above the status bar, its corner
+ * and its shadow, and the class the shell looks for while a menu is open), less what the surface
+ * paints itself: the grid, the inset, the fill and the hairline. SlabMenu.tsx reads the least width
+ * and the greatest height off it, and sets its width and height.
+ */
+
+.menu-drop.slab-menu {
+  display: block;
+  padding: 0;
+  background: transparent;
+  border: none;
+  overflow: visible;
+}
+
+.menu-drop.slab-menu > .slab-surface {
+  display: block;
+}
+
+/* A submenu's box: fixed in the window beside its row (SlabMenu.tsx: `submenuPlacement`), past
+   the whole parent menu, over it. */
+.menu-drop.slab-menu.slab-menu-sub {
+  position: fixed;
+  left: var(--slab-sub-x, 0);
+  top: var(--slab-sub-y, 0);
+  right: auto;
+  translate: none;
+  min-width: 24ch;
+  z-index: 50;
+  pointer-events: auto;
+}
+
+/* Where the surfaces wait between openings: in the page, so each keeps its kernel and its
+   document, and never seen or reached. */
+.slab-menu-shelf {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.slab-menu-shelf > .slab-surface {
+  display: block;
+  width: 240px;
+  height: 40px;
+}

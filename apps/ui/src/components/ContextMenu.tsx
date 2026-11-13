@@ -16,10 +16,10 @@
  * the press that closed it took the focus somewhere itself.
  */
 
-import { createUniqueId, onCleanup, onMount, Show, type Accessor, type JSX } from "solid-js";
+import { createUniqueId, onCleanup, onMount, Show, type Accessor, type Component, type JSX } from "solid-js";
 import type { ContextSource } from "../context";
 import type { MenuItem } from "../menu";
-import { Menu, type MenuHandle } from "./Menu";
+import { Menu, type MenuHandle, type MenuProps } from "./Menu";
 import "../canvas.css";
 
 /** Where a menu was asked for (the window's CSS px), and how. */
@@ -63,6 +63,8 @@ export interface ContextMenuProps {
   onInvoke: (id: string) => void;
   /** The menu asks to be closed. */
   onClose: () => void;
+  /** The menu drawn: `Menu` unless the shell hands another with the same props (the Slab shell's). */
+  view?: Component<MenuProps>;
 }
 
 export function ContextMenu(props: ContextMenuProps): JSX.Element {
@@ -82,6 +84,7 @@ function OpenMenu(props: ContextMenuProps & { at: MenuPoint }): JSX.Element {
   /** What had the keyboard when the menu opened. */
   const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const stacked = window.matchMedia(STACKED_QUERY).matches;
+  const View = props.view ?? Menu;
 
   /** Hand the keyboard back, when nothing else has taken it. */
   const restore = (always: boolean): void => {
@@ -144,7 +147,7 @@ function OpenMenu(props: ContextMenuProps & { at: MenuPoint }): JSX.Element {
       // The menu stands under the pointer that opened it: the browser's own menu stays away from it.
       onContextMenu={(event) => event.preventDefault()}
     >
-      <Menu
+      <View
         id={menuId}
         label={props.menu()?.label ?? ""}
         items={props.menu()?.items ?? []}

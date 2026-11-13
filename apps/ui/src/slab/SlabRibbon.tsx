@@ -95,6 +95,8 @@ export function SlabRibbon(props: RibbonProps): JSX.Element {
   const [tabCap, setTabCap] = createSignal(0);
   const measure = pageMeasure() ?? roughMeasure;
   const mac = isMacPlatform();
+  /** The overflow key's menu: the Slab shell's (`SlabParts.Menu`) when it has one. */
+  const MenuView = props.menuView ?? Menu;
 
   const tab = createMemo(() => ribbonTab(head().tab));
   const folded = (): boolean => head().folded;
@@ -529,7 +531,7 @@ export function SlabRibbon(props: RibbonProps): JSX.Element {
               if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget) && event.relatedTarget !== element) setMoreOpen(false);
             }}
           >
-            <Menu
+            <MenuView
               label="More tools"
               items={overflow()}
               stacked

@@ -1335,12 +1335,13 @@ export function App(props: AppProps): JSX.Element {
       onTogglePanel={() => setShowCmdline((v) => !v)}
       assistantOpen={showAssistant}
       onToggleAssistant={() => setShowAssistant((v) => !v)}
+      menuView={props.slab?.Menu}
     />
   );
   /** The ribbon, drawn by `Strip`: the SolidJS one, or the one ported to Slab. */
   const ribbon = (Strip: Component<RibbonProps> = ToolStrip): JSX.Element => (
     <Show when={showToolbar()}>
-      <Strip onInvoke={onInvoke} commands={commands()} running={prompt().running} />
+      <Strip onInvoke={onInvoke} commands={commands()} running={prompt().running} menuView={props.slab?.Menu} />
     </Show>
   );
   /** The sidebar is on screen: its switch is on and it has a section to show. */
@@ -1520,7 +1521,7 @@ export function App(props: AppProps): JSX.Element {
         onApplied={refresh}
       />
       <CommandPalette open={paletteOpen} items={palette} recent={recentCommands} onRun={onPaletteRun} onClose={() => setPaletteOpen(false)} />
-      <ContextMenu menu={contextMenu} onInvoke={onContextInvoke} onClose={() => setContextAt(null)} />
+      <ContextMenu menu={contextMenu} onInvoke={onContextInvoke} onClose={() => setContextAt(null)} view={props.slab?.Menu} />
     </>
   );
 

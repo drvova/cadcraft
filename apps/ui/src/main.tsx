@@ -156,8 +156,19 @@ async function withAssistant(boot: SlabBoot): Promise<SlabBoot> {
   return { ...boot, parts: { ...boot.parts, Assistant: SlabAssistant } };
 }
 
+/** The menus, added to the parts when their document loads; the SolidJS menu shows when it does not. */
+async function withMenu(boot: SlabBoot): Promise<SlabBoot> {
+  if (boot.parts === undefined) return boot;
+  const { loadSlab } = await import("./slab/loader");
+  const menu = await loadSlab("menu");
+  if (!menu.ok) return { ...boot, notice: boot.notice ?? slabPartNotice("menus", menu.reason) };
+  const { SlabMenu, prepareMenus } = await import("./slab/SlabMenu");
+  prepareMenus();
+  return { ...boot, parts: { ...boot.parts, Menu: SlabMenu } };
+}
+
 const ask = shellChoice(window.location.search);
 /** A checkout that never built Slab shows the standard shell without a word, unless Slab was asked for by name. */
 const quietWhenAbsent = (boot: SlabBoot): SlabBoot => (!ask.asked && boot.parts === undefined && boot.notice === SLAB_ABSENT ? {} : boot);
-const [facade, slab] = await Promise.all([createFacade(), ask.shell === "slab" ? loadSlabParts().then(quietWhenAbsent).then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts).then(withDialogs).then(withMoreDialogs).then(withRibbon).then(withTopBar).then(withCommandLine).then(withAssistant) : Promise.resolve<SlabBoot>({})]);
+const [facade, slab] = await Promise.all([createFacade(), ask.shell === "slab" ? loadSlabParts().then(quietWhenAbsent).then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts).then(withDialogs).then(withMoreDialogs).then(withRibbon).then(withTopBar).then(withCommandLine).then(withAssistant).then(withMenu) : Promise.resolve<SlabBoot>({})]);
 render(() => <App facade={facade} slab={slab.parts} shellNotice={slab.notice} />, root);

@@ -1,0 +1,279 @@
+// A menu: one level of the menus the menu bar's titles, the Main menu key, the ribbon's overflow
+// key and a right click open. Its rows stand in columns (a menu taller than the window runs on
+// into a second one); in a window with no room beside a row (`stacked`) it is one column that
+// scrolls, and a submenu opens in place as an indented group under its row. The view only: which
+// rows there are, which column each starts, how wide each track is, which row is lit and which
+// group is open are shaped in TypeScript (src/slab/menu-params.ts, over the rules of
+// src/menu.ts that the SolidJS menu, src/components/Menu.tsx, is drawn by). A submenu beside
+// its row is another surface of this document: a surface's overlay cannot leave its box.
+//
+// No node binds `pointer-move` and none eases with `transition=`, each of which has the kernel
+// solve a frame per step; nothing is lit by the kernel's own hover either. The host finds the row
+// under the pointer in the solved scene and lights it (`lit`), so a pointer drawn down the rows
+// asks for one frame per row it enters and none for the moves inside a row. A row's parts are
+// `inert`.
+//
+// Measures follow src/chrome.css (.menu-drop, .menu-separator, .menu-name, .menu-shortcut,
+// .menu-arrow, .menu-drop.is-stacked) and src/ui/ui.css (.ui-row--menuitem): the box is the
+// popover (its inset 4 inside a hairline, its 14 corner), a row an input high (a button's under
+// a finger) on an 8 inset, its corner the box's less the inset and the hairline; a separator is
+// half a row with a hairline across the text's run; the typed name is the mono face in the quiet
+// ink, a step brighter on the lit row; a group opened in place stands 12 in, past a hairline.
+import "gen/tokens.slab"
+
+tokens {
+  menu {
+    // The box's inset and its hairline: where the rows start.
+    inset 5
+    // A row's corner: the popover's 14 less the inset (4) and the hairline.
+    row-radius 9
+    // A separator: half a row (half a button's under a finger).
+    sep 12
+    sep-coarse 14
+    // A group opened in place: 12 in, a hairline, 4 more.
+    guide 17
+    // A row's glyph (the overflow menu's) and the room after it.
+    glyph-box 22
+    // The row's inset at its end: the chevron's box stands 4 past the shortcuts' edge.
+    end-pad 4
+  }
+}
+
+// ---- glyphs: generated from src/icons.ts by src/slab/ribbon-icons.ts; do not edit ----
+icon glyph-chevron-right viewbox=24 {
+  path "M9 6l6 6-6 6" bg=none stroke=current stroke-w=2.5
+}
+icon glyph-new viewbox=24 {
+  path "M13 3.75H7a2 2 0 0 0-2 2v12.5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9.75z M13 3.75v6h6" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-open viewbox=24 {
+  path "M3.75 5.75a2 2 0 0 1 2-2h3.5l2 3h7a2 2 0 0 1 2 2v9.5a2 2 0 0 1-2 2H5.75a2 2 0 0 1-2-2z" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-save viewbox=24 {
+  path "M5.75 3.75h11.5l3 3v11.5a2 2 0 0 1-2 2H5.75a2 2 0 0 1-2-2V5.75a2 2 0 0 1 2-2z M8.25 3.75v6h7.5v-6 M6.75 20.25v-6h10.5v6" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-plot viewbox=24 {
+  path "M6.75 8.25v-4.5h10.5v4.5 M5.75 8.25h12.5a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H5.75a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2z M6.75 14.25h10.5v6h-10.5z" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-u viewbox=24 {
+  path "M9 14.75l-5-5 5-5 M4 9.75h10.75a5.25 5.25 0 0 1 0 10.5H10" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-redo viewbox=24 {
+  path "M15 14.75l5-5-5-5 M20 9.75H9.25a5.25 5.25 0 0 0 0 10.5H14" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-line viewbox=24 {
+  path "M6.4 17.6L17.6 6.4 M5 17a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M19 3a2 2 0 1 0 0 4a2 2 0 1 0 0-4" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-polyline viewbox=24 {
+  path "M5.7 17.1L9.5 7l5 8 3.7-8.2 M5 17a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M19 3a2 2 0 1 0 0 4a2 2 0 1 0 0-4" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-circle viewbox=24 {
+  path "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-arc viewbox=24 {
+  path "M5.2 16A13 13 0 0 1 16 5.2 M5 16a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M18 3a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M18 18h0" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-rectangle viewbox=24 {
+  path "M16.75 6.75H5.25v8.5 M7.25 17.25h11.5v-8.5 M18.75 4.75a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M5.25 15.25a2 2 0 1 0 0 4a2 2 0 1 0 0-4" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-move viewbox=24 {
+  path "M3.75 12.75h7.5v7.5h-7.5z M12.75 11.25l7.5-7.5 M14.25 3.75h6v6" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-copy-objects viewbox=24 {
+  path "M3.75 8.25h12v12h-12z M8.25 8.25v-4.5h12v12h-4.5 M9.75 11.25v6 M6.75 14.25h6" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-rotate viewbox=24 {
+  path "M20.25 12A8.25 8.25 0 1 1 12 3.75 M10 2l2 1.75-2 2.5 M9.75 9.75h4.5v4.5h-4.5z" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-trim viewbox=24 {
+  path "M9.75 3v18 M3 15.75h6.75 M13.5 15.75h2.25 M19.5 15.75h1.5" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-erase viewbox=24 {
+  path "M14 4l7 7-8 8H9l-5-5z M9 9l7 7 M13 19h8" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-zoom-extents viewbox=24 {
+  path "M4 9V4h5 M15 4h5v5 M20 15v5h-5 M9 20H4v-5 M10 10h4v4h-4z" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-zoom-window viewbox=24 {
+  path "M3.75 8.25v-4.5h4.5 M12 3.75h3.75v3.75 M3.75 12v3.75h3.75 M15.75 11.25a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0-9 M19 19l2.5 2.5" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-pan viewbox=24 {
+  path "M12 3v18 M3 12h18 M9 6l3-3 3 3 M9 18l3 3 3-3 M6 9l-3 3 3 3 M18 9l3 3-3 3" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-ring viewbox=24 {
+  path "M12 7.5a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13 M12 2.5l3 2.5-3 2.5-3-2.5z" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-gem viewbox=24 {
+  path "M7.5 5.25h9l4.5 4.5-9 10.5-9-10.5z M3 9.75h18 M9 9.75l3 10.5 M15 9.75l-3 10.5" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-setting viewbox=24 {
+  path "M12 5.5a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13 M6 4a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M18 4a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M6 16a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M18 16a2 2 0 1 0 0 4a2 2 0 1 0 0-4" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-pave viewbox=24 {
+  path "M6 6a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M12 6a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M18 6a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M9 13a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M15 13a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-ringsizes viewbox=24 {
+  path "M3 10.75L20.25 7.5v9L3 13.25z M8.25 9.75v4.5 M12.75 9v6 M17.25 8.25v7.5" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-gemfit viewbox=24 {
+  path "M9.75 3.75a6 6 0 1 0 0 12a6 6 0 1 0 0-12 M13 17.5l3 3 5-7.5" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-techsheet viewbox=24 {
+  path "M5.25 3.75h13.5v16.5H5.25z M9.75 6a2.25 2.25 0 1 0 0 4.5a2.25 2.25 0 1 0 0-4.5 M14.25 8.25h1.5 M8.25 14.25h7.5 M8.25 17.25h7.5" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-bench viewbox=24 {
+  path "M12.75 3.75v16.5 M9.75 20.25h6 M6.25 6.75h13 M6.25 6.75l-2.5 6a2.5 2.5 0 0 0 5 0z M19.25 6.75l-2.5 6a2.5 2.5 0 0 0 5 0z" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-polygon viewbox=24 {
+  path "M7.5 3.75h9l4.5 8.25-4.5 8.25h-9L3 12z M12 12h0" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-ellipse viewbox=24 {
+  path "M3.9 9.3A10.125 10.125 0 0 1 20.1 9.3A4.5 4.5 0 0 1 20.1 14.7A10.125 10.125 0 0 1 3.9 14.7A4.5 4.5 0 0 1 3.9 9.3 M12 12h0" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-spline viewbox=24 {
+  path "M5.6 17.1A5.5 5.5 0 0 1 12 12A5.5 5.5 0 0 0 18.4 6.9 M5 17a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M19 3a2 2 0 1 0 0 4a2 2 0 1 0 0-4" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-hatch viewbox=24 {
+  path "M4 4h16v16H4z M4 12l8-8 M4 20L20 4 M12 20l8-8" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-mirror viewbox=24 {
+  path "M12.75 3.75v2.25 M12.75 10.5v4.5 M12.75 19.5v2.25 M8.25 6.75v12L3.75 12.75z M17.25 6.75v12l4.5-6z" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-scale viewbox=24 {
+  path "M3.75 3.75h16.5v16.5H3.75z M3.75 12.75h7.5v7.5 M13.5 10.5l3.75-3.75 M14.25 6.75h3v3" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-offset viewbox=24 {
+  path "M3.75 20.25v-9a7.5 7.5 0 0 1 7.5-7.5h9 M11.25 20.25v-9h9" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-extend viewbox=24 {
+  path "M18.75 3v18 M3 12.75h5.25 M11.25 12.75h4.5 M13.5 9.75l3 3-3 3" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-fillet viewbox=24 {
+  path "M3.75 3.75h9a7.5 7.5 0 0 1 7.5 7.5v9 M20.25 3.75h0" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-chamfer viewbox=24 {
+  path "M3.75 3.75h9l7.5 7.5v9 M20.25 3.75h0" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-text viewbox=24 {
+  path "M5 7V4h14v3 M12 4v16 M9 20h6" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-mleader viewbox=24 {
+  path "M4.3 16.3L3.75 20.25l3.6-1.8 M3.75 20.25l7.5-10.5h3 M15.75 8.25h4.5 M15.75 11.25h4.5" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-table viewbox=24 {
+  path "M3.75 5.25h16.5v13.5H3.75z M3.75 9.75h16.5 M3.75 14.25h16.5 M9.75 9.75v9" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-dimension-linear viewbox=24 {
+  path "M4 4v11 M20 4v11 M4 8h16 M7 5L4 8l3 3 M17 5l3 3-3 3 M4 20h16" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-dimension-aligned viewbox=24 {
+  path "M7.5 20.5l13-7.5 M3.5 13.6l13-7.5 M6.75 19.2l-4-6.9 M19.75 11.7l-4-6.9 M6.3 13.7l-2.8-.1 1.3-2.5 M13.7 6l2.8.1-1.3 2.5" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-dimension-radius viewbox=24 {
+  path "M12 3.75a8.25 8.25 0 1 0 0 16.5a8.25 8.25 0 1 0 0-16.5 M12 12h0 M12 12l5.8-5.8 M14.9 6.2h2.9v2.9" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-dimension-angular viewbox=24 {
+  path "M20.25 20.25H3.75L14 4.5 M15.75 20.25A12 12 0 0 0 10.3 10.2" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-dist viewbox=24 {
+  path "M3 17L17 3l4 4L7 21z M8 12l2 2 M11 9l2 2 M14 6l2 2" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-ui-dialog-layers viewbox=24 {
+  path "M12 3l8 5-8 5-8-5z M4 13l8 5 8-5 M4 17l8 5 8-5" bg=none stroke=current stroke-w=2.1429
+}
+icon glyph-properties viewbox=24 {
+  path "M4 8h9 M17 8h3 M15 6a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M4 16h3 M11 16h9 M9 14a2 2 0 1 0 0 4a2 2 0 1 0 0-4" bg=none stroke=current stroke-w=2.1429
+}
+// ---- end of the generated glyphs ----
+
+// The edge of an open group a row stands in: one per level it is nested (a stacked menu only).
+def MenuGuide(on=true) export {
+  row w=menu.guide h=fill pad-l=space.g12 {
+    rect w=size.hairline h=fill bg=color.border
+  }
+}
+
+// One row, or the separator above a group (`sep`). `caption` is the row's label and `short` its
+// shortcut (a prop named `label` or `keys` would shadow the attribute). The tracks are the host's: `lw` the label's
+// (less the glyph's room, when the row has one), `nw` the typed name's (0 when it is not drawn),
+// `sw` the shortcut's or the chevron's, `g1` and `g2` the room between them; the whole row is as
+// wide as its column. `off` is a row that is not available: it keeps its place and the keyboard
+// still reaches it (the host says it is unavailable, and does not run it). `sub` opens a submenu
+// and `open` is the one that is open (`down`: in place, under it, its chevron turned down); `lit` is the row under the pointer or the keyboard, or the
+// open one. `said` is the typed name said as the row's description; `pos` and `count` its place in
+// its own list (a stacked menu holds the groups opened in place in the same one).
+def MenuRow(caption="", name="", short="", said="", glyph="", iconed=false, sub=false, open=false, off=false, lit=false, \
+            down=false, sep=false, pos=1, count=1, lw=0, nw=0, sw=0, g1=0, g2=0, guides=list(MenuGuide)) export {
+  row w=fill {
+    each guides
+    col w=fill {
+      when sep {
+        row w=fill h=menu.sep pad=0,space.g8 align=center role=separator {
+          when coarse { h=menu.sep-coarse }
+          rect w=fill h=size.hairline bg=color.border
+        }
+      }
+      when !sep {
+        row #row w=fill h=size.control-h-input pad=0,menu.end-pad,0,space.g8 align=center radius=menu.row-radius \
+            color=color.text role=menuitem label=caption desc=said pos-in-set=pos set-size=count act=row {
+          when coarse { h=size.control-h-button }
+          when sub { expanded=open }
+          when lit { bg=color.hover }
+          when off { bg=none color=color.text-disabled }
+          when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+          when iconed {
+            row w=menu.glyph-box h=fill align=center inert {
+              icon glyph size=size.icon-size-md color=color.icon {
+                when off { color=color.text-disabled }
+              }
+            }
+          }
+          text caption style=text.body w=lw nowrap ellipsis inert
+          rect w=g1 h=1 inert
+          text name style=text.mono w=nw color=color.text-faint nowrap clip inert {
+            when lit { color=color.text-dim }
+            when off { color=color.text-disabled }
+          }
+          rect w=g2 h=1 inert
+          row w=sw h=fill align=center pack=end inert {
+            when !sub {
+              pad-r=menu.end-pad
+              text short style=text.label color=color.text-faint nowrap {
+                when off { color=color.text-disabled }
+              }
+            }
+            when sub {
+              icon glyph-chevron-right size=size.icon-size-sm color=color.text-faint {
+                when down { rotate=90 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// A column of rows, as wide as its widest row's tracks.
+def MenuColumn(cw=0, rows=list(MenuRow)) export {
+  col w=cw {
+    each rows
+  }
+}
+
+params {
+  // The box: its outer width and height (the host works both out before the surface is laid out,
+  // so the menu is placed in the window in the same turn as it is asked for).
+  w num = 0
+  h num = 0
+  cols list(MenuColumn) = []
+}
+
+col #menu w=param.w h=param.h pad=menu.inset bg=color.surface-elevated stroke=color.border stroke-w=size.hairline \
+    stroke-align=inside radius=radius.popover {
+  col #body w=fill h=fill scroll {
+    row #cols gap=space.g4 {
+      each param.cols
+    }
+  }
+}

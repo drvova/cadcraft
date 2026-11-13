@@ -21,6 +21,7 @@ import type { JewelryDialogProps } from "../components/JewelryDialog";
 import type { PriceBookDialogProps } from "../components/PriceBookDialog";
 import type { DraftingSettingsProps } from "../components/DraftingSettings";
 import type { TemplateGalleryProps } from "../components/TemplateGallery";
+import type { MenuProps } from "../components/Menu";
 
 /**
  * What the ribbon is given: the SolidJS strip's props, and the id of the command that is running
@@ -29,6 +30,8 @@ import type { TemplateGalleryProps } from "../components/TemplateGallery";
  */
 export interface RibbonProps extends ToolStripProps {
   running?: string | null;
+  /** The menu its overflow key opens: the Slab shell's when it has one (`SlabParts.Menu`); the SolidJS one otherwise. */
+  menuView?: Component<MenuProps>;
 }
 
 /**
@@ -38,6 +41,8 @@ export interface RibbonProps extends ToolStripProps {
  */
 export interface TitleBarProps extends TopBarProps {
   menus?: MenuBarProps | null;
+  /** The menu a title opens: the Slab shell's when it has one (`SlabParts.Menu`); the SolidJS one otherwise. */
+  menuView?: Component<MenuProps>;
 }
 
 export interface SlabParts {
@@ -73,4 +78,6 @@ export interface SlabParts {
   CommandLine?: Component<CommandLineProps>;
   /** The assistant panel's frame; absent when its document did not load, and the SolidJS panel is shown. */
   Assistant?: Component<AssistantPaneProps>;
+  /** The menus (the title bar's, the ribbon's overflow, the right-click ones); absent when their document did not load, and the SolidJS menu is shown. */
+  Menu?: Component<MenuProps>;
 }

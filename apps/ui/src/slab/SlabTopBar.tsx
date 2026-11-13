@@ -99,6 +99,8 @@ export function SlabTopBar(props: TitleBarProps): JSX.Element {
   });
   /** A layout key's shortcut in this platform's words, as the menus print it. */
   const shortcut = (keys: string): string => shortcutLabel(keys, mac);
+  /** The menu a title opens: the Slab shell's (`SlabParts.Menu`) when it has one. */
+  const MenuView = props.menuView ?? Menu;
 
   let element: HTMLElement | undefined;
   let frame: HTMLDivElement | undefined;
@@ -518,21 +520,22 @@ export function SlabTopBar(props: TitleBarProps): JSX.Element {
                 placeMenu();
                 // Tab on a row, ahead of the menu's own handler (the page's, on the document):
                 // on from the menus is the command centre, which the browser would pass by (the
-                // surface is one stop to it). Back leaves the bar, as the menu itself has it.
+                // surface is one stop to it). Back leaves the bar, as the menu itself has it. In
+                // capture: ahead of a Slab menu's own handler, on its surface.
                 box.addEventListener("keydown", (event) => {
                   if (event.key !== "Tab" || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
                   event.preventDefault();
                   event.stopPropagation();
                   focusStop("centre");
                   close();
-                });
+                }, true);
               }}
               onFocusOut={(event) => {
                 // The focus going to something outside closes the menu; the focus merely dropped does not.
                 if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget) && event.relatedTarget !== element) close();
               }}
             >
-              <Menu
+              <MenuView
                 label={at.index === COMPACT ? "Main menu" : (tree()[at.index]?.label ?? "")}
                 items={at.index === COMPACT ? tree() : (tree()[at.index]?.children ?? [])}
                 stacked={at.index === COMPACT && stacked()}
