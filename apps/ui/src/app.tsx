@@ -1344,10 +1344,12 @@ export function App(props: AppProps): JSX.Element {
   const sidebarShown = (): boolean => showSidebar() && (showPiece() || showLayers() || showObjects() || showProperties() || showBench());
   /** The Layers section's panel: the SolidJS one, or the one ported to Slab when its document loaded. */
   const Layers: Component<LayersPanelProps> = props.slab?.Layers ?? LayersPanel;
+  /** The Piece section: the SolidJS one, or the one ported to Slab when the Slab shell has it. */
+  const PieceSection = props.slab?.Piece ?? PiecePanel;
   const railSections = (): JSX.Element => (
     <>
       <Show when={showPiece()}>
-        <PiecePanel state={piece()} choices={pieceChoices()} onRun={onPieceRun} onNotice={onPropertyNotice} onTemplates={() => setShowTemplates(true)} />
+        <PieceSection state={piece()} choices={pieceChoices()} onRun={onPieceRun} onNotice={onPropertyNotice} onTemplates={() => setShowTemplates(true)} />
       </Show>
       <Show when={showLayers()}>
         <Layers layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} onMenu={(name, at) => openContext({ kind: "layer", name }, at)} />

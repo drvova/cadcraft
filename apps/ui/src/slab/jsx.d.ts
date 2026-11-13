@@ -11,6 +11,7 @@ declare module "solid-js" {
       "cadcraft-shell": HTMLAttributes<HTMLElement>;
       "slab-bench-panel": HTMLAttributes<HTMLElement>;
       "slab-layers-panel": HTMLAttributes<HTMLElement>;
+      "slab-piece-panel": HTMLAttributes<HTMLElement>;
     }
   }
 }

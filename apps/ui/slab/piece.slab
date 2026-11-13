@@ -1,0 +1,229 @@
+// The Piece section of the sidebar: the parametric ring the engine's `piece` command builds. With
+// no piece it offers the kinds; with one it lists the parameters of its kind, each edited in
+// place (a typed value, a choice from a list that opens under its row, a tick), then what the
+// engine worked out and its checks, and a way to remove it.
+//
+// The view only. Every string and every boolean is shaped in TypeScript (src/piece.ts,
+// src/slab/piece-params.ts); every press, pick and typed value comes back as a signal and goes
+// through the same row logic as the SolidJS panel (src/piece-edit.ts).
+//
+// Measures follow src/interaction.css (.properties-head, .prop-row, .piece-check, .piece-foot):
+// the heading is 24 high, a row 22, a label starts on the rail's text column (24 in), a value
+// ends 24 before the edge and a choice's arrow stands in the 16 after it.
+import "gen/tokens.slab"
+
+icon chevron viewbox=24 {
+  path "M6 9l6 6 6-6" bg=none stroke=current stroke-w=2
+}
+
+icon mark viewbox=24 {
+  path "M5 12.5l4.5 4.5 9.5-10" bg=none stroke=current stroke-w=3
+}
+
+// A kind a piece starts as. The 4 after it is the gap to the next one on its line (an `each`
+// lays its items edge to edge).
+def PieceStart(name="", hint="") export {
+  row w=hug pad=0,space.g4,0,0 {
+    row #start w=hug h=size.control-h-input pad=space.g2,space.g6 radius=radius.control align=center \
+        bg=color.hover color=color.text act=start role=button label=hint transition=dur.fast {
+      when hover { bg=color.fill-active }
+      when pressed { bg=color.fill-active }
+      when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+      text name style=text.body nowrap
+    }
+  }
+}
+
+// One line of the kinds. An `each` inside a `wrap` is one block, not items that wrap, so the
+// host breaks the kinds into lines (src/slab/piece-params.ts) and the last line carries the way
+// to the template gallery when the shell has one.
+def PieceStartLine(more=false, starts=list(PieceStart)) export {
+  row w=fill align=center {
+    each starts
+    when more {
+      row #templates w=hug h=size.control-h-input pad=space.g2,space.g6 radius=radius.control align=center \
+          act=templates role=button label="Start from a template" color=color.text-dim transition=dur.fast {
+        when hover { bg=color.hover color=color.text }
+        when pressed { bg=color.fill-active color=color.text }
+        when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+        text "Templates…" style=text.body nowrap
+      }
+    }
+  }
+}
+
+// One value of a choice, in the list that opens under its row.
+def PieceOption(name="", picked=false) export {
+  row #option w=fill h=size.control-h-row pad=0,space.g8,0,24 gap=space.g4 align=center color=color.text-dim \
+      act=option_pick role=option label=name selected=picked transition=dur.fast {
+    when hover { bg=color.hover color=color.text }
+    when picked { color=color.text }
+    when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+    text name style=text.body w=fill nowrap ellipsis align-text=end
+    row w=size.icon-size-sm h=size.icon-size-sm align=center pack=center color=color.text-accent {
+      when picked { icon mark size=size.icon-size-sm }
+    }
+  }
+}
+
+// One parameter: its label and the control its kind of value takes. `shown` is the value as it
+// reads (a choice's label, the typed text the field starts from); `said` is a choice as a screen
+// reader is told it ("Kind: Solitaire": a row scrolled out of sight has no text of its own in the
+// tree); `hint` is the refusal standing on the row, in words.
+def PieceRow(name="", shown="", said="", hint="", choice=false, tick=false, typed=false, \
+             open=false, on=false, bad=false, options=list(PieceOption)) export {
+  col w=fill role=listitem {
+    row w=fill h=size.control-h-row pad=0,space.g8,0,24 gap=space.g8 align=center transition=dur.fast {
+      when hover { bg=color.control-hover }
+      when open { bg=color.control-hover }
+      text name style=text.body color=color.text-faint w=fill nowrap ellipsis
+      row w=fill h=fill align=center pack=end {
+        when typed {
+          // A focused field is scrolled 8 by the kernel to keep the caret at the end of its text
+          // inside the content box, and one without the focus is not. The 8 is given up from the
+          // inset while the field has the focus, so the text stands in one place either way: 4
+          // inside the box's inset, on the values' edge. (The host puts the caret at the end when
+          // the focus arrives and clears the scroll when it leaves: src/slab/SlabPiece.tsx.)
+          row w=fill h=fill pad=0,space.g4,0,0 align=center {
+            text #field shown style=text.body color=color.text w=fill h=size.control-h-chip \
+                 pad=space.g2,space.g12,space.g2,space.g4 radius=radius.control nowrap clip align-text=end \
+                 field=row_edit submit=row_submit field-sync=host label=name desc=hint \
+                 stroke-w=1 stroke-align=inside transition=dur.fast {
+              when hover { bg=color.control stroke=color.border }
+              when focus { bg=color.control stroke=color.focus-ring pad=space.g2,space.g4 }
+              when bad { stroke=color.error }
+            }
+          }
+        }
+        when choice {
+          row #choice w=fill h=size.control-h-chip pad=0,0,0,space.g4 gap=space.g4 radius=radius.control \
+              align=center color=color.text act=row_choose role=button label=said desc=hint expanded=open \
+              stroke-w=1 stroke-align=inside transition=dur.fast {
+            when hover { bg=color.control stroke=color.border }
+            when bad { stroke=color.error }
+            when focus-visible { stroke=color.focus-ring }
+            text shown style=text.body w=fill nowrap ellipsis align-text=end
+            icon chevron size=size.icon-size-sm color=color.icon {
+              when open { rotate=180 }
+            }
+          }
+        }
+        when tick {
+          row h=fill pad=0,space.g16,0,0 align=center {
+            row #tick w=size.icon-size-md h=size.icon-size-md radius=radius.small align=center pack=center \
+                act=row_tick role=checkbox label=name checked=on color=color.on-accent \
+                stroke=color.icon stroke-w=1 stroke-align=inside transition=dur.fast {
+              when hover { bg=color.hover }
+              when on { bg=color.accent stroke=color.accent }
+              when focus-visible { stroke=color.focus-ring stroke-w=2 }
+              when on { icon mark size=size.icon-size-sm }
+            }
+          }
+        }
+      }
+    }
+    // Closed, the host hands over no values and the list is not in the scene.
+    when open {
+      col #values w=fill bg=color.surface-inset role=listbox label=name {
+        each options
+      }
+    }
+  }
+}
+
+// What the engine worked out: read, never edited. The value is whole and wraps.
+def PieceFact(name="", amount="", said="") export {
+  row w=fill min-h=size.control-h-row pad=space.g3,24,space.g3,24 gap=space.g8 role=listitem label=said {
+    text name style=text.body color=color.text-faint nowrap
+    text amount style=text.body color=color.text-dim w=fill align-text=end
+  }
+}
+
+// A check: its sentence, read whole, and the word for how it went. The word says it; the ink
+// only repeats it.
+def PieceCheck(note="", mark="", said="", failed=false) export {
+  row w=fill min-h=size.control-h-row pad=space.g2,24,space.g2,24 gap=space.g8 role=listitem label=said {
+    text note style=text.chip color=color.text-dim w=fill {
+      when failed { color=color.text }
+    }
+    text mark style=text.chip color=color.text-faint nowrap {
+      when failed { color=color.warn }
+    }
+  }
+}
+
+def PiecePanel(summary="", open=true, unavailable=false, none=false, held=false, \
+               counted=false, judged=false, above=false, below=false, between=false, \
+               checks_name="", body_max=100000, \
+               lines=list(PieceStartLine), rows=list(PieceRow), facts=list(PieceFact), checks=list(PieceCheck)) export {
+  col w=fill bg=color.panel select select-bg=color.accent-soft {
+    row #head w=fill h=size.control-h-input pad=0,space.g8,0,space.g2 gap=space.g2 align=center \
+        stroke=color.border stroke-sides=b {
+      row #fold w=size.control-h-chip h=size.control-h-chip radius=radius.round align=center pack=center \
+          act=fold role=button label="Hide the piece" expanded=open color=color.text-dim transition=dur.fast {
+        when !open { label="Show the piece" }
+        when hover { bg=color.hover color=color.text }
+        when pressed { bg=color.fill-active }
+        when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+        icon chevron size=size.icon-size-sm {
+          when !open { rotate=-90 }
+        }
+      }
+      text "PIECE" style=text.chip weight=700 color=color.text-faint nowrap role=heading level=2 label="Piece"
+      spacer
+      row h=fill pad=0,16,0,0 align=center {
+        text summary style=text.chip color=color.text-faint nowrap ellipsis
+      }
+    }
+    // Folded, the host hands over no rows: the body is empty, to the eye and to a screen reader.
+    // A body taller than its room scrolls, and fades at the end that hides rows (the host says
+    // which: `above`, `below`, `between` for both). A mask reads only its paint's alpha, and a
+    // gradient's stops take no token reference: the two stops are "all" and "none", not colours
+    // of the interface, and nothing is painted in them.
+    col #body w=fill pad=space.g2,0 max-h=body_max scroll {
+      when above { mask=linear(180, #00000000 0%, #000000 12%, #000000 100%) }
+      when below { mask=linear(180, #000000 0%, #000000 88%, #00000000 100%) }
+      when between { mask=linear(180, #00000000 0%, #000000 12%, #000000 88%, #00000000 100%) }
+      when !open { max-h=0 pad=0 }
+      when unavailable {
+        row w=fill pad=space.g4,space.g8,space.g4,24 {
+          text "The piece tools are not in this build." style=text.body color=color.text-faint w=fill
+        }
+      }
+      when none {
+        row w=fill pad=space.g4,space.g8,space.g4,24 {
+          text "No piece yet. Start one:" style=text.body color=color.text-faint w=fill
+        }
+        col #starts w=fill gap=space.g4 pad=space.g2,space.g8,space.g6,24 role=group label="Start a piece" {
+          each lines
+        }
+      }
+      when held {
+        col #rows w=fill role=list label="Piece parameters" {
+          each rows
+        }
+      }
+      when counted {
+        col #facts w=fill pad=space.g2,0,0,0 role=list label="Piece results" stroke=color.border-soft stroke-sides=t {
+          each facts
+        }
+      }
+      when judged {
+        col #checks w=fill pad=space.g2,0,0,0 role=list label=checks_name stroke=color.border-soft stroke-sides=t {
+          each checks
+        }
+      }
+      when held {
+        row #foot w=fill pad=space.g4,space.g8,space.g4,18 {
+          row #remove h=size.control-h-input pad=space.g2,space.g6 radius=radius.control align=center \
+              act=remove role=button desc="Undo brings it back" color=color.text-dim transition=dur.fast {
+            when hover { bg=color.hover color=color.text }
+            when pressed { bg=color.fill-active color=color.text }
+            when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+            text "Remove piece" style=text.body nowrap
+          }
+        }
+      }
+    }
+  }
+}

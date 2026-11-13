@@ -5,8 +5,10 @@
  * weight, the stones, the size in the other systems) and its checks, and a way to remove it.
  *
  * `../piece` holds the logic: the reply's narrowing, the rows of a kind, what typed text becomes
- * (`judgePieceDraft`) and the row a refusal belongs on (`refusalRow`). No jewelry number is
- * worked out here or there: every figure is the engine's.
+ * (`judgePieceDraft`) and the row a refusal belongs on (`refusalRow`); `../piece-edit` holds how a
+ * row is edited (when a draft is sent, kept or cancelled) and the section's state, both shared
+ * with the Slab panel (`../slab/SlabPiece`). No jewelry number is worked out here or there: every
+ * figure is the engine's.
  *
  * A row is the properties palette's row (`.prop-row`, `../interaction.css`) and holds what that
  * palette's rows hold: text being typed survives a refresh; Enter or leaving the field commits;
@@ -26,7 +28,8 @@
  */
 
 import { createEffect, createMemo, createSignal, For, Index, Match, onCleanup, Show, Switch, untrack, type Accessor, type JSX } from "solid-js";
-import { failedChecks, judgePieceDraft, pieceFacts, pieceHeading, pieceRows, refusalRow, refusalWords, PIECE_KINDS, type PieceChoices, type PieceRow, type PieceState } from "../piece";
+import { pieceHeading, PIECE_KINDS, type PieceChoices, type PieceRow, type PieceState } from "../piece";
+import { createPieceSection, createRowEdit, type Refused } from "../piece-edit";
 import { sizeExample } from "../jewelry-dialog";
 import { Button } from "../ui/Button";
 import { Checkbox } from "../ui/Checkbox";
@@ -51,12 +54,6 @@ export interface PiecePanelProps {
   onNotice?: (message: string) => void;
   /** Open the "Start from a template" gallery (the empty state's richer start). */
   onTemplates?: () => void;
-}
-
-/** The refusal standing on a row: which row, and the words for it. */
-interface Refused {
-  key: string;
-  message: string;
 }
 
 /**
@@ -84,32 +81,9 @@ function scrollEnds(list: HTMLElement): () => void {
 export function PiecePanel(props: PiecePanelProps): JSX.Element {
   /** The section folds to its heading, as the rail's other sections do. */
   const [open, setOpen] = createSignal(true);
-  const piece = createMemo(() => (props.state.kind === "piece" ? props.state.piece : null));
-
-  /** The size system picked here; null while the section shows the one the piece holds. */
-  const [picked, setPicked] = createSignal<string | null>(null);
-  const system = (): string => picked() ?? piece()?.params.sizeSystem ?? "us";
-  // The engine's system changed (a size was sent in another one, or another piece came): follow it.
-  createEffect((before: string) => {
-    const now = piece()?.params.sizeSystem ?? "";
-    if (now !== before) setPicked(null);
-    return now;
-  }, piece()?.params.sizeSystem ?? "");
-
-  const rows = createMemo((): PieceRow[] => {
-    const held = piece();
-    return held === null ? [] : pieceRows(held, props.choices, system());
-  });
-  const facts = createMemo(() => {
-    const held = piece();
-    return held === null ? [] : pieceFacts(held, system());
-  });
-  const failed = (): number => {
-    const held = piece();
-    return held === null ? 0 : failedChecks(held);
-  };
-
-  const [refused, setRefused] = createSignal<Refused | null>(null);
+  // The piece, the size system shown, its rows and the refusal standing on one: `../piece-edit`'s,
+  // shared with the Slab panel.
+  const { piece, system, setPicked, rows, facts, failed, refused, setRefused, run } = createPieceSection(props);
 
   // The rows change under a list whose own box does not (another kind, the halo's rows, a check
   // that wraps, the section unfolded): the list's hidden ends are marked again.
@@ -120,18 +94,6 @@ export function PiecePanel(props: PiecePanelProps): JSX.Element {
     open();
     queueMicrotask(() => markEnds?.());
   });
-
-  /** Send a patch; a refusal is put on the row it names. Answers whether it went through. */
-  const run = (params: Record<string, unknown>): boolean => {
-    const error = props.onRun(params);
-    if (error === null) {
-      setRefused(null);
-      return true;
-    }
-    const key = refusalRow(error, rows());
-    setRefused(key === null ? null : { key, message: refusalWords(error) });
-    return false;
-  };
 
   return (
     <aside class={open() ? "properties piece" : "properties piece is-folded"}>
@@ -234,32 +196,33 @@ function PieceRowView(props: PieceRowViewProps): JSX.Element {
   const [dirty, setDirty] = createSignal(false);
   /** Why the draft was refused before it reached the engine; null when it was not. */
   const [fault, setFault] = createSignal<string | null>(null);
-  /** The text the last refusal was for, so Enter-then-blur neither warns nor sends twice. */
-  let said: string | null = null;
-  /** Set when the row leaves the page: the blur a removed field fires must not send anything. */
-  let gone = false;
-  onCleanup(() => {
-    gone = true;
-  });
 
   /** The engine's refusal standing on this row, if one is. */
   const engineFault = (): string | null => {
     const held = props.refused();
     return held !== null && held.key === props.row().key ? held.message : null;
   };
-  const why = (): string | null => fault() ?? engineFault();
-  const forget = (): void => {
-    if (untrack(engineFault) !== null) props.onRefused(null);
-  };
-
-  /** Back to the engine's value, with no edit pending. */
-  const settle = (): void => {
-    said = null;
-    setDirty(false);
-    setFault(null);
-    forget();
-    setDraft(props.row().value);
-  };
+  // What becomes of the draft is `../piece-edit`'s, shared with the Slab panel.
+  const edit = createRowEdit({
+    row: () => props.row(),
+    system: () => props.system(),
+    draft,
+    setDraft,
+    dirty,
+    setDirty,
+    fault,
+    setFault,
+    engineFault,
+    forget: () => {
+      if (untrack(engineFault) !== null) props.onRefused(null);
+    },
+    pick: (system) => props.onPick(system),
+    run: (patch) => props.onRun(patch),
+    notice: (message) => props.onNotice?.(message),
+  });
+  // The row leaves the page: the blur a removed field fires must not send anything.
+  onCleanup(edit.gone);
+  const why = edit.why;
 
   // Re-seed when the engine's value changes (a refresh after a rebuild), never over text being typed.
   createEffect(() => {
@@ -269,73 +232,18 @@ function PieceRowView(props: PieceRowViewProps): JSX.Element {
   // Another parameter in this place (the kind changed): the unfinished edit was not for it.
   createEffect((before: string) => {
     const now = props.row().key;
-    if (now !== before) untrack(settle);
+    if (now !== before) untrack(edit.settle);
     return now;
   }, props.row().key);
-
-  /** A picked value (a choice, a tick): sent unless it is the one already there. */
-  const commit = (value: string): void => {
-    if (props.row().key === "system") {
-      props.onPick(value);
-      return;
-    }
-    const verdict = judgePieceDraft(props.row(), value, props.system());
-    if (verdict.kind !== "send") return;
-    // Refused, the control shows the engine's value again (the refusal is on its row).
-    if (!props.onRun(verdict.patch)) setDraft(props.row().value);
-  };
-
-  /**
-   * Commit the typed text. Text that is refused (here, or by the engine) is said once and stays
-   * in the field, marked, while it has the focus (`leaving` false); on the way out the engine's
-   * value comes back.
-   */
-  const commitText = (leaving: boolean): void => {
-    if (gone || !dirty()) return;
-    const value = draft();
-    if (said === value) {
-      if (leaving) settle();
-      return;
-    }
-    const verdict = judgePieceDraft(props.row(), value, props.system());
-    if (verdict.kind === "keep") {
-      settle();
-      return;
-    }
-    if (verdict.kind === "refuse") {
-      props.onNotice?.(verdict.message);
-      if (leaving) {
-        settle();
-        return;
-      }
-      said = value;
-      setFault(verdict.message);
-      return;
-    }
-    // Not dirty while the engine answers: the refresh a rebuild brings re-seeds the field.
-    setDirty(false);
-    setFault(null);
-    if (props.onRun(verdict.patch)) {
-      said = null;
-      return;
-    }
-    if (leaving) {
-      settle();
-      return;
-    }
-    said = value;
-    setDirty(true);
-  };
 
   const onKeyDown = (e: KeyboardEvent): void => {
     if (e.key === "Enter") {
       e.preventDefault();
-      commitText(false);
-    } else if (e.key === "Escape" && (dirty() || why() !== null)) {
+      edit.commitText(false);
+    } else if (e.key === "Escape" && edit.cancel()) {
       // Escape cancels this edit only; with nothing to cancel it is the shell's.
       e.preventDefault();
       e.stopPropagation();
-      settle();
     }
   };
 
@@ -367,7 +275,7 @@ function PieceRowView(props: PieceRowViewProps): JSX.Element {
               onChange={(checked) => {
                 const value = checked ? "true" : "false";
                 setDraft(value);
-                commit(value);
+                edit.commit(value);
               }}
             />
           </Match>
@@ -384,7 +292,7 @@ function PieceRowView(props: PieceRowViewProps): JSX.Element {
                 options={props.row().choices ?? []}
                 onChange={(value) => {
                   setDraft(value);
-                  commit(value);
+                  edit.commit(value);
                 }}
               />
             </span>
@@ -404,15 +312,9 @@ function PieceRowView(props: PieceRowViewProps): JSX.Element {
                 spellcheck={false}
                 autocomplete="off"
                 autocapitalize="off"
-                onInput={(value) => {
-                  said = null;
-                  setDirty(true);
-                  setFault(null);
-                  forget();
-                  setDraft(value);
-                }}
+                onInput={edit.typed}
                 onKeyDown={onKeyDown}
-                onBlur={() => commitText(true)}
+                onBlur={() => edit.commitText(true)}
               />
             </span>
           </Match>

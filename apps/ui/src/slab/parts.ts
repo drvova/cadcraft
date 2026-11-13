@@ -7,6 +7,7 @@
 import type { Component } from "solid-js";
 import type { BenchPanelProps } from "../components/BenchPanel";
 import type { LayersPanelProps } from "../components/LayersPanel";
+import type { PiecePanelProps } from "../components/PiecePanel";
 import type { SlabShellProps } from "./SlabShell";
 
 export interface SlabParts {
@@ -15,4 +16,6 @@ export interface SlabParts {
   Bench?: Component<BenchPanelProps>;
   /** The Layers section; absent when its document did not load, and the SolidJS one is shown. */
   Layers?: Component<LayersPanelProps>;
+  /** The Piece section; absent when its document did not load, and the SolidJS one is shown. */
+  Piece?: Component<PiecePanelProps>;
 }

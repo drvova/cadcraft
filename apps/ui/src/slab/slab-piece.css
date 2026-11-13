@@ -1,0 +1,12 @@
+/*
+ * The Slab Piece section's page side (`SlabPiece.tsx`): where the surface stands in the rail, as
+ * `.piece` does (interaction.css). The document draws everything that shows.
+ */
+
+/* As tall as the kernel solved it (its body caps and scrolls inside), never squeezed by the
+   sections under it. */
+.slab-piece {
+  display: block;
+  flex: 0 0 auto;
+  min-width: 0;
+}
