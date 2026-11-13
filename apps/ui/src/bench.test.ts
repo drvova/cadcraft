@@ -23,13 +23,22 @@ const SOLITAIRE = {
 describe("the bench sheet", () => {
   test("reads the stones by cut and size, then the bands", () => {
     const sheet = parseBench(SOLITAIRE);
-    expect(sheet?.lines).toEqual([
+    expect(sheet?.lines).toMatchObject([
       { label: "Round 6.5 mm", value: "1 pc · 1.03 ct", note: null, handles: [] },
       { label: "Round 1.5 mm", value: "14 pc · 0.18 ct", note: null, handles: [] },
       { label: "Round 1.3 mm", value: "18 pc · 0.15 ct", note: null, handles: [] },
       { label: "18k gold band", value: "US 6 · 3.86 g", note: null, handles: [] },
     ]);
     expect(benchSummary(sheet)).toBe("33 stones, 1.36 ct · 3.86 g");
+  });
+
+  test("splits each line into its part and the sheet's two numeric columns", () => {
+    const lines = parseBench(SOLITAIRE)?.lines ?? [];
+    expect(lines.map((l) => l.part)).toEqual(["stone", "stone", "stone", "metal"]);
+    expect(lines[1]?.cells).toEqual(["14 pc", "0.18 ct"]);
+    expect(lines[3]?.cells).toEqual(["US 6", "3.86 g"]);
+    const sizeless = parseBench({ stones: { count: 0, carat: 0, groups: [] }, bands: [{ grams: 2, metal: "gold18", size: "?" }] });
+    expect(sizeless?.lines[0]?.cells).toEqual(["", "2 g"]);
   });
 
   test("names a fancy cut by both sides, a material by its gravity, and melee off the calibrated list", () => {
@@ -43,8 +52,8 @@ describe("the bench sheet", () => {
         ],
       },
     });
-    expect(sheet?.lines[0]).toEqual({ label: "Emerald 7×5 mm, SG 2.72", value: "1 pc · 0.90 ct", note: null, handles: [] });
-    expect(sheet?.lines[1]).toEqual({ label: "Round 1.25 mm", value: "2 pc · 0.015 ct", note: "Not a calibrated melee size", handles: [] });
+    expect(sheet?.lines[0]).toMatchObject({ label: "Emerald 7×5 mm, SG 2.72", value: "1 pc · 0.90 ct", note: null, handles: [] });
+    expect(sheet?.lines[1]).toMatchObject({ label: "Round 1.25 mm", value: "2 pc · 0.015 ct", note: "Not a calibrated melee size", handles: [] });
   });
 
   test("a drawing with no jewelry is an empty sheet with nothing to say", () => {
@@ -65,7 +74,7 @@ describe("the bench sheet", () => {
     });
     expect(sheet?.stones).toBe(0);
     expect(sheet?.carat).toBe(0);
-    expect(sheet?.lines).toEqual([{ label: "Metal band", value: "2 g", note: null, handles: [] }]);
+    expect(sheet?.lines).toMatchObject([{ label: "Metal band", value: "2 g", note: null, handles: [] }]);
     expect(sheet?.warnings).toEqual(["the block GEM-X disagrees with its description"]);
   });
 

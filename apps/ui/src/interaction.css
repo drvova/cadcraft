@@ -70,6 +70,75 @@
   white-space: nowrap;
 }
 
+/* The sheet reads as a bench sheet: its stones, then its metal, each part under a head line that
+   carries the part's totals in the same columns as its lines. The pieces and the carats (the
+   band's size and grams) are two right-aligned numeric columns, so the figures line up down the
+   sheet whatever the label's length. */
+.bench-part {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.bench-part + .bench-part {
+  margin-top: var(--gap-4);
+}
+
+.bench-cell {
+  flex: 0 0 auto;
+  min-width: 7ch;
+  margin-inline-start: var(--gap-4);
+  text-align: right;
+  font-variant-numeric: lining-nums tabular-nums;
+  white-space: nowrap;
+}
+
+/* The count column is narrower ("36 pc", a band's "US 6½"). */
+.bench-count {
+  min-width: 5ch;
+}
+
+.bench-part-head,
+.bench-static {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  min-height: var(--control-h-row);
+  padding: 0 calc(var(--gap-8) + var(--prop-arrow-slot)) 0 var(--rail-text, var(--gap-8));
+  font-size: var(--font-body);
+}
+
+.bench-part-head {
+  min-height: auto;
+  padding-top: var(--gap-2);
+  color: var(--text-faint);
+  font-size: var(--font-chip);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.bench-part-head .bench-label {
+  flex: 1 1 auto;
+  text-transform: uppercase;
+}
+
+/* The totals are in the lines' type, so a column's width (in its own characters) is the same on
+   the head as on the lines under it. */
+.bench-part-head .bench-cell {
+  font-size: var(--font-body);
+  font-weight: 400;
+  letter-spacing: normal;
+}
+
+.bench-static {
+  color: var(--text-dim);
+}
+
+.bench-part-list {
+  display: flex;
+  flex-direction: column;
+}
+
 /* What the engine found wrong with a stone's record: a line of the list in the warning ink, which
    wraps (it is a sentence, not a value). */
 .bench-warning {
@@ -119,8 +188,14 @@
   font-variant-numeric: lining-nums tabular-nums;
   white-space: nowrap;
 }
+/* The total closes the money under a hairline, in the text ink and the body's size: the figure
+   the bench quotes. */
 .bench-cost-total {
+  margin-top: var(--gap-2);
+  padding-top: var(--gap-3);
+  border-top: var(--hairline) solid var(--border-soft);
   color: var(--text);
+  font-size: var(--font-body);
   font-weight: 600;
 }
 .bench-cost-unpriced {
@@ -379,6 +454,119 @@
 
 .piece-check.is-failed .piece-check-mark {
   color: var(--warn);
+}
+
+/* The summary a jeweller scans before any parameter: the size, the metal's weight and the
+   stones' weight as three figures side by side (the figure in the text ink, its name above it
+   and what qualifies it under it, both quiet), then the centre stone in words. On the rail's
+   text column, ending on the values' edge. */
+.piece-summary {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-3);
+  padding: var(--gap-4) calc(var(--gap-8) + var(--prop-arrow-slot)) var(--gap-6) var(--rail-text, var(--gap-8));
+}
+
+.piece-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  column-gap: var(--gap-8);
+  margin: 0;
+}
+
+.piece-tile {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.piece-tile-label {
+  color: var(--text-faint);
+  font-size: var(--font-chip);
+  line-height: var(--leading-ui);
+}
+
+.piece-tile-value {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--font-body);
+  font-weight: 600;
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: var(--leading-ui);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.piece-tile-detail {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: var(--font-chip);
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: var(--leading-ui);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.piece-centre {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: var(--font-chip);
+  line-height: var(--leading-ui);
+}
+
+/* A failing check stands under the summary, before any parameter, in the shape the proposal
+   cards give a check a change would fail: the word "Fail" in the warning ink and the sentence in
+   the text ink, behind a warning edge. Read whole (it wraps). */
+.piece-failing {
+  margin: 0 calc(var(--gap-8) + var(--prop-arrow-slot) - var(--gap-6)) var(--gap-4) calc(var(--rail-text, var(--gap-8)) - var(--gap-6));
+  padding: var(--gap-2) 0;
+  /* No inset fill: the warning ink on the light inset surface is 4.19:1, under AA for its 11px
+     word; on the rail's own surface it is 4.53:1 (dark: 10.1:1). The edge carries the call-out. */
+  border-left: var(--gap-2) solid var(--warn);
+  border-radius: var(--radius-small);
+}
+
+.piece-failing .piece-check {
+  display: block;
+  padding: var(--gap-2) var(--gap-6);
+}
+
+.piece-failing .piece-check-mark {
+  margin-inline-end: var(--gap-4);
+  font-weight: 600;
+}
+
+/* A group of the parameters under its name: a quiet small-capital word on the text column, with
+   a little air above it, so Band, Stones and Head read as the bench's own sections. */
+.piece-group {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.piece-group + .piece-group,
+.piece-summary + .piece-group,
+.piece-failing + .piece-group {
+  margin-top: var(--gap-4);
+}
+
+.piece-group-label {
+  padding: var(--gap-2) var(--gap-8) 0 var(--rail-text, var(--gap-8));
+  color: var(--text-faint);
+  font-size: var(--font-chip);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: var(--leading-ui);
+}
+
+/* A length's unit, said once beside its value in the quiet ink. */
+.piece-unit {
+  color: var(--text-faint);
+  font-size: var(--font-chip);
 }
 
 /* The way out of the piece, quiet under everything else: its label (inside the button's own

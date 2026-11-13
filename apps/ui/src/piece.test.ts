@@ -20,7 +20,11 @@ import {
   parsePieceReply,
   pieceFacts,
   pieceHeading,
+  pieceGroups,
   pieceRows,
+  pieceSummary,
+  rowShownName,
+  rowUnit,
   readPieceChoices,
   refusalRow,
   refusalWords,
@@ -437,5 +441,45 @@ describe("the mock's piece, through the same reader", () => {
   test("an engine that lists nothing gives empty lists, not a default to send", () => {
     const silent = { execute: () => ({ ok: false as const, error: "unknown command `gemlist`" }), commands: () => [] };
     expect(readPieceChoices(silent)).toEqual(NO_CHOICES);
+  });
+});
+
+describe("the section's layout", () => {
+  test("the summary is the size, the metal and the stones, then the centre stone in words", () => {
+    const s = pieceSummary(piece("solitaire"), "us");
+    expect(s.tiles).toEqual([
+      { label: "Size", value: "US 6½", detail: "16.92 mm" },
+      { label: "Metal", value: "3.46 g", detail: "18k gold" },
+      { label: "Stones", value: "1.03 ct", detail: "1 pc" },
+    ]);
+    expect(s.centre).toMatch(/^6\.5 mm round diamond/);
+  });
+
+  test("a band has no stones tile and no centre stone", () => {
+    const s = pieceSummary(piece("band", {}, { stones: { count: 0, carat: 0 } }), "us");
+    expect(s.tiles.map((t) => t.label)).toEqual(["Size", "Metal"]);
+    expect(s.centre).toBeNull();
+  });
+
+  test("the rows fall into ring, band, stones and head, in order, none lost", () => {
+    for (const kind of ["band", "solitaire", "threestone", "eternity"]) {
+      const rows = pieceRows(piece(kind), CHOICES, "us");
+      const groups = pieceGroups(rows, kind);
+      expect(groups.flatMap((g) => g.rows).length).toBe(rows.length);
+      expect(groups[0]?.name).toBe("Ring");
+    }
+    const eternity = pieceGroups(pieceRows(piece("eternity"), CHOICES, "us"), "eternity");
+    expect(eternity.find((g) => g.name === "Stones")?.rows.map((r) => r.key)).toContain("gap");
+    expect(pieceGroups(pieceRows(piece("band"), CHOICES, "us"), "band").map((g) => g.name)).toEqual(["Ring", "Band"]);
+  });
+
+  test("a length's unit moves beside its value, and a round stone's size is named apart from its material", () => {
+    const rows = pieceRows(piece("solitaire"), CHOICES, "us");
+    const wall = rows.find((r) => r.key === "wall");
+    expect(wall && [rowShownName(wall), rowUnit(wall)]).toEqual(["Wall", "mm"]);
+    const kind = rows.find((r) => r.key === "kind");
+    expect(kind && rowUnit(kind)).toBe("");
+    const stone = rows.find((r) => r.key === "stoneWidth");
+    expect(stone && rowShownName(stone)).toBe(stone?.both === true ? "Stone size" : "Stone width");
   });
 });

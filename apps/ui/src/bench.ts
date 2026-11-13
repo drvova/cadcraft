@@ -14,6 +14,12 @@ export interface BenchLine {
   label: string;
   /** How many and how heavy. */
   value: string;
+  /** Which part of the sheet the line is in: a stone group, or a band of metal. Optional so a
+   *  stand-in sheet can leave it out; `parseBench` always sets it. */
+  part?: "stone" | "metal";
+  /** The value as the sheet's two numeric columns: "14 pc" and "0.18 ct", or the band's size and
+   *  "3.86 g" (the size "" when the engine gave none). Set with `part`. */
+  cells?: [string, string];
   /** A stone off the calibrated melee list (a bench cannot buy it from stock). */
   note: string | null;
   /** The objects the line counts, by handle: what a press on the line selects. Empty when the
@@ -155,6 +161,8 @@ function stoneLine(group: unknown): BenchLine | null {
     label: `${capital(cut.slice(0, 24))} ${size}${material}`,
     // "14 pc · 0.18 ct": the count and the group's whole weight, as the trade's sheet writes them.
     value: `${Math.round(count).toLocaleString("en-US")} pc · ${caratText(carat)}`,
+    part: "stone",
+    cells: [`${Math.round(count).toLocaleString("en-US")} pc`, caratText(carat)],
     note: group["calibrated"] === false && width <= 3 ? "Not a calibrated melee size" : null,
     handles: handlesOf(group["handles"]),
   };
@@ -164,9 +172,11 @@ function bandLine(band: unknown): { line: BenchLine; grams: number } | null {
   if (!isRecord(band)) return null;
   const grams = finite(band["grams"]);
   if (grams === null || grams < 0) return null;
-  const size = typeof band["size"] === "string" && band["size"] !== "?" ? `${band["size"].slice(0, 16)} · ` : "";
+  const named = typeof band["size"] === "string" && band["size"] !== "?" ? band["size"].slice(0, 16) : "";
+  const size = named === "" ? "" : `${named} · `;
   const metal = metalText(typeof band["metal"] === "string" ? band["metal"].slice(0, 24) : "");
-  return { line: { label: `${capital(metal)} band`, value: `${size}${trim(grams, 2)} g`, note: null, handles: handlesOf([band["handle"]]) }, grams };
+  const weight = `${trim(grams, 2)} g`;
+  return { line: { label: `${capital(metal)} band`, value: `${size}${weight}`, part: "metal", cells: [named, weight], note: null, handles: handlesOf([band["handle"]]) }, grams };
 }
 
 /** A line of the `cost` object, narrowed; null when it cannot be read. */

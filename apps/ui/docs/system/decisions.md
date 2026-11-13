@@ -877,3 +877,28 @@ notice first. Local styles only; no token, component or wording changed.
   the table says its roles in the markup (`role="table"`, `row`, `rowheader`, `cell`, ...), and
   because a browser copies grid rows a cell per line, the table writes its own copy: the rows the
   selection touches as tab-separated lines (`rowsTsv`), exactly what the wide table copies.
+- **Piece reads as a jeweller's spec, not a property form.** Same rows, same controls, same
+  commands; the change is order and type (`PiecePanel.tsx`, `piece.ts`, `interaction.css`):
+  - A summary on top: the size (with the inside diameter), the metal's weight (with the alloy)
+    and the stones' weight (with the count) as three figures in the text ink at 600, their names
+    and qualifiers in the quiet inks; then the centre stone in words for a solitaire or a
+    three-stone. These are the engine's figures that were the "results" list under the rows, so
+    that list is gone; its "Also" row (the size in the other systems) moved into the Ring group.
+  - A failing check stands right under the summary, before any parameter, as the proposal
+    cards draw a check a change would fail: "Fail" in the warning ink at 600, the sentence in the
+    text ink, behind a warning edge. No inset fill: `--warn` on the light `--surface-inset` is
+    4.19:1, under AA for an 11px word; on the rail's surface it is 4.53:1 light, 10.1:1 dark.
+    Passing checks keep their quiet list at the end.
+  - The parameters fall into Ring, Band, Stones and Head (`pieceGroups`), each under a quiet
+    11px capital word; each group is a list named "<Group> parameters" (the word itself is
+    `aria-hidden`, the list's name says it). The Tab order is the rows' order as before.
+  - A length's unit moved from the label ("Wall, mm") to a quiet `mm` inside the field's end
+    (`Field`'s `end` slot, `aria-hidden`); the control's accessible name is still the full label.
+    One shown wording changed because of it: a round stone's diameter would have read as a
+    second "Stone" under the stone's material, so it is drawn "Stone size" (`rowShownName`).
+- **Bench reads as a bench sheet.** Its lines fall into Stones and Metal, each under a head line
+  carrying the part's totals (52 pc, 2.54 ct; 7.39 g) in the same columns as its lines; a line's
+  value is two right-aligned tabular columns (pieces and carats; a band's size and grams), so the
+  figures line up down the sheet (`BenchLine.part` and `.cells`, read by `parseBench`). The
+  cost's total closes the money under a hairline, at the body size. Pressing a line still
+  selects what it counts.

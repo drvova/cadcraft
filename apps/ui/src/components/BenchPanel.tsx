@@ -15,7 +15,7 @@
  */
 
 import { createMemo, createSignal, For, Show, type JSX } from "solid-js";
-import { benchSummary, lineSelected, type BenchCost, type BenchLine, type BenchSheet } from "../bench";
+import { benchSummary, caratText, lineSelected, trim, type BenchCost, type BenchLine, type BenchSheet } from "../bench";
 import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
 import { Row } from "../ui/Row";
@@ -80,12 +80,63 @@ function CostGroup(props: { cost: BenchCost; onEdit: () => void }): JSX.Element 
   );
 }
 
+/** One line of the sheet: a press selects what it counts when the engine named its objects, else
+ *  it is read-only. Its value is the sheet's two numeric columns when the line has them. */
+function LineView(props: { line: BenchLine; selected: ReadonlySet<string>; onPress: (line: BenchLine) => void }): JSX.Element {
+  const value = (): JSX.Element =>
+    props.line.cells === undefined ? (
+      <span class="bench-value">{props.line.value}</span>
+    ) : (
+      <>
+        <span class="bench-cell bench-count">{props.line.cells[0]}</span>
+        <span class="bench-cell">{props.line.cells[1]}</span>
+      </>
+    );
+  return (
+    <Show
+      when={props.line.handles.length > 0}
+      fallback={
+        <div class="bench-static" role="listitem" data-hint={props.line.note ?? undefined}>
+          <span class="bench-label">{props.line.label}</span>
+          {value()}
+        </div>
+      }
+    >
+      <div class="bench-line" role="listitem">
+        <Row selected={lineSelected(props.line, props.selected)} title={props.line.note ?? undefined} onClick={() => props.onPress(props.line)}>
+          <span class="bench-label">{props.line.label}</span>
+          {value()}
+        </Row>
+      </div>
+    </Show>
+  );
+}
+
+interface SheetPart {
+  name: string;
+  totals: [string, string];
+  lines: BenchLine[];
+}
+
+/** The sheet's two parts, each with its totals on its head line: the stones (pieces, carats),
+ *  then the metal (its weight). A part with no line is left out. */
+function sheetParts(sheet: BenchSheet | null): SheetPart[] {
+  if (sheet === null) return [];
+  const stones = sheet.lines.filter((l) => l.part !== "metal");
+  const metal = sheet.lines.filter((l) => l.part === "metal");
+  const parts: SheetPart[] = [];
+  if (stones.length > 0) parts.push({ name: "Stones", totals: [`${sheet.stones.toLocaleString("en-US")} pc`, caratText(sheet.carat)], lines: stones });
+  if (metal.length > 0) parts.push({ name: "Metal", totals: ["", `${trim(sheet.grams, 2)} g`], lines: metal });
+  return parts;
+}
+
 export function BenchPanel(props: BenchPanelProps): JSX.Element {
   /** The section folds to its heading, as the rail's other sections do. */
   const [open, setOpen] = createSignal(true);
   const summary = (): string => benchSummary(props.sheet);
   const empty = (): boolean => (props.sheet?.lines.length ?? 0) === 0;
   const selected = createMemo(() => new Set(props.selection));
+  const parts = createMemo(() => sheetParts(props.sheet));
   const press = (line: BenchLine): void => props.onSelect(lineSelected(line, selected()) ? [] : line.handles);
 
   return (
@@ -97,29 +148,19 @@ export function BenchPanel(props: BenchPanelProps): JSX.Element {
           {summary()}
         </span>
       </div>
-      <div class="properties-body" id="bench-body" role="list" aria-label="Bench sheet" hidden={!open()}>
-        <For each={props.sheet?.lines ?? []}>
-          {(line) => (
-            <Show
-              when={line.handles.length > 0}
-              fallback={
-                <div class="prop-row" role="listitem" data-hint={line.note ?? undefined}>
-                  <span class="prop-label" data-hint="">
-                    {line.label}
-                  </span>
-                  <span class="prop-value">
-                    <span class="prop-readonly">{line.value}</span>
-                  </span>
-                </div>
-              }
-            >
-              <div class="bench-line" role="listitem">
-                <Row selected={lineSelected(line, selected())} title={line.note ?? undefined} onClick={() => press(line)}>
-                  <span class="bench-label">{line.label}</span>
-                  <span class="bench-value">{line.value}</span>
-                </Row>
+      <div class="properties-body" id="bench-body" role="group" aria-label="Bench sheet" hidden={!open()}>
+        <For each={parts()}>
+          {(part) => (
+            <div class="bench-part">
+              <div class="bench-part-head" aria-hidden="true">
+                <span class="bench-label">{part.name}</span>
+                <span class="bench-cell bench-count">{part.totals[0]}</span>
+                <span class="bench-cell">{part.totals[1]}</span>
               </div>
-            </Show>
+              <div class="bench-part-list" role="list" aria-label={part.name}>
+                <For each={part.lines}>{(line) => <LineView line={line} selected={selected()} onPress={press} />}</For>
+              </div>
+            </div>
           )}
         </For>
         <For each={props.sheet?.warnings ?? []}>{(warning) => <div class="properties-empty bench-warning">{warning}</div>}</For>

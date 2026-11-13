@@ -432,6 +432,106 @@ export function pieceFacts(piece: Piece, system: string): PieceFact[] {
   return facts;
 }
 
+// ---------------------------------------------------------------------------------------------
+// The section's layout: the summary a jeweller scans, the parameters in groups
+// ---------------------------------------------------------------------------------------------
+
+/** One figure of the summary: the number large, what it is small under it. */
+export interface PieceTile {
+  /** What the figure is ("Size", "Metal", "Stones"), said first to a screen reader. */
+  label: string;
+  /** The figure ("US 6", "3.53 g", "2.54 ct"). */
+  value: string;
+  /** What qualifies it ("16.51 mm", "18k gold", "52 pc"); "" when nothing does. */
+  detail: string;
+}
+
+export interface PieceSummary {
+  tiles: PieceTile[];
+  /** The centre stone in words ("6.5 mm round diamond, 6 prongs"); null for a band or an eternity. */
+  centre: string | null;
+}
+
+/**
+ * The facts a jeweller scans first, each the engine's figure: the size (with the finger's inside
+ * diameter), the metal's weight (with the alloy), the stones' weight (with how many), and the
+ * centre stone of a solitaire or a three-stone. A figure the engine left out is not a tile.
+ */
+export function pieceSummary(piece: Piece, system: string): PieceSummary {
+  const shown = systemOf(system);
+  const p = piece.params;
+  const tiles: PieceTile[] = [];
+  const size = sizeIn(piece, shown);
+  if (size !== "") tiles.push({ label: "Size", value: `${systemLabel(shown)} ${size}`, detail: piece.size.diameter === null ? "" : `${trim(piece.size.diameter, 2)} mm` });
+  if (piece.metal.grams !== null) tiles.push({ label: "Metal", value: `${trim(piece.metal.grams, 2)} g`, detail: piece.metal.name === "" ? "" : metalLabel(piece.metal.name) });
+  if (piece.stones.count !== null && piece.stones.count > 0 && piece.stones.carat !== null) {
+    tiles.push({ label: "Stones", value: caratText(piece.stones.carat), detail: `${piece.stones.count.toLocaleString("en-US")} pc` });
+  }
+  let centre: string | null = null;
+  if ((p.kind === "solitaire" || p.kind === "threestone") && p.stoneWidth !== null) {
+    const long = p.stoneLength !== null && Math.abs(p.stoneLength - p.stoneWidth) > 1e-6 ? `${trim(p.stoneLength, 2)}×` : "";
+    const words = [`${long}${trim(p.stoneWidth, 2)} mm`, p.cut, p.stone].filter((w) => w !== "").join(" ");
+    centre = p.prongs === null ? words : `${words}, ${numberText(p.prongs)} prongs`;
+  }
+  return { tiles, centre };
+}
+
+/** A group of the parameters, under its name. */
+export interface PieceGroup {
+  name: "Ring" | "Band" | "Stones" | "Head";
+  rows: PieceRow[];
+}
+
+/** The group each parameter is read in; the gap is the stones' on an eternity and the head's
+ *  (the halo's) otherwise. */
+function groupOf(row: PieceRow, kind: string): PieceGroup["name"] {
+  switch (row.key) {
+    case "kind":
+    case "system":
+    case "size":
+      return "Ring";
+    case "wall":
+    case "width":
+    case "profile":
+    case "metal":
+      return "Band";
+    case "prongs":
+    case "sideProngs":
+    case "halo":
+    case "haloWidth":
+      return "Head";
+    case "gap":
+      return kind === "eternity" ? "Stones" : "Head";
+    default:
+      return "Stones";
+  }
+}
+
+const GROUP_ORDER: readonly PieceGroup["name"][] = ["Ring", "Band", "Stones", "Head"];
+
+/**
+ * The rows in the groups a bench reads them in: the ring (what it is and the finger), the band,
+ * the stones, the head that holds them. A group with no rows is left out; inside a group the
+ * rows keep `pieceRows`'s order.
+ */
+export function pieceGroups(rows: readonly PieceRow[], kind: string): PieceGroup[] {
+  return GROUP_ORDER.map((name) => ({ name, rows: rows.filter((row) => groupOf(row, kind) === name) })).filter((g) => g.rows.length > 0);
+}
+
+/**
+ * A row's name as the section draws it, the unit moved beside the value: "Wall, mm" is "Wall".
+ * A round stone's one diameter ("Stone, mm") would then read as a second "Stone" under the
+ * stone's material, so it is "Stone size". The control keeps the full label as its name.
+ */
+export function rowShownName(row: PieceRow): string {
+  return row.both === true ? "Stone size" : rowName(row);
+}
+
+/** A row's unit as the label says it ("Wall, mm" is "mm"); "" when it has none. */
+export function rowUnit(row: PieceRow): string {
+  return /,\s*mm$/.test(row.label) ? "mm" : "";
+}
+
 /** How many checks failed: the heading of the checks says it in words. */
 export function failedChecks(piece: Piece): number {
   return piece.checks.filter((c) => !c.ok).length;
