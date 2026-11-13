@@ -289,8 +289,47 @@ commands on this page, so its bench sheet reads back: 32 stones, 1.35 ct, a 3.86
   its numbers in place; each edit rebuilds the sheet, and the engine's weight, stones and checks
   are under the numbers. A refusal marks the row it names.
 - **The 3D tab** over the drawing shows the piece as a solid: orbit, pan and zoom, the standard
-  views, a gizmo that flies to a view along an axis, Shaded, Wireframe, Ghosted and X-ray, labels
-  for the ring's regions, the part under the pointer named, and Download STL.
+  views, a gizmo that flies to a view along an axis, Realistic (the default), Shaded, Wireframe,
+  Ghosted and X-ray, labels for the ring's regions, the part under the pointer named, and
+  Download STL. The stills (the Templates thumbnails, the Tech Sheet's views, the proposal
+  cards' before and after) are drawn the same way, Realistic unless the Tech Sheet is told
+  otherwise.
+- **Realistic** shows the piece as jewelry (`apps/ui/src/materials.ts` holds its numbers, tested;
+  the shaders are in `render3d.ts`). It is an honest approximation drawn in WebGL 1, not a ray
+  tracer:
+  - *Metal* is physically based: the GGX/Cook-Torrance response in its image-based split-sum
+    form (Karis's analytic fit stands in for the lookup table), with Fresnel-Schlick from each
+    alloy's own reflectance at normal incidence (18k and the other golds, platinum, palladium,
+    silver, steel, titanium, brass, copper; wax is a dull dielectric). The values are the
+    project's own rounded approximations of commonly quoted optical constants. The engine has no
+    rose gold. The renderer knows the metal and the stone only by the colour the engine gives
+    the part, matched against the engine's palette.
+  - *The studio* that lights it is drawn by formula, not loaded: four soft rectangular boxes and
+    a sweep that is bright at the horizon and dark at the floor, with the eye's own direction
+    held dark (the photographer a polished piece mirrors). It hangs in the eye's frame, so the
+    piece is lit the same from every side. Instead of a prefiltered environment map, a rough
+    surface sees each box with a wider, dimmer edge (analytic, so there is nothing to prefilter
+    and no float texture is needed).
+  - *Stones* are the engine's faceted cuts (a round brilliant has table, star, kite, upper and
+    lower girdle, pavilion and culet facets), each facet shaded flat: what it mirrors by the
+    stone's own Fresnel (diamond 2.42, coloured stones their own index), over a fake of the light
+    returned from inside: the facet's tilt from the line of sight, multiplied and scattered,
+    picks a direction in the studio's boxes and a lattice of small lamps, tinted by the body
+    colour. Red, green and blue each take their own index (the dispersion, widened so it shows
+    on screen), which is the fire. There is no refraction through the stone and no light path
+    is traced: a facet shows one value, so a large table cannot show the pavilion's arrows.
+    Opaque stones (opal, pearl, onyx, turquoise, lapis, jade, moonstone, coral) are polished
+    bodies of their colour.
+  - *Grounding*: a seamless backdrop over the theme's canvas colour, a soft contact shadow under
+    the piece (a quad on its lowest plane, two soft falloffs; no shadow map and no ambient
+    occlusion on the piece itself), ACES tone mapping and gamma. The ground grid is not drawn in
+    Realistic; the other modes keep it.
+  - *Anti-aliasing*: the stage asks for MSAA; stills are drawn at twice their size (held to the
+    still ceiling) and scaled down. With `OES_standard_derivatives` the metal's roughness grows
+    where its normal turns fast across a pixel, so a tight curve does not shimmer.
+  - *Fallbacks*: without the derivatives extension the program is built without that term;
+    where the realistic programs cannot be built at all, a Realistic pass is drawn Shaded; where
+    WebGL is missing the stage and the stills say so in words, as before.
 - **The Objects section** lists the piece and its parts, the stones by cut and size, the bands
   and everything else by layer and kind, with a search; a press on a row selects it on the
   drawing and a selection on the drawing marks its row.
@@ -347,6 +386,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-13 | minor | A Realistic display mode, the 3D tab's default and the stills': physically based metal under a procedural studio, faceted stones with Fresnel, a faked internal return and fire, a backdrop and a contact shadow, tone mapping, supersampled stills |
 | 2026-11-13 | minor | The piece card, the bench sheet page, the terminal dashboard and `(card)` removed with Slab |
 | 2026-11-12 | minor | The piece card, the bench sheet as a page and a terminal dashboard (`cadcraft-cli run --card/--sheet`, `tui`, `(card)`): an optional build of the command-line tool, laid out by Slab without its fonts |
 | 2026-11-12 | minor | `PIECE` gains five band profiles and a three-stone ring; property tests with Hegel, with six faults fixed and three set aside as gap rows J5–J7 |

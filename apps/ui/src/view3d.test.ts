@@ -517,8 +517,8 @@ describe("the mock's stand-in solid", () => {
 describe("the display modes", () => {
   const faces = (plan: DrawPass[]): Extract<DrawPass, { kind: "faces" }>[] => plan.filter((pass): pass is Extract<DrawPass, { kind: "faces" }> => pass.kind === "faces");
 
-  test("there are four, and anything else is not one", () => {
-    expect(DISPLAY_MODES.map((entry) => entry.mode)).toEqual(["shaded", "wireframe", "ghosted", "xray"]);
+  test("there are five, realistic first, and anything else is not one", () => {
+    expect(DISPLAY_MODES.map((entry) => entry.mode)).toEqual(["realistic", "shaded", "wireframe", "ghosted", "xray"]);
     for (const entry of DISPLAY_MODES) expect(isDisplayMode(entry.mode)).toBe(true);
     for (const value of ["", "Shaded", null, 3, undefined]) expect(isDisplayMode(value)).toBe(false);
     expect(DISPLAY_MODES.filter((entry) => modeHasEdges(entry.mode)).map((entry) => entry.mode)).toEqual(["wireframe", "xray"]);
@@ -528,6 +528,14 @@ describe("the display modes", () => {
     const plan = drawPlan("shaded");
     expect(plan.map((pass) => (pass.kind === "faces" ? pass.what : pass.kind))).toEqual(["metal", "ground", "stone"]);
     for (const pass of faces(plan)) expect(pass).toMatchObject({ color: true, depthTest: true, depthWrite: true, opacity: null, pushed: false });
+  });
+
+  test("realistic lays the studio, then both kinds solid with the realistic materials, and no grid or edges", () => {
+    const plan = drawPlan("realistic");
+    expect(plan.map((pass) => (pass.kind === "faces" ? pass.what : pass.kind))).toEqual(["studio", "metal", "stone"]);
+    for (const pass of faces(plan)) expect(pass).toMatchObject({ real: true, color: true, depthTest: true, depthWrite: true, opacity: null });
+    for (const mode of ["shaded", "wireframe", "ghosted", "xray"] as const) expect(faces(drawPlan(mode)).every((pass) => !pass.real)).toBe(true);
+    expect(modeHasEdges("realistic")).toBe(false);
   });
 
   test("a wireframe colours no face: the faces only hide the edges behind them, pushed back so a line on them wins", () => {
@@ -893,16 +901,16 @@ describe("what is under the pointer", () => {
 describe("what the browser remembers of the 3D view", () => {
   const store = (held: Record<string, string> = {}) => ({ held, getItem: (key: string) => held[key] ?? null, setItem: (key: string, value: string) => void (held[key] = value) });
 
-  test("it starts shaded with the names off, and comes back as it was left", () => {
-    expect(loadView3d(null)).toEqual({ mode: "shaded", labels: false });
+  test("it starts realistic with the names off, and comes back as it was left", () => {
+    expect(loadView3d(null)).toEqual({ mode: "realistic", labels: false });
     const s = store();
-    expect(loadView3d(s)).toEqual({ mode: "shaded", labels: false });
+    expect(loadView3d(s)).toEqual({ mode: "realistic", labels: false });
     saveView3d({ mode: "xray", labels: true }, s);
     expect(loadView3d(s)).toEqual({ mode: "xray", labels: true });
   });
 
   test("a value it does not know, or a store that throws, is the default and never an error", () => {
-    expect(loadView3d(store({ "cadcraft.view3d.mode": "sparkly", "cadcraft.view3d.labels": "yes" }))).toEqual({ mode: "shaded", labels: false });
+    expect(loadView3d(store({ "cadcraft.view3d.mode": "sparkly", "cadcraft.view3d.labels": "yes" }))).toEqual({ mode: "realistic", labels: false });
     const broken = {
       getItem: (): string | null => {
         throw new Error("refused");
@@ -911,7 +919,7 @@ describe("what the browser remembers of the 3D view", () => {
         throw new Error("full");
       },
     };
-    expect(loadView3d(broken)).toEqual({ mode: "shaded", labels: false });
+    expect(loadView3d(broken)).toEqual({ mode: "realistic", labels: false });
     expect(() => saveView3d({ mode: "ghosted", labels: true }, broken)).not.toThrow();
   });
 });

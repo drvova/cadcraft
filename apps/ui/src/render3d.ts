@@ -30,6 +30,7 @@ import {
   type StandardView,
   type Vec3,
 } from "./view3d";
+import { contactShadow, EXPOSURE, realBatch, REAL_FLOATS, SHADOW_FLOATS, STUDIO, supersampledSize, SWEEP } from "./materials";
 
 // ---- the shaders ----
 
@@ -155,6 +156,213 @@ void main() {
   gl_FragColor = vec4(mix(own, uInk.rgb, uInk.a), uAlpha);
 }`;
 
+// ---- the realistic look ----
+
+/**
+ * The studio, as GLSL: `studio(d, r)` is `studioRadiance` of `./materials.ts` for a direction in
+ * the eye's frame and a roughness. It stands in for a prefiltered environment map: a rough surface
+ * sees each box with a wider, dimmer edge. No texture, so no float-texture extension is needed.
+ */
+const STUDIO_GLSL = `
+uniform vec3 uBoxDir[4];
+uniform vec3 uBoxAcross[4];
+uniform vec4 uBoxShape[4];
+uniform vec4 uSweep;
+uniform vec3 uRight;
+uniform vec3 uUp;
+uniform vec3 uBack;
+vec3 toEye(vec3 d) { return vec3(dot(d, uRight), dot(d, uUp), dot(d, uBack)); }
+float sweep(vec3 d, float r) {
+  float soft = 0.12 + 0.6 * r;
+  float light = d.y < 0.0 ? mix(uSweep.x, uSweep.y, smoothstep(-0.3 - soft, 0.02, d.y)) : mix(uSweep.y, uSweep.z, smoothstep(0.0, 0.6 + soft, d.y));
+  return light * (1.0 - uSweep.w * smoothstep(0.82 - soft * 0.5, 0.97, d.z));
+}
+float boxes(vec3 d, float r) {
+  float light = 0.0;
+  for (int i = 0; i < 4; i++) {
+    vec3 bd = uBoxDir[i];
+    float c = dot(d, bd);
+    if (c > 0.02) {
+      vec3 ac = uBoxAcross[i];
+      vec3 up = cross(bd, ac);
+      vec4 sh = uBoxShape[i];
+      float x = abs(dot(d, ac) / c);
+      float y = abs(dot(d, up) / c);
+      float e = sh.w + 1.6 * r * r;
+      float grow = e - sh.w;
+      float gain = sh.x * sh.y / ((sh.x + grow) * (sh.y + grow));
+      light += sh.z * gain * (1.0 - smoothstep(sh.x - e, sh.x + e, x)) * (1.0 - smoothstep(sh.y - e, sh.y + e, y));
+    }
+  }
+  return light;
+}
+float studio(vec3 d, float r) { return sweep(d, r) + boxes(d, r); }
+vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+vec4 finish(vec3 c) {
+  vec3 m = aces(max(c, vec3(0.0)) * uExposure);
+  return vec4(pow(m, vec3(1.0 / 2.2)), 1.0);
+}
+`;
+
+const REAL_VERTEX = `
+attribute vec3 aPosition;
+attribute vec3 aNormal;
+attribute vec4 aMaterial;
+attribute float aDispersion;
+uniform mat4 uViewProj;
+varying vec3 vPosition;
+varying vec3 vNormal;
+varying vec4 vMaterial;
+varying float vDispersion;
+void main() {
+  vPosition = aPosition;
+  vNormal = aNormal;
+  vMaterial = aMaterial;
+  vDispersion = aDispersion;
+  gl_Position = uViewProj * vec4(aPosition, 1.0);
+}`;
+
+/**
+ * The realistic materials, one program for both kinds (`uStone`).
+ *
+ * Metal: Cook-Torrance's image-based form: the studio seen in the mirror direction at the
+ * finish's roughness, times the split-sum response of GGX with Fresnel-Schlick from the alloy's
+ * own reflectance (Karis's analytic fit of the integrated BRDF, in place of its lookup table).
+ * With derivatives the roughness grows where the normal changes fast across a pixel, so a tight
+ * curve does not shimmer. Wax (a negative roughness) is a dull dielectric of its colour.
+ *
+ * Stone: flat facets (the buffers give every facet its own normal). What a facet reflects (the
+ * studio along the mirror direction, by the stone's own Fresnel) over what it returns from inside:
+ * light enters, bounces off the pavilion and comes back out near the way it came, turned by the
+ * facet's tilt several times over; each of red, green and blue is turned by its own index, which
+ * is the fire. The return is tinted by the body colour. An opaque stone (a negative index) is a
+ * polished body of its colour.
+ */
+const REAL_FRAGMENT = (derivatives: boolean): string => `${derivatives ? "#extension GL_OES_standard_derivatives : enable\\n#define DERIVATIVES 1\\n" : ""}
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+uniform vec3 uEye;
+uniform float uStone;
+uniform float uExposure;
+varying vec3 vPosition;
+varying vec3 vNormal;
+varying vec4 vMaterial;
+varying float vDispersion;
+${STUDIO_GLSL}
+vec2 envBrdf(float rough, float nv) {
+  vec4 r = rough * vec4(-1.0, -0.0275, -0.572, 0.022) + vec4(1.0, 0.0425, 1.04, -0.04);
+  float a = min(r.x * r.x, exp2(-9.28 * nv)) * r.x + r.y;
+  return vec2(-1.04, 1.04) * a + r.zw;
+}
+float inside(vec3 t, float ior) {
+  // t: the facet's tilt from the line of sight, in the eye's frame. Light that comes back out
+  // has been turned by the tilt several times over and scattered round the stone's axis by the
+  // pavilion's bounces: its angle from the eye grows with the tilt and the index, and its bearing
+  // is the tilt's, tripled and twisted. The numbers are chosen by eye, not derived.
+  float m = length(t.xy);
+  float phi = m > 1e-4 ? atan(t.y, t.x) : 0.0;
+  float psi = 3.0 * phi + 2.0 * m * ior + 4.0 * m;
+  float el = min(2.4 * (ior - 1.0) * m + 0.15, 1.45);
+  vec3 a = vec3(cos(psi) * sin(el), sin(psi) * sin(el), cos(el));
+  float psi2 = 1.3 - 2.0 * psi;
+  float el2 = 0.6 * el + 0.25;
+  vec3 b = vec3(cos(psi2) * sin(el2), sin(psi2) * sin(el2), cos(el2));
+  // Inside a stone the sweep is mostly lost through the pavilion: the boxes are what come back,
+  // and a scatter of small lamps (a lattice of points on the sphere) is the sparkle.
+  vec3 q = a * 11.0;
+  float lamps = pow(max(sin(q.x) * sin(q.y) * sin(q.z), 0.0), 8.0) * smoothstep(0.35, 0.7, el);
+  return 0.45 * boxes(a, 0.03) + 0.25 * boxes(b, 0.05) + 4.0 * lamps + 0.015;
+}
+void main() {
+  vec3 n = normalize(vNormal);
+  vec3 v = normalize(uEye - vPosition);
+  if (dot(n, v) < 0.0) n = -n;
+  float nv = clamp(dot(n, v), 1e-3, 1.0);
+  vec3 r = reflect(-v, n);
+  vec3 color;
+  if (uStone < 0.5) {
+    float rough = abs(vMaterial.w);
+#ifdef DERIVATIVES
+    vec3 dn = fwidth(n);
+    rough = clamp(sqrt(rough * rough + 0.6 * dot(dn, dn)), 0.0, 1.0);
+#endif
+    vec2 ab = envBrdf(rough, nv);
+    if (vMaterial.w >= 0.0) {
+      color = studio(toEye(r), rough) * (vMaterial.rgb * ab.x + ab.y);
+    } else {
+      color = vMaterial.rgb * studio(toEye(n), 1.0) * 0.9 + studio(toEye(r), rough) * (0.04 * ab.x + ab.y);
+    }
+  } else {
+    float ior = abs(vMaterial.w);
+    float f0 = (ior - 1.0) / (ior + 1.0);
+    f0 *= f0;
+    float fresnel = f0 + (1.0 - f0) * pow(1.0 - nv, 5.0);
+    vec3 mirror = vec3(boxes(toEye(r), 0.02) + 0.5 * sweep(toEye(r), 0.02));
+    if (vMaterial.w < 0.0) {
+      color = vMaterial.rgb * studio(toEye(n), 1.0) * 0.85 + vec3(studio(toEye(r), 0.12)) * fresnel;
+    } else {
+      vec3 tilt = n - v * nv;
+      float h = 0.5 * vDispersion;
+      vec3 te = toEye(tilt);
+      vec3 back = vec3(inside(te, ior - h), inside(te, ior), inside(te, ior + h));
+      // Fire is a fringe, not a facet's whole colour: half of each channel is the stone's mean.
+      back = mix(vec3(dot(back, vec3(0.3333))), back, 0.45);
+      vec3 body = pow(max(vMaterial.rgb, vec3(0.0)), vec3(1.4));
+      color = mirror * fresnel + back * body * (1.0 - fresnel);
+    }
+  }
+  gl_FragColor = finish(color);
+}`;
+
+/** A triangle over the whole view for the backdrop. */
+const BACKDROP_VERTEX = `
+attribute vec2 aCorner;
+varying vec2 vAt;
+void main() {
+  vAt = aCorner;
+  gl_Position = vec4(aCorner, 0.999, 1.0);
+}`;
+
+/** A seamless sweep over the theme's canvas colour: lighter behind the piece and above it, falling off to the corners. */
+const BACKDROP_FRAGMENT = `
+precision mediump float;
+uniform vec3 uBase;
+uniform vec2 uAspect;
+varying vec2 vAt;
+void main() {
+  vec2 p = vAt * uAspect;
+  float glow = exp(-dot(p - vec2(0.0, 0.15), p - vec2(0.0, 0.15)) * 0.9);
+  float fall = smoothstep(-1.2, 1.0, vAt.y);
+  vec3 c = uBase + vec3(0.075) * (glow - 0.3) + vec3(0.025) * (fall - 0.5);
+  gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+}`;
+
+const SHADOW_VERTEX = `
+attribute vec3 aPosition;
+attribute vec2 aAt;
+uniform mat4 uViewProj;
+varying vec2 vAt;
+void main() {
+  vAt = aAt;
+  gl_Position = uViewProj * vec4(aPosition, 1.0);
+}`;
+
+/** The contact shadow: a tight dark core where the piece meets the ground and a broad faint one around it. */
+const SHADOW_FRAGMENT = `
+precision mediump float;
+uniform float uStrength;
+varying vec2 vAt;
+void main() {
+  vec2 core = vAt * vec2(3.2, 2.0);
+  vec2 wide = vAt * vec2(1.5, 1.5);
+  float a = 0.55 * exp(-dot(core, core)) + 0.3 * exp(-dot(wide, wide));
+  a *= 1.0 - smoothstep(0.85, 1.0, max(abs(vAt.x), abs(vAt.y)));
+  gl_FragColor = vec4(0.0, 0.0, 0.0, a * uStrength);
+}`;
+
 // ---- the renderer ----
 
 /** One frame: the eye, and the inks that are not the parts' own. */
@@ -172,10 +380,13 @@ export interface Ground {
 }
 
 export interface Renderer {
-  upload: (buffers: Buffers | null, ground: Ground | null, edges: EdgeBatch | null) => void;
+  /** Hand over what is drawn. `shadow` is the realistic contact shadow's quad (`contactShadow`), null for none. */
+  upload: (buffers: Buffers | null, ground: Ground | null, edges: EdgeBatch | null, shadow?: Float32Array | null) => void;
   /** Draw one frame as `plan`'s passes on a store `width` by `height` device pixels. */
   draw: (frame: Frame, plan: readonly DrawPass[], width: number, height: number) => void;
   dispose: () => void;
+  /** Whether the realistic program runs here, and how: "full", "no derivatives", or why it does not (then a realistic pass is drawn shaded). */
+  realistic: string;
 }
 
 /** The strokes of a bold edge, in device pixels from the line. */
@@ -235,6 +446,63 @@ export function createRenderer(gl: WebGLRenderingContext): Renderer | string {
     gl.deleteProgram(grid);
     return edge;
   }
+  // The realistic programs are wanted, not needed: where they cannot be made, a realistic pass is drawn shaded.
+  const derivatives = gl.getExtension("OES_standard_derivatives") !== null;
+  let realistic = "full";
+  let real: WebGLProgram | null = null;
+  let backdrop: WebGLProgram | null = null;
+  let shade: WebGLProgram | null = null;
+  {
+    let made = link(REAL_VERTEX, REAL_FRAGMENT(derivatives));
+    if (typeof made === "string" && derivatives) made = link(REAL_VERTEX, REAL_FRAGMENT(false));
+    const back = link(BACKDROP_VERTEX, BACKDROP_FRAGMENT);
+    const sh = link(SHADOW_VERTEX, SHADOW_FRAGMENT);
+    if (typeof made === "string" || typeof back === "string" || typeof sh === "string") {
+      realistic = [made, back, sh].find((x): x is string => typeof x === "string") ?? "unavailable";
+      for (const p of [made, back, sh]) if (typeof p !== "string") gl.deleteProgram(p);
+    } else {
+      real = made;
+      backdrop = back;
+      shade = sh;
+      if (!derivatives) realistic = "no derivatives";
+    }
+  }
+  const realMetalBuffer = gl.createBuffer();
+  const realStoneBuffer = gl.createBuffer();
+  const backdropBuffer = gl.createBuffer();
+  const shadowBuffer = gl.createBuffer();
+  let held: Buffers | null = null;
+  /** The realistic batches are made the first time a realistic pass draws, from `held`. */
+  let realReady = false;
+  let shadowCount = 0;
+  gl.bindBuffer(gl.ARRAY_BUFFER, backdropBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const realAt =
+    real === null
+      ? null
+      : {
+          position: gl.getAttribLocation(real, "aPosition"),
+          normal: gl.getAttribLocation(real, "aNormal"),
+          material: gl.getAttribLocation(real, "aMaterial"),
+          dispersion: gl.getAttribLocation(real, "aDispersion"),
+        };
+  const studioU = (program: WebGLProgram) => ({
+    viewProj: gl.getUniformLocation(program, "uViewProj"),
+    eye: gl.getUniformLocation(program, "uEye"),
+    stone: gl.getUniformLocation(program, "uStone"),
+    exposure: gl.getUniformLocation(program, "uExposure"),
+    boxDir: gl.getUniformLocation(program, "uBoxDir"),
+    boxAcross: gl.getUniformLocation(program, "uBoxAcross"),
+    boxShape: gl.getUniformLocation(program, "uBoxShape"),
+    sweep: gl.getUniformLocation(program, "uSweep"),
+    right: gl.getUniformLocation(program, "uRight"),
+    up: gl.getUniformLocation(program, "uUp"),
+    back: gl.getUniformLocation(program, "uBack"),
+  });
+  const realU = real === null ? null : studioU(real);
+  const boxDir = new Float32Array(STUDIO.flatMap((b) => [...b.dir]));
+  const boxAcross = new Float32Array(STUDIO.flatMap((b) => [...b.across]));
+  const boxShape = new Float32Array(STUDIO.flatMap((b) => [b.half[0], b.half[1], b.intensity, b.edge]));
   const metalBuffer = gl.createBuffer();
   const stoneBuffer = gl.createBuffer();
   const gridBuffer = gl.createBuffer();
@@ -293,7 +561,80 @@ export function createRenderer(gl: WebGLRenderingContext): Renderer | string {
     gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   };
 
+  const drawReal = (frame: Frame, viewProj: Float32Array, pass: Extract<DrawPass, { kind: "faces" }>, program: WebGLProgram, at: NonNullable<typeof realAt>, u: NonNullable<typeof realU>): void => {
+    const stone = pass.what === "stone";
+    if (!realReady) {
+      realReady = true;
+      fill(realMetalBuffer, held === null ? null : realBatch("metal", held.metal.data, held.metal.vertices, VERTEX_FLOATS));
+      fill(realStoneBuffer, held === null ? null : realBatch("stone", held.stone.data, held.stone.vertices, VERTEX_FLOATS));
+    }
+    const count = stone ? stoneCount : metalCount;
+    if (count === 0) return;
+    gl.useProgram(program);
+    gl.uniformMatrix4fv(u.viewProj, false, viewProj);
+    gl.uniform3f(u.eye, frame.eye[0], frame.eye[1], frame.eye[2]);
+    gl.uniform1f(u.stone, stone ? 1 : 0);
+    gl.uniform1f(u.exposure, EXPOSURE);
+    gl.uniform3fv(u.boxDir, boxDir);
+    gl.uniform3fv(u.boxAcross, boxAcross);
+    gl.uniform4fv(u.boxShape, boxShape);
+    gl.uniform4f(u.sweep, SWEEP.floor, SWEEP.horizon, SWEEP.top, SWEEP.eye);
+    gl.uniform3f(u.right, frame.right[0], frame.right[1], frame.right[2]);
+    gl.uniform3f(u.up, frame.up[0], frame.up[1], frame.up[2]);
+    gl.uniform3f(u.back, frame.back[0], frame.back[1], frame.back[2]);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthMask(true);
+    blend(false);
+    gl.bindBuffer(gl.ARRAY_BUFFER, stone ? realStoneBuffer : realMetalBuffer);
+    point(at.position, 3, REAL_FLOATS, 0);
+    point(at.normal, 3, REAL_FLOATS, 3);
+    point(at.material, 4, REAL_FLOATS, 6);
+    point(at.dispersion, 1, REAL_FLOATS, 10);
+    gl.drawArrays(gl.TRIANGLES, 0, count);
+    unpoint(at.position, at.normal, at.material, at.dispersion);
+  };
+
+  /** The realistic backdrop (over a background, not over a cut-out) and the contact shadow. Neither writes depth. */
+  const drawStudio = (frame: Frame, viewProj: Float32Array, width: number, height: number): void => {
+    if (backdrop === null || shade === null) return;
+    gl.disable(gl.DEPTH_TEST);
+    gl.depthMask(false);
+    if (frame.background !== null) {
+      blend(false);
+      gl.useProgram(backdrop);
+      const back = frame.background;
+      gl.uniform3f(gl.getUniformLocation(backdrop, "uBase"), back[0], back[1], back[2]);
+      gl.uniform2f(gl.getUniformLocation(backdrop, "uAspect"), Math.min(2, width / height), 1);
+      const corner = gl.getAttribLocation(backdrop, "aCorner");
+      gl.bindBuffer(gl.ARRAY_BUFFER, backdropBuffer);
+      point(corner, 2, 2, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      unpoint(corner);
+    }
+    if (shadowCount > 0) {
+      blend(true);
+      gl.useProgram(shade);
+      gl.uniformMatrix4fv(gl.getUniformLocation(shade, "uViewProj"), false, viewProj);
+      // A light backdrop takes a darker shadow than a dark one, where it would be lost.
+      const base = frame.background === null ? 0.6 : (frame.background[0] + frame.background[1] + frame.background[2]) / 3;
+      gl.uniform1f(gl.getUniformLocation(shade, "uStrength"), 0.5 + 0.4 * base);
+      const position = gl.getAttribLocation(shade, "aPosition");
+      const at = gl.getAttribLocation(shade, "aAt");
+      gl.bindBuffer(gl.ARRAY_BUFFER, shadowBuffer);
+      point(position, 3, SHADOW_FLOATS, 0);
+      point(at, 2, SHADOW_FLOATS, 3);
+      gl.drawArrays(gl.TRIANGLES, 0, shadowCount);
+      unpoint(position, at);
+    }
+    gl.depthMask(true);
+    gl.enable(gl.DEPTH_TEST);
+  };
+
   const drawFaces = (frame: Frame, viewProj: Float32Array, pass: Extract<DrawPass, { kind: "faces" }>): void => {
+    if (pass.real && real !== null && realAt !== null && realU !== null) {
+      drawReal(frame, viewProj, pass, real, realAt, realU);
+      return;
+    }
     const stone = pass.what === "stone";
     const count = stone ? stoneCount : metalCount;
     if (count === 0) return;
@@ -370,7 +711,12 @@ export function createRenderer(gl: WebGLRenderingContext): Renderer | string {
   };
 
   return {
-    upload(buffers, ground, edges) {
+    realistic,
+    upload(buffers, ground, edges, shadow = null) {
+      held = buffers;
+      realReady = false;
+      fill(shadowBuffer, shadow);
+      shadowCount = shadow === null ? 0 : Math.floor(shadow.length / SHADOW_FLOATS);
       fill(metalBuffer, buffers?.metal.data ?? null);
       fill(stoneBuffer, buffers?.stone.data ?? null);
       fill(gridBuffer, ground?.data ?? null);
@@ -397,6 +743,7 @@ export function createRenderer(gl: WebGLRenderingContext): Renderer | string {
       for (const pass of plan) {
         if (pass.kind === "faces") drawFaces(frame, viewProj, pass);
         else if (pass.kind === "ground") drawGround(frame, viewProj);
+        else if (pass.kind === "studio") drawStudio(frame, viewProj, width, height);
         else drawEdges(frame, viewProj, pass, width, height);
       }
       gl.disable(gl.BLEND);
@@ -409,6 +756,8 @@ export function createRenderer(gl: WebGLRenderingContext): Renderer | string {
       gl.deleteBuffer(stoneBuffer);
       gl.deleteBuffer(gridBuffer);
       gl.deleteBuffer(edgeBuffer);
+      for (const b of [realMetalBuffer, realStoneBuffer, backdropBuffer, shadowBuffer]) gl.deleteBuffer(b);
+      for (const p of [real, backdrop, shade]) if (p !== null) gl.deleteProgram(p);
       gl.deleteProgram(mesh);
       gl.deleteProgram(grid);
       gl.deleteProgram(edge);
@@ -421,7 +770,7 @@ export function createRenderer(gl: WebGLRenderingContext): Renderer | string {
 export interface StillOptions {
   /** Which side the piece is seen from, framed to the picture. */
   view: StandardView;
-  /** How it is shown. Defaults to `shaded`. */
+  /** How it is shown. Defaults to `realistic`. */
   mode?: DisplayMode;
   /** The picture's size in pixels. Each side is held to `STILL_MIN`…`STILL_MAX`. */
   width: number;
@@ -451,7 +800,7 @@ export function stillSetup(mesh: PieceMesh, options: StillOptions): StillSetup {
   const side = (value: number): number => (Number.isFinite(value) ? Math.min(STILL_MAX, Math.max(STILL_MIN, Math.round(value))) : STILL_MIN);
   const width = side(options.width);
   const height = side(options.height);
-  const mode = options.mode ?? "shaded";
+  const mode = options.mode ?? "realistic";
   const scene = sceneOf(mesh.extent);
   const camera = standardCamera(options.view, scene, width / height);
   const background = options.background ?? null;
@@ -485,9 +834,11 @@ export function renderPieceStill(mesh: PieceMesh, options: StillOptions): Promis
 async function drawStill(mesh: PieceMesh, options: StillOptions): Promise<Blob> {
   if (typeof document === "undefined") throw new Error("a still needs a browser to draw in");
   const setup = stillSetup(mesh, options);
+  // Drawn larger and scaled down: the supersampling smooths the facets' edges and the highlights.
+  const store = supersampledSize(setup.width, setup.height, STILL_MAX);
   const canvas = document.createElement("canvas");
-  canvas.width = setup.width;
-  canvas.height = setup.height;
+  canvas.width = store.width;
+  canvas.height = store.height;
   // The store is kept after the frame, so it is still there when the picture is encoded.
   const attributes: WebGLContextAttributes = { antialias: true, alpha: true, depth: true, stencil: false, premultipliedAlpha: true, preserveDrawingBuffer: true };
   let gl: WebGLRenderingContext | null = null;
@@ -502,10 +853,23 @@ async function drawStill(mesh: PieceMesh, options: StillOptions): Promise<Blob> 
     const made = createRenderer(gl);
     if (typeof made === "string") throw new Error(`the still could not be drawn: ${made}`);
     renderer = made;
-    renderer.upload(buildBuffers(mesh), null, setup.edges ? featureEdges(mesh) : null);
-    renderer.draw(setup.frame, setup.plan, setup.width, setup.height);
+    renderer.upload(buildBuffers(mesh), null, setup.edges ? featureEdges(mesh) : null, contactShadow(mesh.extent));
+    renderer.draw(setup.frame, setup.plan, store.width, store.height);
     if (gl.isContextLost()) throw new Error("the still could not be drawn: the graphics context was lost");
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    let out: HTMLCanvasElement = canvas;
+    if (store.factor > 1) {
+      const small = document.createElement("canvas");
+      small.width = setup.width;
+      small.height = setup.height;
+      const context = small.getContext("2d");
+      if (context !== null) {
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = "high";
+        context.drawImage(canvas, 0, 0, setup.width, setup.height);
+        out = small;
+      }
+    }
+    const blob = await new Promise<Blob | null>((resolve) => out.toBlob(resolve, "image/png"));
     if (blob === null) throw new Error("the still could not be encoded");
     return blob;
   } finally {

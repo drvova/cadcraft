@@ -27,15 +27,15 @@ describe("a still's setup", () => {
     expect(front.frame.viewProj.every(Number.isFinite)).toBe(true);
   });
 
-  test("it is the mode's own passes without the ground, shaded unless said, and wants edges only where the mode draws them", () => {
-    const shaded = stillSetup(mesh(), { view: "front", width: 400, height: 400 });
-    expect(shaded.plan).toEqual(drawPlan("shaded").filter((pass) => pass.kind !== "ground"));
-    expect(shaded.edges).toBe(false);
-    for (const mode of ["wireframe", "ghosted", "xray"] as const) {
+  test("it is the mode's own passes without the ground, realistic unless said, and wants edges only where the mode draws them", () => {
+    const real = stillSetup(mesh(), { view: "front", width: 400, height: 400 });
+    expect(real.plan).toEqual(drawPlan("realistic"));
+    expect(real.edges).toBe(false);
+    for (const mode of ["shaded", "wireframe", "ghosted", "xray"] as const) {
       const setup = stillSetup(mesh(), { view: "front", mode, width: 400, height: 400 });
       expect(setup.plan).toEqual(drawPlan(mode).filter((pass) => pass.kind !== "ground"));
       expect(setup.plan.some((pass) => pass.kind === "ground")).toBe(false);
-      expect(setup.edges).toBe(mode !== "ghosted");
+      expect(setup.edges).toBe(mode === "wireframe" || mode === "xray");
     }
   });
 

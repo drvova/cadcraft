@@ -86,7 +86,7 @@ export function createTechSheet(props: TechSheetStateProps, options: TechSheetOp
   };
   const [model, setModel] = createSignal<SheetModel | null>(null);
   const [loading, setLoading] = createSignal(false);
-  const [mode, setMode] = createSignal<DisplayMode>("shaded");
+  const [mode, setMode] = createSignal<DisplayMode>("realistic");
   const [background, setBackground] = createSignal<SheetBackground>("surface");
   const [tiles, setTiles] = createSignal(freshTiles());
   /** The PNG of each drawn view, by the view it is of; revoked when it is replaced. */

@@ -9,7 +9,8 @@
  * the normals, the feature edges, the order of the passes, what is under the pointer) is in
  * `../view3d.ts`, which is tested.
  *
- * The solid is shown one of four ways (`DisplayMode`): shaded, as a wireframe of its feature
+ * The solid is shown one of five ways (`DisplayMode`): realistic (the default: polished metal and
+ * faceted stones under a studio, `../materials.ts`), shaded, as a wireframe of its feature
  * edges, with the metal ghosted so the stones show through it, or as an X-ray. The gizmo in the
  * corner draws the engine's three axes as the camera sees them; each of its six ends is a key
  * that turns the eye to stand on it. The region names (off until asked for) hang on places taken
@@ -30,6 +31,7 @@ import type { Envelope } from "../facade";
 import { downloadBytes } from "../files";
 import { isRecord } from "../json";
 import { wheelZoomFactor } from "../view";
+import { contactShadow } from "../materials";
 import { createRenderer, type Renderer } from "../render3d";
 import {
   AXIS_ENDS,
@@ -186,6 +188,8 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
   let edges: EdgeBatch | null = null;
   let targets: PickTarget[] | null = null;
   let ground: { data: Float32Array; vertices: number } | null = null;
+  /** The realistic mode's contact shadow under the piece. */
+  let shadow: Float32Array | null = null;
   let scene: Scene | null = null;
   let camera: Camera | null = remembered?.camera ?? null;
   /** The camera still frames the piece (no pan or zoom since the last fit): a resize or a new size of piece fits again. */
@@ -327,7 +331,7 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
       return false;
     }
     renderer = made;
-    renderer.upload(buffers, ground, edges);
+    renderer.upload(buffers, ground, edges, shadow);
     return true;
   };
 
@@ -337,7 +341,7 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
   const wantEdges = (): void => {
     if (edges !== null || solid === null || !modeHasEdges(mode())) return;
     edges = featureEdges(solid);
-    renderer?.upload(buffers, ground, edges);
+    renderer?.upload(buffers, ground, edges, shadow);
   };
 
   const chooseMode = (value: string): void => {
@@ -379,6 +383,7 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
     targets = null;
     setPointed(null);
     ground = null;
+    shadow = null;
     scene = null;
     setReadout(null);
     renderer?.upload(null, null, null);
@@ -422,10 +427,11 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
     solid = reply.mesh;
     buffers = buildBuffers(reply.mesh);
     ground = groundGrid(reply.mesh.extent);
+    shadow = contactShadow(reply.mesh.extent);
     scene = sceneOf(reply.mesh.extent);
     edges = modeHasEdges(mode()) ? featureEdges(reply.mesh) : null;
     targets = null;
-    renderer?.upload(buffers, ground, edges);
+    renderer?.upload(buffers, ground, edges, shadow);
     setReadout({ triangles: formatTriangles(reply.mesh.triangles), size: formatSize(reply.mesh.bounds), notes: reply.mesh.notes });
     keepGl({ kind: "ready" });
     settle();

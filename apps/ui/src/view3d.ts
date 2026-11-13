@@ -572,13 +572,16 @@ export function groundGrid(extent: Bounds): { data: Float32Array; vertices: numb
 
 /**
  * The ways the solid is shown. `shaded` is the lit solid. `wireframe` is its feature edges alone,
- * the hidden ones removed. `ghosted` makes the metal see-through and keeps the stones solid, so a
+ * the hidden ones removed. `realistic` (the default) is the piece as jewellery: polished metal and
+ * faceted stones lit by a studio, over a backdrop with a soft contact shadow (`./materials.ts`).
+ * `ghosted` makes the metal see-through and keeps the stones solid, so a
  * stone and what holds it show through the head. `xray` makes everything see-through and draws
  * the feature edges over it, the hidden ones faintly.
  */
-export type DisplayMode = "shaded" | "wireframe" | "ghosted" | "xray";
+export type DisplayMode = "realistic" | "shaded" | "wireframe" | "ghosted" | "xray";
 
 export const DISPLAY_MODES: readonly { mode: DisplayMode; label: string }[] = [
+  { mode: "realistic", label: "Realistic" },
   { mode: "shaded", label: "Shaded" },
   { mode: "wireframe", label: "Wireframe" },
   { mode: "ghosted", label: "Ghosted" },
@@ -586,7 +589,7 @@ export const DISPLAY_MODES: readonly { mode: DisplayMode; label: string }[] = [
 ];
 
 export function isDisplayMode(value: unknown): value is DisplayMode {
-  return value === "shaded" || value === "wireframe" || value === "ghosted" || value === "xray";
+  return value === "realistic" || value === "shaded" || value === "wireframe" || value === "ghosted" || value === "xray";
 }
 
 /** Whether a mode draws the feature edges (so whether they are worth computing). */
@@ -599,11 +602,13 @@ export function modeHasEdges(mode: DisplayMode): boolean {
  * (`color: false`), tested against the depth already written or not, writing depth or not, at the
  * shader's own opacity (`opacity: null`: metal solid, a stone slightly see-through) or at a fixed
  * one that `rim` lifts where the surface turns away. `pushed` moves the faces a little back in
- * depth so a line on them wins. `edges` draws the feature edges; `bold` thickens them.
+ * depth so a line on them wins. `real` draws them with the realistic materials. `studio` lays the
+ * realistic backdrop and the contact shadow. `edges` draws the feature edges; `bold` thickens them.
  */
 export type DrawPass =
-  | { kind: "faces"; what: PartKind; color: boolean; depthTest: boolean; depthWrite: boolean; opacity: number | null; rim: number; pushed: boolean }
+  | { kind: "faces"; what: PartKind; color: boolean; depthTest: boolean; depthWrite: boolean; opacity: number | null; rim: number; pushed: boolean; real: boolean }
   | { kind: "ground" }
+  | { kind: "studio" }
   | { kind: "edges"; depthTest: boolean; alpha: number; bold: boolean };
 
 const facePass = (what: PartKind, over: Partial<Omit<Extract<DrawPass, { kind: "faces" }>, "kind" | "what">> = {}): DrawPass => ({
@@ -615,6 +620,7 @@ const facePass = (what: PartKind, over: Partial<Omit<Extract<DrawPass, { kind: "
   opacity: null,
   rim: 0,
   pushed: false,
+  real: false,
   ...over,
 });
 
@@ -660,6 +666,9 @@ export function drawPlan(mode: DisplayMode): DrawPass[] {
         { kind: "edges", depthTest: false, alpha: 0.22, bold: false },
         { kind: "edges", depthTest: true, alpha: 1, bold: true },
       ];
+    case "realistic":
+      // The studio first (it writes no depth), then both kinds solid: a realistic stone is opaque.
+      return [{ kind: "studio" }, facePass("metal", { real: true }), facePass("stone", { real: true })];
     default:
       // The metal, the ground's lines behind it, then the stones over what is behind them.
       return [facePass("metal"), { kind: "ground" }, facePass("stone")];
@@ -878,6 +887,9 @@ export interface EyeFrame {
   key: Vec3;
   fill: Vec3;
   up: Vec3;
+  /** The eye's other two axes: the realistic studio hangs in the eye's frame (`right`, `up`, `back`). */
+  right: Vec3;
+  back: Vec3;
 }
 
 /**
@@ -895,6 +907,8 @@ export function eyeFrame(camera: Camera, scene: Scene, aspect: number): EyeFrame
     key: mix(-0.5, 0.7, 0.55),
     fill: mix(0.8, -0.1, 0.45),
     up: basis.up,
+    right: basis.right,
+    back,
   };
 }
 
@@ -1239,9 +1253,9 @@ function browserStore(): View3dStore | null {
   }
 }
 
-/** How the 3D view was left in this browser: shaded and without the region names until it is said otherwise. */
+/** How the 3D view was left in this browser: realistic and without the region names until it is said otherwise. */
 export function loadView3d(store: View3dStore | null = browserStore()): View3dMemory {
-  const memory: View3dMemory = { mode: "shaded", labels: false };
+  const memory: View3dMemory = { mode: "realistic", labels: false };
   if (store === null) return memory;
   try {
     const mode = store.getItem(MODE_KEY);
