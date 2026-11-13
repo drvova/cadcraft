@@ -30,7 +30,10 @@ import {
   type StandardView,
   type Vec3,
 } from "./view3d";
-import { contactShadow, DEEP_POWER, EXPOSURE, HUE_KEEP, realBatch, REAL_FLOATS, SHADOW_FLOATS, STUDIO, STUDIO_BOXES, supersampledSize, SWEEP } from "./materials";
+import { contactShadow, DEEP_POWER, EXPOSURE, HUE_KEEP, CARDS, LIGHT_PEAK, realBatch, RINGS, STRIP_DEEP, REAL_FLOATS, SHADOW_FLOATS, STUDIO, STUDIO_BOXES, supersampledSize, SWEEP } from "./materials";
+
+/** A number as a GLSL float literal. */
+const glsl = (x: number): string => (Number.isInteger(x) ? `${x}.0` : `${x}`);
 
 // ---- the shaders ----
 
@@ -200,7 +203,22 @@ float boxes(vec3 d, float r) {
   }
   return light;
 }
-float studio(vec3 d, float r) { return sweep(d, r) + boxes(d, r); }
+float rings(vec3 d, float r) {
+  float theta = acos(clamp(d.z, -1.0, 1.0));
+  float side = length(d.xy);
+  float up = side > 1e-6 ? d.y / side : 0.0;
+  vec2 flat2 = side > 1e-6 ? d.xy / side : vec2(0.0);
+  float card = 0.0;
+${CARDS.map((a) => `  card = max(card, smoothstep(0.55, 0.85, dot(flat2, vec2(${glsl(Math.cos(a))}, ${glsl(Math.sin(a))}))));`).join("\n")}
+  float down = max(0.0, -up) * (1.0 - card);
+  float grow = 1.6 * r * r;
+  float light = 0.0;
+${RINGS.map((g) => `  { float e = ${glsl(g.edge)} + grow; float off = abs(theta - ${glsl(g.angle)}); float t = min(1.0, off / (${glsl(g.half)} + e)); light += ${glsl(g.intensity)} * (${glsl(g.half)} / (${glsl(g.half)} + grow)) * (1.0 - ${glsl(g.below)} * down) * (1.0 - smoothstep(${glsl(g.half)} - e, ${glsl(g.half)} + e, off)) * (1.0 - 0.6 * t * t); }`).join("\n")}
+  return light;
+}
+float lights(vec3 d, float r) { return boxes(d, r) + rings(d, r); }
+float softPeak(float l) { return ${glsl(LIGHT_PEAK)} * (1.0 - exp(-l / ${glsl(LIGHT_PEAK)})); }
+float studio(vec3 d, float r) { return sweep(d, r) + softPeak(lights(d, r)); }
 vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
 vec4 finish(vec3 c, float keepHue) {
   vec3 x = max(c, vec3(0.0)) * uExposure;
@@ -210,11 +228,11 @@ vec4 finish(vec3 c, float keepHue) {
   m = mix(m, clamp(hue * (1.0 - uHueWhite) + m * uHueWhite, 0.0, 1.0), keepHue);
   return vec4(pow(m, vec3(1.0 / 2.2)), 1.0);
 }
-vec3 deepTint(vec3 f0) {
+vec3 deepTint(vec3 f0, float power) {
   float hi = max(f0.r, max(f0.g, f0.b));
   float lo = min(f0.r, min(f0.g, f0.b));
   if (hi <= 0.0) return vec3(0.0);
-  float p = 1.0 + uDeepPower * smoothstep(0.2, 0.55, (hi - lo) / hi);
+  float p = 1.0 + power * smoothstep(0.2, 0.55, (hi - lo) / hi);
   return hi * pow(max(f0, vec3(0.0)) / hi, vec3(p));
 }
 `;
@@ -253,7 +271,7 @@ void main() {
  * is the fire. The return is tinted by the body colour. An opaque stone (a negative index) is a
  * polished body of its colour.
  */
-const REAL_FRAGMENT = (derivatives: boolean): string => `${derivatives ? "#extension GL_OES_standard_derivatives : enable\\n#define DERIVATIVES 1\\n" : ""}
+const REAL_FRAGMENT = (derivatives: boolean): string => `${derivatives ? "#extension GL_OES_standard_derivatives : enable\n#define DERIVATIVES 1\n" : ""}
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
 #else
@@ -289,7 +307,7 @@ float inside(vec3 t, float ior) {
   // and a scatter of small lamps (a lattice of points on the sphere) is the sparkle.
   vec3 q = a * 11.0;
   float lamps = pow(max(sin(q.x) * sin(q.y) * sin(q.z), 0.0), 8.0) * smoothstep(0.35, 0.7, el);
-  return 0.45 * boxes(a, 0.03) + 0.25 * boxes(b, 0.05) + 4.0 * lamps + 0.015;
+  return 0.45 * lights(a, 0.03) + 0.25 * lights(b, 0.05) + 4.0 * lamps + 0.015;
 }
 void main() {
   vec3 n = normalize(vNormal);
@@ -308,9 +326,9 @@ void main() {
 #endif
     vec2 ab = envBrdf(rough, nv);
     if (vMaterial.w >= 0.0) {
-      // The boxes mirror in the alloy's colour; the dim sweep in its deeper tint (see deepTint).
+      // The boxes and rings mirror in the alloy's colour, a little deepened, eased toward a peak; the dim sweep in its deeper tint (see deepTint).
       vec3 re = toEye(r);
-      color = boxes(re, rough) * (vMaterial.rgb * ab.x + ab.y) + sweep(re, rough) * (deepTint(vMaterial.rgb) * ab.x + ab.y);
+      color = softPeak(lights(re, rough)) * (deepTint(vMaterial.rgb, ${glsl(STRIP_DEEP)}) * ab.x + ab.y) + sweep(re, rough) * (deepTint(vMaterial.rgb, uDeepPower) * ab.x + ab.y);
     } else {
       color = vMaterial.rgb * studio(toEye(n), 1.0) * 0.9 + studio(toEye(r), rough) * (0.04 * ab.x + ab.y);
     }
@@ -319,7 +337,7 @@ void main() {
     float f0 = (ior - 1.0) / (ior + 1.0);
     f0 *= f0;
     float fresnel = f0 + (1.0 - f0) * pow(1.0 - nv, 5.0);
-    vec3 mirror = vec3(boxes(toEye(r), 0.02) + 0.5 * sweep(toEye(r), 0.02));
+    vec3 mirror = vec3(lights(toEye(r), 0.02) + 0.5 * sweep(toEye(r), 0.02));
     if (vMaterial.w < 0.0) {
       color = vMaterial.rgb * studio(toEye(n), 1.0) * 0.85 + vec3(studio(toEye(r), 0.12)) * fresnel;
     } else {

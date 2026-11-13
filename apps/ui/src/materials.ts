@@ -267,33 +267,74 @@ function box(dir: Vec3, half: readonly [number, number], intensity: number, edge
 
 /**
  * A jeweller's light tent, seen from the piece. The light a polished face shows is whatever lies
- * in its mirror direction, and the broad faces of a ring at the usual views (the outside of a band
- * turned toward the camera, its top, its shoulders) mirror the space round and just above the
- * camera. So, as in ring photography, the tent has:
+ * in its mirror direction. The studio turns with the eye, so what matters is how far a face's
+ * mirror direction lies from the lens and on which side; a broad face of a ring, turned anywhere
+ * through an orbit, sweeps its mirror directions across a wide arc round the lens.
  *
- * - a wide gradient strip just above the lens, running across the whole view: every face turned
- *   toward the camera carries its bright line, fading to dark at its edges;
- * - a dimmer strip below the lens (a white card on the table), so a band's outside shows a second,
- *   fainter line and the dark between them;
- * - the dark of the camera itself between the two (the sweep's eye hole): the crisp dark band;
+ * So, as in ring photography with a ring of light round the lens, the tent has:
+ *
+ * - concentric gradient rings round the lens (`RINGS`): whatever way a broad face is turned, its
+ *   arc of mirror directions crosses them, so it carries a bright line fading to dark beside a
+ *   crisp dark gap, from the front, the top, the side and every angle of an orbit;
  * - a broad box overhead for the top faces, a key strip high on the left, a narrow fill on the
- *   right and a low kicker behind, with dark gaps between them.
+ *   right, a low kicker behind and two tall strips behind on either side, with dark gaps between.
  *
- * The gaps matter as much as the boxes: polished metal and a diamond are read by the contrast of
+ * The gaps matter as much as the lights: polished metal and a diamond are read by the contrast of
  * what they mirror. `STUDIO_BOXES` is the count the shader's arrays are sized by.
  */
 export const STUDIO: readonly Softbox[] = [
-  box([0.0, 1.0, 0.25], [0.95, 0.6], 3.2, 0.12, 0.35),
-  box([-0.85, 0.45, 0.55], [0.22, 0.8], 6.0, 0.06, 0.5),
-  box([0.9, 0.25, 0.5], [0.12, 0.7], 3.5, 0.05, 0.4),
+  box([0.0, 1.0, 0.25], [0.95, 0.6], 3.0, 0.12, 0.35),
+  box([-0.85, 0.45, 0.55], [0.22, 0.8], 5.0, 0.06, 0.5),
+  box([0.9, 0.25, 0.5], [0.12, 0.7], 3.2, 0.05, 0.4),
   box([0.2, 0.35, -1.0], [0.9, 0.18], 3.0, 0.08),
-  box([0.0, 0.15, 1.0], [1.7, 0.065], 3.8, 0.035, 0.7),
-  box([0.0, -0.22, 1.0], [1.5, 0.05], 1.4, 0.03, 0.6),
-  box([1.0, 0.1, -0.25], [0.16, 1.4], 3.2, 0.06, 0.7),
-  box([-1.0, 0.05, -0.45], [0.14, 1.4], 2.2, 0.06, 0.7),
-  box([0.0, -0.5, 0.85], [1.4, 0.2], 1.8, 0.08, 0.85),
-  box([-0.88, -0.4, 0.22], [0.7, 0.045], 2.6, 0.03, 0.75),
+  box([1.0, 0.1, -0.25], [0.16, 1.4], 2.8, 0.06, 0.7),
+  box([-1.0, 0.05, -0.45], [0.14, 1.4], 2.0, 0.06, 0.7),
 ];
+
+/**
+ * A ring of light round the lens: its angle from the eye's axis (radians), its half-width (radians),
+ * its brightness, and how much of its lower half is held back (0 = none): below the lens a ring
+ * shows only where a card stands on the table, low on the left and low on the right (`CARDS`), so
+ * straight down stays dark.
+ */
+export interface Ring {
+  angle: number;
+  half: number;
+  intensity: number;
+  below: number;
+  /** The width of its soft edge, radians. */
+  edge: number;
+}
+
+/**
+ * The rings. In front (to a little past a right angle from the lens), one every 22°, strong and
+ * faint in turn: a flat face mirrors a patch of the tent only some 10–15° across (the spread of the
+ * view across it), so rings this close always put part of a band and part of a gap on it, whichever
+ * way it is turned. Behind the piece, two broad soft rings: a band seen edge on (the side view)
+ * sweeps every angle, and narrow rings there would stripe it like a ladder.
+ */
+export const RINGS: readonly Ring[] = [
+  { angle: 0.21, half: 0.085, intensity: 2.4, below: 0.85, edge: 0.05 },
+  { angle: 0.59, half: 0.085, intensity: 1.15, below: 0.85, edge: 0.05 },
+  { angle: 0.98, half: 0.085, intensity: 2.4, below: 0.85, edge: 0.05 },
+  { angle: 1.36, half: 0.085, intensity: 1.15, below: 0.85, edge: 0.05 },
+  { angle: 1.85, half: 0.16, intensity: 1.9, below: 0.85, edge: 0.14 },
+  { angle: 2.7, half: 0.2, intensity: 1.5, below: 0.85, edge: 0.16 },
+];
+
+
+/**
+ * The light a metal mirrors from the boxes and rings together is eased toward this ceiling
+ * (`peak · (1 − e^(−L/peak))`): a strip still reads as the brightest thing on a face, but a white
+ * metal does not burn to paper white and gold keeps its colour in the middle of a band.
+ */
+export const LIGHT_PEAK = 1.9;
+
+/** The soft ceiling of `LIGHT_PEAK`. */
+export function softPeak(light: number, peak: number = LIGHT_PEAK): number {
+  const l = Number.isFinite(light) ? Math.max(0, light) : 0;
+  return peak > 0 ? peak * (1 - Math.exp(-l / peak)) : l;
+}
 
 /** How many boxes the studio has (the shader's arrays are this long). */
 export const STUDIO_BOXES = STUDIO.length;
@@ -325,7 +366,42 @@ export function boxSpread(b: Softbox, roughness: number): { edge: number; gain: 
  * polished one a crisp, bright box. The shader's `studio()` is this function.
  */
 export function studioRadiance(dir: Vec3, roughness: number): number {
-  return sweepRadiance(dir, roughness) + boxRadiance(dir, roughness);
+  return sweepRadiance(dir, roughness) + softPeak(boxRadiance(dir, roughness) + ringRadiance(dir, roughness));
+}
+
+/**
+ * Where, round the lens, the table's cards stand (bearings in the eye's frame, radians from the
+ * right, negative below): low on the left and low on the right.
+ */
+export const CARDS: readonly number[] = [(-150 * Math.PI) / 180, (-30 * Math.PI) / 180];
+
+/** How much a direction below the lens lies toward a card (0…1). */
+export function cardMask(d: Vec3): number {
+  const side = Math.hypot(d[0], d[1]);
+  if (!(side > 1e-6)) return 0;
+  let m = 0;
+  for (const a of CARDS) m = Math.max(m, smoothstep(0.55, 0.85, (d[0] * Math.cos(a) + d[1] * Math.sin(a)) / side));
+  return m;
+}
+
+/** The rings alone (the shader's `rings()`): each a gradient band at its angle from the lens, widened and dimmed by roughness. */
+export function ringRadiance(dir: Vec3, roughness: number): number {
+  const d = unit(dir);
+  const r = Number.isFinite(roughness) ? Math.min(1, Math.max(0, roughness)) : 0;
+  const theta = Math.acos(Math.min(1, Math.max(-1, d[2])));
+  const side = Math.hypot(d[0], d[1]);
+  const up = side > 1e-6 ? d[1] / side : 0;
+  let light = 0;
+  for (const g of RINGS) {
+    const grow = 1.6 * r * r;
+    const e = g.edge + grow;
+    const gain = g.half / (g.half + grow);
+    const off = Math.abs(theta - g.angle);
+    const t = Math.min(1, off / (g.half + e));
+    const az = 1 - g.below * Math.max(0, -up) * (1 - cardMask(d));
+    light += g.intensity * gain * az * (1 - smoothstep(g.half - e, g.half + e, off)) * (1 - 0.6 * t * t);
+  }
+  return light;
 }
 
 /** The sweep alone (the shader's `sweep()`). */
@@ -376,7 +452,7 @@ export function acesFilm(x: number): number {
  * per-channel curve is mixed back so the hottest glints still burn toward white. Metal only: the
  * stones keep the per-channel curve and their look.
  */
-export const HUE_KEEP = { white: 0.22 } as const;
+export const HUE_KEEP = { white: 0.12 } as const;
 
 /** The hue-keeping tone curve (the shader's `finish()` for metal), linear light in, 0…1 out. */
 export function toneKeepHue(c: Vec3, white: number = HUE_KEEP.white): Vec3 {
@@ -394,16 +470,23 @@ export function toneKeepHue(c: Vec3, white: number = HUE_KEEP.white): Vec3 {
  * how coloured the alloy is (its saturation), so the white metals are left as they are. The shader
  * does the same per pixel.
  */
-export function deepTint(f0: Vec3): Vec3 {
+export function deepTint(f0: Vec3, power: number = DEEP_POWER): Vec3 {
   const hi = Math.max(f0[0], f0[1], f0[2]);
   const lo = Math.min(f0[0], f0[1], f0[2]);
   if (!(hi > 0) || !Number.isFinite(hi) || !Number.isFinite(lo)) return [0, 0, 0];
-  const p = 1 + DEEP_POWER * smoothstep(0.2, 0.55, (hi - lo) / hi);
+  const p = 1 + power * smoothstep(0.2, 0.55, (hi - lo) / hi);
   return f0.map((x) => hi * Math.pow(Math.max(0, x) / hi, p)) as unknown as Vec3;
 }
 
 /** How much deeper a fully coloured alloy's shadows are (the extra power `deepTint` raises it to). */
 export const DEEP_POWER = 0.9;
+
+/**
+ * How much deeper a coloured alloy is where it mirrors a strip (the `deepTint` power there): a
+ * polished gold's highlight in a photograph stays a rich yellow, its light having bounced off gold
+ * more than once. The white metals are left as they are.
+ */
+export const STRIP_DEEP = 0.6;
 
 /** The exposure the realistic shader multiplies by before the tone curve. */
 export const EXPOSURE = 0.85;

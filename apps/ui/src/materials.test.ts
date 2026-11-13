@@ -8,6 +8,11 @@ import {
   acesFilm,
   boxRadiance,
   boxSpread,
+  cardMask,
+  LIGHT_PEAK,
+  ringRadiance,
+  RINGS,
+  softPeak,
   channelIors,
   contactShadow,
   deepTint,
@@ -119,8 +124,9 @@ describe("the materials", () => {
 
 describe("the studio", () => {
   test("a box seen square on is bright, a gap between boxes is the dim sweep", () => {
-    for (const b of STUDIO) expect(studioRadiance(b.dir, 0)).toBeGreaterThan(b.intensity * 0.9);
-    expect(studioRadiance([0, -1, 0], 0)).toBeCloseTo(SWEEP.floor, 6);
+    // The boxes and rings together are eased toward LIGHT_PEAK, so a box reads as its eased brightness.
+    for (const b of STUDIO) expect(studioRadiance(b.dir, 0)).toBeGreaterThan(softPeak(b.intensity) * 0.9);
+    expect(studioRadiance([0, -1, 0], 0)).toBeCloseTo(SWEEP.floor, 2);
     // Straight back toward the viewer, between the boxes.
     expect(studioRadiance([0, 0, 1], 0)).toBeLessThan(0.5);
   });
@@ -136,31 +142,60 @@ describe("the studio", () => {
     }
   });
 
-  test("a face turned to the camera mirrors a bright strip above the lens and the dark of the camera below it", () => {
-    // The mirror direction of a face turned straight at the camera is back toward the eye (+z).
-    const strip = studioRadiance([0, 0.149, 0.989], 0);
+  const ringAt = (theta: number, bearing = Math.PI / 2): Vec3 => [Math.sin(theta) * Math.cos(bearing), Math.sin(theta) * Math.sin(bearing), Math.cos(theta)];
+
+  test("a face turned to the camera mirrors a bright ring round the lens and the dark of the lens inside it", () => {
+    const first = RINGS[0];
+    expect(first).toBeDefined();
+    if (!first) return;
+    const ring = studioRadiance(ringAt(first.angle), 0);
     const lens = studioRadiance([0, 0, 1], 0);
-    const card = studioRadiance([0, -0.215, 0.977], 0);
-    expect(strip).toBeGreaterThan(3);
-    expect(card).toBeGreaterThan(1);
-    expect(lens).toBeLessThan(strip / 8);
-    expect(lens).toBeLessThan(card / 2);
-    // Across the view the strip holds: a face turned a little left or right still catches it.
-    for (const x of [-0.5, -0.2, 0.2, 0.5]) expect(studioRadiance([x, 0.149, 0.989], 0)).toBeGreaterThan(2);
+    expect(ring).toBeGreaterThan(1.5);
+    expect(lens).toBeLessThan(ring / 8);
+    // A ring goes all the way round above the lens: turned left, right or up, a face still catches it.
+    for (const bearing of [0, Math.PI / 4, (3 * Math.PI) / 4, Math.PI]) expect(ringRadiance(ringAt(first.angle, bearing), 0)).toBeGreaterThan(first.intensity * 0.9);
   });
 
-  test("a gradient strip is brightest along its middle and fades toward its long edges", () => {
-    const front = STUDIO.find((b) => b.grad > 0.5 && b.dir[2] > 0.9 && b.dir[1] > 0);
-    expect(front).toBeDefined();
-    if (!front) return;
-    const up: Vec3 = [0, 1, 0];
-    const at = (k: number): number => boxRadiance([front.dir[0] + up[0] * k, front.dir[1] + up[1] * k, front.dir[2] + up[2] * k], 0);
-    expect(at(0)).toBeGreaterThan(at(0.04));
-    expect(at(0.04)).toBeGreaterThan(at(0.08));
+  test("below the lens a ring shows only where a card stands, so straight down stays dark", () => {
+    const first = RINGS[0];
+    if (!first) return;
+    const down = ringRadiance(ringAt(first.angle, -Math.PI / 2), 0);
+    const left = ringRadiance(ringAt(first.angle, (-150 * Math.PI) / 180), 0);
+    expect(cardMask(ringAt(first.angle, -Math.PI / 2))).toBe(0);
+    expect(cardMask(ringAt(first.angle, (-150 * Math.PI) / 180))).toBeCloseTo(1, 6);
+    expect(left).toBeGreaterThan(first.intensity * 0.9);
+    expect(down).toBeLessThan(left * 0.25);
+  });
+
+  test("a ring is brightest along its middle and fades toward its edges, with a dark gap before the next", () => {
+    for (const g of RINGS) {
+      const at = (k: number): number => ringRadiance(ringAt(g.angle + k), 0);
+      expect(at(0)).toBeGreaterThan(at(g.half * 0.5));
+      expect(at(g.half * 0.5)).toBeGreaterThan(at(g.half * 0.9));
+    }
+    // Between the close front rings there is dark: a flat face's small patch always holds both.
+    const [r0, r1] = RINGS;
+    if (!r0 || !r1) return;
+    expect(ringRadiance(ringAt((r0.angle + r1.angle) / 2), 0)).toBeLessThan(0.1);
+  });
+
+  test("whatever way a flat face is turned, the patch of tent it mirrors (some 12° across) holds light and dark", () => {
+    // Any patch ending before the back rings (where broad soft rings take over) contains a ring and a gap.
+    for (let theta = 0.15; theta < 1.5; theta += 0.02) {
+      const samples = [0, 0.05, 0.1, 0.15, 0.2].map((k) => ringRadiance(ringAt(theta + k, Math.PI / 3), 0));
+      expect(Math.max(...samples) - Math.min(...samples)).toBeGreaterThan(0.4);
+    }
+  });
+
+  test("the eased peak keeps the order of lights and never passes its ceiling", () => {
+    expect(softPeak(0)).toBe(0);
+    expect(softPeak(1)).toBeLessThan(softPeak(2));
+    expect(softPeak(1e9)).toBeLessThanOrEqual(LIGHT_PEAK);
+    expect(softPeak(NaN)).toBe(0);
   });
 
   test("a rough metal sees the strip wider and dimmer", () => {
-    const peak = (r: number): number => studioRadiance([0, 0.149, 0.989], r);
+    const peak = (r: number): number => ringRadiance([0, Math.sin(RINGS[0]?.angle ?? 0.2), Math.cos(RINGS[0]?.angle ?? 0.2)], r);
     // Well above the strip a polished face sees none of it, a rough one its spread glow.
     const off = (r: number): number => boxRadiance([0, 0.6, 0.8], r);
     expect(peak(0.5)).toBeLessThan(peak(0));
