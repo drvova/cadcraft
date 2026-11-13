@@ -44,6 +44,7 @@ import { BenchPanel } from "./components/BenchPanel";
 import { ObjectsPanel } from "./components/ObjectsPanel";
 import { OBJECTS_LIMIT, parseObjects, type ObjectList } from "./objects";
 import { PiecePanel } from "./components/PiecePanel";
+import { StartSurface } from "./components/StartSurface";
 import { NO_CHOICES, NO_PIECE, parsePieceReply, readPieceChoices, type PieceChoices, type PieceState } from "./piece";
 import { InlineAsk } from "./components/InlineAsk";
 import { parseBench, type BenchSheet } from "./bench";
@@ -1440,6 +1441,10 @@ export function App(props: AppProps): JSX.Element {
         onBeforeQuery={tellView}
         onCursor={setCursor}
       />
+      {/* An empty drawing in model space, nothing running: a quiet way in. Gone once anything is drawn. */}
+      <Show when={drawing() !== null && (drawing()?.entityCount ?? 0) === 0 && !stage3d() && space().toLowerCase() === "model" && prompt().running === null}>
+        <StartSurface onPiece={(kind) => onPieceRun({ kind })} onTemplates={() => setShowTemplates(true)} onOpen={() => onInvoke("open")} onAsk={() => onInvoke("ui.assistant.ask")} />
+      </Show>
       {/* Over the drawing, which stays mounted under it at its own view. */}
       <Show when={stage3d()}>
         <Viewport3D execute={(command, params) => props.facade.execute(command, params)} revision={drawing()?.revision ?? 0} onNotice={setNotice} />

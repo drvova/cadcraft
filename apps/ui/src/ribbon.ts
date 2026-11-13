@@ -80,6 +80,7 @@ const RING_SIZES = tool("ringsizes", "ringsizes", "Ring Sizes");
 const GEM_FIT = tool("gemfit", "gemfit", "Gem Fit");
 const TECH_SHEET = tool("techsheet", "techsheet", "Tech Sheet", "BOM");
 const BENCH = tool("bench", "ui.panel.bench", "Bench Sheet");
+const TEMPLATES = tool("ui.dialog.templates", "ui.dialog.templates", "Templates");
 
 const TEXT = tool("text", "mtext", "Multiline Text", "T", "", "Text");
 const LEADER = tool("mleader", "mleader", "Multileader", "MLD", "", "Leader");
@@ -123,6 +124,7 @@ export const RIBBON: readonly RibbonTab[] = [
     groups: [
       // The blank, a stone, the metal that holds it, and melee. A piece built whole belongs here
       // when the engine has its command.
+      { name: "Start", tools: [TEMPLATES] },
       { name: "Build", tools: [RING, GEM, SETTING, PAVE] },
       { name: "Check", tools: [RING_SIZES, GEM_FIT] },
       { name: "Bench", tools: [TECH_SHEET, BENCH] },

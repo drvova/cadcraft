@@ -362,6 +362,11 @@ export function ToolStrip(props: ToolStripProps): JSX.Element {
             <For each={RIBBON}>
               {(entry) => (
                 <Tab size="sm" id={tabId(entry.id)} controls={panelId} selected={tabKey() === entry.id} tabIndex={tabKey() === entry.id ? 0 : -1} onClick={(event) => pick(entry.id, event)}>
+                  <Show when={entry.id === "jewelry"}>
+                    <span class="ribbon-tab-mark" aria-hidden="true">
+                      <ToolIcon id="gem" />
+                    </span>
+                  </Show>
                   {entry.label}
                 </Tab>
               )}

@@ -24,7 +24,7 @@ describe("the toolbar table", () => {
     expect(entries).toEqual([...RIBBON_TOOLS]);
     expect(RIBBON.map((tab) => [tab.label, ...tab.groups.map((group) => `${group.name}: ${group.tools.map((e) => e.id).join(" ")}`)])).toEqual([
       ["Home", "File: new open qsave plot", "History: u redo", "Draw: line pline circle arc rectang", "Modify: move copy rotate trim erase", "Zoom: zoom.extents zoom.window pan"],
-      ["Jewelry", "Build: ring gem setting pave", "Check: ringsizes gemfit", "Bench: techsheet ui.panel.bench"],
+      ["Jewelry", "Start: ui.dialog.templates", "Build: ring gem setting pave", "Check: ringsizes gemfit", "Bench: techsheet ui.panel.bench"],
       ["Draw", "Lines: line pline rectang polygon", "Curves: circle arc ellipse spline", "Fill: hatch"],
       ["Modify", "Place: move copy rotate mirror scale", "Shape: offset trim extend fillet chamfer", "Remove: erase"],
       ["Annotate", "Notes: mtext mleader table", "Dimension: dimlinear dimaligned dimradius dimangular", "Measure: dist", "Fill: hatch"],

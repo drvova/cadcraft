@@ -224,3 +224,15 @@
     gap: var(--gap-6);
   }
 }
+
+/* The Jewelry tab carries a small stone before its name, in the accent ink, so the jeweller's own
+   tools are found at a glance among the drafting tabs. The mark is decoration (aria-hidden). */
+.ribbon-tab-mark {
+  display: inline-flex;
+  margin-inline-end: var(--gap-4);
+  color: var(--text-accent);
+}
+.ribbon-tab-mark .tool-icon {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+}

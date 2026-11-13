@@ -942,3 +942,16 @@ notice first. Local styles only; no token, component or wording changed.
   centre; it is drawn 13 units across (was 14) with the small plus kept full size, so the plus
   still reads as a plus at 14 px. Checked as 4x crops at 2x in both themes; the ribbon's glyphs
   (held to the 16 px pixel grid by `icons.test.ts`) are unchanged.
+
+## The chrome pass (2026-11-13)
+
+- **An empty drawing invites a start.** A new drawing showed a bare grid; the only way in was the
+  Piece section in the rail. A quiet card now sits over empty model space (`StartSurface.tsx`):
+  the four piece kinds (the `piece` command, as the rail runs it), Templates..., Open a file... and
+  Ask the assistant, all existing commands. It shows only while the drawing has no entities, the
+  view is model space and no command runs; the layer passes the pointer through, only the card
+  takes it. Colours are existing tokens (`--surface-elevated`, `--border-soft`, `--text-dim`).
+- **The Jewelry tab is marked and opens with a way in.** The tab carries the stone glyph in
+  `--text-accent` (decoration, `aria-hidden`); its band leads with a Start group holding Templates
+  (`ui.dialog.templates`, a new code-drawn four-sheet glyph on the strip pixel grid). Wording
+  added: "Start", "Templates" as a tool label.

@@ -691,3 +691,45 @@
 .status-selection {
   font-variant-numeric: tabular-nums;
 }
+
+/* The start surface over an empty drawing (StartSurface.tsx). The layer passes the pointer
+   through to the drawing; only the card takes it. */
+.start-surface {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  padding: var(--gap-16);
+}
+.start-card {
+  pointer-events: auto;
+  max-width: var(--assistant-width);
+  padding: var(--gap-16);
+  background: var(--surface-elevated);
+  border: var(--hairline) solid var(--border-soft);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-popover);
+  display: grid;
+  gap: var(--gap-8);
+}
+.start-title {
+  margin: 0;
+  font-size: var(--font-body);
+  font-weight: 600;
+  color: var(--text);
+}
+.start-lede {
+  margin: 0;
+  font-size: var(--font-small);
+  color: var(--text-dim);
+}
+.start-kinds,
+.start-more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-4);
+}
+.start-more {
+  margin-inline-start: calc(-1 * var(--button-pad-x));
+}

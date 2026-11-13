@@ -130,6 +130,8 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
   /** A sheet with a stone drawn at its head and the rows of its list: the tech sheet. */
   techsheet: "M5.25 3.75h13.5v16.5H5.25z M9.75 6a2.25 2.25 0 1 0 0 4.5a2.25 2.25 0 1 0 0-4.5 M14.25 8.25h1.5 M8.25 14.25h7.5 M8.25 17.25h7.5",
   /** A balance, a pan for the stones and a pan for the metal: the bench sheet's weights. */
+  /** Four sheets in a grid: a gallery of pieces to start from. */
+  "ui.dialog.templates": "M3.75 3.75h7.5v7.5h-7.5z M12.75 3.75h7.5v7.5h-7.5z M3.75 12.75h7.5v7.5h-7.5z M12.75 12.75h7.5v7.5h-7.5z",
   bench: "M12.75 3.75v16.5 M9.75 20.25h6 M6.25 6.75h13 M6.25 6.75l-2.5 6a2.5 2.5 0 0 0 5 0z M19.25 6.75l-2.5 6a2.5 2.5 0 0 0 5 0z",
   /** Two tracks with a knob on each: the properties inspector. */
   properties: "M4 8h9 M17 8h3 M15 6a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M4 16h3 M11 16h9 M9 14a2 2 0 1 0 0 4a2 2 0 1 0 0-4",
