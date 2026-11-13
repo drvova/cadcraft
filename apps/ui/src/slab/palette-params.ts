@@ -25,7 +25,6 @@ export interface PaletteRowParam {
   /** The command's id (capped, unique): the row keeps its key, and so its state, while the list changes under it. */
   key: string;
   path: string;
-  placed: boolean;
   /** "recently used" or "other commands", where the two groups of an empty query start. */
   tag: string;
   tagged: boolean;
@@ -119,7 +118,6 @@ export function paletteRows(matches: readonly PaletteMatch[], recentCount: numbe
     rows.push({
       key: rowKey(item.id, index, seen),
       path,
-      placed: path !== "",
       tag,
       tagged: tag !== "",
       tag2: off ? "not available" : "",

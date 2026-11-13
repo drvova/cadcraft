@@ -51,41 +51,35 @@ def Cap(k="") {
 }
 
 // One command: its label (the matched letters lit), where the menu keeps it, and at the end the
-// tags, the name typed at the command line and the shortcut. The path gives way first, then the
-// label; the trailing column keeps its width (a grid's hug column is measured before its fill).
-def PaletteRow(path="", placed=false, tag="", tagged=false, tag2="", tagged2=false, \
+// tags, the name typed at the command line and the shortcut. One flat row (every node of a row is
+// laid out, painted and mirrored again in every frame): the path takes what the label and the
+// trailing parts leave, and is cut first; then the trailing parts, then the label (a row's parts
+// are measured in reading order).
+def PaletteRow(path="", tag="", tagged=false, tag2="", tagged2=false, \
                name="", named=false, shortcut="", keyed=false, off=false, runs=list(PaletteRun)) export {
-  row w=fill h=size.control-h-row pad=0,space.g4 radius=radius.card align=center color=color.text-dim inert {
+  row w=fill h=size.control-h-row pad=0,space.g8,0,space.g4 gap=space.g8 radius=radius.card align=center color=color.text-dim inert {
     when lit { bg=color.fill-active color=color.text }
     when off { color=color.text-disabled }
-    grid w=fill cols=fill,hug {
-      row w=fill h=size.control-h-row align=center {
-        para h=hug nowrap ellipsis pad=0,space.g4 style=text.body color=color.text {
-          when off { color=color.text-disabled }
-          each runs
-        }
-        when placed {
-          text path w=fill pad=0,0,0,space.g4 style=text.label color=color.text-faint nowrap ellipsis {
-            when off { color=color.text-disabled }
-          }
-        }
+    para h=hug nowrap ellipsis pad=0,0,0,space.g4 style=text.body color=color.text {
+      when off { color=color.text-disabled }
+      each runs
+    }
+    text path w=fill pad=0,space.g4,0,0 style=text.label color=color.text-faint nowrap ellipsis {
+      when off { color=color.text-disabled }
+    }
+    when tagged {
+      text tag style=text.chip color=color.text-faint nowrap
+    }
+    when tagged2 {
+      text tag2 style=text.chip color=color.text-faint nowrap
+    }
+    when named {
+      text name style=text.mono color=color.text-faint nowrap ellipsis {
+        when off { color=color.text-disabled }
       }
-      row w=hug h=size.control-h-row pad=0,space.g4,0,space.g12 gap=space.g8 align=center {
-        when tagged {
-          text tag style=text.chip color=color.text-faint nowrap
-        }
-        when tagged2 {
-          text tag2 style=text.chip color=color.text-faint nowrap
-        }
-        when named {
-          text name style=text.mono color=color.text-faint nowrap ellipsis {
-            when off { color=color.text-disabled }
-          }
-        }
-        when keyed {
-          Cap k=shortcut
-        }
-      }
+    }
+    when keyed {
+      Cap k=shortcut
     }
   }
 }
@@ -112,7 +106,7 @@ col #box w=fill bg=color.surface-elevated {
   col #body w=fill {
     col #list w=fill max-h=param.list_max pad=space.g4 scroll scrollbar=auto scrollbar-fg=color.scrollbar scrollbar-bg=none {
       when !filled { max-h=0 pad=0 }
-      each param.rows key=rows virtual item-extent=22 overscan=8
+      each param.rows key=rows virtual item-extent=22 overscan=2
     }
     when !filled {
       col #empty w=fill pad=space.g4 {

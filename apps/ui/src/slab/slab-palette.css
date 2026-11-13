@@ -22,3 +22,10 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* An option's parts are laid out as a SolidJS row's are (flex items, the trail an inline flex),
+   so its accessible name is worded the same: one part, a space, the next. */
+.slab-palette-option,
+.slab-palette-trail {
+  display: flex;
+}

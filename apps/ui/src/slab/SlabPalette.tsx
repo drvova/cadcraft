@@ -36,13 +36,13 @@
  * rather than a frame later (the driver measures a surface when it is connected).
  */
 
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, Index, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { isMacPlatform, shortcutLabel } from "../commands";
 import { ToolIcon } from "../icons";
 import { rowName } from "../palette";
 import { createPaletteModel, paletteOptionId as optionId, type CommandPaletteProps } from "../palette-model";
 import { Field } from "../ui/Field";
-import { followOffset, listHeight, listMax, mirrorWindow, NARROW_MAX, pageRows, paletteRows, PALETTE_SCALARS, rowAt, type PaletteParams } from "./palette-params";
+import { followOffset, listHeight, listMax, mirrorWindow, NARROW_MAX, pageRows, paletteRows, PALETTE_SCALARS, ROW_H, rowAt, type PaletteParams } from "./palette-params";
 import { isSlabControlHost, type SlabControlHost } from "./scene";
 import { attachSurface } from "./surface";
 import "../palette.css";
@@ -76,7 +76,7 @@ export function SlabPalette(props: CommandPaletteProps): JSX.Element {
 
   const max = createMemo(() => listMax(win().h));
   /** How tall the list is now: the room its rows take, up to the cap. */
-  const viewport = (): number => listHeight(model.matches().length, max());
+  const viewport = (): number => listHeight(model.rows().length, max());
 
   /**
    * Whether the list has been laid out. The kernel at the pinned commit traps when a scroll is
@@ -95,7 +95,7 @@ export function SlabPalette(props: CommandPaletteProps): JSX.Element {
   });
   const { query, active, matches, recentCount, current, status } = model;
 
-  const rows = createMemo(() => paletteRows(matches(), recentCount(), (shortcut) => shortcutLabel(shortcut, mac)));
+  const rows = createMemo(() => paletteRows(model.rows(), recentCount(), (shortcut) => shortcutLabel(shortcut, mac)));
   const params = createMemo(
     (): PaletteParams => ({
       rows: rows(),
@@ -160,27 +160,42 @@ export function SlabPalette(props: CommandPaletteProps): JSX.Element {
       setLit(row?.key ?? null);
     });
 
-    // The lit row stays in view as the keys move it, with a row of context past it.
+    // The lit row stays in view as the keys move it, with a row of context past it. The offset is
+    // said again after the frame that lays out rows the move drew (End, a page past the drawn
+    // ones): the kernel holds an offset to what was laid out when it is set.
+    let following = false;
+    const follow = (): void => {
+      scrollTo(followOffset(scrollOf(), active(), model.rows().length, viewport()));
+    };
     createEffect(
-      on(active, (index) => {
+      on(active, () => {
         if (!model.follows()) return;
-        scrollTo(followOffset(scrollOf(), index, matches().length, viewport()));
+        follow();
+        following = true;
       }),
     );
 
     const onFrame = (): void => {
       if (!solved) {
         solved = host.sceneSnapshot().some((node) => node.key === LIST);
-        if (solved) scrollTo(followOffset(0, active(), matches().length, viewport()));
+        if (solved) follow();
+      }
+      if (following) {
+        following = false;
+        if (model.follows()) follow();
       }
       if (litPending && lit !== null) setLit(lit);
+      // Near the end of what is drawn (the wheel or the scrollbar took the list there), draw the
+      // next screenful, as the SolidJS list does.
+      const drawn = model.rows().length;
+      if (drawn < matches().length && scrollOf() + viewport() * 2 >= drawn * ROW_H) model.more();
     };
     host.addEventListener("slab-frame", onFrame);
 
     /** The row under a pointer event; -1 when it is over none. */
     const rowOf = (event: PointerEvent | MouseEvent): number => {
       const box = host.getBoundingClientRect();
-      return rowAt(event.clientX - box.left, event.clientY - box.top, scrollOf(), box.width, viewport(), matches().length);
+      return rowAt(event.clientX - box.left, event.clientY - box.top, scrollOf(), box.width, viewport(), model.rows().length);
     };
     const onPointerMove = (event: PointerEvent): void => {
       const index = rowOf(event);
@@ -261,33 +276,33 @@ export function SlabPalette(props: CommandPaletteProps): JSX.Element {
         </div>
         <cadcraft-palette ref={element} class="slab-palette-surface" aria-hidden="true" />
         <div class="slab-palette-sr" id="palette-list" role="listbox" aria-label="Commands">
-          <For each={mirror()}>
+          <Index each={mirror()}>
             {(entry) => (
-              <div role="option" id={optionId(entry.index)} aria-selected={entry.index === active()} aria-disabled={entry.match.item.enabled ? undefined : "true"} aria-posinset={entry.index + 1} aria-setsize={matches().length}>
-                <span>{entry.match.item.label}</span>
-                <Show when={entry.match.item.path !== ""}>
-                  <span>{entry.match.item.path}</span>
+              <div class="slab-palette-option" role="option" id={optionId(entry().index)} aria-selected={entry().index === active()} aria-disabled={entry().match.item.enabled ? undefined : "true"} aria-posinset={entry().index + 1} aria-setsize={matches().length}>
+                <span>{entry().match.item.label}</span>
+                <Show when={entry().match.item.path !== ""}>
+                  <span>{entry().match.item.path}</span>
                 </Show>
-                <span>
-                  <Show when={recentCount() > 0 && entry.index === 0}>
+                <span class="slab-palette-trail">
+                  <Show when={recentCount() > 0 && entry().index === 0}>
                     <span>recently used</span>
                   </Show>
-                  <Show when={recentCount() > 0 && entry.index === recentCount()}>
+                  <Show when={recentCount() > 0 && entry().index === recentCount()}>
                     <span>other commands</span>
                   </Show>
-                  <Show when={!entry.match.item.enabled}>
+                  <Show when={!entry().match.item.enabled}>
                     <span>not available</span>
                   </Show>
-                  <Show when={rowName(entry.match) !== ""}>
-                    <span>{rowName(entry.match)}</span>
+                  <Show when={rowName(entry().match) !== ""}>
+                    <span>{rowName(entry().match)}</span>
                   </Show>
-                  <Show when={entry.match.item.shortcut !== ""}>
-                    <kbd>{shortcutLabel(entry.match.item.shortcut, mac)}</kbd>
+                  <Show when={entry().match.item.shortcut !== ""}>
+                    <kbd>{shortcutLabel(entry().match.item.shortcut, mac)}</kbd>
                   </Show>
                 </span>
               </div>
             )}
-          </For>
+          </Index>
           <Show when={props.open() && matches().length === 0}>
             <div>
               No command matches {query().trim()}. Try fewer letters, the menu it lives in (Draw, Modify, Dimension), or the name you would type at the command line.
