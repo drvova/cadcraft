@@ -77,18 +77,7 @@ sha256() {
 # it is built before cargo: the wasm facade, then the site. Extra arguments go to `vite build`.
 build_interface() {
   command -v bun >/dev/null || { echo "error: bun not found (https://bun.sh); the interface in apps/ui needs it" >&2; exit 1; }
-  (cd "$ROOT/apps/ui" && bun install --frozen-lockfile && bun run build:wasm && build_slab && bun run typecheck && bun x vite build "$@")
-  # The Slab shell is the default, and a build made without its artifacts is the standard shell
-  # with nothing said: a package must not be that by accident.
-  compgen -G "$ROOT/apps/ui/dist/assets/slab-runtime-*.js" >/dev/null || { echo "error: apps/ui/dist holds no Slab runtime; the package would ship the standard shell" >&2; exit 1; }
+  (cd "$ROOT/apps/ui" && bun install --frozen-lockfile && bun run build:wasm && bun run typecheck && bun x vite build "$@")
   return
 }
 
-# The Slab toolchain the default shell runs on (apps/ui/docs/slab-foundation.md): built from source
-# at the commit third_party/slab/SLAB.lock pins, never committed. Built only when what is there
-# does not match apps/ui/slab.lock.json; what was built must match it, or the package stops.
-# Needs git, rustup (Slab pins its own nightly) and the network. Run from apps/ui.
-build_slab() {
-  bun run slab:verify >/dev/null 2>&1 && { bun run slab:docs; return; }
-  bun run build:slab && bun run slab:verify
-}

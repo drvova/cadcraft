@@ -63,15 +63,7 @@ if (-not $SkipBuild) {
   try {
     Invoke-Native 'bun install' { bun install --frozen-lockfile }
     Invoke-Native 'bun run build:wasm' { bun run build:wasm }
-    # The Slab toolchain the default shell runs on (apps/ui/docs/slab-foundation.md): built from
-    # source at the pinned commit, never committed; what was built must match apps/ui/slab.lock.json.
-    Invoke-Native 'bun run build:slab' { bun run build:slab }
-    Invoke-Native 'bun run slab:verify' { bun run slab:verify }
     Invoke-Native 'bun run build' { bun run build }
-    # A build made without the artifacts is the standard shell with nothing said.
-    if (-not (Get-ChildItem -Path 'dist\assets' -Filter 'slab-runtime-*.js' -ErrorAction SilentlyContinue)) {
-      throw 'apps/ui/dist holds no Slab runtime; the package would ship the standard shell'
-    }
   } finally { Pop-Location }
   # Static CRT: no VC++ redistributable needed. Scoped to the target so host build scripts and
   # proc-macros are unaffected.
