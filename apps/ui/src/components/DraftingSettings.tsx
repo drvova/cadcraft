@@ -17,29 +17,10 @@
  * asked for its own page.
  */
 
-import { createEffect, createMemo, createSignal, For, on, Show, type JSX } from "solid-js";
+import { For, Show, type JSX } from "solid-js";
 import { SNAP_MARKER_HALF, SNAP_MARKER_WIDTH, snapGlyph } from "../canvas";
-import {
-  formOf,
-  OSNAP_ALL,
-  OSNAP_MODES,
-  planCalls,
-  POLAR_ANGLES,
-  POLAR_CUSTOM,
-  readEngine,
-  readState,
-  runCalls,
-  snapShapePath,
-  tabOf,
-  unapplied,
-  type DraftingEngine,
-  type DraftingErrors,
-  type DraftingField,
-  type DraftingForm,
-  type DraftingState,
-  type DraftingTab,
-  type DraftingVar,
-} from "../drafting";
+import { OSNAP_ALL, OSNAP_MODES, POLAR_ANGLES, POLAR_CUSTOM, snapShapePath, type DraftingEngine, type DraftingField, type DraftingForm, type DraftingTab, type DraftingVar } from "../drafting";
+import { createDraftingEdit } from "../drafting-edit";
 import { Button } from "../ui/Button";
 import { Checkbox } from "../ui/Checkbox";
 import { Dialog } from "../ui/Dialog";
@@ -81,81 +62,9 @@ function SnapGlyph(props: { bit: number }): JSX.Element {
   );
 }
 
-/** How many of something, in words: "1 value", "3 values". */
-const count = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
-
 export function DraftingSettings(props: DraftingSettingsProps): JSX.Element {
-  const [state, setState] = createSignal<DraftingState>(readState({}, {}));
-  const [form, setForm] = createSignal<DraftingForm>(formOf(state()));
-  const [errors, setErrors] = createSignal<DraftingErrors>({});
-  const [summary, setSummary] = createSignal("");
-  const [tab, setTab] = createSignal<DraftingTab>("snap-grid");
   let body: HTMLDivElement | undefined;
-
-  // Every opening starts from the engine: what was typed and left in a dialog that was cancelled is gone.
-  createEffect(
-    on(
-      () => props.open,
-      (open) => {
-        if (!open) return;
-        const held = readEngine(props.facade);
-        setState(held);
-        setForm(formOf(held));
-        setErrors({});
-        setSummary("");
-        setTab(props.tab ?? "snap-grid");
-      },
-    ),
-  );
-
-  /** Change the form; a field that was marked is no longer, once it is edited. */
-  const edit = (patch: Partial<DraftingForm>, ...fields: DraftingField[]): void => {
-    setForm((held) => ({ ...held, ...patch }));
-    if (fields.some((field) => errors()[field] !== undefined)) {
-      setErrors((held) => {
-        const next = { ...held };
-        for (const field of fields) delete next[field];
-        return next;
-      });
-    }
-  };
-
-  const untouched = createMemo(() => JSON.stringify(form()) === JSON.stringify(formOf(state())));
-  const missing = (name: DraftingVar): boolean => state().missing.includes(name);
-  const unusable = (name: DraftingVar): boolean => state().unusable.includes(name);
-
-  /** Mark the fields, bring the first marked one's page to the front and put the keyboard on it. */
-  const mark = (found: DraftingErrors, words: string): void => {
-    setErrors(found);
-    setSummary(words);
-    const first = (Object.keys(found) as DraftingField[])[0];
-    if (first === undefined) return;
-    setTab(tabOf(first));
-    queueMicrotask(() => body?.querySelector<HTMLElement>(`[aria-describedby~="${errorId(first)}"]`)?.focus());
-  };
-
-  const apply = (): void => {
-    const plan = planCalls(state(), form());
-    if (!plan.ok) {
-      mark(plan.errors, `Nothing was changed: ${count(Object.keys(plan.errors).length, "value needs", "values need")} correcting.`);
-      return;
-    }
-    if (plan.calls.length === 0) {
-      props.onClose();
-      return;
-    }
-    const refused = runCalls(props.facade, plan.calls);
-    const after = readEngine(props.facade);
-    const left: DraftingErrors = { ...unapplied(after, form()), ...refused };
-    const kept = Object.keys(left).length;
-    setState(after);
-    if (kept < plan.calls.length) props.onApplied();
-    if (kept === 0) {
-      props.onClose();
-      return;
-    }
-    mark(left, `${Math.max(0, plan.calls.length - kept)} of ${count(plan.calls.length, "change was", "changes were")} applied. The engine refused the rest: each is marked.`);
-  };
+  const { form, errors, summary, tab, setTab, edit, untouched, missing, unusable, apply } = createDraftingEdit(props, (field) => body?.querySelector<HTMLElement>(`[aria-describedby~="${errorId(field)}"]`)?.focus());
 
   /** The line under a field that says why it is marked. */
   const ErrorLine = (line: { field: DraftingField }): JSX.Element => (

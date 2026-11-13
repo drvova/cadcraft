@@ -1490,6 +1490,8 @@ export function App(props: AppProps): JSX.Element {
   const Ring = props.slab?.Ring ?? RingDialog;
   const Gem = props.slab?.Gem ?? GemDialog;
   const PriceBook = props.slab?.PriceBook ?? PriceBookDialog;
+  const Drafting = props.slab?.Drafting ?? DraftingSettings;
+  const Templates = props.slab?.Templates ?? TemplateGallery;
   const overlays = (): JSX.Element => (
     <>
       <LayerManager facade={props.facade} open={layerManager()} onClose={() => setLayerManager(false)} onChanged={refresh} />
@@ -1505,9 +1507,9 @@ export function App(props: AppProps): JSX.Element {
           readBench(drawing());
         }}
       />
-      <TemplateGallery open={showTemplates()} onClose={() => setShowTemplates(false)} execute={(command, params) => props.facade.execute(command, params)} onChoose={onTemplateChoose} />
+      <Templates open={showTemplates()} onClose={() => setShowTemplates(false)} execute={(command, params) => props.facade.execute(command, params)} onChoose={onTemplateChoose} />
       <TechSheet open={showTechSheet()} execute={(command, params) => props.facade.execute(command, params)} revision={drawing()?.revision ?? 0} onClose={() => setShowTechSheet(false)} />
-      <DraftingSettings
+      <Drafting
         facade={props.facade}
         open={drafting().open}
         tab={drafting().tab}

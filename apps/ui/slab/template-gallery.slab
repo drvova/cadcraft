@@ -1,0 +1,94 @@
+// The body of the "Start from a template" gallery: the templates by kind, each group under its
+// heading, each template a card (its 3D still, its name, its line, a refusal or a preview that
+// could not be drawn, and the key that builds it). The view only, and only the cards: the box, the
+// title bar, the footer's Close, the backdrop, Escape and the focus trap are the interface's own
+// dialog (src/ui/Dialog.tsx), and the line that says what the gallery is stands over this surface
+// in the page, where the dialog's `aria-describedby` can reach it (src/slab/SlabTemplateGallery.tsx).
+//
+// The grid: an `each` directly under `wrap` is one block, so the host lays the cards out in rows
+// of as many columns as the body holds (as `.template-grid`'s `auto-fill`), and a short last row
+// is filled with blank cards so every column keeps its width. A container's `gap` does not fall
+// between the items of an `each` (the list is one child of it), so the gaps are items too: a
+// `spacer` card between two cards, a row's `lead` over it. Every string, number and boolean is
+// shaped in TypeScript (src/slab/template-gallery-params.ts).
+//
+// The still is the PNG the 3D stage drew (src/template-gallery-edit.ts), registered with the
+// surface as a runtime image under the name the card's `thumb` gives; until it is drawn, and when
+// it cannot be, the card shows a drawn ring from the tokens (as `PlaceholderRing`).
+//
+// The keyboard (src/slab/modal.tsx): every card's key is a Tab stop, in reading order; Enter and
+// Space press it. Measures follow src/templates.css and src/ui/ui.css (.ui-button--sm).
+import "gen/tokens.slab"
+
+// The placeholder ring, on the 100 box of `PlaceholderRing`: a band, and a stone over it.
+icon ring-plain viewbox=100 {
+  path "M24 56a26 26 0 1 0 52 0a26 26 0 1 0 -52 0" bg=none stroke=color.canvas-grip-hover stroke-w=7
+}
+
+icon ring-stoned viewbox=100 {
+  path "M24 56a26 26 0 1 0 52 0a26 26 0 1 0 -52 0" bg=none stroke=color.canvas-grip-hover stroke-w=7
+  path "M50 12L59 23L50 34L41 23Z" bg=color.accent
+}
+
+// One template, a blank that holds a column of a short last row, or the gap between two (`spacer`).
+// `plain` and `stoned` are the placeholder (a ring, a ring with a stone), `drawn` the still: one of the three.
+def TemplateCard(name="", blurb="", note="", said="", thumb="", thumb_h=120, ring_px=72, real=false, drawn=false, \
+                 plain=false, stoned=false, noted=false, spacer=false) export {
+  col w=fill h=fill {
+    when spacer { w=space.g12 }
+    when real {
+      col w=fill h=fill gap=space.g8 pad=space.g10 radius=radius.card bg=color.surface-inset \
+          stroke=color.border stroke-w=1 stroke-align=inside role=listitem label=name {
+        when noted { stroke=color.border-soft }
+        stack w=fill h=thumb_h radius=radius.small bg=color.canvas clip {
+          col w=fill h=fill align=center pack=center {
+            when plain { icon ring-plain size=ring_px }
+            when stoned { icon ring-stoned size=ring_px }
+          }
+          when drawn { img thumb fit=contain w=fill h=fill }
+        }
+        col w=fill h=fill gap=space.g3 {
+          text name style=text.body weight=600 color=color.text w=fill
+          text blurb style=text.label color=color.text-dim w=fill
+          when noted { text note style=text.label color=color.warn w=fill }
+        }
+        row #use w=fill h=size.control-h-input pad=space.g2,space.g6 radius=radius.control align=center pack=center \
+            bg=color.hover color=color.text act=use role=button label=said transition=dur.fast {
+          when hover { bg=color.fill-active }
+          when pressed { bg=color.fill-active }
+          when focus-visible { stroke=color.focus-ring stroke-w=2 stroke-align=outside }
+          text "Use this template" style=text.body nowrap
+        }
+      }
+    }
+  }
+}
+
+// One line of the grid.
+def CardRow(lead=0, cards=list(TemplateCard)) export {
+  col w=fill {
+    row w=fill h=lead
+    row w=fill {
+      each cards
+    }
+  }
+}
+
+// The templates of one kind, under their heading.
+def CardGroup(title="", caps="", lead=0, rows=list(CardRow)) export {
+  col w=fill {
+    row w=fill h=lead
+    text caps style=text.chip weight=700 color=color.text-faint nowrap role=heading level=2 label=title
+    col w=fill pad=space.g8,0,0,0 role="list" label=title {
+      each rows
+    }
+  }
+}
+
+params {
+  groups list(CardGroup) = []
+}
+
+col #body w=fill {
+  each param.groups
+}

@@ -19,9 +19,9 @@ Not applicable: hand-rolled — a native `<dialog>` opened with `showModal()` (`
 ## Examples
 `<Dialog open={open()} title="Rename Layout" size="sm" onClose={() => setOpen(false)} footer={…}>…</Dialog>` — one field and its two actions (`docs/system/examples/dialog/default.tsx`).
 
-Real uses, 9 call sites (`rg -c "<Dialog" src` → `src/components/DraftingSettings.tsx:1`, `src/components/JewelryDialog.tsx:2`, `src/components/LayerManager.tsx:1`):
+Real uses, 11 call sites (`rg -c "<Dialog" src` → `src/components/DraftingSettings.tsx:1`, `src/components/JewelryDialog.tsx:2`, `src/components/LayerManager.tsx:1`):
 - `src/components/JewelryDialog.tsx` — the Ring and Gem dialogs (Draw ▸ Ring, Draw ▸ Gem and the tool strip's keys): a form of the piece's numbers, a read-out of what the engine says about them, Cancel and OK in the footer; a refusal from the engine stays in the dialog beside the field it names. Added 2026-11-12.
-- `src/components/DraftingSettings.tsx:328` — Drafting Settings (`size="md"`): three pages on `TabPanels`, Cancel and OK in the footer, `dismissOnBackdrop` true only while the form is untouched, `describedBy` naming the line that says what OK did when the engine refused a value. The component is exported and not mounted yet: the shell's lines are in the coordinator's hands.
+- `src/components/DraftingSettings.tsx:237` — Drafting Settings (`size="md"`): three pages on `TabPanels`, Cancel and OK in the footer, `dismissOnBackdrop` true only while the form is untouched, `describedBy` naming the line that says what OK did when the engine refused a value. The component is exported and not mounted yet: the shell's lines are in the coordinator's hands.
 - The command palette (`src/components/CommandPalette.tsx`) stays a native `<dialog>` of its own: it has no title bar, no dimmed page and no footer, it hangs from the title bar instead of standing in the middle, and it keeps the keyboard in one field (`docs/system/decisions.md`, "A task over the page").
 
 ### Example files
@@ -338,30 +338,30 @@ Not applicable: no motion — the dialog arrives and leaves at once (`docs/syste
 - A setting is switched on or off in place. Use `Toggle` instead.
 
 ### Rules
-- `rule/dialog-mounted-open`: When a surface has a dialog, render `Dialog` once and pass `open`, rather than mounting it by a condition, because the focus goes back to its opener only while the element outlives its 1 closing, and the caller's answer to `onClose` is read from the same instance. Evidence: single use `src/components/DraftingSettings.tsx:328`. Check: lint `trap/overlay-conditional-render`.
+- `rule/dialog-mounted-open`: When a surface has a dialog, render `Dialog` once and pass `open`, rather than mounting it by a condition, because the focus goes back to its opener only while the element outlives its 1 closing, and the caller's answer to `onClose` is read from the same instance. Evidence: single use `src/components/DraftingSettings.tsx:237`. Check: lint `trap/overlay-conditional-render`.
   - Don't: `{open() && <Dialog open title="Drawing Units" onClose={close} />}`
   - Do: `<Dialog open={open()} title="Drawing Units" onClose={close} />`
 - `rule/dialog-close-answered`: When `onClose` runs, set the caller's `open` to false in it, or leave it true on purpose, because the dialog closes 0 times by itself: Escape, the close key and a press outside only ask, and an unanswered ask leaves it open. Evidence: single use `src/ui/Dialog.tsx:122`, the one function every way of closing goes through. Check: test `src/ui/Dialog.test.tsx`.
   - Don't: `<Dialog open={open()} title="Drawing Units" onClose={() => undefined} />`
   - Do: `<Dialog open={open()} title="Drawing Units" onClose={() => setOpen(false)} />`
-- `rule/dialog-primary-submit`: When a footer has a primary action, make it 1 `Button` with `type="submit"` and run the action from its `onClick`, because Enter in a single-line field presses the form's first submit button and no other, and a second submit button is never reached by the key. Evidence: single use `src/components/DraftingSettings.tsx:338`. Check: test `src/ui/Dialog.test.tsx`.
+- `rule/dialog-primary-submit`: When a footer has a primary action, make it 1 `Button` with `type="submit"` and run the action from its `onClick`, because Enter in a single-line field presses the form's first submit button and no other, and a second submit button is never reached by the key. Evidence: single use `src/components/DraftingSettings.tsx:247`. Check: test `src/ui/Dialog.test.tsx`.
   - Don't: `footer={<Button variant="primary" onClick={save}>Save</Button>}`
   - Do: `footer={<Button variant="primary" type="submit" onClick={save}>Save</Button>}`
 - `rule/dialog-initial-focus`: When typing should start somewhere other than the body's first field, pass `initialFocus` with that control's selector, because the default is the first of the 3 field kinds (`input`, `select`, `textarea`) that is showing, and the close key is never a starting point: a dialog whose first Enter closes it has lost the task. Evidence: single use `src/ui/Dialog.tsx:95`. Check: test `src/ui/Dialog.test.tsx`.
   - Don't: `<Dialog open title="Find"><Checkbox>Match case</Checkbox><Field ariaLabel="Find what" /></Dialog>`
   - Do: `<Dialog open title="Find" initialFocus="[aria-label='Find what']"><Checkbox>Match case</Checkbox><Field ariaLabel="Find what" /></Dialog>`
-- `rule/dialog-backdrop-work`: When closing would throw away what was typed, pass `dismissOnBackdrop` as false, or as a value that is false once the form is touched, because 1 press outside the box is a slip of the hand as often as a decision, and Escape and Cancel remain for the decision. Evidence: single use `src/components/DraftingSettings.tsx:333`. Check: test `src/ui/Dialog.test.tsx`.
+- `rule/dialog-backdrop-work`: When closing would throw away what was typed, pass `dismissOnBackdrop` as false, or as a value that is false once the form is touched, because 1 press outside the box is a slip of the hand as often as a decision, and Escape and Cancel remain for the decision. Evidence: single use `src/components/DraftingSettings.tsx:242`. Check: test `src/ui/Dialog.test.tsx`.
   - Don't: `<Dialog open title="Drafting Settings" onClose={close}>` around a form with typed values.
   - Do: `<Dialog open title="Drafting Settings" dismissOnBackdrop={untouched()} onClose={close}>`
-- `rule/dialog-refusal-beside-field`: When an action cannot take a value, keep the dialog open, mark the field `invalid`, tie 1 line of words to it with `describedBy` and move the focus to it, because a dialog that closes on a refused value reports nothing and one that only colours the field tells a screen reader nothing. Evidence: single use `src/components/DraftingSettings.tsx:134`. Check: review `src/components/DraftingSettings.tsx`.
+- `rule/dialog-refusal-beside-field`: When an action cannot take a value, keep the dialog open, mark the field `invalid`, tie 1 line of words to it with `describedBy` and move the focus to it, because a dialog that closes on a refused value reports nothing and one that only colours the field tells a screen reader nothing. Evidence: single use `src/drafting-edit.ts:90`. Check: review `src/drafting-edit.ts`.
   - Don't: `onClick={() => { facade.execute("setvar", { name: "POLARANG", value }); close(); }}`
   - Do: `onClick={() => { const refused = runCalls(facade, plan.calls); if (Object.keys(refused).length === 0) close(); else mark(refused); }}`
 
 ### Content
-- `rule/dialog-title-names-task`: When a title is written, use the menu item that opens the dialog less its ellipsis, in 1 to 4 words, because the row "Drafting Settings..." promised a dialog of that name and the title is what a screen reader says on opening. Evidence: single use `src/components/DraftingSettings.tsx:330`. Check: review `src/components/DraftingSettings.tsx`.
+- `rule/dialog-title-names-task`: When a title is written, use the menu item that opens the dialog less its ellipsis, in 1 to 4 words, because the row "Drafting Settings..." promised a dialog of that name and the title is what a screen reader says on opening. Evidence: single use `src/components/DraftingSettings.tsx:239`. Check: review `src/components/DraftingSettings.tsx`.
   - Don't: `<Dialog title="Please configure your drafting options">`
   - Do: `<Dialog title="Drafting Settings">`
-- `rule/dialog-action-labels`: When a footer's 2 actions are written, label the one that changes nothing "Cancel" and put the primary action last, named by its verb where the dialog does 1 thing (Rename, Delete) and "OK" where it applies a form of several settings, because one verb cannot name several settings and "OK" beside "Cancel" is the pair a drafter already reads without reading. Evidence: single use `src/components/DraftingSettings.tsx:337`. Check: review `src/components/DraftingSettings.tsx`.
+- `rule/dialog-action-labels`: When a footer's 2 actions are written, label the one that changes nothing "Cancel" and put the primary action last, named by its verb where the dialog does 1 thing (Rename, Delete) and "OK" where it applies a form of several settings, because one verb cannot name several settings and "OK" beside "Cancel" is the pair a drafter already reads without reading. Evidence: single use `src/components/DraftingSettings.tsx:246`. Check: review `src/components/DraftingSettings.tsx`.
   - Don't: `footer={<><Button variant="primary" type="submit">Yes</Button><Button>No</Button></>}`
   - Do: `footer={<><Button>Cancel</Button><Button variant="primary" type="submit">OK</Button></>}`
 

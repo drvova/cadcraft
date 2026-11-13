@@ -23,3 +23,12 @@
 .slab-dialog-hole .ui-select {
   width: 100%;
 }
+
+/* An unseen surface a body measures by (`SlabDrafting.tsx`: the tallest page): as wide as the
+   body, of no height, never painted, never reached. */
+.slab-dialog-twin {
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}

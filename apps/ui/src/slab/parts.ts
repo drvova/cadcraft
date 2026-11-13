@@ -17,6 +17,8 @@ import type { TopBarProps } from "../components/TopBar";
 import type { SlabShellProps } from "./SlabShell";
 import type { JewelryDialogProps } from "../components/JewelryDialog";
 import type { PriceBookDialogProps } from "../components/PriceBookDialog";
+import type { DraftingSettingsProps } from "../components/DraftingSettings";
+import type { TemplateGalleryProps } from "../components/TemplateGallery";
 
 /**
  * What the ribbon is given: the SolidJS strip's props, and the id of the command that is running
@@ -57,6 +59,10 @@ export interface SlabParts {
   /** The Ring and Gem dialogs (one document); absent when it did not load, and the SolidJS ones are shown. */
   Ring?: Component<JewelryDialogProps>;
   Gem?: Component<JewelryDialogProps>;
+  /** The Drafting Settings dialog; absent when its document did not load, and the SolidJS one is shown. */
+  Drafting?: Component<DraftingSettingsProps>;
+  /** The template gallery; absent when its document did not load, and the SolidJS one is shown. */
+  Templates?: Component<TemplateGalleryProps>;
   /** The ribbon; absent when its document did not load, and the SolidJS strip is shown. */
   Ribbon?: Component<RibbonProps>;
   /** The title bar; absent when its document did not load, and the SolidJS bar is shown. */

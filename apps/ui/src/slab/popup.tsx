@@ -60,6 +60,8 @@ export interface SlabPopupProps {
   onPick: (value: string, byKey: boolean) => void;
   /** The popup asks to be closed. */
   onClose: (reason: PopupDismiss) => void;
+  /** Where the list is put in the page; the body when absent. A modal dialog's own popup is put in the dialog: the page behind one is inert. */
+  mount?: () => Node | undefined;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -181,7 +183,7 @@ export function SlabPopup(props: SlabPopupProps): JSX.Element {
     // One instance per opening: a popup asked for while another is open takes its place.
     <Show when={props.popup()} keyed>
       {(popup) => (
-        <Portal>
+        <Portal mount={props.mount?.()}>
           <OpenList popup={popup} onPick={props.onPick} onClose={props.onClose} />
         </Portal>
       )}

@@ -32,6 +32,17 @@
  *   clears the scroll the kernel gave it.
  * - **The shell's keys.** A key typed in a kernel field is kept from the window (`./fields`).
  *
+ * **The keyboard convention of a body**, whatever it holds (fields, ticks, buttons, tabs, a
+ * table): every control is a Tab stop, in reading order, as in the SolidJS dialogs. A composite
+ * is one stop, and the arrows move inside it: a strip of tabs (the tab in front is the stop;
+ * Left, Right, Home and End change the page), a table (the row the keyboard is on is in the
+ * walk, cell by cell; Up and Down change the row). A body says which of the kernel's focusable
+ * nodes are not stops (`skip`) and where the arrows are let through to the kernel (`arrows`);
+ * elsewhere an arrow on a tick or a button does nothing, where the kernel alone would walk its
+ * whole ring by it. Enter and Space press the focused control (the kernel's activation); a body
+ * that wants Enter to be the dialog's primary action on a tick, as a form's implicit submission
+ * is, maps the key in its document.
+ *
  * The standard shell imports nothing from here.
  */
 
@@ -161,6 +172,20 @@ export interface ModalSurfaceOptions {
   on: (name: string, event: Event) => void;
   /** The form's value for each field, by the key of its list item. */
   values: () => ReadonlyMap<string, string>;
+  /**
+   * A focusable node (by full key) that is not a Tab stop: a tab behind the one in front (a strip
+   * of tabs is one stop), a cell of a table's row the keyboard is not on, a node that is
+   * focusable only because it holds a mapped key. Absent: every focusable node is a stop.
+   */
+  skip?: (key: string) => boolean;
+  /**
+   * Whether the arrows walk the kernel's ring from a node that is not a field (by full key).
+   * Given, an arrow on a node it answers false for never reaches the kernel's walk, so a tick or
+   * a button answers the arrows as the page's own do: not at all. A `keys=` binding of the
+   * document on an ancestor (a strip of tabs, a table's row) still hears them only where this
+   * answers true. Absent: the kernel's walk, as it was.
+   */
+  arrows?: (key: string) => boolean;
 }
 
 export interface ModalSurface {
@@ -176,6 +201,8 @@ export interface ModalSurface {
 
 /** How many solves a stop is waited for before the focus is given up (a dialog opens in two). */
 const FOCUS_TRIES = 12;
+/** The keys the kernel walks its focus ring by, besides Tab. */
+const ARROWS: ReadonlySet<string> = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
 /** How long after a Tab press a focus arriving on the surface is taken to be that press's. */
 const TAB_WINDOW_MS = 400;
 
@@ -202,6 +229,7 @@ export function attachModalSurface(host: SlabFieldHost, options: ModalSurfaceOpt
       for (const el of Array.from(host.shadowRoot?.querySelectorAll<HTMLElement>(".slab-a11y-node") ?? [])) {
         const key = el.dataset["slabKey"];
         if (key === undefined || !focusable.delete(key)) continue;
+        if (options.skip?.(key) === true) continue;
         out.push({ el, key, field: el.getAttribute("role") === "textbox", ...box(el) });
       }
     }
@@ -322,6 +350,12 @@ export function attachModalSurface(host: SlabFieldHost, options: ModalSurfaceOpt
     if (e.key === "Escape" && e.target === host) {
       // Unused, so the frame's `cancel` closes the dialog.
       e.stopImmediatePropagation();
+      return;
+    }
+    if (options.arrows !== undefined && ARROWS.has(e.key) && e.target === host) {
+      const focused = host.focusedKey();
+      // A field's arrows are its caret's.
+      if (focused !== null && !fieldKeys().has(focused) && !options.arrows(focused)) e.stopImmediatePropagation();
       return;
     }
     if (e.key !== "Tab" || e.ctrlKey || e.metaKey || e.altKey) return;

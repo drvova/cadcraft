@@ -124,5 +124,17 @@ async function withTopBar(boot: SlabBoot): Promise<SlabBoot> {
   return { ...boot, parts: { ...boot.parts, TopBar: SlabTopBar } };
 }
 
-const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts).then(withDialogs).then(withRibbon).then(withTopBar) : Promise.resolve<SlabBoot>({})]);
+/** The dialogs with kernel buttons, ticks, tabs and tables in their bodies, each when its document loads. */
+async function withMoreDialogs(boot: SlabBoot): Promise<SlabBoot> {
+  if (boot.parts === undefined) return boot;
+  const { loadSlab } = await import("./slab/loader");
+  const [drafting, templates] = await Promise.all([loadSlab("drafting"), loadSlab("template-gallery")]);
+  const parts: SlabParts = { ...boot.parts };
+  if (drafting.ok) parts.Drafting = (await import("./slab/SlabDrafting")).SlabDrafting;
+  if (templates.ok) parts.Templates = (await import("./slab/SlabTemplateGallery")).SlabTemplateGallery;
+  const notice = boot.notice ?? (!drafting.ok ? slabPartNotice("Drafting Settings dialog", drafting.reason) : !templates.ok ? slabPartNotice("template gallery", templates.reason) : undefined);
+  return { parts, ...(notice === undefined ? {} : { notice }) };
+}
+
+const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts).then(withDialogs).then(withMoreDialogs).then(withRibbon).then(withTopBar) : Promise.resolve<SlabBoot>({})]);
 render(() => <App facade={facade} slab={slab.parts} shellNotice={slab.notice} />, root);

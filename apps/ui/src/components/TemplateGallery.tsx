@@ -3,7 +3,8 @@
  * shows the template's name, a one-line blurb and a 3D thumbnail; choosing one builds that ring.
  *
  * The list and all the logic are `../templates` (the const table, the thumbnail state machine, the
- * refusal words). This component only draws it and runs the renders: a thumbnail is the engine's
+ * refusal words) and `../template-gallery-edit` (the renders, the choice, shared with the gallery
+ * the Slab shell draws). This component only draws it: a thumbnail is the engine's
  * own solid (`piecemesh`, read-only — it changes nothing in the drawing) drawn to a small PNG with
  * the 3D stage's own shaders (`renderPieceStill`). Thumbnails are drawn lazily and one at a time
  * (the renderer keeps a single off-screen context), cached once drawn, and a template whose preview
@@ -18,30 +19,13 @@
  * The shell owns `open`; the component is mounted once.
  */
 
-import { createEffect, createSignal, For, onCleanup, Show, untrack, type JSX } from "solid-js";
+import { For, Show, type JSX } from "solid-js";
 import type { Envelope } from "../facade";
-import { renderPieceStill } from "../render3d";
-import {
-  chooseMessage,
-  groupTemplates,
-  initialThumbs,
-  markDone,
-  markFailed,
-  markRendering,
-  nextThumb,
-  templateKind,
-  templateParams,
-  thumbMessage,
-  THUMB_HEIGHT,
-  THUMB_WIDTH,
-  TEMPLATES,
-  type Template,
-  type ThumbMap,
-} from "../templates";
+import { createTemplateGallery } from "../template-gallery-edit";
+import { templateKind } from "../templates";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { SectionLabel } from "../ui/SectionLabel";
-import { parseMeshReply } from "../view3d";
 import "../templates.css";
 
 export interface TemplateGalleryProps {
@@ -84,68 +68,7 @@ function PlaceholderRing(props: { stoned: boolean }): JSX.Element {
 }
 
 export function TemplateGallery(props: TemplateGalleryProps): JSX.Element {
-  const [thumbs, setThumbs] = createSignal<ThumbMap>(initialThumbs(TEMPLATES));
-  /** The engine's refusal on a card, keyed by template id, after the reader chose it. */
-  const [chooseErrors, setChooseErrors] = createSignal<Readonly<Record<string, string>>>({});
-  /** True while one thumbnail render is in flight, so only one runs at a time. */
-  let busy = false;
-
-  const groups = groupTemplates(TEMPLATES);
-
-  /** One template's thumbnail: its solid as a PNG, or the words to show when it cannot be drawn. */
-  const renderOne = async (template: Template): Promise<{ url: string } | { message: string }> => {
-    const env = props.execute("piecemesh", { ...template.params, quality: "draft" });
-    if (!env.ok) return { message: thumbMessage(template, env.error) };
-    const reply = parseMeshReply(env.result);
-    if (!reply.ok) return { message: reply.error };
-    try {
-      const blob = await renderPieceStill(reply.mesh, { view: "three-quarter", width: THUMB_WIDTH, height: THUMB_HEIGHT, background: null });
-      return { url: URL.createObjectURL(blob) };
-    } catch {
-      return { message: "The preview could not be drawn." };
-    }
-  };
-
-  // While the gallery is open, draw the thumbnails lazily and one at a time: each render marks its
-  // template `rendering` (so nothing else starts), and on finishing advances to the next idle one.
-  createEffect(() => {
-    if (!props.open) return;
-    const id = nextThumb(thumbs(), TEMPLATES);
-    if (id === null || busy) return;
-    const template = TEMPLATES.find((t) => t.id === id);
-    if (template === undefined) return;
-    busy = true;
-    setThumbs((current) => markRendering(current, id));
-    void renderOne(template).then((result) => {
-      busy = false;
-      setThumbs((current) => ("url" in result ? markDone(current, id, result.url) : markFailed(current, id, result.message)));
-    });
-  });
-
-  // The blob URLs the thumbnails hold are released when the gallery leaves the page.
-  onCleanup(() => {
-    for (const thumb of Object.values(untrack(thumbs))) {
-      if (thumb.url !== null) URL.revokeObjectURL(thumb.url);
-    }
-  });
-
-  /** Build the template; close on success, else leave its refusal on the card. */
-  const choose = (template: Template): void => {
-    const error = props.onChoose(templateParams(template));
-    if (error === null) {
-      props.onClose();
-      return;
-    }
-    setChooseErrors((errors) => ({ ...errors, [template.id]: chooseMessage(template, error) }));
-  };
-
-  /** The note under a card: a build refusal first, else a thumbnail that could not be drawn. */
-  const note = (template: Template): string | null => {
-    const chosen = chooseErrors()[template.id];
-    if (chosen !== undefined) return chosen;
-    const thumb = thumbs()[template.id];
-    return thumb?.phase === "failed" ? thumb.message : null;
-  };
+  const { groups, thumbs, choose, note } = createTemplateGallery(props);
 
   return (
     <Dialog

@@ -1,0 +1,222 @@
+// The body of the Drafting Settings dialog: three pages under a strip of tabs (Snap and Grid,
+// Polar Tracking, Object Snap). The view only, and only the body: the box, the title bar, the
+// footer's keys, the backdrop, Escape and the focus trap are the interface's own dialog
+// (src/ui/Dialog.tsx), which this surface stands inside (src/slab/modal.tsx).
+//
+// Every string and every boolean is shaped in TypeScript (src/slab/drafting-params.ts); every
+// press, tick and typed value comes back as a signal with its row's key and goes through the same
+// state as the SolidJS dialog (src/drafting-edit.ts).
+//
+// A page is one list of lines, each of one kind: a tick, a typed figure beside its label, a typed
+// list under its label, a choice (whose values open as a popup the host draws: src/slab/popup.tsx;
+// a hole cannot stand in an `each`), a value that is only read (the engine did not report it), a
+// note. The Object Snap page adds the snap boxes, two columns of them while there is room, each
+// beside the marker the drawing shows for it: the marker is the canvas's own strokes
+// (src/canvas.ts, `snapGlyph`), handed over as path data.
+//
+// The keyboard (src/slab/modal.tsx): every control is a Tab stop, the strip of tabs is one (the
+// tab in front), and Left, Right, Home and End on it bring the next page to the front. Enter on a
+// tick or in a field is OK, as it is in the SolidJS form; Space ticks.
+//
+// Measures follow src/dialogs.css (.drafting-page, .drafting-group, .drafting-pair,
+// .drafting-modes) and src/ui/ui.css (.ui-tabs-strip, .ui-tab--sm, .ui-checkbox, .ui-field).
+import "gen/tokens.slab"
+
+icon mark viewbox=24 {
+  path "M5 12.5l4.5 4.5 9.5-10" bg=none stroke=current stroke-w=3
+}
+
+icon chevron viewbox=24 {
+  path "M6 9l6 6 6-6" bg=none stroke=current stroke-w=2.5
+}
+
+// A tab of the strip. The arrows are the strip's (`#tabs`): they never reach the kernel's own walk.
+def PageTab(name="", on=false) export {
+  row pad=0,space.g2,0,0 {
+    row #tab h=size.control-h-row pad=0,space.g6 radius=radius.card align=center color=color.text-faint \
+        act=tab_pick role=tab label=name selected=on transition=dur.fast {
+      when hover { bg=color.hover color=color.text }
+      when on { bg=color.fill-active color=color.text }
+      // Outside: an inside ring of 2 moves the words in its box as it is painted (the scene's own
+      // boxes stay where they were), so the ring stands around the tab.
+      when focus-visible { stroke=color.focus-ring stroke-w=2 stroke-align=outside }
+      text name style=text.label nowrap
+    }
+  }
+}
+
+// What happened to the whole form: said at once to a screen reader.
+def FormAlert(note="") export {
+  col w=fill pad=0,0,space.g12,0 {
+    row w=fill pad=space.g6,space.g8 radius=radius.card stroke=color.error stroke-w=1 role=alert label=note {
+      text note style=text.body color=color.text w=fill
+    }
+  }
+}
+
+// One line of a page. `lead` is the room over it (16 opens a group, 8 follows in one).
+def SetLine(name="", shown="", said="", hint="", help="", ticked="false", lead=8, tick=false, typed=false, \
+            wide=false, choice=false, read=false, note=false, on=false, open=false, bad=false, helped=false) export {
+  col w=fill {
+   row w=fill h=lead
+   col w=fill gap=space.g4 {
+    when tick {
+      // The tick is as wide as its box and its words, not as the page: a press beside it is not one.
+      row w=fill {
+        row #tick gap=space.g6 align=center radius=radius.small act=line_tick \
+            role=checkbox label=name desc=hint checked=ticked color=color.text {
+          row #box w=size.icon-size-md h=size.icon-size-md radius=radius.small align=center pack=center \
+              color=color.on-accent stroke=color.icon stroke-w=1 stroke-align=inside transition=dur.fast {
+            when hover { bg=color.hover }
+            when on { bg=color.accent stroke=color.accent }
+            when on { icon mark size=size.icon-size-sm }
+          }
+          text name style=text.body nowrap
+          when focus-visible { stroke=color.focus-ring stroke-w=2 stroke-align=outside }
+        }
+      }
+    }
+    when typed {
+      row w=fill h=size.control-h-input gap=space.g12 align=center {
+        text name style=text.body color=color.text-dim w=fill nowrap ellipsis
+        text shown style=text.body color=color.text w=164 h=size.control-h-input \
+             pad=space.g4,space.g14,space.g4,space.g6 radius=radius.control nowrap clip align-text=end \
+             field=field_edit submit=field_submit field-sync=host label=name desc=hint \
+             bg=color.control stroke=color.border stroke-w=1 stroke-align=inside transition=dur.fast {
+          when focus { stroke=color.focus-ring stroke-w=2 pad=space.g4,space.g6 }
+          when bad { stroke=color.error }
+        }
+      }
+    }
+    when wide {
+      text name style=text.body color=color.text-dim w=fill nowrap ellipsis
+      text shown style=text.body color=color.text w=fill h=size.control-h-input \
+           pad=space.g4,space.g6 radius=radius.control nowrap clip \
+           field=field_edit submit=field_submit field-sync=host label=name desc=help \
+           bg=color.control stroke=color.border stroke-w=1 stroke-align=inside transition=dur.fast {
+        when focus { stroke=color.focus-ring stroke-w=2 }
+        when bad { stroke=color.error }
+      }
+    }
+    when choice {
+      row w=fill h=size.control-h-input gap=space.g12 align=center {
+        text name style=text.body color=color.text-dim w=fill nowrap ellipsis
+        row #choice w=164 h=size.control-h-input pad=0,space.g6 gap=space.g4 radius=radius.control align=center \
+            color=color.text act=line_choose keys=Enter role=combobox label=said desc=hint expanded=open \
+            bg=color.control stroke=color.border stroke-w=1 stroke-align=inside transition=dur.fast {
+          when open { stroke=color.focus-ring }
+          when focus-visible { stroke=color.focus-ring stroke-w=2 }
+          when bad { stroke=color.error }
+          text shown style=text.body w=fill nowrap ellipsis
+          icon chevron size=size.icon-size-sm color=color.icon
+        }
+      }
+    }
+    when read {
+      row w=fill h=size.control-h-input gap=space.g12 align=center role=listitem label=said {
+        text name style=text.body color=color.text-dim w=fill nowrap ellipsis
+        text shown style=text.body color=color.text-faint nowrap align-text=end
+      }
+    }
+    when note {
+      row w=fill pad=0,0,0,20 {
+        text name style=text.label color=color.text-faint w=fill
+      }
+    }
+    when bad {
+      text hint style=text.label color=color.error w=fill
+    }
+    when helped {
+      text help style=text.label color=color.text-faint w=fill
+    }
+   }
+  }
+}
+
+// One running snap: its box, the drawing's marker for it, its name.
+def SnapBox(name="", ticked="false", glyph="", on=false) export {
+  row w=fill pad=space.g8,0,0,0 {
+    row gap=space.g6 align=center radius=radius.small act=mode_tick \
+        role=checkbox label=name checked=ticked color=color.text {
+      row w=size.icon-size-md h=size.icon-size-md radius=radius.small align=center pack=center \
+          color=color.on-accent stroke=color.icon stroke-w=1 stroke-align=inside transition=dur.fast {
+        when hover { bg=color.hover }
+        when on { bg=color.accent stroke=color.accent }
+        when on { icon mark size=size.icon-size-sm }
+      }
+      canvas w=size.icon-size-md h=size.icon-size-md {
+        path glyph bg=none stroke=color.icon stroke-w=1.5
+      }
+      text name style=text.body nowrap
+      when focus-visible { stroke=color.focus-ring stroke-w=2 stroke-align=outside }
+    }
+  }
+}
+
+params {
+  // Zero or one.
+  alerts list(FormAlert) = []
+  tabs   list(PageTab) = []
+  // The page in front, as a screen reader is told it.
+  page_name text = ""
+  lines  list(SetLine) = []
+  // The Object Snap page: the boxes, in two columns while there is room (`two`).
+  osnap  bool = false
+  two    bool = true
+  modes_a list(SnapBox) = []
+  modes_b list(SnapBox) = []
+  modes_hint text = ""
+  modes_bad  bool = false
+}
+
+col #body w=fill {
+  each param.alerts
+  row #tabs w=fill pad=0,0,space.g8,0 stroke=color.border-soft stroke-w=1 stroke-sides=b \
+      role=tablist label="Drafting settings" keys=ArrowLeft:tab_prev,ArrowRight:tab_next,Home:tab_first,End:tab_last {
+    each param.tabs
+  }
+  // Enter on a tick is OK, as in the SolidJS form (a mapped key stands on an ancestor of the
+  // control: the control's own `act=` is its press). The buttons stand outside these two.
+  col #page w=fill pad=space.g12,0,0,0 role=tabpanel label=param.page_name {
+    col #lines w=fill keys=Enter:line_submit {
+      each param.lines
+    }
+    when osnap {
+      row #modes-head w=fill gap=space.g8 align=center pad=space.g8,0,0,0 {
+        text "SNAP MODES" style=text.chip weight=700 color=color.text-faint nowrap role=heading level=2 label="Snap modes"
+        spacer
+        row #all h=size.control-h-input pad=space.g2,space.g6 radius=radius.control align=center color=color.text \
+            act=modes_all role=button label="Select all" transition=dur.fast {
+          when hover { bg=color.hover }
+          when pressed { bg=color.fill-active }
+          when focus-visible { stroke=color.focus-ring stroke-w=2 stroke-align=outside }
+          text "Select all" style=text.body nowrap
+        }
+        row #none h=size.control-h-input pad=space.g2,space.g6 radius=radius.control align=center color=color.text \
+            act=modes_none role=button label="Clear all" transition=dur.fast {
+          when hover { bg=color.hover }
+          when pressed { bg=color.fill-active }
+          when focus-visible { stroke=color.focus-ring stroke-w=2 stroke-align=outside }
+          text "Clear all" style=text.body nowrap
+        }
+      }
+      // What a `when` adds stands after its node's own children, so the boxes are written inside
+      // this one, under their heading; and a `when` cannot stand in another, so the second column
+      // is always there and has no width when the boxes are in one.
+      row #modes w=fill role=group label="Object snap modes" desc=param.modes_hint keys=Enter:line_submit {
+        col w=fill pad=0,space.g16,0,0 {
+          each param.modes_a
+        }
+        col w=fill {
+          when !two { w=0 }
+          each param.modes_b
+        }
+      }
+    }
+    when modes_bad {
+      row w=fill pad=space.g4,0,0,0 {
+        text param.modes_hint style=text.label color=color.error w=fill
+      }
+    }
+  }
+}

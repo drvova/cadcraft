@@ -10,6 +10,8 @@ declare module "solid-js" {
     interface IntrinsicElements {
       "cadcraft-pricebook": HTMLAttributes<HTMLElement>;
       "cadcraft-jewelry-dialog": HTMLAttributes<HTMLElement>;
+      "cadcraft-drafting": HTMLAttributes<HTMLElement>;
+      "cadcraft-template-gallery": HTMLAttributes<HTMLElement>;
     }
   }
 }
