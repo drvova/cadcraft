@@ -45,6 +45,9 @@
   overflow: auto;
   display: flex;
   justify-content: center;
+  /* The page is as tall as what is on it: stretched to the backdrop's height, its views ran off
+     the bottom of the paper. */
+  align-items: flex-start;
   padding: var(--gap-16);
   background: var(--surface-inset);
 }

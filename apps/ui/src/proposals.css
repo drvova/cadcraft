@@ -10,9 +10,27 @@
   flex-direction: column;
   gap: var(--gap-8);
   margin: 0 var(--gap-8) var(--gap-6);
-  max-height: calc(var(--block-max-height) * 2.5);
+  /* The list takes the panel's height and the transcript gives it up (below): a decision that
+     waits is the panel's subject, not a strip under an empty transcript. It still scrolls inside
+     itself, so the composer never leaves the panel. */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/* While proposals wait, the composer holds them and grows; the transcript keeps two lines, so
+   its last words (and the empty state's one line) stay in view over the cards. */
+.assistant-panel:has(.assistant-proposals) .assistant-composer {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.assistant-panel:has(.assistant-proposals) .assistant-body {
+  flex: 1 1 0;
+  min-height: calc(2 * var(--composer-leading) + 2 * var(--gap-12));
 }
 
 .proposal-group {
@@ -115,9 +133,22 @@
   overflow: hidden;
 }
 
+.proposal-still {
+  position: relative;
+}
+
+/* Before and After name the pictures on the pictures: a quiet tag in the tile's corner, so the
+   pair reads as one comparison and the card spends no line on the words. */
 .proposal-still figcaption {
-  color: var(--text-faint);
+  position: absolute;
+  top: var(--gap-4);
+  left: var(--gap-4);
+  padding: 0 var(--gap-4);
+  border-radius: var(--radius-small);
+  background: var(--surface-elevated);
+  color: var(--text-dim);
   font-size: var(--font-small);
+  line-height: var(--leading-ui);
 }
 
 /* The figures that differ: label, before, after, the signed difference. Figures hold their width. */

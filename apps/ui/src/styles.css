@@ -639,6 +639,22 @@ body {
   color: var(--text-dim);
 }
 
+/* A command's JSON answer is a record, not a sentence: it keeps the quiet ink even when it is the
+   newest line, and an older one is cut to its first two lines, so the commands typed stand out
+   of the log instead of drowning in braces. The newest answer is whole; the cut ones are whole
+   in the document (a copy or a screen reader has every character). */
+.cmd-line.is-data {
+  color: var(--text-faint);
+}
+
+.cmd-line.is-data:not(:last-child) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
 /* The chips are pills with an inset of their own (the chip's 8px): the row steps in by the rest
    of the column, so their words read on it. */
 .cmdline .cmd-chips {

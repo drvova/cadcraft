@@ -2591,6 +2591,16 @@ export default function InStatusBar() {
 <p>  ink, an 8px inset, a round corner, a label that gives way to an ellipsis, a chevron, and a   two-line hint. A <code>Chip</code> is 20px at 11px in the quiet ink; a quiet <code>Button size=&quot;sm&quot;</code> is the   right height, type and ink, but has a 2px corner and a 6px inset, does not shrink, and takes   no <code>expanded</code>, <code>controls</code> or second hint line. Adopting either changes the corner and the   inset, and the brief was no change. What would make it fit: <code>expanded</code> and <code>controls</code> on   <code>Button</code> (small, and <code>IconButton</code> has them), a label that clips inside the button, and a   decision that the composer's model key is a 2px-cornered button like the rest of the layer's   rather than Cursor's pill.</p>
 <h4 id="decisions-the-hint-inside-a-dialog">The hint inside a dialog</h4>
 <p>Verified in the browser with Drafting Settings open, by the pointer and by the keyboard, on the close key and on an object snap box given a hint for the test: the box is a child of the open dialog, is drawn over its footer and past its edge, and is not clipped. Nothing changed. No object snap box carries a hint today: <code>Checkbox</code> takes no <code>title</code>.</p>
+<h3 id="decisions-the-jeweller-s-pass-2026-11-13">The jeweller's pass (2026-11-13)</h3>
+<p>Looked at every state at 1280, 1440 and 390, dark and light, and changed what a jeweller would notice first. Local styles only; no token, component or wording changed.</p>
+<ul><li><strong>The Tech Sheet's paper holds its views.</strong> The backdrop is a flex row that stretched the page</li></ul>
+<p>  to its own height, so the four views ran off the bottom of the paper onto the backdrop.   <code>.techsheet-scroll</code> now aligns the page to the top: the page is as tall as what is on it.</p>
+<ul><li><strong>Proposals take the assistant's height.</strong> The cards were capped at two and a half blocks</li></ul>
+<p>  under an empty transcript, so a decision that waited scrolled inside a strip while the panel   above it was empty. While proposals wait, the composer grows and the transcript keeps two   lines (<code>proposals.css</code>).</p>
+<ul><li><strong>Before and After are tags on the pictures.</strong> The captions were a line under each tile; they</li></ul>
+<p>  are now a small tag in the tile's corner (the secondary ink on the elevated surface), so the   pair reads as one comparison and each card is a line shorter.</p>
+<ul><li><strong>A command's JSON answer is quiet in the log.</strong> The answers are records, not sentences, and</li></ul>
+<p>  at full width they buried the commands typed. A line that starts with <code>{</code> or <code>[</code> keeps the   quiet ink even when newest, and an older one is clipped to two lines on screen (the document   keeps every character for a copy or a screen reader). The newest answer is whole.</p>
 </section>
 </body>
 </html>

@@ -48,7 +48,7 @@ export function CommandLine(props: CommandLineProps): JSX.Element {
   return (
     <section class="cmdline" aria-label="Command line">
       <div class="cmd-output" ref={scrollback} role="log" aria-label="Command history">
-        <For each={state().output}>{(line) => <div class="cmd-line">{line}</div>}</For>
+        <For each={state().output}>{(line) => <div class={isData(line) ? "cmd-line is-data" : "cmd-line"}>{line}</div>}</For>
       </div>
       <div class="cmd-status" role="status">
         {promptText(state())}
@@ -81,4 +81,10 @@ export function CommandLine(props: CommandLineProps): JSX.Element {
       </div>
     </section>
   );
+}
+
+/** A line that is a command's JSON answer rather than words: drawn quieter than the words around it. */
+export function isData(line: string): boolean {
+  const t = line.trimStart();
+  return t.startsWith("{") || t.startsWith("[");
 }

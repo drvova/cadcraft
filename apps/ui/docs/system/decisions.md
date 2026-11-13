@@ -838,3 +838,23 @@ Verified in the browser with Drafting Settings open, by the pointer and by the k
 close key and on an object snap box given a hint for the test: the box is a child of the open
 dialog, is drawn over its footer and past its edge, and is not clipped. Nothing changed. No
 object snap box carries a hint today: `Checkbox` takes no `title`.
+
+## The jeweller's pass (2026-11-13)
+
+Looked at every state at 1280, 1440 and 390, dark and light, and changed what a jeweller would
+notice first. Local styles only; no token, component or wording changed.
+
+- **The Tech Sheet's paper holds its views.** The backdrop is a flex row that stretched the page
+  to its own height, so the four views ran off the bottom of the paper onto the backdrop.
+  `.techsheet-scroll` now aligns the page to the top: the page is as tall as what is on it.
+- **Proposals take the assistant's height.** The cards were capped at two and a half blocks
+  under an empty transcript, so a decision that waited scrolled inside a strip while the panel
+  above it was empty. While proposals wait, the composer grows and the transcript keeps two
+  lines (`proposals.css`).
+- **Before and After are tags on the pictures.** The captions were a line under each tile; they
+  are now a small tag in the tile's corner (the secondary ink on the elevated surface), so the
+  pair reads as one comparison and each card is a line shorter.
+- **A command's JSON answer is quiet in the log.** The answers are records, not sentences, and
+  at full width they buried the commands typed. A line that starts with `{` or `[` keeps the
+  quiet ink even when newest, and an older one is clipped to two lines on screen (the document
+  keeps every character for a copy or a screen reader). The newest answer is whole.
