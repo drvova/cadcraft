@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { AppFacade, type Envelope } from "./facade";
 import { MockFacade } from "./mock";
-import { arrivalSentence, changeRows, checkLines, createProposals, createStillCache, formatDelta, formatNumber, formatValue, groupProposals, hasStills, objectsLine, parseProposal, parseProposals, patchTitle, stillKey, type ProposalStillDrawer } from "./proposals";
+import { arrivalSentence, changeRows, checkLines, createProposals, createStillCache, formatDelta, formatNumber, formatValue, groupProposals, hasStills, objectsLine, parseProposal, parseProposals, patchTitle, rowsTsv, stillKey, type ProposalStillDrawer } from "./proposals";
 
 /** A report as the engine wrote it for `piece {wall: 0.5}` on a solitaire with a price book set
  *  (`cadcraft-cli run --metric`, 2026-11-13), cut to what a card reads. */
@@ -275,5 +275,15 @@ describe("the stills", () => {
     expect(cache.state({ kind: "band" })).toEqual({ kind: "failed", message: "The still could not be drawn: WebGL is not available." });
     cache.dispose();
     expect(cache.state({ kind: "band" })).toBeUndefined();
+  });
+});
+
+describe("a copy of the rows", () => {
+  test("one tab-separated line per row, an empty change kept as a column", () => {
+    const rows = [
+      { key: "width", label: "Width", before: "2.2 mm", after: "2.8 mm", delta: "+0.6 mm" },
+      { key: "metal", label: "Metal", before: "Gold", after: "Platinum", delta: null },
+    ];
+    expect(rowsTsv(rows)).toBe("Width\t2.2 mm\t2.8 mm\t+0.6 mm\nMetal\tGold\tPlatinum\t");
   });
 });

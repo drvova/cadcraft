@@ -869,3 +869,11 @@ notice first. Local styles only; no token, component or wording changed.
   longer than about two lines has a fold key (`IconButton`, `expanded` + `controls`) that shows it
   whole. The document keeps every character, so a copy and a screen reader get the whole record
   as before. This undoes "the newest answer is whole" from the first pass, on purpose.
+- **A narrow proposal card puts each figure's name over its values.** At the assistant's default
+  width the four columns left the name a third of the card, and "Metal weight" broke over two
+  lines inside its row. Below 22rem of card (a container query on `.proposal`) each row is a grid:
+  the name on its own line, then before, after and the change in three fixed columns so the
+  arrows and the changes line up down the card. Because a grid row loses the table's meaning,
+  the table says its roles in the markup (`role="table"`, `row`, `rowheader`, `cell`, ...), and
+  because a browser copies grid rows a cell per line, the table writes its own copy: the rows the
+  selection touches as tab-separated lines (`rowsTsv`), exactly what the wide table copies.

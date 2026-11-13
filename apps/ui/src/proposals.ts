@@ -218,6 +218,16 @@ export function changeRows(p: Proposal): ChangeRow[] {
   return p.changes.map((row) => ({ key: row.key, label: row.label, before: formatValue(row.before, row), after: formatValue(row.after, row), delta: formatDelta(row) }));
 }
 
+/**
+ * The rows of a card's table as a copy writes them: one line per row, its name, before, after
+ * and change parted by tabs, as a browser copies a table laid out as one. The card's narrow layout
+ * draws the rows as grids, which a browser would copy a cell per line, so the card writes the copy
+ * itself from this.
+ */
+export function rowsTsv(rows: readonly ChangeRow[]): string {
+  return rows.map((row) => [row.label, row.before, row.after, row.delta ?? ""].join("\t")).join("\n");
+}
+
 /** The checks a card names: those the change would make fail, those it would make pass, and how
  *  many more fail on both sides (failing before and still failing after). */
 export function checkLines(p: Proposal): { broken: readonly ProposalCheck[]; fixed: readonly ProposalCheck[]; stillFailing: number } {

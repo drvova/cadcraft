@@ -17,7 +17,7 @@
  */
 
 import { createEffect, For, Match, Show, Switch, untrack, type JSX } from "solid-js";
-import { changeRows, checkLines, hasStills, objectsLine, type Proposal, type ProposalGroup, type ProposalsModel, type StillCache } from "../proposals";
+import { changeRows, checkLines, hasStills, objectsLine, rowsTsv, type ChangeRow, type Proposal, type ProposalGroup, type ProposalsModel, type StillCache } from "../proposals";
 import { Button } from "../ui/Button";
 import { Chip } from "../ui/Chip";
 import "../proposals.css";
@@ -53,7 +53,26 @@ function Still(props: { cache: StillCache; params: Readonly<Record<string, unkno
   );
 }
 
-function Card(props: { proposal: Proposal; cards: ProposalCardsProps }): JSX.Element {
+/**
+ * A copy made inside the table writes the rows it touches as tab-separated lines, whatever the
+ * card's layout draws them as. A selection that runs out of the table is the browser's to copy.
+ */
+function copyRows(e: ClipboardEvent, rows: readonly ChangeRow[]): void {
+  const table = e.currentTarget;
+  const selection = window.getSelection();
+  if (!(table instanceof HTMLTableElement) || selection === null || selection.isCollapsed || e.clipboardData === null) return;
+  const range = selection.getRangeAt(0);
+  if (!table.contains(range.commonAncestorContainer)) return;
+  const touched = rows.filter((row) => {
+    const tr = table.querySelector(`tr[data-row="${CSS.escape(row.key)}"]`);
+    return tr !== null && selection.containsNode(tr, true);
+  });
+  if (touched.length === 0) return;
+  e.clipboardData.setData("text/plain", rowsTsv(touched));
+  e.preventDefault();
+}
+
+function Card(props:{ proposal: Proposal; cards: ProposalCardsProps }): JSX.Element {
   const p = (): Proposal => props.proposal;
   const titleId = (): string => `proposal-${p().id}-title`;
   const rows = () => changeRows(p());
@@ -96,24 +115,44 @@ function Card(props: { proposal: Proposal; cards: ProposalCardsProps }): JSX.Ele
         </div>
       </Show>
       <Show when={rows().length > 0}>
-        <table class="proposal-table">
-          <caption class="proposal-said">What changes</caption>
-          <thead class="proposal-table-head">
-            <tr>
-              <th scope="col">Figure</th>
-              <th scope="col">Before</th>
-              <th scope="col">After</th>
-              <th scope="col">Change</th>
+        {/* The roles are said outright: a narrow card draws the rows as grids (proposals.css),
+            which would otherwise take the table's meaning away from a screen reader. */}
+        <table class="proposal-table" role="table" aria-labelledby={`${titleId()}-figures`} onCopy={(e) => copyRows(e, rows())}>
+          <caption class="proposal-said" id={`${titleId()}-figures`}>
+            What changes
+          </caption>
+          <thead class="proposal-table-head" role="rowgroup">
+            <tr role="row">
+              <th scope="col" role="columnheader">
+                Figure
+              </th>
+              <th scope="col" role="columnheader">
+                Before
+              </th>
+              <th scope="col" role="columnheader">
+                After
+              </th>
+              <th scope="col" role="columnheader">
+                Change
+              </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             <For each={rows()}>
               {(row) => (
-                <tr>
-                  <th scope="row">{row.label}</th>
-                  <td class="proposal-before">{row.before}</td>
-                  <td class="proposal-after">{row.after}</td>
-                  <td class="proposal-delta">{row.delta ?? ""}</td>
+                <tr role="row" data-row={row.key}>
+                  <th scope="row" role="rowheader">
+                    {row.label}
+                  </th>
+                  <td class="proposal-before" role="cell">
+                    {row.before}
+                  </td>
+                  <td class="proposal-after" role="cell">
+                    {row.after}
+                  </td>
+                  <td class="proposal-delta" role="cell">
+                    {row.delta ?? ""}
+                  </td>
                 </tr>
               )}
             </For>

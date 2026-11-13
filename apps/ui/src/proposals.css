@@ -74,6 +74,8 @@
   color: var(--text);
   font-size: var(--font-body);
   line-height: var(--leading-ui);
+  /* The figures' table lays itself out by the card's width (narrow below). */
+  container: proposal / inline-size;
 }
 
 .proposal-head {
@@ -194,6 +196,40 @@
   color: var(--text-dim);
   text-align: right;
   white-space: nowrap;
+}
+
+/* A card too narrow for four columns (the assistant at its default width) puts each figure's name
+   on a line of its own over its three values, so a name such as "Metal weight" is never broken
+   inside a row. The rows become grids, so the table's roles are said in the markup
+   (ProposalCards.tsx) and a copy is still written as tab-separated rows by the card's copy
+   handler, not by the browser's table layout. */
+@container proposal (width < 22rem) {
+  .proposal-table tbody tr {
+    display: grid;
+    /* Two equal columns for before and after, so the arrows line up down the card. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr);
+    column-gap: var(--gap-4);
+    padding-block: var(--gap-2);
+  }
+
+  .proposal-table tbody th {
+    grid-column: 1 / -1;
+    padding: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* A figure too long for its third wraps rather than running into the next. */
+  .proposal-table tbody td:is(.proposal-before, .proposal-after, .proposal-delta) {
+    padding: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .proposal-table td.proposal-delta {
+    padding-left: var(--gap-8);
+  }
 }
 
 .proposal-checks {
