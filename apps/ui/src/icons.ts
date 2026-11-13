@@ -55,7 +55,7 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
   /** Four corner brackets around a small square. */
   "zoom.extents": "M4 9V4h5 M15 4h5v5 M20 15v5h-5 M9 20H4v-5 M10 10h4v4h-4z",
   /** A window with a rail down its left side: the sidebar's key. */
-  "ui.toggle.palettes": "M4 5h16v14H4z M9 5v14",
+  "ui.toggle.palettes": "M6.5 5.5h11a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z M9.5 5.5v13",
   /** Three stacked sheets. */
   "ui.dialog.layers": "M12 3l8 5-8 5-8-5z M4 13l8 5 8-5 M4 17l8 5 8-5",
   /** A band seen from the front with its stone on top: the ring blank. */
@@ -170,13 +170,13 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
   /** A magnifier: the command centre and the palette's field. */
   search: "M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13 M15.5 15.5L20 20",
   /** A window with a band along its foot: the command line's panel. */
-  "layout.bottom": "M4 5h16v14H4z M4 14.5h16",
+  "layout.bottom": "M6.5 5.5h11a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z M4.5 14h15",
   /** A lens with a pupil: a masked value is showing (the key field's show and hide). */
   eye: "M3 12a10.5 10.5 0 0 1 18 0a10.5 10.5 0 0 1-18 0z M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z",
   /** The empty lens struck through: the value is masked. */
   "eye-off": "M3 12a10.5 10.5 0 0 1 18 0a10.5 10.5 0 0 1-18 0z M5.5 4.5l13 15",
   /** A four-point spark with a small plus: the assistant's toggle in the top bar. */
-  assistant: "M11 4l1.8 5.2L18 11l-5.2 1.8L11 18l-1.8-5.2L4 11l5.2-1.8z M19 15v4 M17 17h4",
+  assistant: "M11 4.5l1.6 4.9 4.9 1.6-4.9 1.6L11 17.5l-1.6-4.9L4.5 11l4.9-1.6z M19 15.5v4 M17 17.5h4",
 };
 
 /**

@@ -932,3 +932,13 @@ notice first. Local styles only; no token, component or wording changed.
   so the total still leads. Labels: at the rail's default width "Round 6.5 mm" fits beside both
   columns (measured at 1280 and 1440); a longer label ends in an ellipsis as before. Not changed:
   the columns' widths, which hold "36 pc" and "2.54 ct" exactly.
+- **The title bar's glyphs weigh what the ribbon's do.** Measured in the page: every glyph is
+  drawn with one stroke, 1.25 CSS px (`STROKE`, non-scaling), at 12, 14 and 16 px alike, so the
+  stroke itself was already consistent and is unchanged. What read heavier was the shapes: the
+  sidebar and panel keys were square-cornered frames filling 16 of the 24 grid at 14 px, a block of
+  ink beside the ribbon's open, round-cornered sheets. Both frames are now 15x13 with the 2-unit
+  round corner the ribbon's sheets use (`ui.toggle.palettes`, `layout.bottom`). The assistant's
+  spark was a touch larger than its neighbours' frames and its concave joins piled ink at the
+  centre; it is drawn 13 units across (was 14) with the small plus kept full size, so the plus
+  still reads as a plus at 14 px. Checked as 4x crops at 2x in both themes; the ribbon's glyphs
+  (held to the 16 px pixel grid by `icons.test.ts`) are unchanged.
