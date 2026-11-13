@@ -859,3 +859,14 @@ notice first. Local styles only; no token, component or wording changed.
   at full width they buried the commands typed. A line that starts with `{` or `[` keeps the
   quiet ink even when newest, and an older one is clipped to two lines on screen (the document
   keeps every character for a copy or a screen reader). The newest answer is whole.
+
+## The jeweller's second pass (2026-11-13)
+
+- **Every JSON answer in the log is cut to two lines, the newest too.** The first pass left the
+  newest answer whole, and a `propose` or `piece` answer is ten lines of braces that pushed the
+  commands typed out of the panel. Now the newest is cut like the older ones; when the record
+  has a `message`, that sentence is drawn above it in the words' ink (`aria-hidden`, not
+  selectable: the record says it already), so the answer reads as a sentence first. A record
+  longer than about two lines has a fold key (`IconButton`, `expanded` + `controls`) that shows it
+  whole. The document keeps every character, so a copy and a screen reader get the whole record
+  as before. This undoes "the newest answer is whole" from the first pass, on purpose.

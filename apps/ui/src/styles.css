@@ -639,15 +639,40 @@ body {
   color: var(--text-dim);
 }
 
-/* A command's JSON answer is a record, not a sentence: it keeps the quiet ink even when it is the
-   newest line, and an older one is cut to its first two lines, so the commands typed stand out
-   of the log instead of drowning in braces. The newest answer is whole; the cut ones are whole
-   in the document (a copy or a screen reader has every character). */
+/* A command's JSON answer is a record, not a sentence: it keeps the quiet ink, and every one, the
+   newest too, is cut to its first two lines, so the commands typed stand out of the log instead
+   of drowning in braces. The record is whole in the document (a copy or a screen reader has every
+   character); a long one has a fold key that shows it whole. Its `message`, when it has one, is
+   drawn above it in the words' ink, for the eye only. */
 .cmd-line.is-data {
   color: var(--text-faint);
 }
 
-.cmd-line.is-data:not(:last-child) {
+.cmd-data-message {
+  color: var(--text-dim);
+  user-select: none;
+}
+
+.cmd-data-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gap-4);
+}
+
+.cmd-data-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cmd-data-row > .ui-icon-button {
+  flex: 0 0 auto;
+}
+
+.cmd-line.is-open .cmd-data-row > .ui-icon-button svg {
+  transform: rotate(180deg);
+}
+
+.cmd-line.is-data:not(.is-open) .cmd-data-text {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;

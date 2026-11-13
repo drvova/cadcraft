@@ -19,9 +19,10 @@
  * as written, so a parent may hand either); the component reads both.
  */
 
-import { createEffect, For, Show, type Accessor, type JSX } from "solid-js";
+import { createEffect, createSignal, For, Show, type Accessor, type JSX } from "solid-js";
 import { freshError, promptText, type PromptState } from "../prompt";
 import { Chip } from "../ui/Chip";
+import { IconButton } from "../ui/IconButton";
 import { CommandField, readProp } from "./CommandField";
 
 export { commandLineLink, MAX_HISTORY, type CommandLineLink } from "./CommandField";
@@ -48,7 +49,7 @@ export function CommandLine(props: CommandLineProps): JSX.Element {
   return (
     <section class="cmdline" aria-label="Command line">
       <div class="cmd-output" ref={scrollback} role="log" aria-label="Command history">
-        <For each={state().output}>{(line) => <div class={isData(line) ? "cmd-line is-data" : "cmd-line"}>{line}</div>}</For>
+        <For each={state().output}>{(line, i) => (isData(line) ? <DataLine line={line} id={`cmd-data-${i()}`} /> : <div class="cmd-line">{line}</div>)}</For>
       </div>
       <div class="cmd-status" role="status">
         {promptText(state())}
@@ -81,6 +82,57 @@ export function CommandLine(props: CommandLineProps): JSX.Element {
       </div>
     </section>
   );
+}
+
+/**
+ * A command's JSON answer in the log. Every one is cut to two lines on screen, the newest too (a
+ * long record buried the commands typed); the document keeps every character, so a copy or a
+ * screen reader has the whole answer. When the answer carries a `message` it is drawn above the
+ * record as the line's words, hidden from assistive tech and from a selection because the record
+ * says it already. A long answer has a fold key that shows the record whole and cuts it again.
+ */
+function DataLine(props: { line: string; id: string }): JSX.Element {
+  const [open, setOpen] = createSignal(false);
+  const message = (): string | null => dataMessage(props.line);
+  return (
+    <div class={open() ? "cmd-line is-data is-open" : "cmd-line is-data"}>
+      <Show when={message()}>
+        {(words) => (
+          <div class="cmd-data-message" aria-hidden="true">
+            {words()}
+          </div>
+        )}
+      </Show>
+      <div class="cmd-data-row">
+        <div class="cmd-data-text" id={props.id}>
+          {props.line}
+        </div>
+        <Show when={props.line.length > DATA_FOLD_AT}>
+          <IconButton icon="chevron-down" size="sm" title={open() ? "Cut the reply to two lines" : "Show the whole reply"} expanded={open()} controls={props.id} onClick={() => setOpen(!open())} />
+        </Show>
+      </div>
+    </div>
+  );
+}
+
+/** How long a JSON answer is before it gets a fold key (about two lines of the log at its narrowest). */
+export const DATA_FOLD_AT = 120;
+
+/** The answer's own `message`, on one line and clipped, when the line is a JSON record with one; else null. */
+export function dataMessage(line: string): string | null {
+  if (line.length > 200_000) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const message = (value as Record<string, unknown>)["message"];
+  if (typeof message !== "string") return null;
+  const flat = message.replace(/\s+/g, " ").trim();
+  if (flat === "") return null;
+  return flat.length > 240 ? `${flat.slice(0, 239)}…` : flat;
 }
 
 /** A line that is a command's JSON answer rather than words: drawn quieter than the words around it. */
