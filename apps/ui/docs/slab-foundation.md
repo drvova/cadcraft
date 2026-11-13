@@ -198,6 +198,10 @@ and the notice names the part. Logic is shared with the SolidJS component, not f
 | Properties | `properties.slab` | choices open a host-drawn listbox anchored to the row (`src/slab/popup.tsx`: a Slab overlay cannot leave its surface's box), which Piece uses too; the row logic is `src/props-edit.ts`, shared |
 | Dialog bodies | `pricebook.slab`, `jewelry-dialog.slab` | the host's `Dialog` stays the frame; `src/slab/modal.tsx` owns Tab between the kernel's controls, the controls in holes and the frame; selects and free text are SolidJS controls in holes |
 | Ribbon | `ribbon.slab` | the fold is the SolidJS strip's `toolsFit` fed with the document's measures; the glyph block is generated from `ICON_PATHS` (`ribbon-icons.ts`, `RIBBON_ICONS=write bun test src/slab/ribbon.test.ts`); round stroke caps come from a sheet the host adds to the shadow root; no `pointer-move` binder and no `transition`, each of which solves per step |
+| Title bar | `topbar.slab` | the menu titles, the command centre, the layout keys; the menus and the palette are the SolidJS ones, opened from the bar; the title keys are `MenuBar`'s `titleKeyAction`, shared |
+| Command line | `cmdline.slab` | the band, the history (a `virtual` list, selectable), the keywords, the error; the typed line is the page's field in a hole (`CommandField`): the kernel's field measured 12.5 ms from key to paint against 3 to 4, and selects no word |
+| Assistant | `assistant.slab` | the frame only: title band, empty state, chips, the composer's card and toolbar. The conversation and the editor are SolidJS in holes: a Slab conversation copied a line break at every drawn line, took no link press, had no headings or lists for a screen reader, and cost 30 times the script while streaming |
+| Drafting Settings, Template Gallery | `drafting.slab`, `template-gallery.slab` | on `modal.tsx`, a tab strip being one stop with arrows; a hidden surface measures the tallest page so the dialog does not move; the gallery's stills are the renderer's PNGs registered as images |
 
 Known to be worse than SolidJS in all of them: one tab stop with arrows per surface; a pointer
 press can show the focus ring; no kerning; a screen reader sees switches where SolidJS has pressed
@@ -206,11 +210,16 @@ few more chunks than before.
 
 ## Next (agent-hours)
 
-1. **Further dialogs** (3 to 6 each when they are fields, selects and text; Drafting Settings and
-   the Layer Manager need kernel buttons, ticks and tabs in a body, not yet tried under `modal.tsx`).
-2. **The title bar and menus, the command line, the assistant**: still SolidJS in holes.
-3. The status bar and the view tabs still bind `pointer-move`, which the ribbon showed costs a
-   solve per move.
+Every region of the shell has a Slab part now. What is still SolidJS, and why:
+
+1. **The Layer Manager** (16 to 24): an 892-line virtualised grid; decide first whether it keeps
+   the SolidJS model (one Tab stop, arrows between cells) or takes `modal.tsx`'s.
+2. **Menus, the command palette, the tech sheet**: not attempted; a menu must open over other
+   regions, which a surface's overlay cannot.
+3. **Text**: every free-text field, the assistant's conversation and editor. These wait on the
+   kernel: word selection, a placeholder, copy that follows paragraphs, links, variable-height
+   virtual rows (`setItemExtent` on the web element).
+4. The status bar and the view tabs still bind `pointer-move`, a solve per move.
 
 The driver clips every hole and paints it under the later ones, so `SlabShell` lets the bars'
 holes out and raises them (`OPEN_PAST_EDGE`): before that the menu bar's menus opened unseen.

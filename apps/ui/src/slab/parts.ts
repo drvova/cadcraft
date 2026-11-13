@@ -14,6 +14,7 @@ import type { PropertiesPanelProps } from "../components/PropertiesPanel";
 import type { LayoutTabsProps, StatusBarProps } from "../components/StatusBar";
 import type { ToolStripProps } from "../components/ToolStrip";
 import type { TopBarProps } from "../components/TopBar";
+import type { AssistantPaneProps } from "../components/AssistantPane";
 import type { SlabShellProps } from "./SlabShell";
 import type { CommandLineProps } from "../components/CommandLine";
 import type { JewelryDialogProps } from "../components/JewelryDialog";
@@ -70,4 +71,6 @@ export interface SlabParts {
   TopBar?: Component<TitleBarProps>;
   /** The command line; absent when its document did not load, and the SolidJS one is shown. */
   CommandLine?: Component<CommandLineProps>;
+  /** The assistant panel's frame; absent when its document did not load, and the SolidJS panel is shown. */
+  Assistant?: Component<AssistantPaneProps>;
 }

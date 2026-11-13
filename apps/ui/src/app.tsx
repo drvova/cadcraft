@@ -1450,10 +1450,12 @@ export function App(props: AppProps): JSX.Element {
       <Line prompt={prompt} notice={notice} onSubmit={onCommand} />
     </Show>
   );
+  /** The assistant panel: the SolidJS one, or the one whose frame Slab draws when its document loaded. */
+  const Assistant = props.slab?.Assistant ?? AssistantPane;
   const assistantPane = (): JSX.Element => (
     <Show when={showAssistant() ? assistant() : undefined} keyed>
       {(chat) => (
-        <AssistantPane
+        <Assistant
           session={chat}
           selection={selection}
           layers={layers().map((l) => l.name)}

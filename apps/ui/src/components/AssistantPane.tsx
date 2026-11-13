@@ -71,6 +71,65 @@ export interface AssistantPaneProps {
   onCloseChat: (index: number) => void;
   /** The panel's close button. */
   onClose: () => void;
+  /**
+   * Draw the panel's frame another way (the Slab shell's `../slab/SlabAssistant`). Absent, the
+   * panel draws itself as below. Either way every decision is this component's: the frame is
+   * handed the state to show, the actions to run and the parts that stay as they are.
+   */
+  frame?: (view: AssistantFrame) => JSX.Element;
+}
+
+/** One thing a message carries besides its words: the canvas selection, something pointed at with `@`, or a picture. */
+export type AssistantChip = ChatImage | "selection" | Mention;
+
+/**
+ * What a frame is handed (`AssistantPaneProps.frame`): what the title, the empty state, the
+ * chips and the composer's toolbar show and do, and the parts of the panel that stay SolidJS,
+ * each to be mounted once.
+ */
+export interface AssistantFrame {
+  props: AssistantPaneProps;
+  session: AssistantSession;
+  /** The setup sheet is open: the title says so, and the composer is out of the page. */
+  setupOpen: () => boolean;
+  /** The model slot's press: open the setup, or close it. */
+  toggleSetup: () => void;
+  /** The model slot's hint, and under it where the requests go (when a model is set up). */
+  modelHint: () => string;
+  modelNote: () => string | undefined;
+  /** The context meter's figures ("0.8k / 60k"); "" until there is something to say. */
+  meter: () => string;
+  /** How much the next request carries, in characters, and the most it may. */
+  used: () => number;
+  budget: number;
+  /** The canvas selection rides in the message. */
+  selectionShown: () => boolean;
+  /** The picked things that draw a chip of their own. */
+  mentionChips: () => readonly Mention[];
+  /** Take a chip out of the message at once (a frame that plays no leaving). */
+  drop: (item: AssistantChip) => void;
+  /** Why the send key is off, or what a press does when that is not sending. */
+  sendNote: () => string | undefined;
+  /** How far the draft is over what one message may hold, or 0. */
+  over: () => number;
+  send: () => void;
+  newChat: () => void;
+  /** Open the file picker for a picture. */
+  attach: () => void;
+  /** The empty state: its one line, and the suggestions (a press fills the composer). */
+  emptyLine: string;
+  examples: readonly { icon: string; text: string }[];
+  useExample: (text: string) => void;
+  /** Put the keyboard in the composer's editor. */
+  focusEditor: () => void;
+  /** The transcript and the setup sheet over it; `drawsEmpty` false when the frame draws the empty state. */
+  main: (drawsEmpty: boolean) => JSX.Element;
+  /** What stands over the composer's card: the stack, the slash list and the `@` list. */
+  stack: () => JSX.Element;
+  /** The composer's editor in its label. */
+  editor: () => JSX.Element;
+  /** The hidden file input `attach` opens. */
+  picker: () => JSX.Element;
 }
 
 /** How many of the models a provider lists the setup offers as chips; the rest are typed by name. */
@@ -318,6 +377,10 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     setLeaving([...leaving(), item]);
     // With the interface's motion off nothing plays, so nothing would end: it goes at once.
     if (document.documentElement.dataset["animations"] === "off") takeOut(item);
+  };
+  const drop = (item: AssistantChip): void => {
+    if (!leaving().includes(item)) setLeaving([...leaving(), item]);
+    takeOut(item);
   };
   const chipClass = (item: ChatImage | "selection" | Mention, base: string): string => (leaving().includes(item) ? `${base} is-leaving` : base);
 
@@ -777,17 +840,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     );
   };
 
-  return (
-    <aside
-      class="assistant-panel"
-      ref={panelEl}
-      role="complementary"
-      aria-label="Assistant"
-      style={{ "--assistant-width": `${width()}px` }}
-      on:keydown={onEscape}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={onDrop}
-    >
+  const resizeStrip = (): JSX.Element => (
       <div
         class="assistant-resize"
         role="separator"
@@ -810,6 +863,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         onDblClick={() => resizeTo(PANEL_WIDTH.initial)}
         onKeyDown={onResizeKey}
       />
+  );
+  const head = (): JSX.Element => (
       <div class="assistant-head">
         {/* While a model is being set up the panel is that task: its title says so. One chat needs
             no title of its own (its first prompt is the first thing under this band, and a title cut
@@ -838,7 +893,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
           <IconButton icon="close" title="Close the assistant" onClick={() => props.onClose()} />
         </div>
       </div>
-
+  );
+  const main = (drawsEmpty: boolean): JSX.Element => (
       <div class="assistant-main">
       <div
         class="assistant-body"
@@ -862,7 +918,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         <Show when={from() === 0 && s.dropped() > 0}>
           <p class="assistant-earlier-note">{`This chat is long: its oldest ${s.dropped().toLocaleString()} messages and steps are no longer kept.`}</p>
         </Show>
-        <Show when={s.entries.length === 0}>
+        <Show when={drawsEmpty && s.entries.length === 0}>
           <div class="assistant-empty">
             {/* One quiet line. Before a model is set up the composer under it is the way in (its
                 model slot, or Send); after, the suggestions follow the line. */}
@@ -1150,10 +1206,9 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
           </section>
         </Show>
       </div>
-
-      {/* The setup sheet takes the panel to its foot: the composer, which cannot send without a
-          model, is out of the page (and the tab order) until the sheet closes. */}
-      <div class="assistant-composer" hidden={menuOpen()}>
+  );
+  const stack = (): JSX.Element => (
+      <>
         <Show when={s.running() || s.status() !== "" || s.queued.length > 0 || s.changes() !== null || over() > 0}>
           <div class="assistant-stack">
             <Show when={s.queued.length > 0}>
@@ -1279,10 +1334,12 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             </Show>
           </div>
         </Show>
-        <div class="assistant-box">
-          {/* The chips' box is always there, so the card eases to and from the height of its row
-              (`easeChips`). A chip that is taken away fades first (`is-leaving`) and leaves the
-              message when that has played. */}
+      </>
+  );
+  /* The chips' box is always there, so the card eases to and from the height of its row
+     (`easeChips`). A chip that is taken away fades first (`is-leaving`) and leaves the
+     message when that has played. */
+  const chips = (): JSX.Element => (
           <div class="assistant-attachments-clip" ref={chipsBox}>
             <Show when={selectionShown() || s.attached().length > 0 || mentionChips().length > 0}>
               <div class="assistant-attachments-row" ref={chipsRow}>
@@ -1323,6 +1380,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               </div>
             </Show>
           </div>
+  );
+  const editor = (): JSX.Element => (
           <label class="assistant-input" for={COMPOSER_ID}>
             <TextArea
               variant="bare"
@@ -1358,6 +1417,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               autocompleteKind={listed() === null ? undefined : "list"}
             />
           </label>
+  );
+  const toolbar = (): JSX.Element => (
           <div class="assistant-row">
             {/* The model chip and the context meter share one line: in a narrow panel the meter
                 is the first to go, and only then does the model's name give way. */}
@@ -1414,6 +1475,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               </Show>
             </div>
           </div>
+  );
+  const picker = (): JSX.Element => (
           <input
             type="file"
             accept="image/*"
@@ -1426,8 +1489,72 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               void addFiles(files);
             }}
           />
-        </div>
-      </div>
+  );
+  const view: AssistantFrame = {
+    props,
+    session: s,
+    setupOpen: menuOpen,
+    toggleSetup: () => (menuOpen() ? closeSetup() : openSetup()),
+    modelHint: chipHint,
+    modelNote: chipNote,
+    meter,
+    used,
+    budget: MAX_REQUEST_CHARS,
+    selectionShown,
+    mentionChips,
+    drop,
+    sendNote,
+    over,
+    send,
+    newChat,
+    attach: () => fileInput?.click(),
+    emptyLine: EMPTY_LINE,
+    examples: EXAMPLES,
+    useExample: (text) => {
+      s.setInput(text);
+      inputEl?.focus();
+    },
+    focusEditor: () => inputEl?.focus(),
+    main,
+    stack,
+    editor,
+    picker,
+  };
+
+  return (
+    <aside
+      class="assistant-panel"
+      ref={panelEl}
+      role="complementary"
+      aria-label="Assistant"
+      style={{ "--assistant-width": `${width()}px` }}
+      on:keydown={onEscape}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={onDrop}
+    >
+      <Show
+        when={props.frame}
+        fallback={
+          <>
+            {resizeStrip()}
+            {head()}
+            {main(true)}
+            {/* The setup sheet takes the panel to its foot: the composer, which cannot send without a
+                model, is out of the page (and the tab order) until the sheet closes. */}
+            <div class="assistant-composer" hidden={menuOpen()}>
+              {stack()}
+              <div class="assistant-box">
+                {chips()}
+                {editor()}
+                {toolbar()}
+                {picker()}
+              </div>
+            </div>
+          </>
+        }
+      >
+        {(frame) => frame()(view)}
+      </Show>
     </aside>
   );
 }

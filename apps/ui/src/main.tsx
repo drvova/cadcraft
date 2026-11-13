@@ -146,5 +146,15 @@ async function withCommandLine(boot: SlabBoot): Promise<SlabBoot> {
   return { ...boot, parts: { ...boot.parts, CommandLine: SlabCommandLine } };
 }
 
-const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts).then(withDialogs).then(withMoreDialogs).then(withRibbon).then(withTopBar).then(withCommandLine) : Promise.resolve<SlabBoot>({})]);
+/** The assistant panel's frame, added to the parts when its document loads; the SolidJS panel shows when it does not. */
+async function withAssistant(boot: SlabBoot): Promise<SlabBoot> {
+  if (boot.parts === undefined) return boot;
+  const { loadSlab } = await import("./slab/loader");
+  const assistant = await loadSlab("assistant");
+  if (!assistant.ok) return { ...boot, notice: boot.notice ?? slabPartNotice("assistant", assistant.reason) };
+  const { SlabAssistant } = await import("./slab/SlabAssistant");
+  return { ...boot, parts: { ...boot.parts, Assistant: SlabAssistant } };
+}
+
+const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts).then(withDialogs).then(withMoreDialogs).then(withRibbon).then(withTopBar).then(withCommandLine).then(withAssistant) : Promise.resolve<SlabBoot>({})]);
 render(() => <App facade={facade} slab={slab.parts} shellNotice={slab.notice} />, root);

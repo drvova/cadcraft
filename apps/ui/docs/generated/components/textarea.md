@@ -15,7 +15,7 @@ Not applicable: hand-rolled — a native `<textarea>` in Field's measured recipe
 
 Real uses, 2 call sites (`rg -c "<TextArea" src/components` → `src/components/AssistantPane.tsx:1`, `src/components/SourcePanel.tsx:1`):
 - `src/components/SourcePanel.tsx` — the Source panel's editor: `variant="bare"` in the panel's body, `rows` and `maxRows` both the rows the body holds, so the script scrolls inside it beside a gutter of line numbers; Ctrl+Enter applies. Added 2026-11-12.
-- `src/components/AssistantPane.tsx:1192` — the composer's editor: `variant="bare"` inside the card, two rows growing to nine, the combobox of the slash list while that list shows.
+- `src/components/AssistantPane.tsx:1247` — the composer's editor: `variant="bare"` inside the card, two rows growing to nine, the combobox of the slash list while that list shows.
 
 ### Example files
 | File | Covers | Caption |
@@ -215,7 +215,7 @@ export default function Invalid() {
 - The text is a fact to read rather than to edit. Use `Chip` instead.
 
 ### Rules
-- `rule/textarea-label-bound`: When a text area is rendered without a visible `<label>`, pass `ariaLabel`, because a placeholder disappears at the first character and leaves 1 unnamed text box. Evidence: single use `src/components/AssistantPane.tsx:1172`, the composer's editor, named "Ask the assistant" with a placeholder beside it. Check: test `src/ui/TextArea.test.tsx`.
+- `rule/textarea-label-bound`: When a text area is rendered without a visible `<label>`, pass `ariaLabel`, because a placeholder disappears at the first character and leaves 1 unnamed text box. Evidence: single use `src/components/AssistantPane.tsx:1227`, the composer's editor, named "Ask the assistant" with a placeholder beside it. Check: test `src/ui/TextArea.test.tsx`.
   - Don't: `<TextArea placeholder="Ask, or / for commands" value={draft()} onInput={setDraft} />`
   - Do: `<TextArea ariaLabel="Ask the assistant" placeholder="Ask, or / for commands" value={draft()} onInput={setDraft} />`
 - `rule/textarea-rows-not-height`: When a text area needs a smallest or a largest size, pass `rows` and `maxRows` rather than a `height`, `min-height` or `max-height` in a stylesheet, because the component sets the height itself from the measured text on every edit and a second height fights it by 1 line or more. Evidence: single use `src/ui/TextArea.tsx:115`, the one place the height is set. Check: test `src/ui/TextArea.test.tsx`.
@@ -236,12 +236,12 @@ export default function Invalid() {
   - Do: `<TextArea ariaLabel="Ask the assistant" role={listed() ? "combobox" : undefined} expanded={listed() ? true : undefined} controls={listed() ? "slash-list" : undefined} activeDescendant={listed() ? activeId() : undefined} value={draft()} onInput={setDraft} />`
 
 ### Content
-- `rule/textarea-placeholder-example`: When a placeholder is written, show in 2 to 6 words what goes here or what the control takes (Ask, or / for commands) and put a rule the user must keep in mind in a line tied by `describedBy`, because the placeholder is gone at the first character. Evidence: single use `src/components/AssistantPane.tsx:1041`, the composer's two placeholders. Check: review `src/components/AssistantPane.tsx`.
+- `rule/textarea-placeholder-example`: When a placeholder is written, show in 2 to 6 words what goes here or what the control takes (Ask, or / for commands) and put a rule the user must keep in mind in a line tied by `describedBy`, because the placeholder is gone at the first character. Evidence: single use `src/components/AssistantPane.tsx:1097`, the composer's two placeholders. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<TextArea ariaLabel="Ask" placeholder="Messages must be under 8,000 characters and may not be empty" />`
   - Do: `<TextArea ariaLabel="Ask the assistant" placeholder="Ask, or / for commands" />`
 
 ### Anti-slop
-- `rule/textarea-canonical-element`: When a surface needs multi-line text, render `TextArea` rather than a raw `<textarea>` with its own class and its own grow function, because the hand-built one fixes its limits in pixels (64 and 240) where the type size they were counted from can change, and every copy re-solves composition and growth. Evidence: single use `src/components/AssistantPane.tsx:98`, the composer's own `grow`. Check: review `src/ui/TextArea.tsx`.
+- `rule/textarea-canonical-element`: When a surface needs multi-line text, render `TextArea` rather than a raw `<textarea>` with its own class and its own grow function, because the hand-built one fixes its limits in pixels (64 and 240) where the type size they were counted from can change, and every copy re-solves composition and growth. Evidence: single use `src/components/AssistantPane.tsx:157`, the composer's own `grow`. Check: review `src/ui/TextArea.tsx`.
   - Don't: `<textarea class="assistant-input" rows={1} onInput={(e) => grow(e.currentTarget)} />`
   - Do: `<TextArea variant="bare" rows={2} maxRows={9} ariaLabel="Ask the assistant" value={draft()} onInput={setDraft} />`
 
