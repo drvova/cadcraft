@@ -141,7 +141,7 @@ describe("the studio", () => {
     const strip = studioRadiance([0, 0.149, 0.989], 0);
     const lens = studioRadiance([0, 0, 1], 0);
     const card = studioRadiance([0, -0.215, 0.977], 0);
-    expect(strip).toBeGreaterThan(4);
+    expect(strip).toBeGreaterThan(3);
     expect(card).toBeGreaterThan(1);
     expect(lens).toBeLessThan(strip / 8);
     expect(lens).toBeLessThan(card / 2);

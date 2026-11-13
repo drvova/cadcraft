@@ -313,10 +313,17 @@ commands on this page, so its bench sheet reads back: 32 stones, 1.35 ct, a 3.86
     the reflectance raised to a power that grows with the alloy's saturation, as gold's shadows
     are lit by the gold and by warm cards in a jeweller's tent). The white metals, whose
     reflectance is nearly grey, are left as they were; the stones keep the per-channel curve.
-  - *The studio* that lights it is drawn by formula, not loaded: four soft rectangular boxes and
-    a sweep that is bright at the horizon and dark at the floor, with the eye's own direction
-    held dark (the photographer a polished piece mirrors). It hangs in the eye's frame, so the
-    piece is lit the same from every side. Instead of a prefiltered environment map, a rough
+  - *The studio* that lights it is drawn by formula, not loaded: nine soft rectangular boxes and
+    a sweep that is bright at the horizon and dark at the floor, with only a small spot round the
+    eye's own direction held dark (the lens a polished piece mirrors). As in ring photography,
+    most boxes are *gradient strips*, brightest along their middle line and fading to their long
+    edges: a wide strip just above the lens and a dimmer one below it (so a face turned to the
+    camera shows a bright line, the dark of the lens and a fainter line), tall strips on either
+    side behind the piece, a low card in front and a low card on the left (which the broad side
+    of a band mirrors at the 3/4 view), with the overhead box, the key, the fill and the kicker.
+    A broad polished face therefore carries a bright, soft band with a crisp dark beside it
+    rather than an even brown. It hangs in the eye's frame, so the piece is lit the same from
+    every side, and the bands slide across the faces as the piece turns. Instead of a prefiltered environment map, a rough
     surface sees each box with a wider, dimmer edge (analytic, so there is nothing to prefilter
     and no float texture is needed).
   - *Stones* are the engine's faceted cuts (a round brilliant has table, star, kite, upper and
@@ -395,6 +402,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-13 | patch | Realistic studio: gradient strips round the lens, tall side strips and low cards, a smaller dark lens spot, so broad polished faces carry a bright highlight band beside a dark one instead of reading as flat bronze |
 | 2026-11-13 | patch | Realistic gold reads warm: metal keeps its hue through the tone curve, and a coloured alloy's dim reflections take its deeper tint; platinum, silver and the stones unchanged |
 | 2026-11-13 | minor | A Realistic display mode, the 3D tab's default and the stills': physically based metal under a procedural studio, faceted stones with Fresnel, a faked internal return and fire, a backdrop and a contact shadow, tone mapping, supersampled stills |
 | 2026-11-13 | minor | The piece card, the bench sheet page, the terminal dashboard and `(card)` removed with Slab |
