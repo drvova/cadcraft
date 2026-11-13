@@ -30,10 +30,10 @@ cargo run --release -p cadcraft       # shows the build embedded from apps/ui/di
 
 Without `dist/` the desktop binary still builds, and its window says how to make the build.
 
-## The Slab shell (behind `?shell=slab`)
+## The Slab shell (the default where it is built; `?shell=standard` for the SolidJS shell)
 
-The outer layout and the Bench section can be drawn by [Slab](https://github.com/stencil-hq/slab)
-(MIT, pre-alpha) instead of the SolidJS shell. Nothing of Slab is a dependency and nothing of it
+The outer layout and every region of it are drawn by [Slab](https://github.com/stencil-hq/slab)
+(MIT, pre-alpha) when its artifacts are built here, with the SolidJS shell behind `?shell=standard`. Nothing of Slab is a dependency and nothing of it
 is committed: `scripts/build-slab.mjs` builds it from source at the commit
 `third_party/slab/SLAB.lock` pins, under the patch series beside that file (the same pin and
 series the Rust side's surfaces build on: `third_party/slab/README.md`). It is built **without
@@ -51,8 +51,8 @@ bun run slab:verify   # compare src/slab-vendor/ with the record in slab.lock.js
 - Generated (git-ignored): `src/slab-vendor/` (runtime, kernel wasm, compiler wasm, the `slab`
   command line, the compiled documents, Slab's MIT licence) and `slab/gen/tokens.slab` (made
   from `src/tokens.css`).
-- Without the artifacts the interface builds and runs as always; `?shell=slab` then shows the
-  standard shell and says why in one line beside the command field.
+- Without the artifacts the interface builds and runs as always, in the standard shell;
+  `?shell=slab` then says why in one line beside the command field.
 - It needs git, cargo with rustup (upstream pins its own nightly) and bun. A wasm-bindgen of the
   version upstream locks is installed into the scratch directory, never over the one on PATH.
 - To move the pin, follow `third_party/slab/README.md` (it is shared), then

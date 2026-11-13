@@ -59,7 +59,7 @@ import type { RibbonProps, SlabParts, TitleBarProps } from "./slab/parts";
 export interface AppProps {
   facade: AppFacade;
   /**
-   * The Slab shell's parts (`?shell=slab`: `./slab/parts`), loaded by main.tsx. Absent, the
+   * The Slab shell's parts (the default; `?shell=standard` leaves them out: `./slab/parts`), loaded by main.tsx. Absent, the
    * shell is the standard one below and nothing of Slab is in the page.
    */
   slab?: SlabParts;

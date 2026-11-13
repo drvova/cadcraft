@@ -323,10 +323,12 @@ describe("the lock", () => {
 });
 
 describe("the switch and the surface", () => {
-  test("only ?shell=slab turns the Slab shell on", () => {
-    expect(shellChoice("?shell=slab")).toBe("slab");
-    expect(shellChoice("?mock=1&shell=slab")).toBe("slab");
-    for (const search of ["", "?shell=", "?shell=SLAB", "?shell=slab2", "?slab", "?shell=default", "%%%"]) expect(shellChoice(search)).toBe("default");
+  test("the Slab shell is the default, and ?shell=standard asks for the other", () => {
+    expect(shellChoice("?shell=slab")).toEqual({ shell: "slab", asked: true });
+    expect(shellChoice("?mock=1&shell=slab")).toEqual({ shell: "slab", asked: true });
+    expect(shellChoice("?shell=standard")).toEqual({ shell: "standard", asked: true });
+    // Slab is the default, and anything that is not a shell's name leaves it so.
+    for (const search of ["", "?shell=", "?shell=SLAB", "?shell=slab2", "?slab", "?shell=default", "?shell=STANDARD", "%%%"]) expect(shellChoice(search)).toEqual({ shell: "slab", asked: false });
   });
 
   test("a failure is said in one line", () => {

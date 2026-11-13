@@ -1,23 +1,32 @@
 /**
- * The one switch the Slab shell is behind: `?shell=slab` in the address. Anything else, and no
- * part of Slab is requested, compiled into the first paint or mounted: the interface is the
- * SolidJS shell it has always been.
+ * Which shell the interface is laid out by. The Slab shell is the default; `?shell=standard` in
+ * the address asks for the SolidJS shell, and then no part of Slab is requested or mounted.
+ * `?shell=slab` asks for the Slab shell by name, which changes one thing: when the toolchain was
+ * never built here, the page says so. Without it the standard shell is shown and nothing is said,
+ * since a checkout that has not built Slab is an ordinary one (the artifacts are never committed).
  */
 
-export type ShellChoice = "default" | "slab";
+export type ShellChoice = "standard" | "slab";
+
+export interface ShellAsk {
+  shell: ShellChoice;
+  /** The address named the shell: its absence is then worth a line. */
+  asked: boolean;
+}
 
 /** What the address asks for. */
-export function shellChoice(search: string): ShellChoice {
+export function shellChoice(search: string): ShellAsk {
   let value: string | null;
   try {
     value = new URLSearchParams(search).get("shell");
   } catch {
-    return "default";
+    return { shell: "slab", asked: false };
   }
-  return value === "slab" ? "slab" : "default";
+  if (value === "standard") return { shell: "standard", asked: true };
+  return { shell: "slab", asked: value === "slab" };
 }
 
-/** What is said, once, when the switch is on and the toolchain was never built here. */
+/** What is said, once, when the Slab shell was asked for by name and the toolchain was never built here. */
 export const SLAB_ABSENT = "The Slab shell is not built here (bun run build:slab in apps/ui); showing the standard interface.";
 
 /** What is said when the artifacts are there and do not load. */

@@ -1,7 +1,9 @@
 # Slab foundation, web side
 
 Status: measured 2026-11-12 on headless Chromium (Linux), production build served by `vite preview`
-unless said otherwise. Behind `?shell=slab`; the standard interface is unchanged. An earlier spike
+unless said otherwise. The Slab shell is the default since 2026-11-13 wherever its artifacts are
+built; `?shell=standard` shows the SolidJS shell, which is unchanged and is also what a checkout
+without the artifacts shows (silently, unless `?shell=slab` asks by name). An earlier spike
 (npm 0.1.0) found three blockers; this is the same technology built from source.
 
 ## The toolchain

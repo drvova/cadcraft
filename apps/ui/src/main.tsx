@@ -9,7 +9,7 @@
 import { render } from "solid-js/web";
 import { App } from "./app";
 import { createFacade } from "./facade";
-import { shellChoice, slabPartNotice } from "./slab/switch";
+import { SLAB_ABSENT, shellChoice, slabPartNotice } from "./slab/switch";
 import type { SlabParts } from "./slab/parts";
 import "./tokens.css";
 import "./ui/ui.css";
@@ -156,5 +156,8 @@ async function withAssistant(boot: SlabBoot): Promise<SlabBoot> {
   return { ...boot, parts: { ...boot.parts, Assistant: SlabAssistant } };
 }
 
-const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts).then(withDialogs).then(withMoreDialogs).then(withRibbon).then(withTopBar).then(withCommandLine).then(withAssistant) : Promise.resolve<SlabBoot>({})]);
+const ask = shellChoice(window.location.search);
+/** A checkout that never built Slab shows the standard shell without a word, unless Slab was asked for by name. */
+const quietWhenAbsent = (boot: SlabBoot): SlabBoot => (!ask.asked && boot.parts === undefined && boot.notice === SLAB_ABSENT ? {} : boot);
+const [facade, slab] = await Promise.all([createFacade(), ask.shell === "slab" ? loadSlabParts().then(quietWhenAbsent).then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts).then(withDialogs).then(withMoreDialogs).then(withRibbon).then(withTopBar).then(withCommandLine).then(withAssistant) : Promise.resolve<SlabBoot>({})]);
 render(() => <App facade={facade} slab={slab.parts} shellNotice={slab.notice} />, root);
