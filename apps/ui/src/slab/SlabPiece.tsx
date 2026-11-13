@@ -2,7 +2,7 @@
  * The Piece section drawn by Slab (`slab/piece.slab`): the same props as
  * `../components/PiecePanel`, the same state (`createPieceSection`), the same row editing
  * (`createRowEdit`), the same handlers. Only the view is Slab's: the rows, results and checks are
- * typed list params, and every press, pick, tick and typed value comes back as a signal with the
+ * typed list params, and every press, tick and typed value comes back as a signal with the
  * row's key.
  *
  * What the host does because the kernel owns the controls:
@@ -11,9 +11,11 @@
  *   change, `row_submit` is Enter, and the field losing the kernel's focus (seen after each frame)
  *   or the surface losing the page's is the commit a blur makes. A value the engine changed is
  *   written into the field's buffer unless it is being typed into.
- * - **A choice** opens its values as a list under its row (a Slab surface cannot paint outside
- *   its own box, so there is no popup): the row's button says `expanded`, the values are options,
- *   Escape or leaving the list closes it, and a pick returns the focus to the button.
+ * - **A choice** opens its values as a popup over the page (`./popup`; a Slab surface cannot paint
+ *   outside its own box), anchored to the row's control, as the Properties section's do: the
+ *   control says `expanded`, the keyboard goes to the list, and a pick, Escape or Tab bring it
+ *   back to the control. A press outside closes the popup; when that press is on the control
+ *   that opened it, it is the closing and nothing more.
  * - **The keys.** One tab stop and the arrows, as in the Bench section; Up and Down leave a
  *   field for the row above or below, since Left and Right are the caret's. Keys typed in a field
  *   are kept from the shell (`./fields`).
@@ -26,7 +28,8 @@ import type { PiecePanelProps } from "../components/PiecePanel";
 import type { PieceRow } from "../piece";
 import { createPieceSection, createRowEdit, type RowEdit } from "../piece-edit";
 import { fieldKeepsKey, isSlabFieldHost, type SlabFieldHost } from "./fields";
-import { fieldNode, fieldNodeLike, focusedRow, heldOption, hiddenEnds, optionNode, pickedValue, piecePanelParams, signalRow, startKind, startNode, stepNode, choiceNode, PIECE_LISTS, PIECE_SCALARS, PIECE_SIGNALS, UNCAPPED, type PiecePanelParams } from "./piece-params";
+import { fieldNode, fieldNodeLike, focusedRow, hiddenEnds, pickedValue, piecePanelParams, piecePopup, signalRow, startKind, startNode, stepNode, choiceNode, PIECE_LISTS, PIECE_SCALARS, PIECE_SIGNALS, UNCAPPED, type PiecePanelParams } from "./piece-params";
+import { isReopen, returnFocus, sceneBoxInWindow, SlabPopup, type OpenPopup, type PopupDismiss } from "./popup";
 import { attachSurface } from "./surface";
 import { isSlabHost, signalDetail } from "./types";
 import "./slab-piece.css";
@@ -70,8 +73,13 @@ export function SlabPiece(props: PiecePanelProps): JSX.Element {
   /** The section folds to its heading, as the rail's other sections do. */
   const [open, setOpen] = createSignal(true);
   const { piece, system, setPicked, rows, facts, refused, setRefused, run } = createPieceSection(props);
-  /** The choice row whose values are listed under it. */
+  /** The choice row whose popup is open, and the popup. */
   const [openChoice, setOpenChoice] = createSignal<string | null>(null);
+  const [popup, setPopup] = createSignal<OpenPopup | null>(null);
+  const closePopup = (): void => {
+    setPopup(null);
+    setOpenChoice(null);
+  };
   /** The faults found here, before the engine was asked, by row key. */
   const [faults, setFaults] = createSignal<ReadonlyMap<string, string>>(new Map());
   const [bodyMax, setBodyMax] = createSignal(UNCAPPED);
@@ -99,6 +107,9 @@ export function SlabPiece(props: PiecePanelProps): JSX.Element {
   );
 
   let element: HTMLElement | undefined;
+  /** What the popup asks of the mounted surface; set once it is mounted. */
+  let pick: (value: string, byKey: boolean) => void = () => undefined;
+  let dismiss: (reason: PopupDismiss) => void = closePopup;
 
   onMount(() => {
     if (element === undefined || !isSlabHost(element) || !isSlabFieldHost(element)) return;
@@ -106,6 +117,8 @@ export function SlabPiece(props: PiecePanelProps): JSX.Element {
     const states = new Map<string, RowState>();
     /** The row whose field had the kernel's focus at the last look. */
     let editing: string | null = null;
+    /** The row whose popup a press outside it closed, and when: that press is not a new opening. */
+    let closedByPress: { row: string; at: number } | null = null;
 
     const setFault = (key: string, message: string | null): void => {
       const now = untrack(faults);
@@ -183,7 +196,7 @@ export function SlabPiece(props: PiecePanelProps): JSX.Element {
         if (!state.dirty) state.draft = row.value;
       }
       const openNow = untrack(openChoice);
-      if (openNow !== null && !keys.has(openNow)) setOpenChoice(null);
+      if (openNow !== null && !keys.has(openNow)) closePopup();
     });
 
     /**
@@ -224,26 +237,19 @@ export function SlabPiece(props: PiecePanelProps): JSX.Element {
     /** After a solve: a field the focus left is committed, and the fields show their drafts. */
     const afterFrame = (): void => {
       syncEditing();
-      const scene = host.sceneSnapshot();
-      const focused = host.focusedKey();
-      const at = focusedRow(focused);
       for (const state of states.values()) if (!state.dirty) pushDraft(state);
-      // The focus moved out of an open list (the arrows walked past its end, or a press elsewhere).
-      const listed = untrack(openChoice);
-      if (listed !== null && focused !== null && at !== listed) setOpenChoice(null);
       // The body fades at the ends that hide rows (the next solve paints it).
-      setHidden(hiddenEnds(scene));
+      setHidden(hiddenEnds(host.sceneSnapshot()));
     };
     host.addEventListener("slab-frame", afterFrame);
 
-    /** The keyboard left the surface: what a blur does to a field, and to an open list. */
+    /** The keyboard left the surface: what a blur does to a field. An open popup has it, and stays. */
     const onFocusOut = (e: FocusEvent): void => {
       const to = e.relatedTarget;
       if (to instanceof Node && (to === host || host.contains(to) || host.shadowRoot?.contains(to) === true)) return;
       // The kernel's focus stays on the field it was on; the page's has gone, which is the blur.
       const left = editing;
       if (left !== null) states.get(left)?.edit.commitText(true);
-      setOpenChoice(null);
     };
     host.addEventListener("focusout", onFocusOut);
 
@@ -263,6 +269,46 @@ export function SlabPiece(props: PiecePanelProps): JSX.Element {
           if (stop instanceof HTMLElement) stop.focus({ preventScroll: true });
         });
       });
+    };
+
+    /** Open a choice row's popup under its control; it opens on the value the row holds, as a native list does. */
+    const openPopup = (row: PieceRow): void => {
+      const key = row.key;
+      const { options, held } = piecePopup(row);
+      if (options.length === 0) return;
+      setOpenChoice(key);
+      setPopup({
+        label: row.label,
+        options,
+        held,
+        anchor: () => {
+          const scene = host.sceneSnapshot();
+          const node = choiceNode(scene, key);
+          const part = node === null ? undefined : scene.find((n) => n.key === node);
+          return part === undefined ? null : sceneBoxInWindow(host, part);
+        },
+      });
+    };
+    pick = (picked, byKey) => {
+      const key = untrack(openChoice);
+      closePopup();
+      if (key === null) return;
+      const row = signalRow(untrack(rows), key);
+      const value = pickedValue(row, picked);
+      returnFocus(host, () => choiceNode(host.sceneSnapshot(), key), byKey);
+      if (row === null || value === null) return;
+      const state = stateFor(row);
+      state.draft = value;
+      state.edit.commit(value);
+    };
+    dismiss = (reason) => {
+      const key = untrack(openChoice);
+      closePopup();
+      if (key === null) return;
+      if (reason === "outside") closedByPress = { row: key, at: performance.now() };
+      // A press outside takes the focus itself when it lands on something that takes it; until
+      // then, and for every other way out, the keyboard is back on the row's control.
+      returnFocus(host, () => choiceNode(host.sceneSnapshot(), key), reason === "escape" || reason === "tab");
     };
 
     /** The kernel's focus when the key went down, before the driver moved it for that key. */
@@ -289,13 +335,7 @@ export function SlabPiece(props: PiecePanelProps): JSX.Element {
       const at = focusedRow(focused);
       const inField = at !== null && focused === fieldNode(host.sceneSnapshot(), at);
       if (e.key === "Escape") {
-        const listed = openChoice();
-        if (listed !== null) {
-          e.preventDefault();
-          e.stopPropagation();
-          setOpenChoice(null);
-          focusWhenSettled(() => choiceNode(host.sceneSnapshot(), listed));
-        } else if (inField && at !== null && states.get(at)?.edit.cancel() === true) {
+        if (inField && at !== null && states.get(at)?.edit.cancel() === true) {
           // Escape cancels this edit only; with nothing to cancel it is the shell's.
           e.preventDefault();
           e.stopPropagation();
@@ -320,7 +360,7 @@ export function SlabPiece(props: PiecePanelProps): JSX.Element {
       const detail = signalDetail(event);
       const item = detail?.item ?? "";
       if (name === "fold") {
-        setOpenChoice(null);
+        closePopup();
         setOpen(!open());
         return;
       }
@@ -339,27 +379,16 @@ export function SlabPiece(props: PiecePanelProps): JSX.Element {
         if (run({ remove: true })) focusWhenSettled(() => startNode(host.sceneSnapshot()), byKeyboard(event));
         return;
       }
-      if (name === "option_pick") {
-        const listed = openChoice();
-        const row = listed === null ? null : signalRow(rows(), listed);
-        const value = pickedValue(row, item);
-        if (row === null || listed === null || value === null) return;
-        setOpenChoice(null);
-        const state = stateFor(row);
-        state.draft = value;
-        state.edit.commit(value);
-        focusWhenSettled(() => choiceNode(host.sceneSnapshot(), listed), byKeyboard(event));
-        return;
-      }
       const row = signalRow(rows(), item);
       if (row === null) return;
       const state = stateFor(row);
       if (name === "row_choose" && row.kind === "choice") {
-        const opening = openChoice() !== row.key;
-        setOpenChoice(opening ? row.key : null);
-        const held = heldOption(row);
-        // Opened, the list starts on the value the row holds, as a native list does.
-        if (opening && held !== null) focusWhenSettled(() => optionNode(host.sceneSnapshot(), row.key, held), byKeyboard(event));
+        // The press that closed this row's popup is the closing, not a new opening.
+        const closed = closedByPress;
+        closedByPress = null;
+        if (!byKeyboard(event) && closed !== null && closed.row === row.key && isReopen(closed.at, performance.now())) return;
+        if (openChoice() === row.key) closePopup();
+        else openPopup(row);
       } else if (name === "row_tick" && row.kind === "tick") {
         const value = row.value === "true" ? "false" : "true";
         state.draft = value;
@@ -406,5 +435,10 @@ export function SlabPiece(props: PiecePanelProps): JSX.Element {
     });
   });
 
-  return <slab-piece-panel ref={element} class="slab-piece" />;
+  return (
+    <>
+      <slab-piece-panel ref={element} class="slab-piece" />
+      <SlabPopup popup={popup} onPick={(value, byKey) => pick(value, byKey)} onClose={(reason) => dismiss(reason)} />
+    </>
+  );
 }

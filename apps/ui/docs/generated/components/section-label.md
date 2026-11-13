@@ -19,7 +19,7 @@ Real uses, 18 call sites (`rg -c "<SectionLabel" src/components` → `src/compon
 - `src/components/AssistantPane.tsx:995` — the setup sheet's "Provider" heading over its list.
 - `src/components/LayersPanel.tsx:83` — the "Layers" heading.
 - `src/components/BenchPanel.tsx` — the "Bench" heading over the piece's stones and metal. Added 2026-11-12.
-- `src/components/PropertiesPanel.tsx:99` — the "Properties" heading.
+- `src/components/PropertiesPanel.tsx:88` — the "Properties" heading.
 
 ### Example files
 | File | Covers | Caption |

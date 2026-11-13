@@ -1,0 +1,33 @@
+/*
+ * The Slab Properties section's page side (`SlabProperties.tsx`): the frame around the surface,
+ * where it stands in the rail as `.properties` does (interaction.css), and the invisible stand-ins
+ * the interface's hint is placed by (`hints.ts`). The document draws everything that shows.
+ */
+
+/* As `.properties`: as tall as its rows up to its share of the rail (the host sets the basis),
+   and the one section that gives way when the rail is full. The surface is told the height the
+   frame was given and scrolls its body inside it; until it has been told, nothing shows past the
+   frame. It keeps its heading and one row (with the body's insets), as a section of a full rail. */
+.slab-properties {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: calc(var(--control-h-input) + var(--control-h-row) + var(--gap-4));
+  overflow: hidden;
+}
+
+/* Folded, it is its heading. */
+.slab-properties.is-folded {
+  min-height: var(--control-h-input);
+}
+
+.slab-properties > slab-properties-panel {
+  display: block;
+}
+
+/* Over one part of the surface, for the hint that is placed beside it. It never takes the
+   pointer: the surface under it does. */
+.slab-properties > .slab-anchor {
+  position: absolute;
+  pointer-events: none;
+}

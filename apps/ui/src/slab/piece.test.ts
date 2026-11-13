@@ -19,16 +19,15 @@ import {
   fieldNode,
   fieldNodeLike,
   focusedRow,
-  heldOption,
   hiddenEnds,
   MAX_PIECE_OPTIONS,
   MAX_PIECE_ROWS,
-  optionNode,
   pickedValue,
   PIECE_LISTS,
   PIECE_SCALARS,
   PIECE_SIGNALS,
   piecePanelParams,
+  piecePopup,
   rowParam,
   sentenceText,
   signalRow,
@@ -127,7 +126,7 @@ describe("the piece panel's params", () => {
     expect(params.summary).toBe("Solitaire · US 6½");
     const by = new Map(params.rows.map((r) => [r.key, r]));
     expect(params.rows.map((r) => r.key)).toEqual(pieceRows(piece("solitaire"), CHOICES, "us").map((r) => r.key));
-    expect(by.get("kind")).toMatchObject({ name: "Kind", shown: "Solitaire", said: "Kind: Solitaire", choice: true, tick: false, typed: false, open: false, options: [] });
+    expect(by.get("kind")).toMatchObject({ name: "Kind", shown: "Solitaire", said: "Kind: Solitaire", choice: true, tick: false, typed: false, open: false });
     expect(by.get("metal")).toMatchObject({ shown: "18k gold", choice: true });
     expect(by.get("wall")).toMatchObject({ name: "Wall, mm", shown: "1.8", typed: true, choice: false, tick: false });
     expect(by.get("size")).toMatchObject({ shown: "6½", typed: true });
@@ -137,15 +136,20 @@ describe("the piece panel's params", () => {
     for (const r of params.rows) expect([r.choice, r.tick, r.typed].filter(Boolean).length).toBe(1);
   });
 
-  test("only the open choice hands over its values, with the held one picked", () => {
-    const params = panel(piece("band", { profile: "comfort" }), { openChoice: "profile" });
-    const profile = params.rows.find((r) => r.key === "profile");
-    expect(profile?.open).toBe(true);
-    expect(profile?.options.map((o) => o.key).slice(0, 3)).toEqual(["o-0", "o-1", "o-2"]);
-    expect(profile?.options.filter((o) => o.picked).map((o) => o.name)).toEqual(["Comfort fit"]);
-    for (const r of params.rows) if (r.key !== "profile") expect(r.options).toEqual([]);
+  test("only the open choice says it is open; its values are the popup's, opened on the held one", () => {
+    const band = piece("band", { profile: "comfort" });
+    const params = panel(band, { openChoice: "profile" });
+    expect(params.rows.filter((r) => r.open).map((r) => r.key)).toEqual(["profile"]);
     // A typed row cannot be opened.
     expect(panel(piece("band"), { openChoice: "wall" }).rows.find((r) => r.key === "wall")?.open).toBe(false);
+    const profile = rowOf(band, "profile");
+    const listed = piecePopup(profile);
+    expect(listed.options.map((o) => o.value)).toEqual((profile.choices ?? []).map((c) => c.value));
+    expect(listed.options.find((o) => o.value === listed.held)?.label).toBe("Comfort fit");
+    // A value its choices do not hold opens the list on none; a row that is no choice has no list.
+    expect(piecePopup({ key: "cut", label: "Cut", value: "gone", kind: "choice", choices: CHOICES.cuts }).held).toBeNull();
+    expect(piecePopup(rowOf(band, "wall"))).toEqual({ options: [], held: null });
+    expect(piecePopup({ key: "cut", label: "Cut", value: "round", kind: "choice" }).options).toEqual([]);
   });
 
   test("a refusal marks its row and is what a screen reader is told", () => {
@@ -196,8 +200,9 @@ describe("the piece panel's params", () => {
     const row: PieceRow = { key: "metal", label: "Me\u0007tal\n", value: "v0", kind: "choice", choices: Array.from({ length: 500 }, (_, i) => ({ value: `v${i}`, label: `L${i}\u0000` })) };
     const shaped = rowParam(row, { openChoice: "metal", faults: new Map([["metal", "no\u0000 ".repeat(400)]]) });
     expect(shaped.name).toBe("Me tal");
-    expect(shaped.options.length).toBe(MAX_PIECE_OPTIONS);
-    expect(shaped.options[1]?.name).toBe("L1");
+    const listed = piecePopup(row);
+    expect(listed.options.length).toBe(MAX_PIECE_OPTIONS);
+    expect(listed.options[1]).toEqual({ value: "v1", label: "L1" });
     expect(shaped.hint.length).toBeLessThanOrEqual(400);
     const p = piece("band");
     const many = Array.from({ length: 300 }, (_, i): PieceRow => ({ key: `k${"a".repeat(i % 20)}`, label: "L", value: "1", kind: "number" }));
@@ -219,24 +224,22 @@ describe("a signal's item key", () => {
     for (const forged of ["", "0", "wall/..", "__proto__", "constructor", "w".repeat(200), "wall "]) expect(signalRow(rows, forged)).toBeNull();
   });
 
-  test("a pressed option is a value of that row's choices only", () => {
+  test("a pick is a value of that row's choices only", () => {
     const metal = rowOf(piece("solitaire"), "metal");
-    expect(pickedValue(metal, "o-1")).toBe("platinum");
-    expect(pickedValue(metal, "o-2")).toBeNull();
-    expect(pickedValue(rowOf(piece("solitaire"), "wall"), "o-0")).toBeNull();
-    for (const forged of ["", "o--1", "o-1e3", "o-9999", "1", "o-1 "]) expect(pickedValue(metal, forged)).toBeNull();
-    expect(pickedValue(null, "o-0")).toBeNull();
+    expect(pickedValue(metal, "platinum")).toBe("platinum");
+    expect(pickedValue(metal, "Platinum")).toBeNull();
+    expect(pickedValue(rowOf(piece("solitaire"), "wall"), "1.8")).toBeNull();
+    for (const forged of ["", "o-1", "gone", "platinum ", "__proto__"]) expect(pickedValue(metal, forged)).toBeNull();
+    expect(pickedValue(null, "platinum")).toBeNull();
+    // Past the cap a value is not one the popup listed.
+    const many: PieceRow = { key: "metal", label: "Metal", value: "v0", kind: "choice", choices: Array.from({ length: 500 }, (_, i) => ({ value: `v${i}`, label: `L${i}` })) };
+    expect(pickedValue(many, `v${MAX_PIECE_OPTIONS - 1}`)).toBe(`v${MAX_PIECE_OPTIONS - 1}`);
+    expect(pickedValue(many, `v${MAX_PIECE_OPTIONS}`)).toBeNull();
   });
 
   test("a start is one of the kinds", () => {
     expect(startKind("eternity")).toBe("eternity");
     for (const forged of ["", "remove", "Band", "toString"]) expect(startKind(forged)).toBeNull();
-  });
-
-  test("an opened list starts on the held value", () => {
-    expect(heldOption(rowOf(piece("solitaire", { metal: "platinum" }), "metal"))).toBe("o-1");
-    expect(heldOption({ key: "cut", label: "Cut", value: "gone", kind: "choice", choices: CHOICES.cuts })).toBe("o-0");
-    expect(heldOption({ key: "cut", label: "Cut", value: "round", kind: "choice", choices: [] })).toBeNull();
   });
 });
 
@@ -246,8 +249,6 @@ describe("the solved scene's keys", () => {
   const scene = [
     { key: "PiecePanel@0/col@0/#head/#fold" },
     { key: `${ROW("kind")}/#choice` },
-    { key: `${BODY}/#rows/each@0~kind/col@0/#values/each@0~o-0/#option` },
-    { key: `${BODY}/#rows/each@0~kind/col@0/#values/each@0~o-1/#option` },
     { key: `${ROW("size")}/row@0/#field` },
     { key: `${ROW("wall")}/row@0/#field` },
     { key: `${ROW("halo")}/row@1/#tick` },
@@ -256,7 +257,7 @@ describe("the solved scene's keys", () => {
 
   test("a node's row", () => {
     expect(focusedRow(`${ROW("wall")}/row@0/#field`)).toBe("wall");
-    expect(focusedRow(`${BODY}/#rows/each@0~kind/col@0/#values/each@0~o-1/#option`)).toBe("kind");
+    expect(focusedRow(`${ROW("kind")}/#choice`)).toBe("kind");
     expect(focusedRow(`${BODY}/#foot/#remove`)).toBeNull();
     expect(focusedRow(null)).toBeNull();
   });
@@ -265,11 +266,9 @@ describe("the solved scene's keys", () => {
     expect(fieldNode(scene, "wall")).toBe(`${ROW("wall")}/row@0/#field`);
     expect(fieldNode(scene, "kind")).toBeNull();
     expect(choiceNode(scene, "kind")).toBe(`${ROW("kind")}/#choice`);
-    expect(optionNode(scene, "kind", "o-1")).toBe(`${BODY}/#rows/each@0~kind/col@0/#values/each@0~o-1/#option`);
-    expect(optionNode(scene, "kind", "o-7")).toBeNull();
     for (const forged of ["", "wall/", "~wall", ".*"]) {
       expect(fieldNode(scene, forged)).toBeNull();
-      expect(optionNode(scene, forged, "o-0")).toBeNull();
+      expect(choiceNode(scene, forged)).toBeNull();
     }
   });
 
@@ -515,7 +514,8 @@ describe("the document", () => {
     const none = piecePanelParams({ kind: "none" }, [], [], [], VIEW);
     const without = (item: object | undefined): string[] => Object.keys(item ?? {}).filter((k) => k !== "key").sort();
     expect(fields("PieceRow")).toEqual(without(params.rows[0]));
-    expect(fields("PieceOption")).toEqual(without(params.rows[0]?.options[0]));
+    // A choice's values are the page's popup, not items of the document.
+    expect(code).not.toMatch(/def PieceOption|role=listbox|role=option|\battach=/);
     expect(fields("PieceFact")).toEqual(without(params.facts[0]));
     expect(fields("PieceCheck")).toEqual(without(params.checks[0]));
     expect(fields("PieceStartLine")).toEqual(without(none.lines[0]));
@@ -537,7 +537,7 @@ describe("the document", () => {
     // `act=` and `field=` give no role: each control's header must write one, or be a field (a textbox).
     const headers = code.replace(/\\\n\s*/g, " ").split("\n");
     for (const line of headers) {
-      if (/\bact=/.test(line)) expect(line).toMatch(/\brole=(button|option|checkbox)\b/);
+      if (/\bact=/.test(line)) expect(line).toMatch(/\brole=(button|combobox|checkbox)\b/);
       if (/\bfield=/.test(line)) expect(line).toMatch(/\blabel=name\b/);
     }
   });

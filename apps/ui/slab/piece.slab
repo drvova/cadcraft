@@ -1,11 +1,13 @@
 // The Piece section of the sidebar: the parametric ring the engine's `piece` command builds. With
 // no piece it offers the kinds; with one it lists the parameters of its kind, each edited in
-// place (a typed value, a choice from a list that opens under its row, a tick), then what the
-// engine worked out and its checks, and a way to remove it.
+// place (a typed value, a choice whose values open as a popup over the panel, a tick), then what
+// the engine worked out and its checks, and a way to remove it.
 //
 // The view only. Every string and every boolean is shaped in TypeScript (src/piece.ts,
-// src/slab/piece-params.ts); every press, pick and typed value comes back as a signal and goes
-// through the same row logic as the SolidJS panel (src/piece-edit.ts).
+// src/slab/piece-params.ts); every press, tick and typed value comes back as a signal and goes
+// through the same row logic as the SolidJS panel (src/piece-edit.ts). The popup of a choice is
+// not drawn here: a surface paints inside its own box. The host draws it (src/slab/popup.tsx),
+// anchored to the row's `#choice`, as it does for the Properties section.
 //
 // Measures follow src/interaction.css (.properties-head, .prop-row, .piece-check, .piece-foot):
 // the heading is 24 high, a row 22, a label starts on the rail's text column (24 in), a value
@@ -13,7 +15,7 @@
 import "gen/tokens.slab"
 
 icon chevron viewbox=24 {
-  path "M6 9l6 6 6-6" bg=none stroke=current stroke-w=2
+  path "M6 9l6 6 6-6" bg=none stroke=current stroke-w=2.5
 }
 
 icon mark viewbox=24 {
@@ -52,26 +54,12 @@ def PieceStartLine(more=false, starts=list(PieceStart)) export {
   }
 }
 
-// One value of a choice, in the list that opens under its row.
-def PieceOption(name="", picked=false) export {
-  row #option w=fill h=size.control-h-row pad=0,space.g8,0,24 gap=space.g4 align=center color=color.text-dim \
-      act=option_pick role=option label=name selected=picked transition=dur.fast {
-    when hover { bg=color.hover color=color.text }
-    when picked { color=color.text }
-    when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
-    text name style=text.body w=fill nowrap ellipsis align-text=end
-    row w=size.icon-size-sm h=size.icon-size-sm align=center pack=center color=color.text-accent {
-      when picked { icon mark size=size.icon-size-sm }
-    }
-  }
-}
-
 // One parameter: its label and the control its kind of value takes. `shown` is the value as it
 // reads (a choice's label, the typed text the field starts from); `said` is a choice as a screen
 // reader is told it ("Kind: Solitaire": a row scrolled out of sight has no text of its own in the
 // tree); `hint` is the refusal standing on the row, in words.
 def PieceRow(name="", shown="", said="", hint="", choice=false, tick=false, typed=false, \
-             open=false, on=false, bad=false, options=list(PieceOption)) export {
+             open=false, on=false, bad=false) export {
   col w=fill role=listitem {
     row w=fill h=size.control-h-row pad=0,space.g8,0,24 gap=space.g8 align=center transition=dur.fast {
       when hover { bg=color.control-hover }
@@ -97,22 +85,21 @@ def PieceRow(name="", shown="", said="", hint="", choice=false, tick=false, type
         }
         when choice {
           row #choice w=fill h=size.control-h-chip pad=0,0,0,space.g4 gap=space.g4 radius=radius.control \
-              align=center color=color.text act=row_choose role=button label=said desc=hint expanded=open \
-              stroke-w=1 stroke-align=inside transition=dur.fast {
+              align=center color=color.text act=row_choose role=combobox label=said desc=hint expanded=open \
+              stroke-w=1 transition=dur.fast {
             when hover { bg=color.control stroke=color.border }
+            when open { bg=color.control stroke=color.border }
             when bad { stroke=color.error }
             when focus-visible { stroke=color.focus-ring }
             text shown style=text.body w=fill nowrap ellipsis align-text=end
-            icon chevron size=size.icon-size-sm color=color.icon {
-              when open { rotate=180 }
-            }
+            icon chevron size=size.icon-size-sm color=color.icon
           }
         }
         when tick {
           row h=fill pad=0,space.g16,0,0 align=center {
             row #tick w=size.icon-size-md h=size.icon-size-md radius=radius.small align=center pack=center \
                 act=row_tick role=checkbox label=name checked=on color=color.on-accent \
-                stroke=color.icon stroke-w=1 stroke-align=inside transition=dur.fast {
+                stroke=color.icon stroke-w=1 transition=dur.fast {
               when hover { bg=color.hover }
               when on { bg=color.accent stroke=color.accent }
               when focus-visible { stroke=color.focus-ring stroke-w=2 }
@@ -120,12 +107,6 @@ def PieceRow(name="", shown="", said="", hint="", choice=false, tick=false, type
             }
           }
         }
-      }
-    }
-    // Closed, the host hands over no values and the list is not in the scene.
-    when open {
-      col #values w=fill bg=color.surface-inset role=listbox label=name {
-        each options
       }
     }
   }

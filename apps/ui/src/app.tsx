@@ -1349,6 +1349,8 @@ export function App(props: AppProps): JSX.Element {
   const PieceSection = props.slab?.Piece ?? PiecePanel;
   /** The Objects section: the SolidJS one, or the one ported to Slab when its document loaded. */
   const Objects = props.slab?.Objects ?? ObjectsPanel;
+  /** The Properties section: the SolidJS one, or the one ported to Slab when its document loaded. */
+  const Properties = props.slab?.Properties ?? PropertiesPanel;
   const railSections = (): JSX.Element => (
     <>
       <Show when={showPiece()}>
@@ -1361,7 +1363,7 @@ export function App(props: AppProps): JSX.Element {
         <Objects list={objects()} available={objectsAvailable()} selection={selection()} onSelect={onBenchSelect} />
       </Show>
       <Show when={showProperties()}>
-        <PropertiesPanel properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={onPropertyNotice} />
+        <Properties properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={onPropertyNotice} />
       </Show>
     </>
   );

@@ -66,6 +66,16 @@ async function withObjects(boot: SlabBoot): Promise<SlabBoot> {
   return { ...boot, parts: { ...boot.parts, Objects: SlabObjects } };
 }
 
+/** The Properties section, added to the parts when its document loads; the SolidJS one shows when it does not. */
+async function withProperties(boot: SlabBoot): Promise<SlabBoot> {
+  if (boot.parts === undefined) return boot;
+  const { loadSlab } = await import("./slab/loader");
+  const properties = await loadSlab("properties");
+  if (!properties.ok) return { ...boot, notice: boot.notice ?? slabPartNotice("Properties section", properties.reason) };
+  const { SlabProperties } = await import("./slab/SlabProperties");
+  return { ...boot, parts: { ...boot.parts, Properties: SlabProperties } };
+}
+
 /** The status bar and the tabs over the drawing, each when its document loads; the SolidJS one is shown otherwise. */
 async function withChromeParts(boot: SlabBoot): Promise<SlabBoot> {
   if (boot.parts === undefined) return boot;
@@ -78,5 +88,5 @@ async function withChromeParts(boot: SlabBoot): Promise<SlabBoot> {
   return notice === undefined ? { parts } : { parts, notice };
 }
 
-const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects).then(withChromeParts) : Promise.resolve<SlabBoot>({})]);
+const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts) : Promise.resolve<SlabBoot>({})]);
 render(() => <App facade={facade} slab={slab.parts} shellNotice={slab.notice} />, root);

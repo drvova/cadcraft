@@ -2,13 +2,14 @@
  * The Piece section as the Slab panel takes it (`slab/piece.slab`): typed scalar and list params,
  * nothing else. Every figure is the engine's, read with checked narrowing by `../piece`; the rows,
  * the results, the heading and the checks are the ones `../piece` makes for the SolidJS panel.
- * This file only shapes them, caps them again (a Slab list is laid out whole) and reads a signal's
- * item key back to the row or the value it names. The behaviour stays where it was: `../piece`,
- * `../piece-edit` and the shell's handlers.
+ * This file only shapes them, caps them again (a Slab list is laid out whole), reads a signal's
+ * item key back to the row it names and makes a choice's values for the popup (`./popup`). The
+ * behaviour stays where it was: `../piece`, `../piece-edit` and the shell's handlers.
  */
 
 import { MAX_CHECKS, PIECE_KINDS, pieceHeading, type PieceCheck, type PieceFact, type PieceRow, type PieceState } from "../piece";
 import { paramText } from "./bench-params";
+import type { PopupOption } from "./popup";
 
 /** One kind a piece starts as: a `PieceStart` of the document. Its key is the kind. */
 export interface PieceStartParam {
@@ -26,13 +27,6 @@ export interface PieceStartLineParam {
   starts: PieceStartParam[];
 }
 
-/** One value of an open choice: a `PieceOption`. Its key is its place in the row's choices. */
-export interface PieceOptionParam {
-  key: string;
-  name: string;
-  picked: boolean;
-}
-
 /** One parameter: a `PieceRow`. Its key is the row's key, so a field keeps its text across a refresh. */
 export interface PieceRowParam {
   key: string;
@@ -46,13 +40,12 @@ export interface PieceRowParam {
   choice: boolean;
   tick: boolean;
   typed: boolean;
-  /** The choice's list is open under the row. */
+  /** The choice's popup is open. */
   open: boolean;
   /** The tick is set. */
   on: boolean;
   /** The row is marked as refused. */
   bad: boolean;
-  options: PieceOptionParam[];
 }
 
 export interface PieceFactParam {
@@ -96,7 +89,7 @@ export interface PiecePanelParams {
 /** The document's scalar params, its list params and the signals the host answers (`slab/piece.slab`). */
 export const PIECE_SCALARS = ["summary", "open", "unavailable", "none", "held", "counted", "judged", "above", "below", "between", "checks_name", "body_max"] as const;
 export const PIECE_LISTS = ["lines", "rows", "facts", "checks"] as const;
-export const PIECE_SIGNALS = ["fold", "start", "templates", "remove", "row_choose", "option_pick", "row_tick", "row_edit", "row_submit"] as const;
+export const PIECE_SIGNALS = ["fold", "start", "templates", "remove", "row_choose", "row_tick", "row_edit", "row_submit"] as const;
 
 /** What the host holds beside the engine's state: the view's own switches. */
 export interface PieceView {
@@ -104,7 +97,7 @@ export interface PieceView {
   open: boolean;
   /** The size system shown. */
   system: string;
-  /** The key of the choice row whose list is open; null when none is. */
+  /** The key of the choice row whose popup is open; null when none is. */
   openChoice: string | null;
   /** The refusal standing on each marked row, by row key. */
   faults: ReadonlyMap<string, string>;
@@ -138,8 +131,6 @@ export function sentenceText(value: string): string {
   line = line.replace(/ {2,}/g, " ").trim();
   return line.length > MAX_SENTENCE ? `${line.slice(0, MAX_SENTENCE - 1)}…` : line;
 }
-
-const optionKey = (index: number): string => `o-${index}`;
 
 /** The kinds on one line of the empty state: three fit the rail at its starting width, as the SolidJS panel wraps them. */
 export const STARTS_PER_LINE = 3;
@@ -185,9 +176,17 @@ export function rowParam(row: PieceRow, view: Pick<PieceView, "openChoice" | "fa
     open,
     on: tick && row.value === "true",
     bad: fault !== null,
-    // A closed choice hands over no values: nothing under it is laid out, focusable or read out.
-    options: open ? (row.choices ?? []).slice(0, MAX_PIECE_OPTIONS).map((c, index) => ({ key: optionKey(index), name: paramText(c.label), picked: c.value === row.value })) : [],
   };
+}
+
+/**
+ * A choice row's values for the popup (`./popup`), capped: the value handed back and its label.
+ * `held` is the value the popup opens on: the row's, or none when its choices do not hold it.
+ */
+export function piecePopup(row: PieceRow): { options: PopupOption[]; held: string | null } {
+  if (row.kind !== "choice") return { options: [], held: null };
+  const options = (row.choices ?? []).slice(0, MAX_PIECE_OPTIONS).map((c) => ({ value: c.value, label: paramText(c.label) }));
+  return { options, held: options.some((option) => option.value === row.value) ? row.value : null };
 }
 
 /** The panel with nothing under its heading. */
@@ -243,26 +242,18 @@ export function signalRow(rows: readonly PieceRow[], itemKey: string): PieceRow 
   return rows.slice(0, MAX_PIECE_ROWS).find((row) => row.key === itemKey) ?? null;
 }
 
-/** The value a pressed option stands for in its row's choices; null when the key names none. */
-export function pickedValue(row: PieceRow | null, optionItem: string): string | null {
-  const m = /^o-(\d{1,3})$/.exec(optionItem);
-  if (row === null || row.kind !== "choice" || m === null) return null;
-  const index = Number(m[1]);
-  if (index >= MAX_PIECE_OPTIONS) return null;
-  return row.choices?.[index]?.value ?? null;
+/**
+ * The value a pick names, when it is one of the row's choices; null when it is not (a pick that
+ * arrives after the row's choices changed does nothing).
+ */
+export function pickedValue(row: PieceRow | null, value: string): string | null {
+  if (row === null || row.kind !== "choice") return null;
+  return (row.choices ?? []).slice(0, MAX_PIECE_OPTIONS).find((c) => c.value === value)?.value ?? null;
 }
 
 /** The kind a pressed start button stands for; null when the key is not one of the kinds. */
 export function startKind(itemKey: string): string | null {
   return PIECE_KINDS.find((kind) => kind.value === itemKey)?.value ?? null;
-}
-
-/** The key of the option that holds the row's value (the first when none does); null with no options. */
-export function heldOption(row: PieceRow): string | null {
-  const choices = (row.choices ?? []).slice(0, MAX_PIECE_OPTIONS);
-  if (choices.length === 0) return null;
-  const at = choices.findIndex((c) => c.value === row.value);
-  return optionKey(at < 0 ? 0 : at);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -301,12 +292,6 @@ export function fieldNodeLike(scene: readonly KeyedNode[], row: string): string 
   if (!/^[a-zA-Z]{1,24}$/.test(row)) return null;
   const sibling = scene.find((node) => focusedRow(node.key) !== null && node.key.endsWith("/#field"))?.key;
   return sibling === undefined ? null : sibling.replace(/(#rows\/each@\d+~)[a-zA-Z]{1,24}\//, `$1${row}/`);
-}
-
-/** The full key of an option of a row's open list; null when the scene has none. */
-export function optionNode(scene: readonly KeyedNode[], row: string, option: string): string | null {
-  if (!/^[a-zA-Z]{1,24}$/.test(row) || !/^o-\d{1,3}$/.test(option)) return null;
-  return scene.find((node) => inRow(node.key, row) && node.key.endsWith(`~${option}/#option`))?.key ?? null;
 }
 
 /** A node of the solved scene with its painted box. */
