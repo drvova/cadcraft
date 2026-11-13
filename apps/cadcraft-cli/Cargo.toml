@@ -9,14 +9,6 @@ publish = false
 [lints]
 workspace = true
 
-[features]
-# The designed surfaces: `run --card`, `run --sheet`, the `tui` dashboard, and `(card)` in the
-# MCP server (docs/surfaces.md). They are built on Slab, which the main workspace does not name,
-# so this feature is only ever on in the surfaces workspace, whose `surfaces/cli` builds this same
-# source file with the crates it needs (`cargo xtask surfaces build`). Turning it on here does not
-# build: there is nothing behind it in this manifest.
-surfaces = []
-
 [dependencies]
 cadcraft-engine = { workspace = true }
 cadcraft-io = { workspace = true }

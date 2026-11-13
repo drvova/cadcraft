@@ -22,7 +22,7 @@ pub fn tool_definitions(_has_ui: bool) -> Value {
 
 /// The most bytes of one picture a result inlines. A client receives it base64-encoded (a third
 /// larger) inside one JSON-RPC line; past this a picture is named, not sent. The engine's own
-/// renders and the piece card are far below it.
+/// renders are far below it.
 pub const MAX_IMAGE_BYTES: u64 = 4 * 1024 * 1024;
 /// The most pictures one result inlines.
 pub const MAX_IMAGES: usize = 8;

@@ -33,7 +33,6 @@ pub mod sample;
 pub mod select;
 pub mod snap;
 pub mod spatial;
-pub mod surfaces;
 pub mod sysvars;
 pub mod undoctl;
 pub mod units;

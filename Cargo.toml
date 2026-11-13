@@ -2,10 +2,8 @@
 resolver = "3"
 members = ["crates/*", "apps/*", "xtask"]
 # `apps/ui` is the SolidJS interface: a bun app, not a Rust crate, so the `apps/*` member glob
-# must not try to load it as one. `surfaces` is a workspace of its own: the designed surfaces,
-# built on Slab, which this workspace does not name (surfaces/Cargo.toml). `third_party/slab/src`
-# is Slab's own workspace, fetched there by `cargo xtask slab` (absent on a fresh clone).
-exclude = ["apps/ui", "surfaces", "third_party/slab/src"]
+# must not try to load it as one.
+exclude = ["apps/ui"]
 # default-members
 
 [workspace.package]

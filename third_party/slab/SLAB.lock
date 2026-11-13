@@ -1,9 +1,0 @@
-# Slab as CADCraft builds it: upstream at one commit, under the patch series in patches/.
-# Read by `cargo xtask slab` and scripts/build-slab.mjs; README.md beside this file explains.
-# A patch line is `patch SHA256 FILE`; the patches apply in the order they are listed.
-repo https://github.com/stencil-hq/slab
-commit 65747371a18da9a54a94955473d0ec7f7fd07d5f
-patch bf928e61984b7e45df8dfc5e5ce9c4095556a1a27d08f7ceb9c893ca161d3e05 0001-fix-compile-build-from-a-clean-checkout-without-the-.patch
-patch 145e0fc7f01bde774b65fa6c47db83b6c17f47d546988f5624b1c857e1126ee5 0002-feat-fonts-make-the-bundled-fallback-faces-a-feature.patch
-patch a5f26249dbf0a15f52068629749e668bf0321a972cdb5b7c3e9c085665a77522 0003-feat-web-register-a-face-by-its-metrics-painted-by-t.patch
-patch 170e3adf544d9e82c564e142a4f32be3568cfbc2c6663a8dc208e80de85fc58d 0004-fix-svg-no-empty-name-at-the-head-of-a-font-family-l.patch

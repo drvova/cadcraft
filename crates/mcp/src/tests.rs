@@ -391,17 +391,3 @@ fn run_is_an_ordinary_command() {
     assert_eq!(cadcraft_ai::code::METHOD, "engine.execute");
     assert_eq!(cadcraft_ai::code::COMMAND, "run");
 }
-
-/// A server whose host installed no renderer answers `(card)` with a sentence. (With one, the
-/// card comes back as a picture: surfaces/cli/tests/mcp_card.rs, in the surfaces workspace.)
-#[test]
-fn a_server_without_the_surfaces_says_the_card_is_not_available() {
-    let mut s = Server::new(Box::new(Headless::default()));
-    run(&mut s, r#"(cmd "new" '((METRIC . T)))"#);
-    let r = run_raw(&mut s, "(card)");
-    // Another test in this process may have installed a renderer; without one it is an error.
-    if !cadcraft_engine::surfaces::available() {
-        assert_eq!(r["result"]["isError"], json!(true), "{r}");
-        assert!(r["result"]["content"][0]["text"].as_str().unwrap().contains("not available"), "{r}");
-    }
-}

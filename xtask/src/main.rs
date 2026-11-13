@@ -7,7 +7,6 @@ mod assets;
 mod ico;
 mod layers;
 mod parity;
-mod slab;
 mod stats;
 mod version;
 
@@ -21,20 +20,11 @@ commands:
   assets          check that every icon/image/font/asset is attributed in ATTRIBUTION.md
   layers          enforce the crate dependency layering (plan/architecture.md §3)
   wasm            cargo check --target wasm32-unknown-unknown for the wasm-safe crates
-  ui [--strict]   the interface's gate: the Slab toolchain (built when it does not match
-                  apps/ui/slab.lock.json; CADCRAFT_SKIP_SLAB=1 leaves it out), then bun type
-                  check, tests and build in apps/ui (skipped,
+  ui [--strict]   the interface's gate: bun type check, tests and build in apps/ui (skipped,
                   with a note, where bun is missing; --strict makes that a failure)
   test            cargo nextest run (cargo test without nextest) plus the doctests
-  ci              fmt --check, clippy -D warnings, test, assets, layers, wasm, ui, surfaces (stops at
-                  first failure; the surfaces step is skipped, with a note, until `slab` has run)
-  slab [--verify] fetch Slab at the commit third_party/slab/SLAB.lock pins into the git-ignored
-                  third_party/slab/src and apply the patch series (needs git and the network;
-                  --verify only checks the patches against the lock)
-  surfaces <test|check|clippy|fmt|build|run> [args]
-                  the surfaces workspace (surfaces/: the surface crate and the command-line tool
-                  built with it), on the patched Slab; fetches it when absent.
-                  `surfaces run -- tui --sample`, `surfaces build --release`
+  ci              fmt --check, clippy -D warnings, test, assets, layers, wasm, ui (stops at
+                  first failure)
   corpus [--download]
                   show where test corpora live; --download fetches PngSuite into corpus/pngsuite
   stats [--exact] count tests and lines per crate (--exact: ask the test harness via `-- --list`)
@@ -53,8 +43,6 @@ fn main() -> ExitCode {
         Some("ui") => cmd_ui(rest.contains(&"--strict")),
         Some("test") => cmd_test(),
         Some("ci") => cmd_ci(),
-        Some("slab") => slab::fetch(&root(), rest.contains(&"--verify")),
-        Some("surfaces") => slab::surfaces(&root(), &rest),
         Some("corpus") => cmd_corpus(rest.contains(&"--download")),
         Some("stats") => stats::run(&root(), rest.contains(&"--exact")),
         Some("parity") => parity::run(&root()),
@@ -214,28 +202,6 @@ fn cmd_ui(strict: bool) -> Result<(), String> {
     let mut wasm = Command::new(&bun);
     wasm.current_dir(&ui).args(["run", "build:wasm"]);
     run(wasm, "bun run build:wasm (apps/ui)")?;
-    // The Slab shell is the default, and its toolchain is built from source, never committed
-    // (apps/ui/docs/slab-foundation.md). Built here only when what is there does not match
-    // apps/ui/slab.lock.json; `CADCRAFT_SKIP_SLAB=1` leaves it out on a box with no network, and
-    // the interface is then built and tested as the standard shell.
-    let slab = std::env::var("CADCRAFT_SKIP_SLAB").map(|v| v != "1").unwrap_or(true);
-    if slab {
-        let mut verify = Command::new(&bun);
-        verify.current_dir(&ui).args(["run", "slab:verify"]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
-        let built = verify.status().map(|s| s.success()).unwrap_or(false);
-        let steps: &[(&[&str], &str)] = if built {
-            &[(&["run", "slab:docs"], "bun run slab:docs (apps/ui)")]
-        } else {
-            &[(&["run", "build:slab"], "bun run build:slab (apps/ui)"), (&["run", "slab:verify"], "bun run slab:verify (apps/ui)")]
-        };
-        for (args, what) in steps {
-            let mut c = Command::new(&bun);
-            c.current_dir(&ui).args(*args);
-            run(c, what)?;
-        }
-    } else {
-        eprintln!("note: CADCRAFT_SKIP_SLAB=1: the Slab toolchain was not built; the interface is checked as the standard shell");
-    }
     for (args, what) in [
         (vec!["run", "typecheck"], "bun run typecheck (apps/ui)"),
         (vec!["test"], "bun test (apps/ui)"),
@@ -246,35 +212,7 @@ fn cmd_ui(strict: bool) -> Result<(), String> {
         c.current_dir(&ui).args(&args);
         run(c, what)?;
     }
-    if slab && !dist_has_slab(&ui.join("dist").join("assets")) {
-        return Err("apps/ui/dist holds no Slab runtime: the build would show the standard shell with nothing said".into());
-    }
     Ok(())
-}
-
-/// Whether a built interface carries the Slab runtime (a `slab-runtime-<hash>.js` chunk).
-fn dist_has_slab(assets: &Path) -> bool {
-    std::fs::read_dir(assets)
-        .map(|dir| dir.flatten().any(|e| e.file_name().to_str().is_some_and(|n| n.starts_with("slab-runtime-") && n.ends_with(".js"))))
-        .unwrap_or(false)
-}
-
-/// The designed surfaces (docs/surfaces.md) are built on Slab, which is not in the repository:
-/// `cargo xtask slab` fetches and patches it. Where that has run, the gate lints and tests them;
-/// where it has not, the step says so and passes, as the interface's does without bun: a fresh
-/// clone's gate must not need the network, and everything else is built without Slab.
-fn cmd_surfaces() -> Result<(), String> {
-    let root = root();
-    slab::fetch(&root, true)?;
-    if !slab::fetched(&root) {
-        eprintln!(
-            "note: the patched Slab is not fetched; the designed surfaces were not linted or tested (cargo xtask slab, then cargo xtask surfaces test)"
-        );
-        return Ok(());
-    }
-    slab::surfaces(&root, &["fmt"])?;
-    slab::surfaces(&root, &["clippy"])?;
-    slab::surfaces(&root, &["test"])
 }
 
 fn cmd_ci() -> Result<(), String> {
@@ -301,7 +239,6 @@ fn cmd_ci() -> Result<(), String> {
         ("layers", Box::new(cmd_layers)),
         ("wasm", Box::new(cmd_wasm)),
         ("ui", Box::new(|| cmd_ui(false))),
-        ("surfaces", Box::new(cmd_surfaces)),
     ];
     let mut done = Vec::new();
     for (name, f) in &steps {

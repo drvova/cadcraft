@@ -293,9 +293,6 @@ pub struct Headless {
 
 impl Default for Headless {
     fn default() -> Self {
-        // The engine's `(card …)` draws through a renderer its host installs
-        // (`cadcraft_engine::surfaces::install`): the command-line tool built in the surfaces
-        // workspace does, before it serves. Without one `(card)` answers with a sentence.
         Headless { session: Session::new() }
     }
 }
