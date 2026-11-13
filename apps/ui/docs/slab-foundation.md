@@ -43,6 +43,17 @@ without the artifacts shows (silently, unless `?shell=slab` asks by name). An ea
   SLIR without `slab-runtime.js` and the kernel: the interface loads the runtime and kernel the
   same build produced.
 
+### Where it is built
+
+- `cargo xtask ui` (so `cargo xtask ci`, which is what CI runs): builds the toolchain when what is
+  in `src/slab-vendor/` does not match `slab.lock.json`, verifies it, and fails when the built
+  `dist` holds no Slab runtime. `CADCRAFT_SKIP_SLAB=1` leaves Slab out on a box with no network.
+- `packaging/env.sh` `build_interface` (Linux, macOS, web) and `packaging/windows/package.ps1`: the
+  same, with no skip: a package without the Slab runtime stops.
+- It needs git, rustup and the network, and takes several minutes the first time. Not yet run on
+  macOS or Windows: `slab:verify` holds the wasm to checksums made on Linux, and a build that
+  differs there will stop the package.
+
 ## Fonts
 
 **No font is in the build.** Upstream's kernel compiles in eight faces (Inter and JetBrains Mono,
