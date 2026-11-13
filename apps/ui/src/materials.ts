@@ -244,6 +244,11 @@ export interface Softbox {
   intensity: number;
   /** Width of the soft edge, in the same tangent units. */
   edge: number;
+  /**
+   * How much the box falls off from its middle line to its long edges (across its narrow side) (0 = even, 1 = dark at the
+   * edges): a gradient strip, whose reflection in a polished face is a bright line fading to dark.
+   */
+  grad: number;
 }
 
 const unit = (v: Vec3): Vec3 => {
@@ -253,32 +258,52 @@ const unit = (v: Vec3): Vec3 => {
 const cross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
-/** A box facing the piece from `dir`, its long side across (horizontal) unless `tall`. */
-function box(dir: Vec3, half: readonly [number, number], intensity: number, edge: number): Softbox {
+/** A box facing the piece from `dir`, its long side across (horizontal). */
+function box(dir: Vec3, half: readonly [number, number], intensity: number, edge: number, grad = 0): Softbox {
   const d = unit(dir);
   const across = unit(cross([0, 1, 0], d));
-  return { dir: d, across: Math.hypot(...across) > 0 ? across : [1, 0, 0], half, intensity, edge };
+  return { dir: d, across: Math.hypot(...across) > 0 ? across : [1, 0, 0], half, intensity, edge, grad };
 }
 
 /**
- * A jeweller's light tent, seen from the piece: a broad box overhead, a key strip high on the
- * left, a narrow fill strip on the right and a low kicker behind, with dark gaps between them.
+ * A jeweller's light tent, seen from the piece. The light a polished face shows is whatever lies
+ * in its mirror direction, and the broad faces of a ring at the usual views (the outside of a band
+ * turned toward the camera, its top, its shoulders) mirror the space round and just above the
+ * camera. So, as in ring photography, the tent has:
+ *
+ * - a wide gradient strip just above the lens, running across the whole view: every face turned
+ *   toward the camera carries its bright line, fading to dark at its edges;
+ * - a dimmer strip below the lens (a white card on the table), so a band's outside shows a second,
+ *   fainter line and the dark between them;
+ * - the dark of the camera itself between the two (the sweep's eye hole): the crisp dark band;
+ * - a broad box overhead for the top faces, a key strip high on the left, a narrow fill on the
+ *   right and a low kicker behind, with dark gaps between them.
+ *
  * The gaps matter as much as the boxes: polished metal and a diamond are read by the contrast of
- * what they mirror.
+ * what they mirror. `STUDIO_BOXES` is the count the shader's arrays are sized by.
  */
 export const STUDIO: readonly Softbox[] = [
-  box([0.0, 1.0, 0.25], [0.95, 0.6], 4.0, 0.12),
-  box([-0.85, 0.45, 0.55], [0.22, 0.8], 7.0, 0.06),
-  box([0.9, 0.25, 0.5], [0.12, 0.7], 4.0, 0.05),
+  box([0.0, 1.0, 0.25], [0.95, 0.6], 3.2, 0.12, 0.35),
+  box([-0.85, 0.45, 0.55], [0.22, 0.8], 6.0, 0.06, 0.5),
+  box([0.9, 0.25, 0.5], [0.12, 0.7], 3.5, 0.05, 0.4),
   box([0.2, 0.35, -1.0], [0.9, 0.18], 3.0, 0.08),
+  box([0.0, 0.15, 1.0], [1.7, 0.065], 5.0, 0.035, 0.7),
+  box([0.0, -0.22, 1.0], [1.5, 0.05], 1.8, 0.03, 0.6),
+  box([1.0, 0.1, -0.25], [0.16, 1.4], 4.5, 0.06, 0.7),
+  box([-1.0, 0.05, -0.45], [0.14, 1.4], 3.0, 0.06, 0.7),
+  box([0.0, -0.5, 0.85], [1.4, 0.2], 2.6, 0.08, 0.85),
+  box([-0.88, -0.4, 0.22], [0.7, 0.045], 3.2, 0.03, 0.75),
 ];
+
+/** How many boxes the studio has (the shader's arrays are this long). */
+export const STUDIO_BOXES = STUDIO.length;
 
 /**
  * The sweep behind the boxes: brightness at the floor, at the horizon and overhead, and how much of
  * the light straight behind the eye is held back (the photographer and the camera, which a polished
- * piece mirrors: the dark that gives a diamond its contrast).
+ * piece mirrors: the dark that gives a diamond its contrast, and the dark band beside a strip).
  */
-export const SWEEP = { floor: 0.12, horizon: 1.3, top: 0.6, eye: 0.85 } as const;
+export const SWEEP = { floor: 0.12, horizon: 1.5, top: 0.6, eye: 0.9 } as const;
 
 const smoothstep = (a: number, b: number, x: number): number => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -310,7 +335,7 @@ export function sweepRadiance(dir: Vec3, roughness: number): number {
   const r = Number.isFinite(roughness) ? Math.min(1, Math.max(0, roughness)) : 0;
   const soft = 0.12 + 0.6 * r;
   const light = y < 0 ? SWEEP.floor + (SWEEP.horizon - SWEEP.floor) * smoothstep(-0.3 - soft, 0.02, y) : SWEEP.top + (SWEEP.horizon - SWEEP.top) * (1 - smoothstep(0, 0.6 + soft, y));
-  return light * (1 - SWEEP.eye * smoothstep(0.82 - soft * 0.5, 0.97, d[2]));
+  return light * (1 - SWEEP.eye * smoothstep(0.975 - soft * 0.3, 0.996, d[2]));
 }
 
 /** The softboxes alone (the shader's `boxes()`): what a stone returns from inside, where the sweep is lost. */
@@ -327,7 +352,9 @@ export function boxRadiance(dir: Vec3, roughness: number): number {
     const { edge, gain } = boxSpread(b, r);
     const mx = 1 - smoothstep(b.half[0] - edge, b.half[0] + edge, x);
     const my = 1 - smoothstep(b.half[1] - edge, b.half[1] + edge, yy);
-    light += b.intensity * gain * mx * my;
+    // The gradient runs across the strip's narrow side.
+    const t = b.half[0] < b.half[1] ? Math.min(1, x / (b.half[0] + edge)) : Math.min(1, yy / (b.half[1] + edge));
+    light += b.intensity * gain * mx * my * (1 - b.grad * t * t);
   }
   return light;
 }

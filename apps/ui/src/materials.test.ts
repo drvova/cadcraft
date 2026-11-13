@@ -6,6 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   acesFilm,
+  boxRadiance,
   boxSpread,
   channelIors,
   contactShadow,
@@ -133,6 +134,38 @@ describe("the studio", () => {
       expect(rough.gain).toBeLessThan(1);
       expect(studioRadiance(b.dir, 0.6)).toBeLessThan(studioRadiance(b.dir, 0));
     }
+  });
+
+  test("a face turned to the camera mirrors a bright strip above the lens and the dark of the camera below it", () => {
+    // The mirror direction of a face turned straight at the camera is back toward the eye (+z).
+    const strip = studioRadiance([0, 0.149, 0.989], 0);
+    const lens = studioRadiance([0, 0, 1], 0);
+    const card = studioRadiance([0, -0.215, 0.977], 0);
+    expect(strip).toBeGreaterThan(4);
+    expect(card).toBeGreaterThan(1);
+    expect(lens).toBeLessThan(strip / 8);
+    expect(lens).toBeLessThan(card / 2);
+    // Across the view the strip holds: a face turned a little left or right still catches it.
+    for (const x of [-0.5, -0.2, 0.2, 0.5]) expect(studioRadiance([x, 0.149, 0.989], 0)).toBeGreaterThan(2);
+  });
+
+  test("a gradient strip is brightest along its middle and fades toward its long edges", () => {
+    const front = STUDIO.find((b) => b.grad > 0.5 && b.dir[2] > 0.9 && b.dir[1] > 0);
+    expect(front).toBeDefined();
+    if (!front) return;
+    const up: Vec3 = [0, 1, 0];
+    const at = (k: number): number => boxRadiance([front.dir[0] + up[0] * k, front.dir[1] + up[1] * k, front.dir[2] + up[2] * k], 0);
+    expect(at(0)).toBeGreaterThan(at(0.04));
+    expect(at(0.04)).toBeGreaterThan(at(0.08));
+  });
+
+  test("a rough metal sees the strip wider and dimmer", () => {
+    const peak = (r: number): number => studioRadiance([0, 0.149, 0.989], r);
+    // Well above the strip a polished face sees none of it, a rough one its spread glow.
+    const off = (r: number): number => boxRadiance([0, 0.6, 0.8], r);
+    expect(peak(0.5)).toBeLessThan(peak(0));
+    expect(off(0)).toBeLessThan(0.05);
+    expect(off(0.6)).toBeGreaterThan(off(0) + 0.2);
   });
 
   test("it is finite and never negative, whatever is asked", () => {

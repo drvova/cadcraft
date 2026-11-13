@@ -30,7 +30,7 @@ import {
   type StandardView,
   type Vec3,
 } from "./view3d";
-import { contactShadow, DEEP_POWER, EXPOSURE, HUE_KEEP, realBatch, REAL_FLOATS, SHADOW_FLOATS, STUDIO, supersampledSize, SWEEP } from "./materials";
+import { contactShadow, DEEP_POWER, EXPOSURE, HUE_KEEP, realBatch, REAL_FLOATS, SHADOW_FLOATS, STUDIO, STUDIO_BOXES, supersampledSize, SWEEP } from "./materials";
 
 // ---- the shaders ----
 
@@ -164,9 +164,10 @@ void main() {
  * sees each box with a wider, dimmer edge. No texture, so no float-texture extension is needed.
  */
 const STUDIO_GLSL = `
-uniform vec3 uBoxDir[4];
-uniform vec3 uBoxAcross[4];
-uniform vec4 uBoxShape[4];
+uniform vec3 uBoxDir[${STUDIO_BOXES}];
+uniform vec3 uBoxAcross[${STUDIO_BOXES}];
+uniform vec4 uBoxShape[${STUDIO_BOXES}];
+uniform float uBoxGrad[${STUDIO_BOXES}];
 uniform vec4 uSweep;
 uniform float uHueWhite;
 uniform float uDeepPower;
@@ -177,11 +178,11 @@ vec3 toEye(vec3 d) { return vec3(dot(d, uRight), dot(d, uUp), dot(d, uBack)); }
 float sweep(vec3 d, float r) {
   float soft = 0.12 + 0.6 * r;
   float light = d.y < 0.0 ? mix(uSweep.x, uSweep.y, smoothstep(-0.3 - soft, 0.02, d.y)) : mix(uSweep.y, uSweep.z, smoothstep(0.0, 0.6 + soft, d.y));
-  return light * (1.0 - uSweep.w * smoothstep(0.82 - soft * 0.5, 0.97, d.z));
+  return light * (1.0 - uSweep.w * smoothstep(0.975 - soft * 0.3, 0.996, d.z));
 }
 float boxes(vec3 d, float r) {
   float light = 0.0;
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < ${STUDIO_BOXES}; i++) {
     vec3 bd = uBoxDir[i];
     float c = dot(d, bd);
     if (c > 0.02) {
@@ -193,7 +194,8 @@ float boxes(vec3 d, float r) {
       float e = sh.w + 1.6 * r * r;
       float grow = e - sh.w;
       float gain = sh.x * sh.y / ((sh.x + grow) * (sh.y + grow));
-      light += sh.z * gain * (1.0 - smoothstep(sh.x - e, sh.x + e, x)) * (1.0 - smoothstep(sh.y - e, sh.y + e, y));
+      float t = sh.x < sh.y ? min(1.0, x / (sh.x + e)) : min(1.0, y / (sh.y + e));
+      light += sh.z * gain * (1.0 - smoothstep(sh.x - e, sh.x + e, x)) * (1.0 - smoothstep(sh.y - e, sh.y + e, y)) * (1.0 - uBoxGrad[i] * t * t);
     }
   }
   return light;
@@ -511,6 +513,7 @@ export function createRenderer(gl: WebGLRenderingContext): Renderer | string {
     boxDir: gl.getUniformLocation(program, "uBoxDir"),
     boxAcross: gl.getUniformLocation(program, "uBoxAcross"),
     boxShape: gl.getUniformLocation(program, "uBoxShape"),
+    boxGrad: gl.getUniformLocation(program, "uBoxGrad"),
     sweep: gl.getUniformLocation(program, "uSweep"),
     hueWhite: gl.getUniformLocation(program, "uHueWhite"),
     deepPower: gl.getUniformLocation(program, "uDeepPower"),
@@ -522,6 +525,7 @@ export function createRenderer(gl: WebGLRenderingContext): Renderer | string {
   const boxDir = new Float32Array(STUDIO.flatMap((b) => [...b.dir]));
   const boxAcross = new Float32Array(STUDIO.flatMap((b) => [...b.across]));
   const boxShape = new Float32Array(STUDIO.flatMap((b) => [b.half[0], b.half[1], b.intensity, b.edge]));
+  const boxGrad = new Float32Array(STUDIO.map((b) => b.grad));
   const metalBuffer = gl.createBuffer();
   const stoneBuffer = gl.createBuffer();
   const gridBuffer = gl.createBuffer();
@@ -597,6 +601,7 @@ export function createRenderer(gl: WebGLRenderingContext): Renderer | string {
     gl.uniform3fv(u.boxDir, boxDir);
     gl.uniform3fv(u.boxAcross, boxAcross);
     gl.uniform4fv(u.boxShape, boxShape);
+    gl.uniform1fv(u.boxGrad, boxGrad);
     gl.uniform4f(u.sweep, SWEEP.floor, SWEEP.horizon, SWEEP.top, SWEEP.eye);
     gl.uniform1f(u.hueWhite, HUE_KEEP.white);
     gl.uniform1f(u.deepPower, DEEP_POWER);
