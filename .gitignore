@@ -20,3 +20,5 @@ node_modules/
 
 # Hegel (property-based tests) keeps the failing examples it found here, to replay them first.
 .hegel/
+# Per-agent build caches (CARGO_TARGET_DIR=target-<name>), deleted when the work is done.
+/target-*/
