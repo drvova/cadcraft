@@ -15,67 +15,51 @@
  *
  * The pointer lights the row it moves over; a list that scrolls under a still pointer does not.
  *
- * The list and its order are `../palette.ts`'s; this component only draws them, a screenful at
+ * The list and its order are `../palette.ts`'s, and the state and the keys `../palette-model.ts`'s
+ * (shared with the palette Slab draws); this component only draws them, a screenful at
  * a time (more rows are drawn as the list is walked or scrolled, so a long registry costs
  * nothing to open).
  */
 
-import { createEffect, createMemo, createSignal, For, on, Show, type Accessor, type JSX } from "solid-js";
+import { createEffect, For, on, Show, type JSX } from "solid-js";
 import { isMacPlatform, shortcutLabel } from "../commands";
 import { ToolIcon } from "../icons";
-import { highlight, PALETTE_LIMIT, rankCommands, recentItems, rowName, stepActive, type PaletteItem, type PaletteMatch } from "../palette";
+import { highlight, rowName } from "../palette";
+import { createPaletteModel, paletteOptionId as optionId, type CommandPaletteProps } from "../palette-model";
 import { Field } from "../ui/Field";
 import { Kbd } from "../ui/Kbd";
 import { Row } from "../ui/Row";
 import "../palette.css";
 
-export interface CommandPaletteProps {
-  open: Accessor<boolean>;
-  items: Accessor<readonly PaletteItem[]>;
-  /** The ids used last, newest first. */
-  recent: Accessor<readonly string[]>;
-  /** Run a command; the shell closes the palette. */
-  onRun: (id: string) => void;
-  onClose: () => void;
-}
-
-const optionId = (index: number): string => `palette-option-${index}`;
+export type { CommandPaletteProps } from "../palette-model";
 
 export function CommandPalette(props: CommandPaletteProps): JSX.Element {
-  const [query, setQuery] = createSignal("");
-  const [active, setActive] = createSignal(0);
-  /** How many of the matches are drawn; it grows as the list is walked or scrolled. */
-  const [shown, setShown] = createSignal(PALETTE_LIMIT);
   let dialog: HTMLDialogElement | undefined;
   let input: HTMLInputElement | undefined;
   let list: HTMLDivElement | undefined;
-  /** The lit row follows the keyboard into view; a row lit by the pointer is already under it. */
-  let follow = true;
-  /** Where the pointer last was, so a row sliding under a still pointer is not taken for a move. */
-  let pointerAt = "";
   const mac = isMacPlatform();
 
-  const matches = createMemo<PaletteMatch[]>(() => (props.open() ? rankCommands(query(), props.items(), props.recent(), Number.POSITIVE_INFINITY) : []));
-  const rows = createMemo(() => matches().slice(0, shown()));
-  const typed = (): boolean => query().trim() !== "";
-  /** With nothing typed, how many of the first rows are the recently used ones. */
-  const recentCount = createMemo(() => (typed() ? 0 : recentItems(props.items(), props.recent()).length));
-  const current = (): PaletteMatch | undefined => matches()[active()];
-
-  /** Light a row from the keyboard: draw it if the list has not reached it yet, and bring it into view. */
-  const light = (index: number): void => {
-    follow = true;
-    if (index >= shown()) setShown((Math.floor(index / PALETTE_LIMIT) + 1) * PALETTE_LIMIT);
-    setActive(index);
+  /** How many rows a page key moves: the rows the list shows, less one kept for context. */
+  const page = (): number => {
+    const row = list?.querySelector(".ui-row");
+    const height = row instanceof HTMLElement ? row.offsetHeight : 0;
+    return height > 0 && list !== undefined ? Math.max(1, Math.floor(list.clientHeight / height) - 1) : 10;
   };
+  // The state, the keys and the order are the model's (`../palette-model`), shared with the
+  // palette Slab draws; this component draws the rows and scrolls its list.
+  const model = createPaletteModel(props, {
+    pageRows: page,
+    toTop: () => {
+      if (list !== undefined) list.scrollTop = 0;
+    },
+  });
+  const { query, active, matches, rows, recentCount, current, run, status } = model;
 
   createEffect(
     on(props.open, (open) => {
       if (dialog === undefined) return;
       if (open) {
-        setShown(PALETTE_LIMIT);
-        light(0);
-        pointerAt = "";
+        model.opened();
         if (!dialog.open) dialog.showModal();
         if (list !== undefined) list.scrollTop = 0;
         input?.focus();
@@ -86,92 +70,16 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
     }),
   );
 
-  // The registry can change under an open palette (a command ends, a selection changes what can
-  // run): the lit row stays on its command, and never points past the end of the list.
-  let litId = "";
-  let litQuery = "";
-  createEffect(
-    on(matches, (now) => {
-      const at = litQuery === query() && litId !== "" ? now.findIndex((m) => m.item.id === litId) : -1;
-      if (at >= 0 && at !== active()) light(at);
-      else if (active() >= now.length && now.length > 0) light(now.length - 1);
-    }),
-  );
-  createEffect(() => {
-    litId = current()?.item.id ?? "";
-    litQuery = query();
-  });
-
   // The lit row stays in view as the keys move it, with a row of context past it (the list's
   // scroll padding); the first and last rows take the list to its very end.
   createEffect(
     on(active, (index) => {
-      if (!follow || list === undefined) return;
+      if (!model.follows() || list === undefined) return;
       if (index === 0) list.scrollTop = 0;
       else if (index === matches().length - 1) list.scrollTop = list.scrollHeight;
       else document.getElementById(optionId(index))?.scrollIntoView({ block: "nearest" });
     }),
   );
-
-  const run = (item: PaletteItem | undefined): void => {
-    if (item === undefined || !item.enabled) return;
-    setQuery("");
-    props.onRun(item.id);
-  };
-
-  /** How many rows a page key moves: the rows the list shows, less one kept for context. */
-  const page = (): number => {
-    const row = list?.querySelector(".ui-row");
-    const height = row instanceof HTMLElement ? row.offsetHeight : 0;
-    return height > 0 && list !== undefined ? Math.max(1, Math.floor(list.clientHeight / height) - 1) : 10;
-  };
-
-  const onKeyDown = (e: KeyboardEvent): void => {
-    if (e.isComposing) return;
-    const count = matches().length;
-    const mod = e.ctrlKey || e.metaKey;
-    if (e.key === "ArrowDown") light(stepActive(active(), 1, count, true));
-    else if (e.key === "ArrowUp") light(stepActive(active(), -1, count, true));
-    else if (e.key === "PageDown") light(stepActive(active(), page(), count, false));
-    else if (e.key === "PageUp") light(stepActive(active(), -page(), count, false));
-    // Home and End belong to the text while there is text; Ctrl (or an empty field) gives them to the list.
-    else if (e.key === "Home" && (mod || query() === "") && !e.shiftKey) light(0);
-    else if (e.key === "End" && (mod || query() === "") && !e.shiftKey) light(Math.max(0, count - 1));
-    else if (e.key === "Enter") run(current()?.item);
-    else if (e.key === "Tab" && !e.shiftKey && !mod && !e.altKey) {
-      // Tab writes the lit command's name into the field and stays on that command.
-      const item = current()?.item;
-      if (item !== undefined) {
-        setQuery(item.label);
-        setShown(PALETTE_LIMIT);
-        if (list !== undefined) list.scrollTop = 0;
-        light(Math.max(0, matches().findIndex((m) => m.item.id === item.id)));
-      }
-    } else return;
-    e.preventDefault();
-  };
-
-  /** The pointer moved over a row. A scroll sends the same event with the pointer where it was. */
-  const onPointerMove = (e: PointerEvent, index: number): void => {
-    const at = `${e.screenX},${e.screenY}`;
-    if (at === pointerAt) return;
-    const first = pointerAt === "";
-    pointerAt = at;
-    // The first event after opening is the pointer being found where it already was.
-    if (first || index === active()) return;
-    follow = false;
-    setActive(index);
-  };
-
-  /** One line under the list: how many commands there are, or why the lit one will not run. */
-  const status = (): string => {
-    const count = matches().length;
-    const lit = current()?.item;
-    if (lit !== undefined && !lit.enabled) return `${lit.label} is not available right now`;
-    if (count === 0) return "No matches";
-    if (!typed()) return `${count} ${count === 1 ? "command" : "commands"}`;
-    return `${count} ${count === 1 ? "match" : "matches"}`;
-  };
 
   return (
     <dialog
@@ -214,14 +122,10 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
             autocapitalize="off"
             spellcheck={false}
             value={query()}
-            onInput={(value) => {
-              setQuery(value);
-              setShown(PALETTE_LIMIT);
-              light(0);
-              // The best match is the first row: the list starts again from its top.
-              if (list !== undefined) list.scrollTop = 0;
+            onInput={model.input}
+            onKeyDown={(e) => {
+              model.keyDown(e);
             }}
-            onKeyDown={onKeyDown}
             start={
               <span class="palette-field-icon">
                 <ToolIcon id="search" />
@@ -238,12 +142,12 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
           onScroll={(e) => {
             // Near the end of what is drawn, draw the next screenful.
             const el = e.currentTarget;
-            if (shown() < matches().length && el.scrollTop + el.clientHeight * 2 >= el.scrollHeight) setShown((n) => n + PALETTE_LIMIT);
+            if (el.scrollTop + el.clientHeight * 2 >= el.scrollHeight) model.more();
           }}
         >
           <For each={rows()}>
             {(match, index) => (
-              <Row option id={optionId(index())} selected={index() === active()} disabled={!match.item.enabled} onPointerMove={(e) => onPointerMove(e, index())} onClick={() => run(match.item)}>
+              <Row option id={optionId(index())} selected={index() === active()} disabled={!match.item.enabled} onPointerMove={(e) => model.pointerOver(e.screenX, e.screenY, index())} onClick={() => run(match.item)}>
                 <span class="palette-label">
                   <For each={highlight(match.item.label, match.indices)}>{(part) => (part.hit ? <mark class="palette-hit">{part.text}</mark> : part.text)}</For>
                 </span>
