@@ -28,6 +28,8 @@ const MAX_BLOCKS: usize = 1_500_000;
 const MAX_BINNED: usize = 12_000_000;
 /// The most primitive evaluations one extraction makes.
 const MAX_EVALS: u64 = 400_000_000;
+/// The most stone vertices a seat is fitted to.
+const MAX_FIT_POINTS: usize = 200_000;
 /// How far along a grid edge a surface vertex may lie from either end, as a fraction of the edge.
 const EDGE_CLAMP: f64 = 0.01;
 /// The most attempts at successively coarser steps.
@@ -145,14 +147,69 @@ pub(super) struct Envelope {
     pub clearance: f64,
     /// The height a bore of the girdle's size (plus clearance) reaches above the girdle.
     pub bore: Option<f64>,
+    /// The stone's own section, fitted to its vertices ([`Envelope::fit`]): the lines `(h0, d0,
+    /// slope)` whose minimum is the concave hull of how far out of the outline the stone reaches
+    /// at each height, and the heights it spans. Empty: the analytic crown and pavilion are used.
+    pub profile: Vec<(f64, f64, f64)>,
+    pub span: (f64, f64),
 }
 
 impl Envelope {
+    /// Fits the seat to the stone's own vertices (world coordinates): for each height, how far out
+    /// of the outline the stone reaches, as the concave hull of the vertices' `(h, d)`. A convex
+    /// stone lies wholly inside the room that gives, whatever its facets (a brilliant's crown
+    /// bulges past the straight line from girdle to table).
+    pub(super) fn fit(&mut self, pts: &[Vec3]) {
+        let mut hd: Vec<(f64, f64)> = pts
+            .iter()
+            .map(|p| {
+                let q = self.axes.local(*p);
+                (q.z, self.outline.dist(Vec2::new(q.x, q.y)))
+            })
+            .filter(|(h, d)| h.is_finite() && d.is_finite())
+            .collect();
+        if hd.len() < 2 || hd.len() > MAX_FIT_POINTS {
+            return;
+        }
+        hd.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+        // The upper hull, left to right (Andrew's monotone chain).
+        let mut hull: Vec<(f64, f64)> = Vec::new();
+        for q in hd {
+            while hull.len() >= 2 {
+                let (Some(a), Some(b)) = (hull.get(hull.len() - 2).copied(), hull.last().copied()) else { break };
+                if (b.0 - a.0) * (q.1 - a.1) - (b.1 - a.1) * (q.0 - a.0) >= 0.0 {
+                    hull.pop();
+                } else {
+                    break;
+                }
+            }
+            hull.push(q);
+        }
+        let (Some(first), Some(last)) = (hull.first().copied(), hull.last().copied()) else { return };
+        let mut lines = Vec::new();
+        for w in hull.windows(2) {
+            if let [a, b] = w {
+                let dh = b.0 - a.0;
+                if dh > 1e-9 {
+                    lines.push((a.0, a.1, ((b.1 - a.1) / dh).clamp(-1e6, 1e6)));
+                }
+            }
+        }
+        if lines.is_empty() {
+            lines.push((first.0, first.1.max(last.1), 0.0));
+        }
+        self.profile = lines;
+        self.span = (first.0, last.0);
+    }
+
     fn eval(&self, p: Vec3) -> f64 {
         let q = self.axes.local(p);
         let (h, c, a) = (q.z, self.clearance, self.reach.max(0.0));
         let d = self.outline.dist(Vec2::new(q.x, q.y));
-        let body = if self.cab {
+        let body = if !self.profile.is_empty() {
+            let side = self.profile.iter().map(|(h0, d0, s)| (d - d0 - s * (h - h0)) / (1.0 + s * s).sqrt()).fold(f64::NEG_INFINITY, f64::max);
+            (side - c).max((self.span.0 - c - h).max(h - self.span.1 - c))
+        } else if self.cab {
             let depth = self.crown.max(1e-6);
             // Under the dome (an ellipse in section) by tangent lines to it: the room is never
             // smaller than the stone.
@@ -568,7 +625,76 @@ pub(super) fn extract(csg: &Csg, step: f64, max_tris: usize) -> Result<Solid, Fa
         return Err(Fail::Empty);
     }
     verify(&positions, &indices).map_err(Fail::Broken)?;
+    let (positions, indices) = drop_crumbs(positions, indices);
+    if indices.is_empty() {
+        return Err(Fail::Empty);
+    }
     Ok(Solid { positions, indices, step })
+}
+
+/// The closed shells smaller than this fraction of the whole (by volume) are sampling crumbs —
+/// a grid node or two of metal left between two seats — and are left out.
+const CRUMB: f64 = 1e-3;
+
+/// The shell without its crumbs: each edge-connected shell is closed on its own, so leaving one
+/// out leaves the rest closed and manifold.
+fn drop_crumbs(positions: Vec<Vec3>, indices: Vec<u32>) -> (Vec<Vec3>, Vec<u32>) {
+    let mut parent: Vec<u32> = (0..u32::try_from(positions.len()).unwrap_or(u32::MAX)).collect();
+    fn find(p: &mut [u32], mut i: u32) -> u32 {
+        while let Some(&up) = p.get(i as usize) {
+            if up == i {
+                break;
+            }
+            let grand = p.get(up as usize).copied().unwrap_or(up);
+            if let Some(slot) = p.get_mut(i as usize) {
+                *slot = grand;
+            }
+            i = grand;
+        }
+        i
+    }
+    for t in indices.chunks_exact(3) {
+        let (Some(a), Some(b), Some(c)) = (t.first(), t.get(1), t.get(2)) else { continue };
+        let ra = find(&mut parent, *a);
+        for v in [*b, *c] {
+            let rv = find(&mut parent, v);
+            if let Some(slot) = parent.get_mut(rv as usize) {
+                *slot = ra;
+            }
+        }
+    }
+    let at = |i: u32| positions.get(i as usize).copied().unwrap_or(Vec3::ZERO);
+    let mut volume: HashMap<u32, f64> = HashMap::new();
+    let mut roots = Vec::with_capacity(indices.len() / 3);
+    for t in indices.chunks_exact(3) {
+        let (Some(a), Some(b), Some(c)) = (t.first(), t.get(1), t.get(2)) else { continue };
+        let r = find(&mut parent, *a);
+        roots.push(r);
+        *volume.entry(r).or_default() += at(*a).dot(at(*b).cross(at(*c))) / 6.0;
+    }
+    if volume.len() <= 1 {
+        return (positions, indices);
+    }
+    let total: f64 = volume.values().map(|v| v.abs()).sum();
+    let keep: Vec<u32> = indices
+        .chunks_exact(3)
+        .zip(&roots)
+        .filter(|(_, r)| volume.get(r).is_some_and(|v| v.abs() >= CRUMB * total))
+        .flat_map(|(t, _)| t.iter().copied())
+        .collect();
+    // Renumber the vertices still used.
+    let mut map = vec![u32::MAX; positions.len()];
+    let mut kept = Vec::new();
+    let mut out = Vec::with_capacity(keep.len());
+    for i in keep {
+        let Some(slot) = map.get_mut(i as usize) else { continue };
+        if *slot == u32::MAX {
+            *slot = u32::try_from(kept.len()).unwrap_or(u32::MAX);
+            kept.push(at(i));
+        }
+        out.push(*slot);
+    }
+    (kept, out)
 }
 
 /// Every edge used once each way, no triangle repeating a vertex.

@@ -870,7 +870,31 @@ fn seat_envelope(shape: &StoneShape, frame: &Frame, girdle: f64, crown: f64, pav
         let r = -super::solid::poly_dist(&shape.poly, shape.centre);
         (Outline::Poly(shape.poly.clone()), if r.is_finite() { r.max(0.0) } else { 0.0 })
     };
-    Envelope { axes: axes_of(frame), outline, reach, girdle, crown, pavilion, table: shape.table, cab: shape.cab, clearance: SEAT_CLEARANCE, bore }
+    Envelope {
+        axes: axes_of(frame),
+        outline,
+        reach,
+        girdle,
+        crown,
+        pavilion,
+        table: shape.table,
+        cab: shape.cab,
+        clearance: SEAT_CLEARANCE,
+        bore,
+        profile: Vec::new(),
+        span: (0.0, 0.0),
+    }
+}
+
+/// Fits a seat to its stone as built at this level and at the finest one (`make` builds the stone
+/// at a level's detail into a buffer), so the room holds the stone however it is tessellated.
+fn fit_seat(envelope: &mut Envelope, d: &Detail, make: &dyn Fn(&mut Buf, &Detail)) {
+    let mut buf = Buf::default();
+    make(&mut buf, d);
+    if let Some(fine) = DETAILS.first() {
+        make(&mut buf, fine);
+    }
+    envelope.fit(&buf.pos);
 }
 
 /// The parts being built, by name.
@@ -1045,7 +1069,10 @@ fn build_head(s: &Sane, d: &Detail, out: &mut Parts, stone: Standing) -> Stood {
     // The seat: the stone's own room in the prongs and the rail (the bearing), and a clearance
     // hole under the culet.
     let (girdle, crown, pavilion) = if cab { (0.0, head.depth, 0.0) } else { proportions(head.depth) };
-    let envelope = seat_envelope(&shape, &frame, girdle, crown, pavilion, None);
+    let mut envelope = seat_envelope(&shape, &frame, girdle, crown, pavilion, None);
+    fit_seat(&mut envelope, d, &|b, dd| {
+        StoneShape::of(cut, stone.length, stone.width, head.depth, dd.outline).build(b, &frame, dd.centre, dd.dome / 2)
+    });
     if let Some(reach) = (envelope.reach > 1e-6).then_some(envelope.reach) {
         if !cab {
             let at = Axes { o: frame.at(centre.x, centre.y, 0.0), ..envelope.axes };
@@ -1145,7 +1172,7 @@ fn build_solitaire(s: &Sane, d: &Detail, out: &mut Parts) {
                     // Its seat in the plate: a cone at the pavilion's angle, a bore to set it
                     // through and a hole through the plate.
                     let r = seat.melee / 2.0;
-                    out.csg.cut.push(Prim::Seat(Envelope {
+                    let mut envelope = Envelope {
                         axes: axes_of(&f),
                         outline: Outline::Circle(r),
                         reach: r,
@@ -1156,7 +1183,11 @@ fn build_solitaire(s: &Sane, d: &Detail, out: &mut Parts) {
                         cab: false,
                         clearance: SEAT_CLEARANCE,
                         bore: Some(mg / 2.0 + mc + BORE_OVER),
-                    }));
+                        profile: Vec::new(),
+                        span: (0.0, 0.0),
+                    };
+                    fit_seat(&mut envelope, d, &|b, dd| round_brilliant(b, &f, r, seat.depth, shared::table_ratio(round_cut), dd.melee));
+                    out.csg.cut.push(Prim::Seat(envelope));
                     out.csg.cut.push(Prim::Cylinder { axes: axes_of(&f), r: PAVE_HOLE * r, lo: -seat.under - HOLE_OVER, hi: 0.0 });
                     out.seats += 1;
                 }
@@ -1226,7 +1257,8 @@ fn build_eternity(s: &Sane, d: &Detail, out: &mut Parts) {
         let w = radial(Row::out(k, n));
         let f = Frame { o: w * seat_r, u: Vec3::new(-w.y, w.x, 0.0), v: Vec3::Z, w };
         shape.build(&mut out.melee, &f, d.melee, 2);
-        let envelope = seat_envelope(&shape, &f, girdle, crown, pavilion, Some(bore));
+        let mut envelope = seat_envelope(&shape, &f, girdle, crown, pavilion, Some(bore));
+        fit_seat(&mut envelope, d, &|b, dd| StoneShape::of(cut, m, m, depth, 16 * dd.melee.clamp(1, 8)).build(b, &f, dd.melee, 2));
         out.csg.cut.push(Prim::Cylinder { axes: axes_of(&f), r: PAVE_HOLE * envelope.reach, lo: -through, hi: 0.0 });
         out.csg.cut.push(Prim::Seat(envelope));
         out.seats += 1;
@@ -1597,9 +1629,12 @@ const SOLID_STEP_FINE: f64 = 0.1;
 const SOLID_STEP_DRAFT: f64 = 0.2;
 /// The most triangles the merged solid of a binary STL holds (about 50 MB).
 pub(super) const MAX_SOLID_TRIANGLES: usize = 1_000_000;
-/// How far the merged solid's volume may stand from the analytic band's, as a fraction, before the
-/// reply says so: the sampling error at the steps above is a few tenths of a per cent.
-pub(super) const SOLID_AGREEMENT: f64 = 0.01;
+/// How far the merged solid's volume may stand from the analytic band's, as a fraction per
+/// millimetre of grid step (1% at fine quality's 0.1 mm, 2% at draft's 0.2 mm), before the reply
+/// says so. The piecewise-linear surface cuts a convex section's corners, so the solid comes out a
+/// little light: about 0.1–0.3% at 0.1 mm on usual bands, up to about 1.3% at 0.2 mm on a small,
+/// thin one.
+pub(super) const SOLID_AGREEMENT_PER_MM: f64 = 0.1;
 
 /// The metal as one closed shell (seats cut) at `quality`'s grid step, coarser when it must be to
 /// stay under `max_tris`: its triangles (normal first), the solid, and notes.
@@ -1666,9 +1701,12 @@ fn run_stlout(_s: &mut Session, p: &Value) -> Result<Value> {
     );
     let volume = solid.volume();
     let band = piece.band_volume();
-    if piece.kind == PieceKind::Band && band > 0.0 && ((volume - band) / band).abs() > SOLID_AGREEMENT {
+    let agreement = SOLID_AGREEMENT_PER_MM * solid.step;
+    if piece.kind == PieceKind::Band && band > 0.0 && ((volume - band) / band).abs() > agreement {
         notes.push(format!(
-            "The solid's volume ({volume:.1} mm³) is more than 1% from the band's exact volume ({band:.1} mm³): it is too thin for its sampling step."
+            "The solid's volume ({volume:.1} mm³) is more than {:.0}% from the band's exact volume ({band:.1} mm³): the band is thin for the {} mm sampling step.",
+            agreement * 100.0,
+            fmt_mm(solid.step)
         ));
     }
     let title = format!("{}-us{}-{}", piece.kind.name(), fmt_mm(piece.size.us), piece.metal);
