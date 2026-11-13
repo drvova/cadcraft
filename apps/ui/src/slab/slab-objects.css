@@ -1,0 +1,33 @@
+/*
+ * The Slab Objects section's place in the rail (`SlabObjects.tsx`): the element stands where the
+ * SolidJS section stands and takes the same share (`../interaction.css`: `.objects`). The kernel
+ * lays out what is inside; the host sets the natural height, and these rules cap it.
+ */
+
+.slab-objects {
+  display: block;
+  /* In a rail too short for every open section this one gives way first, as the SolidJS one. */
+  flex: 0 10 auto;
+  /* Never zero: a surface with no height at its first measure sizes itself for good. The host
+     replaces this with the section's natural height after the first frame. */
+  height: var(--control-h-input);
+  min-height: var(--control-h-input);
+  max-height: 40%;
+  max-height: round(down, 40%, 1px);
+}
+
+/* Open over a tree, it keeps its search and three rows however the rail is squeezed. */
+.slab-objects.is-listed {
+  min-height: calc(2 * var(--control-h-input) + 3 * var(--control-h-row) + 3 * var(--gap-4));
+}
+
+/* The search field fills its hole (the document gives the hole .objects-search's insets). */
+.slab-objects-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+
+.slab-objects-search[hidden] {
+  display: none;
+}

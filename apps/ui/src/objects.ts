@@ -672,3 +672,81 @@ export function treeKey(event: TypedKey, rows: readonly VisibleNode[], active: s
     }
   }
 }
+
+// ---- What the panel says ----
+//
+// The words and the small decisions every drawing of the tree shares (the SolidJS panel and the
+// one drawn by Slab, `slab/SlabObjects.tsx`): a view draws them and decides nothing.
+
+const count = (n: number): string => n.toLocaleString("en-US");
+
+/** The longest search the panel keeps (the field's `maxLength`). */
+export const MAX_QUERY_CHARS = 200;
+
+/** The window height, in CSS pixels, from which the section starts open: where the rail has the room for a fifth section. */
+export const ROOMY_WINDOW = 860;
+
+/** A row's name for assistive tech: its label, and for a group how much it holds and how much of that is selected. */
+export function rowName(node: VisibleNode, selected: number): string {
+  if (node.kind !== "group") return node.label;
+  const holds = `${node.label}, ${count(node.count)} ${node.count === 1 ? "object" : "objects"}`;
+  return selected > 0 && selected < node.count ? `${holds}, ${count(selected)} selected` : holds;
+}
+
+/** What a group shows at its row's end: how many objects it holds ("18"), or how many of them are selected ("3/18"); empty on other rows. */
+export function rowTally(node: VisibleNode, selected: number): string {
+  if (node.kind !== "group") return "";
+  return selected > 0 && selected < node.count ? `${count(selected)}/${count(node.count)}` : count(node.count);
+}
+
+/** The heading's count: how many objects, or how many of them a search found; empty with no list. */
+export function panelSummary(list: ObjectList | null, available: boolean, query: string, matches: number): string {
+  if (!available || list === null) return "";
+  return searchTokens(query).length > 0 ? `${count(matches)} of ${count(list.rows.length)}` : objectsSummary(list);
+}
+
+/** What stands in the place of the tree, or under it: one line each. */
+export function panelNotes(list: ObjectList | null, available: boolean, drawn: TreeLayout, query: string): string[] {
+  if (!available) return ["The object list is not in this build."];
+  if (list === null) return ["The objects could not be listed."];
+  const out: string[] = [];
+  if (list.rows.length === 0) out.push(list.total === 0 ? "Nothing drawn yet." : "The objects could not be listed.");
+  else if (drawn.rows.length === 0) out.push(`Nothing matches “${query.trim().slice(0, 40)}”.`);
+  if (drawn.cut) out.push("More rows are open than the list shows. Search to narrow it.");
+  if (list.truncated && list.rows.length > 0 && list.rows.length < list.total) out.push(`The first ${count(list.rows.length)} of ${count(list.total)} objects are listed.`);
+  return out;
+}
+
+/** Whether the search and the tree show at all: the engine listed at least one object. */
+export function panelListed(list: ObjectList | null, available: boolean): boolean {
+  return available && list !== null && list.rows.length > 0;
+}
+
+/** The groups open by hand (`expanded`, with no search) and closed by hand (`collapsed`, under one). */
+export interface OpenGroups {
+  expanded: ReadonlySet<string>;
+  collapsed: ReadonlySet<string>;
+}
+
+/**
+ * The view after a group is opened or closed. A search holds every matching group open, so under
+ * one a group is closed by naming it in `collapsed`; with none it is open by being in `expanded`.
+ */
+export function withGroupOpen(groups: OpenGroups, searching: boolean, id: string, open: boolean): OpenGroups {
+  const next = new Set(searching ? groups.collapsed : groups.expanded);
+  if (open === searching) next.delete(id);
+  else next.add(id);
+  return searching ? { expanded: groups.expanded, collapsed: next } : { expanded: next, collapsed: groups.collapsed };
+}
+
+/**
+ * The view that shows a selection made on the drawing: the groups above its row opened and the
+ * caps raised to reach it. The same sets are handed back when nothing has to change.
+ */
+export function withReveal(reveal: Reveal, expanded: ReadonlySet<string>, shown: ReadonlyMap<string, number>): { expanded: ReadonlySet<string>; shown: ReadonlyMap<string, number> } {
+  const opened = reveal.open.some((id) => !expanded.has(id)) ? new Set([...expanded, ...reveal.open]) : expanded;
+  if (reveal.shown.size === 0) return { expanded: opened, shown };
+  const caps = new Map(shown);
+  for (const [id, cap] of reveal.shown) caps.set(id, Math.max(cap, caps.get(id) ?? 0));
+  return { expanded: opened, shown: caps };
+}

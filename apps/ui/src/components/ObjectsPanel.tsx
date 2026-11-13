@@ -27,22 +27,29 @@ import {
   buildTree,
   layout,
   moreId,
-  objectsSummary,
+  panelListed,
+  panelNotes,
+  panelSummary,
   PIECE_ID,
   pressSelection,
   revealTarget,
+  ROOMY_WINDOW,
+  rowName,
+  rowTally,
   searchTokens,
   selectedCount,
   showMore,
   treeKey,
+  withGroupOpen,
+  withReveal,
   type ObjectList,
   type VisibleNode,
 } from "../objects";
 import { highlight } from "../palette";
 import { isTypeaheadKey } from "../roving";
-import { Field } from "../ui/Field";
 import { IconButton } from "../ui/IconButton";
 import { SectionLabel } from "../ui/SectionLabel";
+import { ObjectsSearch } from "./ObjectsSearch";
 import "../interaction.css";
 
 export interface ObjectsPanelProps {
@@ -56,22 +63,10 @@ export interface ObjectsPanelProps {
   onSelect: (handles: readonly string[]) => void;
 }
 
-const count = (n: number): string => n.toLocaleString("en-US");
-
 /** Run once the page has been laid out again (the next frame; at once where there are no frames). */
 function later(run: () => void): void {
   if (typeof requestAnimationFrame === "function") requestAnimationFrame(run);
   else queueMicrotask(run);
-}
-
-/** The window height, in CSS pixels, from which the section starts open. */
-const ROOMY_WINDOW = 860;
-
-/** A row's name for assistive tech: its label, and for a group how much it holds and how much of that is selected. */
-function rowName(node: VisibleNode, selected: number): string {
-  if (node.kind !== "group") return node.label;
-  const holds = `${node.label}, ${count(node.count)} ${node.count === 1 ? "object" : "objects"}`;
-  return selected > 0 && selected < node.count ? `${holds}, ${count(selected)} selected` : holds;
 }
 
 /** The rows of one level, each a tree item that holds its own group. Kept by position (`Index`),
@@ -106,7 +101,7 @@ function Branch(props: { nodes: readonly VisibleNode[]; selection: ReadonlySet<s
                 <For each={highlight(node().label, node().hits)}>{(part) => (part.hit ? <mark class="objects-hit">{part.text}</mark> : part.text)}</For>
               </span>
               <Show when={node().kind === "group"}>
-                <span class="objects-count">{selected() > 0 && selected() < node().count ? `${count(selected())}/${count(node().count)}` : count(node().count)}</span>
+                <span class="objects-count">{rowTally(node(), selected())}</span>
               </Show>
             </div>
             <Show when={node().kind === "group" && node().open}>
@@ -147,23 +142,10 @@ export function ObjectsPanel(props: ObjectsPanelProps): JSX.Element {
   };
 
   /** The heading: how many objects, or how many of them a search found. */
-  const summary = (): string => {
-    if (!props.available || props.list === null) return "";
-    return searching() ? `${count(drawn().matches)} of ${count(props.list.rows.length)}` : objectsSummary(props.list);
-  };
+  const summary = (): string => panelSummary(props.list, props.available, query(), drawn().matches);
 
   /** What stands in the place of the tree, or under it: one line each. */
-  const notes = (): string[] => {
-    if (!props.available) return ["The object list is not in this build."];
-    const list = props.list;
-    if (list === null) return ["The objects could not be listed."];
-    const out: string[] = [];
-    if (list.rows.length === 0) out.push(list.total === 0 ? "Nothing drawn yet." : "The objects could not be listed.");
-    else if (drawn().rows.length === 0) out.push(`Nothing matches “${query().trim().slice(0, 40)}”.`);
-    if (drawn().cut) out.push("More rows are open than the list shows. Search to narrow it.");
-    if (list.truncated && list.rows.length > 0 && list.rows.length < list.total) out.push(`The first ${count(list.rows.length)} of ${count(list.total)} objects are listed.`);
-    return out;
-  };
+  const notes = (): string[] => panelNotes(props.list, props.available, drawn(), query());
 
   const element = (id: string): HTMLElement | null => {
     for (const item of treeEl?.querySelectorAll<HTMLElement>("[data-node]") ?? []) if (item.dataset["node"] === id) return item;
@@ -187,17 +169,9 @@ export function ObjectsPanel(props: ObjectsPanelProps): JSX.Element {
   };
 
   const setOpenGroup = (id: string, to: boolean): void => {
-    if (searching()) {
-      const next = new Set(collapsed());
-      if (to) next.delete(id);
-      else next.add(id);
-      setCollapsed(next);
-    } else {
-      const next = new Set(expanded());
-      if (to) next.add(id);
-      else next.delete(id);
-      setExpanded(next);
-    }
+    const next = withGroupOpen({ expanded: expanded(), collapsed: collapsed() }, searching(), id, to);
+    setExpanded(next.expanded);
+    setCollapsed(next.collapsed);
   };
 
   /** A selection this panel asked for is not brought into view again: the row is under the hand. */
@@ -285,13 +259,9 @@ export function ObjectsPanel(props: ObjectsPanelProps): JSX.Element {
     const reveal = untrack(() => revealTarget(tree(), selected()));
     if (reveal === null) return;
     if (!untrack(searching)) {
-      const opened = untrack(expanded);
-      if (reveal.open.some((id) => !opened.has(id))) setExpanded(new Set([...opened, ...reveal.open]));
-      if (reveal.shown.size > 0) {
-        const next = new Map(untrack(shown));
-        for (const [id, cap] of reveal.shown) next.set(id, Math.max(cap, next.get(id) ?? 0));
-        setShown(next);
-      }
+      const next = withReveal(reveal, untrack(expanded), untrack(shown));
+      setExpanded(next.expanded);
+      setShown(next.shown);
     }
     later(() => bringIntoView(reveal.id));
   });
@@ -306,21 +276,13 @@ export function ObjectsPanel(props: ObjectsPanelProps): JSX.Element {
         </span>
       </div>
       <div class="objects-body" id="objects-body" hidden={!open()}>
-        <Show when={props.available && props.list !== null && props.list.rows.length > 0}>
+        <Show when={panelListed(props.list, props.available)}>
           <div class="objects-search">
-            <Field
-              type="search"
+            <ObjectsSearch
+              value={query()}
               ref={(el) => {
                 searchEl = el;
               }}
-              value={query()}
-              ariaLabel="Search objects"
-              placeholder="Round 1.3"
-              autocomplete="off"
-              autocapitalize="off"
-              spellcheck={false}
-              maxLength={200}
-              start={<ToolIcon id="search" />}
               onInput={(value) => {
                 setQuery(value);
                 setCollapsed(new Set<string>());

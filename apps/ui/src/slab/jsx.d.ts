@@ -12,6 +12,7 @@ declare module "solid-js" {
       "slab-bench-panel": HTMLAttributes<HTMLElement>;
       "slab-layers-panel": HTMLAttributes<HTMLElement>;
       "slab-piece-panel": HTMLAttributes<HTMLElement>;
+      "cadcraft-objects": HTMLAttributes<HTMLElement>;
     }
   }
 }

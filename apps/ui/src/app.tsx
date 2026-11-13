@@ -1346,6 +1346,8 @@ export function App(props: AppProps): JSX.Element {
   const Layers: Component<LayersPanelProps> = props.slab?.Layers ?? LayersPanel;
   /** The Piece section: the SolidJS one, or the one ported to Slab when the Slab shell has it. */
   const PieceSection = props.slab?.Piece ?? PiecePanel;
+  /** The Objects section: the SolidJS one, or the one ported to Slab when its document loaded. */
+  const Objects = props.slab?.Objects ?? ObjectsPanel;
   const railSections = (): JSX.Element => (
     <>
       <Show when={showPiece()}>
@@ -1355,7 +1357,7 @@ export function App(props: AppProps): JSX.Element {
         <Layers layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} onMenu={(name, at) => openContext({ kind: "layer", name }, at)} />
       </Show>
       <Show when={showObjects()}>
-        <ObjectsPanel list={objects()} available={objectsAvailable()} selection={selection()} onSelect={onBenchSelect} />
+        <Objects list={objects()} available={objectsAvailable()} selection={selection()} onSelect={onBenchSelect} />
       </Show>
       <Show when={showProperties()}>
         <PropertiesPanel properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={onPropertyNotice} />

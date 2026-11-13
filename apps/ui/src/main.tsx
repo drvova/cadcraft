@@ -56,5 +56,15 @@ async function withPiece(boot: SlabBoot): Promise<SlabBoot> {
   return { ...boot, parts: { ...boot.parts, Piece: SlabPiece } };
 }
 
-const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece) : Promise.resolve<SlabBoot>({})]);
+/** The Objects section, added to the parts when its document loads; the SolidJS one shows when it does not. */
+async function withObjects(boot: SlabBoot): Promise<SlabBoot> {
+  if (boot.parts === undefined) return boot;
+  const { loadSlab } = await import("./slab/loader");
+  const objects = await loadSlab("objects");
+  if (!objects.ok) return { ...boot, notice: boot.notice ?? objects.reason };
+  const { SlabObjects } = await import("./slab/SlabObjects");
+  return { ...boot, parts: { ...boot.parts, Objects: SlabObjects } };
+}
+
+const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects) : Promise.resolve<SlabBoot>({})]);
 render(() => <App facade={facade} slab={slab.parts} shellNotice={slab.notice} />, root);
