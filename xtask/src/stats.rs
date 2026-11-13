@@ -134,7 +134,7 @@ pub fn run(_root: &Path, exact: bool) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Counts, count_tests};
+    use super::{Counts, count_tests, walk};
 
     #[test]
     fn counts_attributes_and_proptest_blocks() {

@@ -15,6 +15,19 @@ them.
 - **Window ▸ Assistant**, Ctrl+7 (⌘7 on macOS), or the assistant key at the end of the title bar.
   The same three close it. The chats outlive the panel: closing it hides them, it does not end
   them.
+- On a window 1200 px wide or more the panel starts open; after that it starts as this browser
+  last left it.
+- With objects selected and no command running, the top of the drawing offers "Ask about N
+  selected objects"; a press opens the same line as Ctrl+K.
+- **`@` in the composer** lists what the message can point at: the selection, the bench sheet's
+  lines and the layers. The text after `@` filters, the arrows move, Enter or Tab picks, Escape
+  closes the list. A pick becomes a chip in the composer card and is sent with that message as
+  quoted lines under the reader's words (a layer's name; a bench line's label, value and the
+  first 200 handles of its objects); the transcript shows what rode along. At most 8 per message.
+- **Ctrl+K** (⌘K), or Window ▸ Ask the Assistant…, opens one line over the top of the drawing.
+  It holds the same draft as the panel's composer. Enter sends it and opens the panel, where the
+  turn is read; Escape closes the line and gives the keyboard back to the drawing. What is
+  selected goes with the message, and the line says how many objects that is.
 - The first time, the composer itself is the way in: its model slot reads "Set up a model" and
   opens the setup sheet. So does Send: a message typed before setup is kept and sent once the
   setup is saved.
@@ -52,6 +65,8 @@ The panel is laid out like an agent panel, not a chat. It is
   changed the drawing, a row says how many changes there are and opens to one line per step.
   **Undo all** takes the drawing back to before them (the engine's `undoto`); **Keep** accepts
   them. The conversation stays either way.
+- **Proposals.** A change the model (or anyone) proposed waits as a card above the rows, with
+  Accept and Reject; see [Proposals](#proposals-a-change-shown-before-it-is-made).
 - **Pictures.** Attach with the paperclip, paste, or drop: up to four per message, 4 MB each.
   The model sees them. In the interface a picture has no file path, so the model cannot trace or
   measure it with code (see below).
@@ -179,6 +194,65 @@ Pictures come back as image content blocks in MCP. The interface's panel has no 
 The brief tells the model to quote the numbers the tools returned and to name anything that came
 out different from what was asked: a drawing report is a report of measurements.
 
+## Proposals: a change shown before it is made
+
+`propose` runs a list of commands, reads what they come to, and puts the drawing back exactly as
+it was (the drawing, its undo and redo, the selection, the revision). What it returns is the
+difference, and the proposal waits until `accept` makes the change as one undo step or `reject`
+forgets it. It is how a change is reviewed rather than merely undone.
+
+```text
+propose {"steps": [{"command": "piece", "params": {"width": 2.8}}], "title": "Wider band"}
+propose {"variants": [{"title": "Slim", "steps": […]}, {"title": "Halo", "steps": […]}]}
+accept {"id": 3}        reject {"id": 3}        reject {}        proposals {}
+proposals {"id": 3, "of": "after", "run": {"command": "techsheet"}}
+```
+
+- **The reply**, per proposal: `id`, `group`, `title`, `steps`, the figures `before` and `after`
+  (the piece as `piece {query}` replies it, the stones, the grams, the cost), `changes` (one row a
+  figure that differs: `key`, `label`, `before`, `after`, a `delta` for numbers, a `unit`),
+  `checks` (`fixed`, `broken`, `failing`), `objects` (`added`, `removed`, `modified`) and a
+  one-line `message`.
+- **Accepting** swaps in the drawing that was read, so what is accepted is exactly what was
+  shown; a property test holds it equal to running the steps. The other variants of the same
+  `propose` are dropped. A proposal is for the drawing it was made on: once that changes,
+  `accept` refuses and says to propose again (`proposals` marks it `stale`).
+- **Steps** are commands that record undo, at most 64, in at most 8 variants; a step that fails
+  fails the proposal and is named. A command that records no undo (`pricebook`, a setting) cannot
+  be a step, because putting the drawing back would not undo it.
+- **Reading a side**: `proposals {id, of, run}` runs `piece` (as a question), `techsheet`,
+  `gemlist`, `objects` or `ringsizes` on the drawing as it was or as it would be. The solid of a
+  side is `piecemesh` of that side's `piece.params`.
+- **The card.** The interface draws each proposal that waits as a card over the assistant's
+  composer (`apps/ui/src/components/ProposalCards.tsx` over
+  `apps/ui/src/proposals.ts`). It has its title; the checks the change would fail, first, under
+  the words "Would fail" in the warning ink; a still of the piece before and after when both sides
+  have a piece and it differs (drawn by the 3D stage's renderer from `piecemesh` of each side's
+  parameters, lazily and one at a time, kept by the parameters; with no WebGL the tile says so in
+  words); a table of the figures that differ (label, before, after, the signed difference with its
+  unit, money in the price book's currency, each to the engine's precision); the checks it would
+  make pass and how many fail either way; and, when there is no piece to describe, a line of the
+  objects added, removed and changed. **Accept** (primary) and **Reject** end it; Accept waits
+  while the assistant's turn runs. A proposal the drawing has moved past says "Out of date" and
+  offers only Reject. The variants of one `propose` stand side by side where the panel has the
+  room and one under another where it has not, each with its own Accept, under one **Reject all**.
+- **Where it comes from.** The interface reads `proposals {}` after every command, every tool call
+  of the assistant's and every accept, so a proposal made anywhere is shown: typed at the command
+  line (`propose {…}` takes the JSON form), made by the assistant, or a Piece edit committed with
+  **Alt** held (Alt+Enter in a field, Alt and a press on a choice), which is proposed instead of
+  made. A proposal that arrives brings the assistant's panel out.
+- **Keyboard and screen reader.** The buttons are in the Tab order and Enter presses them; after a
+  decision the keyboard goes back to the composer. Each card is a region named by its title, the
+  figures are a table with its column headers, and a polite status says when a proposal arrives
+  and when one is accepted or rejected.
+- **Undo.** Accepting is one undo step, "Proposal: <title>". When the assistant's changes row is
+  open, an accepted proposal joins it, so **Undo all** says what it takes back; with no row open,
+  Undo takes it back like any other step.
+- **The model proposes.** The brief tells the model to change a piece or the drawing through
+  `propose`, with two to four variants for an open request, to say what each comes to, and to
+  leave `accept` to the person unless they name the one to take; when the person says to just do
+  it, the model runs the commands directly.
+
 ## The same tool over MCP
 
 `cadcraft-cli mcp` serves the identical tool, one entry in `tools/list` with the same schema, on
@@ -232,6 +306,7 @@ and that is the boundary.
 | `apps/ui/src/assistant.ts` | the interface's port: provider presets and checks, the wire protocol, the bounds, the brief, the transcript's text |
 | `apps/ui/src/assistant-session.ts` | one chat: the conversation, the queue, the changes, the stored setup |
 | `apps/ui/src/components/AssistantPane.tsx` | the panel and the setup sheet |
+| `apps/ui/src/proposals.ts`, `apps/ui/src/components/ProposalCards.tsx` | what waits for a decision, its rows and stills, and the cards over the composer |
 
 The tests are worth reading. `crates/mcp/src/tests.rs` drives the whole drafting workflow —
 a plate with holes, entity queries, texts, the report, a traced picture — **through `run` and
@@ -245,6 +320,11 @@ a provider's output, the queue and the changes row.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-13 | minor | The proposal card: each waiting proposal is a card over the composer in both shells (the checks it would fail first, the stills before and after, the figures that differ, Accept and Reject, Reject all over variants, a stale one says so). The interface reads what waits after every command and tool call; Alt+Enter in the Piece section proposes the edit. The brief asks the model to propose (variants for an open request) and leave `accept` to the person, in the interface and in `crates/ai` |
+| 2026-11-13 | minor | Proposals: `propose` reads a change (the piece's parameters, weight, stones, cost, checks, objects) and puts the drawing back; `accept` makes it as one undo step, `reject` forgets it, `proposals` lists them and reads either side. Engine commands only; nothing draws a proposal yet |
+| 2026-11-12 | minor | `@` context in the composer: the selection, bench lines and layers as chips that ride with one message |
+| 2026-11-12 | patch | The panel starts open on a wide window and remembers how it was left; a selection on the drawing offers the inline ask; the empty panel's suggestions are short enough to read whole at the panel's first width |
+| 2026-11-12 | minor | Ctrl+K opens a line over the drawing that shares the composer's draft and sends to the chat in front. The system prompt names the jewelry commands (`ringsizes`, `ring`, `gem`, `gemlist`, `setting`, `pave`, `gemfit`, `techsheet`) and asks for answers in finger sizes, millimetres, carats and grams, in the interface and in `crates/ai`. The empty panel's suggestions are jewelry requests |
 | 2026-11-12 | minor | First run and setup as they are at 43dd130: the composer's "Set up a model" slot is the way in and a message typed before setup is sent after Save; step two is one form with one status line and Cancel, Check connection, Save; the composer rests on one line |
 | 2026-11-11 | minor | Replies draw links (http and https only) and turn a Markdown table into readable rows; the turn's status and Stop stay in view while the setup sheet is open |
 | 2026-11-11 | major | Rewritten for the web interface after the egui interface was removed: how to open the panel, the panel, setup in two steps with a connection check, where the key is kept and what protects it, the bounds on a provider, what the WebAssembly build changes. Removed: the `assistant {…}` command and the `options` assistant keys (both were the egui interface's), the `--connect` configuration as the default, `crates/ui-egui/src/assistant.rs` |

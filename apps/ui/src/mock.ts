@@ -32,6 +32,19 @@ type Entity =
   | { kind: "line"; layer: string; color: Rgb; x0: number; y0: number; x1: number; y1: number }
   | { kind: "rect"; layer: string; color: Rgb; x0: number; y0: number; x1: number; y1: number };
 
+/** The mock's price book: prices per gram and per carat, a currency and one labor figure. */
+interface MockBook {
+  currency?: string;
+  metal: Record<string, number>;
+  stone: Record<string, number>;
+  labor?: { mode: "flat" | "perStone" | "perGram"; amount: number };
+}
+
+/** The alloys and materials the mock prices (a small stand-in for the engine's full tables). */
+const MOCK_METALS = new Set(["gold24", "gold22", "gold18", "gold14", "gold10", "gold9", "platinum", "palladium", "silver", "steel", "titanium", "brass", "copper", "wax"]);
+const MOCK_STONES = new Set(["diamond", "cz", "moissanite", "sapphire", "ruby", "emerald", "morganite", "aquamarine", "amethyst", "topaz", "garnet", "opal", "default"]);
+const MOCK_PRICE_MAX = 1e12;
+
 const SEGMENTS = 64;
 const DEFAULT_COLOR: Rgb = [212, 212, 212];
 const AMBER: Rgb = [241, 180, 103];
@@ -76,13 +89,24 @@ export class MockFacade implements RawFacade {
   /** The last command that opened a prompt: what an empty Enter starts again. */
   private lastAsked: string | null = null;
   private selected: string[] = [];
+  /** The mock's parametric ring (`piece`): its parameters, or null when the drawing has none. */
+  private piece: Record<string, unknown> | null = null;
+  /** The mock's price book (`pricebook`): the jeweler's own prices, or null when none are set. */
+  private priceBook: MockBook | null = null;
   /** The canvas size in CSS pixels (`set_viewport`); the engine's default until it is told. */
   private viewport: [number, number] = [1200, 800];
   /** The drafting toggles the status bar shows (GRID, SNAP, ORTHO). */
   private toggles = { grid: true, snap: false, ortho: false };
+  /** The mock's proposals (`propose`): each with the drawing it was read on and the one it would leave. */
+  private proposals: MockProposal[] = [];
+  private proposalId = 0;
 
   constructor() {
     this.reset();
+    // `?mock=1&piece=solitaire` starts the mock with a piece, so the 3D view has something to show
+    // without the Piece section being worked first (band, solitaire or eternity).
+    const asked = typeof location === "undefined" ? null : new URLSearchParams(location.search).get("piece");
+    if (asked !== null) this.pieceCommand({ kind: asked });
   }
 
   private reset(): void {
@@ -97,6 +121,7 @@ export class MockFacade implements RawFacade {
     this.dirty = false;
     this.pending = null;
     this.lastAsked = null;
+    this.piece = null;
     // The canned drawing: a 100x60 plate with a bore, a datum line, a filled arrow (tris),
     // corner points and an image frame — every primitive kind the canvas knows.
     this.entities = [
@@ -468,11 +493,473 @@ export class MockFacade implements RawFacade {
         if (this.selected.length === 0) return envelope(false, { error: "properties.set: nothing selected" });
         return envelope(true, { changed: Object.keys(params).length });
       }
-      case "circle":
+      case "piece":
+        return this.pieceCommand(params);
+      case "objects":
+        return this.objectsCommand(params);
+      case "piecemesh": {
+        // The piece as a solid, for the 3D view: a mock's stand-in shape, never the engine's ring.
+        // PIECEMESH takes the piece's parameters directly and changes nothing (the gallery's
+        // thumbnails lean on that), so a full spec in `params` is built from; else the stored piece.
+        const spec = typeof params["kind"] === "string" ? params : this.piece;
+        if (spec === null) return envelope(false, { error: "piecemesh: the drawing has no piece" });
+        return envelope(true, mockPieceMesh(spec, params["quality"] === "fine"));
+      }
+      case "stlout": {
+        if (this.piece === null) return envelope(false, { error: "stlout: the drawing has no piece" });
+        const solid = mockPieceMesh(this.piece, true);
+        return envelope(true, mockStl(solid.meshes.filter((mesh) => params["stones"] !== false || mesh.part !== "stone"), `${String(this.piece["kind"] ?? "piece")}-mock.stl`));
+      }
+      case "gemlist":
+        // A mock's list: enough for the Piece section's and the Gem dialog's choices.
+        return envelope(true, {
+          cuts: [
+            { name: "round", measure: "diameter" },
+            { name: "princess", measure: "diameter" },
+            { name: "oval", measure: "length" },
+            { name: "emerald", measure: "length" },
+          ],
+          stones: [
+            ["diamond", 3.52],
+            ["sapphire", 4.0],
+            ["ruby", 4.0],
+          ],
+        });
+      case "techsheet":
+        return this.techSheet();
+      case "pricebook":
+        return this.priceBookCommand(params);
+      case "propose":
+        return this.proposeCommand(params);
+      case "accept":
+        return this.acceptCommand(params);
+      case "reject":
+        return this.rejectCommand(params);
+      case "proposals":
+        return this.proposalsCommand();
+      case "circle": {
+        // The JSON form the engine takes (`{center: [x, y], radius}`), so a proposal can add circles.
+        const c = params["center"];
+        const r = params["radius"];
+        if (Array.isArray(c) && typeof c[0] === "number" && typeof c[1] === "number" && typeof r === "number" && Number.isFinite(r) && r > 0) {
+          this.entities.push({ kind: "circle", layer: this.currentLayer, color: this.colorOf(this.currentLayer), cx: c[0], cy: c[1], r });
+          this.touch();
+          return envelope(true, { handles: [String(this.entities.length)], message: "circle: 1 drawn (mock)" });
+        }
         return envelope(false, { error: "circle: use the command line (`cmdline`) or centre/radius params in the mock" });
+      }
       default:
         return envelope(false, { error: `unknown command \`${command}\`` });
     }
+  }
+
+  // ---- proposals (a stand-in for `crates/engine/src/cmd/proposal.rs`) ----
+
+  private hold(): MockHeld {
+    return { entities: [...this.entities], piece: this.piece === null ? null : { ...this.piece }, revision: this.revision, dirty: this.dirty };
+  }
+
+  private putBack(held: MockHeld): void {
+    this.entities = [...held.entities];
+    this.piece = held.piece === null ? null : { ...held.piece };
+    this.revision = held.revision;
+    this.dirty = held.dirty;
+  }
+
+  /** What a drawing comes to, as `propose` reads it: the piece, its stones and grams, the estimate. */
+  private facts(): Record<string, unknown> {
+    const piece = this.piece === null ? null : this.pieceJson(this.piece);
+    const sheet = JSON.parse(this.techSheet()) as { result?: { bands?: { grams: number }[]; cost?: Record<string, unknown> } };
+    const r = sheet.result ?? {};
+    const grams = this.piece === null ? null : (r.bands ?? []).reduce((n, b) => n + b.grams, 0);
+    const cost = r.cost === undefined ? null : { total: r.cost["total"], metal: r.cost["metal"], stones: r.cost["stones"], currency: r.cost["currency"], unpriced: r.cost["unpriced"] };
+    const stones = piece === null ? null : piece["stones"];
+    return { piece, stones, grams: grams === null ? null : Math.round(grams * 100) / 100, cost };
+  }
+
+  private proposeCommand(params: Record<string, unknown>): string {
+    const bad = (error: string): string => envelope(false, { error: `propose: ${error}` });
+    type MockStep = { command: string; params: Record<string, unknown> };
+    const asSteps = (v: unknown): MockStep[] | string => {
+      if (!Array.isArray(v)) return "`steps` must be a list of {command, params}";
+      if (v.length === 0) return "a proposal needs at least one step";
+      const out: MockStep[] = [];
+      for (const [i, step] of v.entries()) {
+        const rec = typeof step === "object" && step !== null ? (step as Record<string, unknown>) : {};
+        if (typeof rec["command"] !== "string") return `step ${i + 1}: \`command\` must be a command's name`;
+        const command = rec["command"].toLowerCase();
+        if (["propose", "accept", "reject", "proposals", "undo", "redo", "pricebook"].includes(command)) return `step ${i + 1}: \`${command}\` cannot be proposed`;
+        const p = rec["params"];
+        out.push({ command, params: typeof p === "object" && p !== null && !Array.isArray(p) ? (p as Record<string, unknown>) : {} });
+      }
+      return out;
+    };
+    const variants: { title: string; steps: MockStep[] }[] = [];
+    if (Array.isArray(params["variants"])) {
+      for (const [i, v] of params["variants"].entries()) {
+        const rec = typeof v === "object" && v !== null ? (v as Record<string, unknown>) : {};
+        const steps = asSteps(rec["steps"]);
+        if (typeof steps === "string") return bad(`variant ${i + 1}: ${steps}`);
+        const t = rec["title"];
+        variants.push({ title: typeof t === "string" && t.trim() !== "" ? t.trim() : `Option ${i + 1}`, steps });
+      }
+      if (variants.length === 0) return bad("`variants` is empty");
+    } else {
+      const steps = asSteps(params["steps"]);
+      if (typeof steps === "string") return bad(steps);
+      const t = params["title"];
+      variants.push({ title: typeof t === "string" && t.trim() !== "" ? t.trim() : [...new Set(steps.map((s) => s.command))].join(", "), steps });
+    }
+    const base = this.hold();
+    const read: MockProposal[] = [];
+    for (const v of variants) {
+      const before = this.facts();
+      for (const [i, step] of v.steps.entries()) {
+        const reply = JSON.parse(this.execute(step.command, JSON.stringify(step.params))) as { ok: boolean; error?: string };
+        if (!reply.ok) {
+          this.putBack(base);
+          return bad(`step ${i + 1} (\`${step.command}\`) failed: ${reply.error ?? "it was refused"}`);
+        }
+      }
+      const after = this.facts();
+      const left = this.hold();
+      this.putBack(base);
+      read.push({ id: 0, group: 0, title: v.title, base: this.stamp(base), after: left, report: mockReport(v.title, v.steps, before, after, base.entities.length, left.entities.length) });
+    }
+    this.proposalId += 1;
+    const group = this.proposalId;
+    for (const p of read) {
+      this.proposalId += 1;
+      p.id = this.proposalId;
+      p.group = group;
+      p.report = { ...p.report, id: p.id, group };
+      this.proposals.push(p);
+    }
+    this.proposals = this.proposals.slice(-16);
+    const message = read.length === 1 ? String(read[0]?.report["message"] ?? "") : `${read.length} options proposed; accept one by its id`;
+    return envelope(true, { proposals: read.map((p) => p.report), message });
+  }
+
+  /** What a proposal is for: the drawing as it stood (a change of it makes the proposal stale). */
+  private stamp(held: MockHeld): string {
+    return JSON.stringify([held.entities, held.piece]);
+  }
+
+  private acceptCommand(params: Record<string, unknown>): string {
+    const id = params["id"];
+    const found = this.proposals.find((p) => p.id === id);
+    if (found === undefined) return envelope(false, { error: `there is no proposal ${String(id)} waiting` });
+    if (this.stamp(this.hold()) !== found.base) return envelope(false, { error: `the drawing changed since proposal ${found.id} was made; propose it again` });
+    this.putBack(found.after);
+    this.touch();
+    this.proposals = this.proposals.filter((p) => p.group !== found.group);
+    return envelope(true, { accepted: found.id, title: found.title, message: `Accepted: ${found.title}` });
+  }
+
+  private rejectCommand(params: Record<string, unknown>): string {
+    const id = params["id"];
+    let rejected: number[];
+    if (id === undefined || id === null) {
+      rejected = this.proposals.map((p) => p.id);
+      this.proposals = [];
+    } else {
+      const found = this.proposals.find((p) => p.id === id);
+      if (found === undefined) return envelope(false, { error: `there is no proposal ${String(id)} waiting` });
+      this.proposals = this.proposals.filter((p) => p !== found);
+      rejected = [found.id];
+    }
+    const message = rejected.length === 0 ? "No proposal was waiting" : rejected.length === 1 ? "Rejected the proposal; the drawing is as it was" : `Rejected ${rejected.length} proposals; the drawing is as it was`;
+    return envelope(true, { rejected, message });
+  }
+
+  private proposalsCommand(): string {
+    const now = this.stamp(this.hold());
+    const list = this.proposals.map((p) => ({ ...p.report, stale: p.base !== now }));
+    return envelope(true, { proposals: list, message: list.length === 0 ? "No proposal is waiting" : `${list.length} proposals are waiting` });
+  }
+
+  /**
+   * A stand-in for the engine's `piece`: it keeps the parameters, refuses what the engine refuses
+   * in the engine's form of words, and answers with canned figures. Nothing is drawn and nothing
+   * here is a real weight, carat or size conversion: this is a mock.
+   */
+  private pieceCommand(params: Record<string, unknown>): string {
+    const bad = (error: string): string => envelope(false, { error: `piece: ${error}` });
+    if (params["query"] === true) return envelope(true, { piece: this.piece === null ? null : this.pieceJson(this.piece) });
+    if (params["remove"] === true) {
+      const removed = this.piece === null ? 0 : 1;
+      this.piece = null;
+      if (removed > 0) this.touch();
+      return envelope(true, { piece: null, removed });
+    }
+    const defaults: Record<string, unknown> = { system: "us", size: 6, sizeSystem: "us", wall: 1.8, width: 2.2, profile: "flat", metal: "gold18", cut: "round", stoneLength: 6.5, stoneWidth: 6.5, stone: "diamond", prongs: 6, halo: false, melee: 1.8, count: null, gap: 0.2 };
+    const next: Record<string, unknown> = { ...(this.piece ?? defaults) };
+    for (const key of ["kind", "wall", "width", "profile", "metal", "cut", "stoneLength", "stoneWidth", "stone", "prongs", "halo", "melee", "count", "gap"]) {
+      if (key in params) next[key] = params[key];
+    }
+    const kind = next["kind"];
+    if (typeof kind !== "string") return bad("give `kind`: band, solitaire or eternity");
+    if (!["band", "solitaire", "eternity"].includes(kind)) return bad("`kind` must be band, solitaire or eternity");
+    for (const [key, min, max] of [
+      ["wall", 0.3, 10],
+      ["width", 0.5, 30],
+      ["stoneWidth", 0.5, 30],
+      ["stoneLength", 0.5, 30],
+      ["melee", 0.8, 6],
+      ["gap", 0, 5],
+    ] as const) {
+      const v = next[key];
+      if (typeof v !== "number" || !Number.isFinite(v) || v < min || v > max) return bad(`\`${key}\` must be a number of millimetres from ${min} to ${max}`);
+    }
+    if (next["profile"] !== "flat" && next["profile"] !== "dome") return bad("`profile` must be flat or dome");
+    if (!["gold24", "gold22", "gold18", "gold14", "platinum", "silver"].includes(String(next["metal"]))) return bad(`\`${String(next["metal"]).slice(0, 24)}\` is not a metal (gold24|22|18|14, platinum, silver)`);
+    if (!["round", "princess", "oval", "emerald"].includes(String(next["cut"]))) return bad(`\`${String(next["cut"]).slice(0, 24)}\` is not a cut (GEMLIST lists them)`);
+    if (!["diamond", "sapphire", "ruby"].includes(String(next["stone"]))) return bad(`\`${String(next["stone"]).slice(0, 24)}\` is not a stone (GEMLIST lists them)`);
+    const prongs = next["prongs"];
+    if (typeof prongs !== "number" || !Number.isInteger(prongs) || prongs < 3 || prongs > 8) return bad("`prongs` must be a whole number from 3 to 8");
+    const halo = next["halo"];
+    if (halo === true) next["halo"] = 1.3;
+    else if (halo !== false && (typeof halo !== "number" || !Number.isFinite(halo) || halo < 0.8 || halo > 3)) return bad("`halo` must be true, false or a melee width from 0.8 to 3 millimetres");
+    const count = next["count"];
+    if (count !== null && (typeof count !== "number" || !Number.isInteger(count) || count < 1 || count > 400)) return bad("`count` must be a whole number from 1 to 400");
+    if ("size" in params) {
+      const system = typeof params["system"] === "string" ? params["system"].toLowerCase() : "us";
+      const size = params["size"];
+      if (system === "uk" ? typeof size !== "string" || !/^[a-z]/i.test(size) : typeof size !== "number" || !Number.isFinite(size) || size < 0 || size > 80) {
+        return envelope(false, { error: `piece: ${typeof size === "string" ? `\`${size.slice(0, 8)}\`` : String(size)} is not a ${system.toUpperCase()} ring size` });
+      }
+      next["sizeSystem"] = system;
+      // The mock converts nothing: a US size is kept as given, any other system's stays US 6.
+      next["size"] = system === "us" ? size : 6;
+      next["mockSize"] = system === "us" ? null : [system, size];
+    }
+    this.piece = next;
+    this.touch();
+    return envelope(true, { piece: this.pieceJson(next), message: `piece: a ${kind} (mock)` });
+  }
+
+  /** The mock piece as the engine's reply shapes it; every figure is canned. */
+  private pieceJson(p: Record<string, unknown>): Record<string, unknown> {
+    const { mockSize, ...params } = p;
+    const us = typeof p["size"] === "number" ? p["size"] : 6;
+    const half = Math.abs(us - Math.floor(us) - 0.5) < 0.01;
+    const size: Record<string, unknown> = { mm: 16.51, diameter: 16.51, circumference: 51.87, us, usText: `${Math.floor(us)}${half ? "½" : ""}`, uk: "L½", eu: 52, jp: 12, cn: 12 };
+    if (Array.isArray(mockSize) && typeof mockSize[0] === "string") size[mockSize[0]] = mockSize[1];
+    const wall = typeof p["wall"] === "number" ? p["wall"] : 1.8;
+    const kind = p["kind"];
+    const stones = kind === "band" ? { count: 0, carat: 0 } : kind === "solitaire" ? { count: p["halo"] === false ? 1 : 19, carat: p["halo"] === false ? 1.03 : 1.21 } : { count: typeof p["count"] === "number" ? p["count"] : 26, carat: 0.62 };
+    const checks: Record<string, unknown>[] = [
+      wall < 0.8 ? { id: "wall", ok: false, message: `The wall is ${wall} mm: under 0.8 mm a casting fails` } : { id: "wall", ok: true, message: "The wall is thick enough to cast" },
+    ];
+    if (kind === "eternity") checks.push({ id: "fit", ok: true, message: "The stones fit around the band" });
+    if (kind === "solitaire") checks.push({ id: "head", ok: true, message: "The head clears the finger" });
+    return {
+      params: { ...params, sizeText: size["usText"] },
+      handles: ["A1", "A2"],
+      size,
+      metal: { name: p["metal"], density: 15.5, grams: 3.42 },
+      stones,
+      checks,
+      at: [0, 0],
+    };
+  }
+
+  /**
+   * The mock's bench sheet: a canned piece of diamonds in a gold band, plus the estimated `cost`
+   * when a price book is set. Nothing here is a real weight or carat; it is enough to exercise the
+   * Bench section and the Price Book editor at `?mock=1`.
+   */
+  private techSheet(): string {
+    const metal = typeof this.piece?.["metal"] === "string" ? this.piece["metal"] : "gold18";
+    const groups = [
+      { cut: "round", width: 6.5, length: 6.5, depth: 4, sg: 3.52, count: 1, caratEach: 1.031, carat: 1.031, depthFrom: "name", calibrated: false, handles: [] as string[] },
+      { cut: "round", width: 1.3, length: 1.3, depth: 0.8, sg: 3.52, count: 18, caratEach: 0.008, carat: 0.149, depthFrom: "default", calibrated: true, handles: [] as string[] },
+    ];
+    // The band's weight follows the piece's width and wall, so a proposal has a weight to compare
+    // (3.86 g at the defaults, as before; nothing here is a real weight).
+    const width = typeof this.piece?.["width"] === "number" ? this.piece["width"] : 2.2;
+    const wall = typeof this.piece?.["wall"] === "number" ? this.piece["wall"] : 1.8;
+    const grams = Math.round(3.86 * (width / 2.2) * (wall / 1.8) * 100) / 100;
+    const bands = [{ block: "RING-16.51x2.4", size: "US 6", mm: 16.51, metal, grams, width: 2.4, wall: 1.8, handle: "A1" }];
+    const reply: Record<string, unknown> = {
+      stones: { groups, count: 19, carat: 1.18 },
+      bands,
+      warnings: [],
+      metal: null,
+      table: null,
+      message: `19 stones, 1.18 ct total; band US 6 — ${metal}, 3.86 g`,
+    };
+    const cost = this.priceBook === null ? null : this.mockCost(this.priceBook, groups, bands);
+    if (cost !== null) reply["cost"] = cost;
+    return envelope(true, reply);
+  }
+
+  /** The cost the mock totals from a book, mirroring the engine's shape. */
+  private mockCost(book: MockBook, groups: { cut: string; width: number; sg: number; count: number; carat: number }[], bands: { size: string; metal: string; grams: number }[]): Record<string, unknown> {
+    const currency = book.currency ?? "USD";
+    const digits = ["JPY", "KRW", "VND", "CLP"].includes(currency) ? 0 : 2;
+    const scale = 10 ** digits;
+    const round = (x: number): number => Math.round(x * scale) / scale;
+    const lines: Record<string, unknown>[] = [];
+    let metalTotal = 0;
+    let stoneTotal = 0;
+    let unpriced = 0;
+    let grams = 0;
+    let stoneCount = 0;
+    for (const b of bands) {
+      grams += b.grams;
+      const rate = book.metal[b.metal];
+      if (rate !== undefined) {
+        const amount = round(b.grams * rate);
+        metalTotal += amount;
+        lines.push({ what: `${b.metal} band (${b.size})`, metal: b.metal, qty: b.grams, unit: "g", rate, amount });
+      } else {
+        unpriced++;
+        lines.push({ what: `${b.metal} band (${b.size})`, metal: b.metal, qty: b.grams, unit: "g", note: `no metal price for ${b.metal}` });
+      }
+    }
+    for (const g of groups) {
+      stoneCount += g.count;
+      const material = Math.abs(g.sg - 3.52) < 1e-6 ? "diamond" : null;
+      const rate = (material !== null ? book.stone[material] : undefined) ?? book.stone["default"];
+      const what = `${material ?? "stone"} ${g.cut} ${g.width} mm`;
+      if (rate !== undefined) {
+        const amount = round(g.carat * rate);
+        stoneTotal += amount;
+        lines.push({ what, material, qty: g.count, carat: g.carat, unit: "ct", rate, amount });
+      } else {
+        unpriced++;
+        lines.push({ what, material, qty: g.count, carat: g.carat, unit: "ct", note: material === null ? "no stone price (material unspecified)" : `no stone price for ${material}` });
+      }
+    }
+    let labor: number | undefined;
+    if (book.labor !== undefined) {
+      const { mode, amount } = book.labor;
+      const figure = mode === "perStone" ? amount * stoneCount : mode === "perGram" ? amount * grams : amount;
+      labor = round(figure);
+      lines.push({ what: `labor (${mode})`, qty: mode === "perStone" ? stoneCount : mode === "perGram" ? grams : 1, unit: mode === "perStone" ? "pc" : mode === "perGram" ? "g" : "flat", rate: amount, amount: labor });
+    }
+    const total = round(metalTotal + stoneTotal + (labor ?? 0));
+    const cost: Record<string, unknown> = { currency, metal: round(metalTotal), stones: round(stoneTotal), total, lines, unpriced, note: "Estimate from the prices you set, not a market quote." };
+    if (labor !== undefined) cost["labor"] = labor;
+    return cost;
+  }
+
+  /** The `pricebook` command: set merges, clear empties, a read returns the stored book. */
+  private priceBookCommand(params: Record<string, unknown>): string {
+    const bad = (error: string): string => envelope(false, { error: `pricebook: ${error}` });
+    const flag = (key: string): boolean | string => {
+      const v = params[key];
+      if (v === undefined || v === null) return false;
+      return typeof v === "boolean" ? v : `\`${key}\` must be true or false`;
+    };
+    const clear = flag("clear");
+    const query = flag("query");
+    if (typeof clear === "string") return bad(clear);
+    if (typeof query === "string") return bad(query);
+    const set = params["set"];
+    if (clear && set !== undefined && set !== null) return bad("give `set` or `clear`, not both");
+    if (clear) {
+      this.priceBook = null;
+      this.touch();
+      return envelope(true, { book: this.bookJson(), message: "Price book cleared." });
+    }
+    if (set !== undefined && set !== null) {
+      const patch = this.normalizeSet(set);
+      if (typeof patch === "string") return bad(patch);
+      const base: MockBook = this.priceBook ?? { metal: {}, stone: {} };
+      this.priceBook = {
+        currency: patch.currency ?? base.currency,
+        metal: { ...base.metal, ...patch.metal },
+        stone: { ...base.stone, ...patch.stone },
+        labor: patch.labor ?? base.labor,
+      };
+      this.touch();
+      return envelope(true, { book: this.bookJson(), message: "Price book updated." });
+    }
+    return envelope(true, { book: this.bookJson(), message: this.priceBook === null ? "No prices set yet." : "Price book." });
+  }
+
+  /** Validate a `set` payload into a mock book, or the words for why it is refused. */
+  private normalizeSet(raw: unknown): MockBook | string {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return "`set` must be an object of prices";
+    const obj = raw as Record<string, unknown>;
+    const out: MockBook = { metal: {}, stone: {} };
+    const currency = obj["currency"];
+    if (currency !== undefined && currency !== null) {
+      if (typeof currency !== "string" || !/^[A-Za-z0-9]{1,8}$/.test(currency.trim())) return '`currency` must be a short code such as "USD"';
+      out.currency = currency.trim().toUpperCase();
+    }
+    const price = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= MOCK_PRICE_MAX ? v : null);
+    const read = (key: "metal" | "stone", known: Set<string>): string | null => {
+      const map = obj[key];
+      if (map === undefined || map === null) return null;
+      if (typeof map !== "object" || Array.isArray(map)) return `\`${key}\` must be an object of prices`;
+      for (const [name, value] of Object.entries(map as Record<string, unknown>)) {
+        const norm = name.trim().toLowerCase();
+        if (!known.has(norm)) continue; // unknown key: ignored
+        const p = price(value);
+        if (p === null) return `\`${key}.${name}\` must be a price from 0 to a sane maximum`;
+        out[key][norm] = p;
+      }
+      return null;
+    };
+    const metalError = read("metal", MOCK_METALS);
+    if (metalError !== null) return metalError;
+    const stoneError = read("stone", MOCK_STONES);
+    if (stoneError !== null) return stoneError;
+    const labor = obj["labor"];
+    if (labor !== undefined && labor !== null) {
+      if (typeof labor === "number") {
+        const p = price(labor);
+        if (p === null) return "`labor` must be a number from 0 to a sane maximum";
+        out.labor = { mode: "flat", amount: p };
+      } else if (typeof labor === "object" && !Array.isArray(labor)) {
+        for (const mode of ["flat", "perStone", "perGram"] as const) {
+          const v = (labor as Record<string, unknown>)[mode];
+          if (v !== undefined && v !== null) {
+            const p = price(v);
+            if (p === null) return `\`labor.${mode}\` must be a number from 0 to a sane maximum`;
+            out.labor = { mode, amount: p };
+            break;
+          }
+        }
+      } else {
+        return "`labor` must be a number, or {flat|perStone|perGram: amount}";
+      }
+    }
+    return out;
+  }
+
+  /** The stored book as the engine's `book` reply shapes it (always with metal and stone maps). */
+  private bookJson(): Record<string, unknown> {
+    const b = this.priceBook;
+    if (b === null) return { metal: {}, stone: {} };
+    const out: Record<string, unknown> = { metal: { ...b.metal }, stone: { ...b.stone } };
+    if (b.currency !== undefined) out["currency"] = b.currency;
+    if (b.labor !== undefined) out["labor"] = { mode: b.labor.mode, amount: b.labor.amount };
+    return out;
+  }
+
+  /**
+   * The mock's own entities as the engine's `objects` lists a space: handle (the display handle a
+   * pick answers with), kind, layer and one measurement, capped at `limit` (2000; 5000 at most).
+   * It changes nothing.
+   */
+  private objectsCommand(params: Record<string, unknown>): string {
+    const asked = params["limit"];
+    if (asked !== undefined && asked !== null && (typeof asked !== "number" || !Number.isInteger(asked) || asked < 0)) {
+      return envelope(false, { error: "objects: `limit` must be a whole number from 0 to 5000" });
+    }
+    const limit = Math.min(typeof asked === "number" ? asked : 2000, 5000);
+    const shown = this.entities.filter((e) => this.visible(e));
+    const objects = shown.slice(0, limit).map((e, i) => {
+      const row = { handle: String(i + 1), layer: e.layer };
+      if (e.kind === "circle") return { ...row, kind: "circle", size: (e.r * 2).toFixed(4) };
+      if (e.kind === "line") return { ...row, kind: "line", size: Math.hypot(e.x1 - e.x0, e.y1 - e.y0).toFixed(4) };
+      return { ...row, kind: "lwpolyline" };
+    });
+    return envelope(true, { objects, total: shown.length, truncated: shown.length > objects.length, space: "Model" });
   }
 
   /** The display handle of the first entity containing `(x, y)` — the mock's canned pick. */
@@ -628,6 +1115,14 @@ export class MockFacade implements RawFacade {
       { id: "layer", label: "Layers", menu: ["Format", "Layers"], shortcut: "", aliases: ["la"], params: "{} → layers", enabled: true },
       { id: "layer.set", label: "Set Layer Properties", menu: [], shortcut: "", aliases: [], params: "{name, on?, frozen?, locked?}", enabled: true },
       { id: "layer.current", label: "Make Current", menu: [], shortcut: "", aliases: [], params: "{name}", enabled: true },
+      { id: "propose", label: "Propose a Change", menu: [], shortcut: "", aliases: [], params: "{steps: [{command, params?}], title?} | {variants: [{title?, steps}]} → {proposals, message}", enabled: true },
+      { id: "accept", label: "Accept Proposal", menu: [], shortcut: "", aliases: [], params: "{id} → {accepted, title, message}", enabled: true },
+      { id: "reject", label: "Reject Proposal", menu: [], shortcut: "", aliases: [], params: "{id?} → {rejected, message}", enabled: true },
+      { id: "proposals", label: "Proposals", menu: [], shortcut: "", aliases: [], params: "{} → {proposals: [report + {stale}]}", enabled: true },
+      { id: "piece", label: "Piece", menu: [], shortcut: "", aliases: [], params: "{kind?: band|solitaire|eternity, metal?: gold24|22|18|14|platinum|silver (default gold18), query?, remove?} → {piece}", enabled: true },
+      { id: "objects", label: "Objects", menu: [], shortcut: "", aliases: [], params: "{limit?: n (default 2000, at most 5000)} → {objects: [{handle, kind, layer, size?}], total, truncated, space}", enabled: true },
+      { id: "techsheet", label: "Tech Sheet", menu: ["Inquiry", "Tech Sheet"], shortcut: "", aliases: ["bom", "stonesheet"], params: "{handles?, metal?, section?, size?, system?, price?} → {stones, bands, metal, cost?, message}", enabled: true },
+      { id: "pricebook", label: "Price Book", menu: ["Inquiry", "Price Book"], shortcut: "", aliases: [], params: "{set?: {currency?, metal?: {gold18|platinum|…: price per gram}, stone?: {diamond|…|default: price per carat}, labor?: number | {flat|perStone|perGram: amount}}, query?, clear?} → {book, message}", enabled: true },
     ]);
   }
 
@@ -798,8 +1293,9 @@ export class MockFacade implements RawFacade {
     return envelope(true, { entities: this.entities.length });
   }
 
-  load_sample(): string {
+  load_sample(name?: string): string {
     this.reset();
+    this.title = name === "solitaire" ? "Solitaire" : "sample.dxf";
     this.touch();
     return envelope(true, { title: this.title, entityCount: this.entities.length });
   }
@@ -811,4 +1307,187 @@ export class MockFacade implements RawFacade {
   digest(): string {
     return `mock-${this.revision}-${this.entities.length}`;
   }
+}
+
+// ---- the mock's solid (`piecemesh`, `stlout`) ----
+
+interface MockMesh {
+  part: "metal" | "stone";
+  name: string;
+  color: [number, number, number];
+  positions: number[];
+  indices: number[];
+}
+
+/**
+ * A stand-in solid for the 3D view, generated here and clearly a mock: a plain torus for the band
+ * (as wide and as thick as the mock piece says) and, for a piece that has a stone, one octahedron
+ * above the head. It is in the engine's frame (the finger's axis is Z, the head at +Y, millimetres,
+ * triangles counter-clockwise seen from outside) and is no model of a ring: nothing here is a
+ * seat, a prong or a cut.
+ */
+function mockPieceMesh(piece: Record<string, unknown>, fine: boolean): { meshes: MockMesh[]; bounds: { min: number[]; max: number[] }; triangles: number; notes: string[] } {
+  const num = (key: string, fallback: number, lo: number, hi: number): number => {
+    const v = piece[key];
+    return typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
+  };
+  const wall = num("wall", 1.8, 0.3, 10);
+  const width = num("width", 2.2, 0.5, 30);
+  const inner = 8.25;
+  const major = inner + wall / 2;
+  const around = fine ? 96 : 48;
+  const across = fine ? 20 : 12;
+  const band: MockMesh = { part: "metal", name: "band (mock)", color: [214, 178, 92], positions: [], indices: [] };
+  for (let i = 0; i < around; i += 1) {
+    const u = (2 * Math.PI * i) / around;
+    for (let j = 0; j < across; j += 1) {
+      const v = (2 * Math.PI * j) / across;
+      const r = major + (wall / 2) * Math.cos(v);
+      band.positions.push(r * Math.cos(u), r * Math.sin(u), (width / 2) * Math.sin(v));
+      const a = i * across + j;
+      const b = ((i + 1) % around) * across + j;
+      const c = ((i + 1) % around) * across + ((j + 1) % across);
+      const d = i * across + ((j + 1) % across);
+      band.indices.push(a, b, c, a, c, d);
+    }
+  }
+  const meshes: MockMesh[] = [band];
+  if (piece["kind"] !== "band") {
+    const half = num("stoneWidth", 6.5, 0.5, 30) / 2;
+    const girdle = inner + wall + half * 0.75;
+    const corners = [
+      [half, girdle, 0],
+      [0, girdle, half],
+      [-half, girdle, 0],
+      [0, girdle, -half],
+    ];
+    const stone: MockMesh = { part: "stone", name: "stone (mock)", color: [176, 214, 244], positions: [0, girdle + half * 0.45, 0, 0, girdle - half * 0.75, 0, ...corners.flat()], indices: [] };
+    for (let k = 0; k < 4; k += 1) {
+      const here = 2 + k;
+      const next = 2 + ((k + 1) % 4);
+      stone.indices.push(0, next, here, 1, here, next);
+    }
+    meshes.push(stone);
+  }
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  let triangles = 0;
+  for (const mesh of meshes) {
+    triangles += mesh.indices.length / 3;
+    mesh.positions.forEach((v, i) => {
+      min[i % 3] = Math.min(min[i % 3] ?? v, v);
+      max[i % 3] = Math.max(max[i % 3] ?? v, v);
+    });
+  }
+  return { meshes, bounds: { min, max }, triangles, notes: ["A mock solid: a plain torus, not the engine's ring."] };
+}
+
+/** The mock solid as a binary STL in base64, shaped as the engine's `stlout` replies. */
+function mockStl(meshes: readonly MockMesh[], name: string): Record<string, unknown> {
+  const triangles = meshes.reduce((sum, mesh) => sum + mesh.indices.length / 3, 0);
+  const bytes = new Uint8Array(84 + triangles * 50);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(80, triangles, true);
+  let at = 84;
+  for (const mesh of meshes) {
+    for (let t = 0; t < mesh.indices.length; t += 3) {
+      const corner = (k: number): [number, number, number] => {
+        const v = (mesh.indices[t + k] ?? 0) * 3;
+        return [mesh.positions[v] ?? 0, mesh.positions[v + 1] ?? 0, mesh.positions[v + 2] ?? 0];
+      };
+      const [a, b, c] = [corner(0), corner(1), corner(2)];
+      const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
+      const w = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
+      const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+      const length = Math.hypot(n[0] ?? 0, n[1] ?? 0, n[2] ?? 0) || 1;
+      [...n.map((v) => v / length), ...a, ...b, ...c].forEach((v, i) => view.setFloat32(at + i * 4, v, true));
+      at += 50;
+    }
+  }
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return { format: "stl-binary", base64: btoa(binary), bytes: bytes.length, triangles, name };
+}
+
+// ---- the mock's proposals ----
+
+interface MockHeld {
+  entities: Entity[];
+  piece: Record<string, unknown> | null;
+  revision: number;
+  dirty: boolean;
+}
+
+interface MockProposal {
+  id: number;
+  group: number;
+  title: string;
+  /** The drawing it was read on, as one string: another drawing makes it stale. */
+  base: string;
+  after: MockHeld;
+  report: Record<string, unknown>;
+}
+
+/** The piece's parameters a card names, with the engine's words for them (the mock's subset). */
+const MOCK_PARAMS: readonly [string, string, string | null][] = [
+  ["kind", "Kind", null],
+  ["width", "Width", "mm"],
+  ["wall", "Wall", "mm"],
+  ["profile", "Profile", null],
+  ["metal", "Metal", null],
+  ["cut", "Cut", null],
+  ["stone", "Stone", null],
+  ["stoneLength", "Stone length", "mm"],
+  ["stoneWidth", "Stone width", "mm"],
+  ["prongs", "Prongs", null],
+  ["halo", "Halo", null],
+];
+
+/** A `propose` report in the engine's shape, from the mock's own canned figures. */
+function mockReport(title: string, steps: readonly unknown[], before: Record<string, unknown>, after: Record<string, unknown>, objectsBefore: number, objectsAfter: number): Record<string, unknown> {
+  const at = (v: unknown, path: readonly string[]): unknown => path.reduce<unknown>((cur, key) => (typeof cur === "object" && cur !== null ? (cur as Record<string, unknown>)[key] : undefined), v) ?? null;
+  const rows: Record<string, unknown>[] = [];
+  const change = (key: string, label: string, b: unknown, a: unknown, unit: string | null): void => {
+    if (JSON.stringify(b) === JSON.stringify(a)) return;
+    const row: Record<string, unknown> = { key, label, before: b, after: a };
+    if (typeof a === "number" && typeof b === "number") row["delta"] = Math.round((a - b) * 1000) / 1000;
+    if (unit !== null) row["unit"] = unit;
+    rows.push(row);
+  };
+  for (const [key, label, unit] of MOCK_PARAMS) change(`piece.${key}`, label, at(before, ["piece", "params", key]), at(after, ["piece", "params", key]), unit);
+  change("grams", "Metal weight", at(before, ["grams"]), at(after, ["grams"]), "g");
+  change("stones.count", "Stones", at(before, ["stones", "count"]), at(after, ["stones", "count"]), "pc");
+  change("stones.carat", "Stone weight", at(before, ["stones", "carat"]), at(after, ["stones", "carat"]), "ct");
+  const currency = at(after, ["cost", "currency"]) ?? at(before, ["cost", "currency"]);
+  change("cost.total", "Estimate", at(before, ["cost", "total"]), at(after, ["cost", "total"]), typeof currency === "string" ? currency : null);
+  type Check = { id: string; ok: boolean; message: string };
+  const checks = (v: unknown): Check[] => {
+    const list = at(v, ["piece", "checks"]);
+    return Array.isArray(list) ? (list as Check[]) : [];
+  };
+  const was = checks(before);
+  const now = checks(after);
+  const okBefore = (id: string): boolean | undefined => was.find((c) => c.id === id)?.ok;
+  const row = (c: Check): Record<string, unknown> => ({ id: c.id, message: c.message });
+  const turned = {
+    fixed: now.filter((c) => c.ok && okBefore(c.id) === false).map(row),
+    broken: now.filter((c) => !c.ok && okBefore(c.id) !== false).map(row),
+    failing: now.filter((c) => !c.ok).map(row),
+  };
+  const added = Math.max(0, objectsAfter - objectsBefore);
+  const removed = Math.max(0, objectsBefore - objectsAfter);
+  const parts = rows.slice(0, 4).map((r) => `${String(r["label"])} ${String(r["before"] ?? "none")} → ${String(r["after"] ?? "none")}${r["unit"] === undefined ? "" : ` ${String(r["unit"])}`}`);
+  if (parts.length === 0) parts.push(`${added} added, ${removed} removed, 0 changed`);
+  if (turned.broken.length > 0) parts.push(`${turned.broken.length} check(s) would fail`);
+  return {
+    title,
+    steps,
+    before,
+    after,
+    changes: rows,
+    checks: turned,
+    objects: { before: objectsBefore, after: objectsAfter, added, removed, modified: 0 },
+    unchanged: rows.length === 0 && added === 0 && removed === 0,
+    message: `${title}: ${parts.join("; ")}`,
+  };
 }

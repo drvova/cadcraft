@@ -1807,7 +1807,19 @@ impl Facade {
     /// Drawing): the same drawing [`Facade::sample`] starts with, replacing what is open, fitted
     /// to the view. Replies `{"ok":true,"title","entityCount"}`.
     pub fn load_sample(&mut self) -> String {
-        self.session.open_drawing(cadcraft_engine::sample::default_sample(), "Bracket", None);
+        self.load_sample_named("bracket")
+    }
+
+    /// Load a sample drawing by name: `bracket` (the mechanical bracket, inches) or `solitaire`
+    /// (a ring with its stones, millimetres). A name that is neither is refused and the drawing
+    /// that is open stays.
+    pub fn load_sample_named(&mut self, name: &str) -> String {
+        let (drawing, title) = match name {
+            "bracket" => (cadcraft_engine::sample::default_sample(), "Bracket"),
+            "solitaire" => (cadcraft_engine::sample::solitaire(), "Solitaire"),
+            _ => return error_reply("there is no sample drawing of that name (bracket, solitaire)"),
+        };
+        self.session.open_drawing(drawing, title, None);
         self.refresh();
         self.fit_view();
         let (title, entity_count) = match self.session.state() {
@@ -2232,6 +2244,12 @@ mod bindings {
             self.0.load_sample()
         }
 
+        /// `loadSampleNamed(name)`: `bracket` or `solitaire`, replacing what is open.
+        #[wasm_bindgen(js_name = loadSampleNamed)]
+        pub fn load_sample_named(&mut self, name: &str) -> String {
+            self.0.load_sample_named(name)
+        }
+
         #[wasm_bindgen(js_name = saveBytes)]
         pub fn save_bytes(&mut self) -> Vec<u8> {
             self.0.save_bytes()
@@ -2299,6 +2317,19 @@ mod tests {
         assert!(d["prims"].as_array().is_some_and(|p| !p.is_empty()), "display after load_sample: {d}");
         let v = parse(&f.view());
         assert!(v["min"].as_array().is_some_and(|m| m.len() == 2), "view after load_sample: {v}");
+    }
+
+    #[test]
+    fn the_solitaire_sample_loads_by_name_and_an_unknown_name_is_refused() {
+        let mut f = Facade::sample();
+        let r = parse(&f.load_sample_named("solitaire"));
+        assert_eq!(r["ok"].as_bool(), Some(true), "{r}");
+        assert_eq!(r["title"].as_str(), Some("Solitaire"), "{r}");
+        let sheet = parse(&f.execute("techsheet", "{}"));
+        assert!(sheet["result"]["stones"]["count"].as_u64().is_some_and(|n| n > 20), "{sheet}");
+        let refused = parse(&f.load_sample_named("../etc"));
+        assert_eq!(refused["ok"].as_bool(), Some(false), "{refused}");
+        assert_eq!(parse(&f.load_sample_named("solitaire"))["title"].as_str(), Some("Solitaire"));
     }
 
     #[test]

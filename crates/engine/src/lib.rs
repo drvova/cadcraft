@@ -686,6 +686,8 @@ pub struct Session {
     picked_viewport: Option<snap::ViewportPoint>,
     /// The last drawing comparison (COMPARE), drawn over the drawing it was made for.
     pub compare: Option<cmd::file::compare::Comparison>,
+    /// Changes proposed and not yet accepted or rejected (PROPOSE).
+    pub proposals: cmd::proposal::Pending,
     /// Object snap tracking: acquired points and the path under the cursor (from the UI's
     /// [`Session::snap_cursor`] calls; direct distance entry follows the path).
     pub tracking: snap::tracking::Tracker,
@@ -748,6 +750,7 @@ impl Session {
             ctrl_down: false,
             picked_viewport: None,
             compare: None,
+            proposals: cmd::proposal::Pending::default(),
             tracking: snap::tracking::Tracker::default(),
             viewport_px: (1200.0, 800.0),
             clipboard: Vec::new(),

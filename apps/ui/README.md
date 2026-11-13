@@ -165,6 +165,8 @@ On macOS the chords use Cmd in place of Ctrl.
 | Ctrl+J | Bring the command line up and focus it; pressed in it, fold it away | Anywhere |
 | Ctrl+1 | Fold or show Properties | Anywhere (a browser keeps Ctrl+1 for its tabs; the desktop window does not) |
 | Ctrl+7 | Fold or show the assistant | Anywhere |
+| Ctrl+U | Fold or show Source, the drawing as its script; in it, Ctrl+Enter applies an edit | Anywhere |
+| Ctrl+K | Open or close the line over the drawing that asks the assistant; in it, Enter sends and Escape closes | Anywhere |
 | Ctrl+9 | Fold or show the command line | Anywhere (as Ctrl+1) |
 | F6, Shift+F6 | Move to the next or previous part: sidebar, drawing, command line, assistant | Anywhere |
 | Menu key, Shift+F10 | Open the right-click menu of what has the focus (on a status toggle: Drafting Settings, as its right click does) | The drawing, a layer row, a layout tab, a status toggle |

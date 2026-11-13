@@ -16,10 +16,13 @@
 import { displayListOf, EMPTY_DISPLAY, MAX_DISPLAY_REPLY_BYTES, parseDisplayList, type DisplayList, type DisplayPrim } from "./display";
 import { anchorOf, emptyPrompt, NO_ANCHOR, reducePrompt, type PromptAnchor, type PromptState } from "./prompt";
 import { MockFacade } from "./mock";
-import { asBool, asNumber, asString, isRecord } from "./json";
+import { asBool, asNumber, asString, asStringList, isRecord } from "./json";
 import { parseRect, rectIsDegenerate, type Point, type Rect } from "./view";
 
 /** The raw wasm-bindgen handle: exactly the facade's methods, JSON strings in and out. */
+/** The sample drawings the engine builds in code. */
+export type SampleName = "bracket" | "solitaire";
+
 export interface RawFacade {
   execute(command: string, paramsJson: string): string;
   cmdline(text: string): string;
@@ -68,7 +71,8 @@ export interface RawFacade {
   /** Invoke one of those options by its `id`. Replies as `cmdline`. */
   grip_option(id: string, option: string): string;
   open_bytes(name: string, bytes: Uint8Array): string;
-  load_sample(): string;
+  /** Replace what is open with a sample: `bracket` (the default) or `solitaire`. */
+  load_sample(name?: string): string;
   save_bytes(): Uint8Array;
   digest(): string;
 }
@@ -90,6 +94,63 @@ export function parseEnvelope(raw: string): Envelope | null {
   if (value["ok"] === true) return { ok: true, result: value["result"] };
   if (value["ok"] === false) return { ok: false, error: asString(value["error"]) ?? "unknown error" };
   return null;
+}
+
+/** The drawing's script (`Facade::source`), or why there is none. */
+export type SourceReply = { ok: true; text: string } | { ok: false; error: string };
+
+/**
+ * Narrow a `source` reply (`{"ok":true,"text":"…"}`): the text when it carries one and does not
+ * say it failed, else the reply's error. A reply that is not such an object is a failure, never
+ * shown as if it were the script.
+ */
+export function parseSourceReply(raw: string): SourceReply {
+  if (typeof raw !== "string" || raw.length === 0 || raw.length > 64 * 1024 * 1024) return { ok: false, error: "unreadable reply from source" };
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return { ok: false, error: "unreadable reply from source" };
+  }
+  if (!isRecord(value)) return { ok: false, error: "unreadable reply from source" };
+  const text = asString(value["text"]);
+  if (value["ok"] !== false && text !== null) return { ok: true, text };
+  return { ok: false, error: asString(value["error"]) ?? "unreadable reply from source" };
+}
+
+/** Most output lines of a script run kept (the engine caps its own at 200). */
+export const MAX_SCRIPT_OUTPUT = 200;
+
+/** What a script's run reports (`Facade::run_script`: `{"ok","ran","output"[,"error"]}`). */
+export interface ScriptReport {
+  ok: boolean;
+  /** The statements that ran; null when the reply does not say (the mock). */
+  ran: number | null;
+  /** The command line's messages, capped at `MAX_SCRIPT_OUTPUT`. */
+  output: string[];
+  /** The error that stopped it (it names its line: `line 3: …`); null on success. */
+  error: string | null;
+}
+
+/**
+ * Narrow a `run_script` reply. Only `ok: true` is a success: a reply without it, or one that is
+ * not an object, is a failure with an error to show.
+ */
+export function parseScriptReport(raw: string): ScriptReport {
+  const failed = (error: string): ScriptReport => ({ ok: false, ran: null, output: [], error });
+  if (typeof raw !== "string" || raw.length === 0 || raw.length > 64 * 1024 * 1024) return failed("unreadable reply from run_script");
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return failed("unreadable reply from run_script");
+  }
+  if (!isRecord(value)) return failed("unreadable reply from run_script");
+  const count = asNumber(value["ran"]);
+  const ran = count !== null && Number.isInteger(count) && count >= 0 ? count : null;
+  const output = asStringList(value["output"], MAX_SCRIPT_OUTPUT);
+  if (value["ok"] === true) return { ok: true, ran, output, error: null };
+  return { ok: false, ran, output, error: asString(value["error"]) ?? "the script did not run" };
 }
 
 /** The drawing summary (`Facade::state`), parsed tolerantly across key spellings. */
@@ -1149,14 +1210,28 @@ export class AppFacade {
     return parseEnvelope(raw) ?? { ok: false, error: "unreadable reply from run_script" };
   }
 
+  /** The drawing's script with the reply narrowed: the text, or why there is none. Never throws. */
+  scriptSource(): SourceReply {
+    return parseSourceReply(this.call(() => this.raw.source()));
+  }
+
+  /**
+   * Rebuild the drawing from a script and say what the engine said: how many statements ran, its
+   * messages, and the error (with its line) when one stopped it. A failed run leaves the drawing
+   * as it was (the engine restores it). Never throws.
+   */
+  applyScript(text: string): ScriptReport {
+    return parseScriptReport(this.call(() => this.raw.run_script(text)));
+  }
+
   openBytes(name: string, bytes: Uint8Array): Envelope {
     const raw = this.call(() => this.raw.open_bytes(name, bytes));
     return parseEnvelope(raw) ?? { ok: false, error: "unreadable reply from open_bytes" };
   }
 
-  /** Replace what is open with the sample drawing (File ▸ Open Sample Drawing). */
-  loadSample(): Envelope {
-    const raw = this.call(() => this.raw.load_sample());
+  /** Replace what is open with a sample drawing (Help ▸ Open Sample Drawing, the ring; Open Sample Bracket). */
+  loadSample(name: SampleName = "bracket"): Envelope {
+    const raw = this.call(() => this.raw.load_sample(name));
     return parseEnvelope(raw) ?? { ok: false, error: "unreadable reply from load_sample" };
   }
 

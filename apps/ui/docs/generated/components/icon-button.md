@@ -13,9 +13,12 @@ Not applicable: hand-rolled — the circle, the .08 hover fill and the 14px glyp
 ## Examples
 `<IconButton icon="close" title="Close the panel" />` — the panel's close control.
 
-Real uses, 25 call sites (`rg -c "<IconButton" src` → `src/components/AssistantPane.tsx:17`, `src/components/LayerManager.tsx:1`, `src/components/LayersPanel.tsx:1`, `src/components/Menu.tsx:1`, `src/components/PropertiesPanel.tsx:1`, `src/components/ToolStrip.tsx:1`, `src/components/TopBar.tsx:3`):
+Real uses, 35 call sites (`rg -c "<IconButton" src` → `src/components/AssistantPane.tsx:18`, `src/components/BenchPanel.tsx:1`, `src/components/InlineAsk.tsx:1`, `src/components/LayerManager.tsx:1`, `src/components/LayersPanel.tsx:1`, `src/components/Menu.tsx:1`, `src/components/PropertiesPanel.tsx:1`, `src/components/ToolStrip.tsx:1`, `src/components/TopBar.tsx:3`):
+- `src/components/AssistantPane.tsx` — the close on a chip of `@` context in the composer card (`sm`), as the selection chip's. Added 2026-11-12.
 - `src/components/AssistantPane.tsx` — the composer pilot: the toolbar's attach (`soft`), stop and send (`inverted`), and each attachment chip's remove circle (`sm`).
-- `src/components/ToolStrip.tsx:111` — every tool in the strip: the glyph from the tool's icon id, the title its label and shortcut, click to invoke it.
+- `src/components/BenchPanel.tsx` — the bench section's fold key (`sm`, `expanded`, `controls`), as the layers' and the properties' sections fold. Added 2026-11-12.
+- `src/components/InlineAsk.tsx` — the inline ask's send (`inverted`, `sm`, `shortcut="Enter"`), off while the line is empty with the reason as its `description`. Added 2026-11-12.
+- `src/components/ToolStrip.tsx:295` — every tool of the ribbon's compact row (a window of a phone's width): the glyph from the tool's icon id, the title its label and shortcut, click to invoke it; and the key at the tab row's end that folds the tool band (`expanded`, `controls`). On a wider window a tool is the ghost `Button` with its glyph over its label.
 
 ### Example files
 | File | Covers | Caption |
@@ -273,7 +276,7 @@ export default function Expanded() {
   - Don't: `<IconButton icon="chevron-down" size="sm" title={open() ? "Hide the layers" : "Show the layers"} selected={open()} />`
   - Do: `<IconButton icon="chevron-down" size="sm" title={open() ? "Hide the layers" : "Show the layers"} expanded={open()} controls="layers-body" />`
 
-- `rule/icon-button-popup-kind`: When an icon button opens something that floats over the page, pass `popup` with its kind (1 of `menu`, `listbox`, `dialog`, matching the `role` of what opens), `expanded` with whether it is open, and `controls` with its `id` while it is rendered, and leave `selected` unset, because a key with no `aria-haspopup` is announced as a plain button and the menu it opens arrives unannounced. Evidence: single use `src/components/MenuBar.tsx:194`, the narrow window's Main menu key, which sets the attribute from outside on mount. Check: test `src/ui/IconButton.test.tsx`.
+- `rule/icon-button-popup-kind`: When an icon button opens something that floats over the page, pass `popup` with its kind (1 of `menu`, `listbox`, `dialog`, matching the `role` of what opens), `expanded` with whether it is open, and `controls` with its `id` while it is rendered, and leave `selected` unset, because a key with no `aria-haspopup` is announced as a plain button and the menu it opens arrives unannounced. Evidence: single use `src/components/MenuBar.tsx:206`, the narrow window's Main menu key, which sets the attribute from outside on mount. Check: test `src/ui/IconButton.test.tsx`.
   - Don't: `<IconButton icon="list" title="Main menu" expanded={open()} />` with `setAttribute("aria-haspopup", "menu")` on mount.
   - Do: `<IconButton icon="list" title="Main menu" popup="menu" expanded={open()} controls={open() ? "main-menu" : undefined} />`
 - `rule/icon-button-no-native-title`: When an icon button is styled or wrapped, add 0 hints of its own (no `title` attribute set from outside, no `Tooltip` around it), because the component already shows its `title` in the layer's hint box and a second hint stacks on the first. Evidence: app 31/31 icon buttons in the running shell render no `title` attribute, measured in the browser 2026-11-11. Check: test `src/ui/IconButton.test.tsx`.
@@ -282,12 +285,12 @@ export default function Expanded() {
 - `rule/icon-button-shortcut-prop`: When an icon button's action has a shortcut, pass it as `shortcut` and keep it out of `title`, because the hint draws it as 1 key cap and the button says it through `aria-keyshortcuts`, while a bracket in the title puts "(Ctrl+Z)" into the accessible name a speech-input user has to say; the parsed bracket form stays for a caller that has not moved, and no call site in the app uses it now (the tool strip's five, the title bar's three and the composer's send and stop pass `shortcut`). Evidence: app 9/31 icon buttons in the running shell carry a shortcut in brackets in their name, measured in the browser 2026-11-11. Check: test `src/ui/IconButton.test.tsx`.
   - Don't: `<IconButton icon="undo" title="Undo (Ctrl+Z)" />`
   - Do: `<IconButton icon="undo" title="Undo" shortcut="Ctrl+Z" />`
-- `rule/icon-button-disabled-reason`: When an icon button is disabled by something the user can fix, pass the reason as `description` in 1 short sentence, because the disabled key stays focusable and hoverable for exactly this, and its name alone says what it is and 0 words about why it is dead. Evidence: single use `src/components/AssistantPane.tsx:922`, the composer's send key, disabled while the message is empty with no reason given. Check: test `src/ui/IconButton.test.tsx`.
+- `rule/icon-button-disabled-reason`: When an icon button is disabled by something the user can fix, pass the reason as `description` in 1 short sentence, because the disabled key stays focusable and hoverable for exactly this, and its name alone says what it is and 0 words about why it is dead. Evidence: single use `src/components/AssistantPane.tsx:976`, the composer's send key, disabled while the message is empty with no reason given. Check: test `src/ui/IconButton.test.tsx`.
   - Don't: `<IconButton icon="send" title="Send" disabled={empty()} />`
   - Do: `<IconButton icon="send" title="Send" disabled={empty()} description={empty() ? "Type a message first" : undefined} />`
 
 ### Content
-- `rule/icon-button-title-sentence`: When `title` is written, name the action in sentence case with no full stop (Close the panel, Send, Stop), because the same string is the hint and the accessible name. Evidence: single use `src/components/AssistantPane.tsx:865`, the "Attach a picture (or paste, or drop one)" label. Check: review `src/components/AssistantPane.tsx`.
+- `rule/icon-button-title-sentence`: When `title` is written, name the action in sentence case with no full stop (Close the panel, Send, Stop), because the same string is the hint and the accessible name. Evidence: single use `src/components/AssistantPane.tsx:892`, the "Attach a picture (or paste, or drop one)" label. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `title="close panel."`
   - Do: `title="Close the panel"`
 

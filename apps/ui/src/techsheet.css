@@ -1,0 +1,376 @@
+/*
+ * The Tech Sheet view (components/TechSheet.tsx): a full-surface stage over the editor that shows
+ * the piece as a printable bench sheet. The chrome (the header, the mode and background choices,
+ * Print, Close) is the app's own surface so it reads in either theme; the sheet in the middle is
+ * paper — the fixed light `--paper` surface with `--paper-ink` text and `--paper-margin` hairlines,
+ * so it reads as a printed page in both themes and prints to one page. Every value is a token.
+ */
+
+.techsheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  font-family: var(--font-family);
+}
+
+/* ---- the chrome: the title at the start, the choices and the keys at the end ---- */
+.techsheet-chrome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-8);
+  padding: var(--gap-8) var(--gap-16);
+  background: var(--chrome);
+  border-block-end: var(--hairline) solid var(--border);
+}
+
+.techsheet-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-8);
+  margin-inline-start: auto;
+}
+
+.techsheet-close {
+  display: inline-flex;
+}
+
+/* ---- the scrolling backdrop that the paper page sits on ---- */
+.techsheet-scroll {
+  flex: 1 1 auto;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  padding: var(--gap-16);
+  background: var(--surface-inset);
+}
+
+/* The page itself: paper in both themes. */
+.techsheet-sheet {
+  width: 100%;
+  max-width: 210mm;
+  box-sizing: border-box;
+  padding: var(--gap-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-16);
+  background: var(--paper);
+  color: var(--paper-ink);
+  border: var(--hairline) solid var(--paper-margin);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-popover);
+}
+
+.techsheet-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-2);
+  padding-block-end: var(--gap-8);
+  border-block-end: var(--hairline) solid var(--paper-margin);
+}
+
+.techsheet-title {
+  margin: 0;
+  font-size: var(--font-body);
+  font-weight: 600;
+  color: var(--paper-ink);
+}
+
+.techsheet-muted {
+  margin: 0;
+  color: var(--paper-margin);
+  font-size: var(--font-small);
+  line-height: var(--leading-ui);
+}
+
+.techsheet-placeholder {
+  margin: 0;
+  padding: var(--gap-16);
+  text-align: center;
+  color: var(--paper-margin);
+  font-size: var(--font-small);
+  line-height: var(--leading-ui);
+  border: var(--hairline) dashed var(--paper-margin);
+  border-radius: var(--radius-card);
+}
+
+/* ---- blocks and their headings. The sheet is paper, so a heading takes the paper ink. ---- */
+.techsheet-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-8);
+}
+
+.techsheet-block h2,
+.techsheet-block-head h2 {
+  color: var(--paper-ink);
+}
+
+.techsheet-block-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gap-8);
+}
+
+.techsheet-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap-16);
+}
+
+/* ---- the four views ---- */
+.techsheet-views {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap-12);
+}
+
+.techsheet-tile {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-4);
+}
+
+.techsheet-canvas {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--paper);
+  border: var(--hairline) solid var(--paper-margin);
+  border-radius: var(--radius-card);
+}
+
+.techsheet-still {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.techsheet-tile-state {
+  padding: var(--gap-8);
+  text-align: center;
+  color: var(--paper-margin);
+  font-size: var(--font-small);
+  line-height: var(--leading-ui);
+}
+
+.techsheet-tile-label {
+  text-align: center;
+  color: var(--paper-ink);
+  font-size: var(--font-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- the fact lists (dimensions, metal) ---- */
+.techsheet-facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-2);
+}
+
+.techsheet-fact {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--gap-8);
+  padding-block: var(--gap-2);
+  border-block-end: var(--hairline) solid var(--paper-margin);
+}
+
+.techsheet-fact dt {
+  color: var(--paper-ink);
+  font-size: var(--font-small);
+}
+
+.techsheet-fact dd {
+  margin: 0;
+  color: var(--paper-ink);
+  font-size: var(--font-small);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.techsheet-fact-wide {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.techsheet-fact-wide dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-4) var(--gap-8);
+  text-align: start;
+}
+
+.techsheet-size {
+  white-space: nowrap;
+}
+
+.techsheet-total dt,
+.techsheet-total dd,
+.techsheet-total span {
+  font-weight: 600;
+}
+
+/* ---- the stone table ---- */
+.techsheet-stones {
+  display: flex;
+  flex-direction: column;
+}
+
+.techsheet-stone-head,
+.techsheet-stone {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: var(--gap-12);
+  align-items: baseline;
+  padding-block: var(--gap-2);
+  border-block-end: var(--hairline) solid var(--paper-margin);
+  font-size: var(--font-small);
+}
+
+.techsheet-stone-head {
+  color: var(--paper-margin);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.techsheet-stone span:nth-child(2),
+.techsheet-stone span:nth-child(3),
+.techsheet-stone-head span:nth-child(2),
+.techsheet-stone-head span:nth-child(3) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.techsheet-flag {
+  display: block;
+  color: var(--warn);
+  font-size: var(--font-small);
+}
+
+/* ---- the checks: a mark and a word, never colour alone ---- */
+.techsheet-checks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-2);
+}
+
+.techsheet-check {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: baseline;
+  gap: var(--gap-8);
+  padding-block: var(--gap-2);
+  border-block-end: var(--hairline) solid var(--paper-margin);
+  font-size: var(--font-small);
+  line-height: var(--leading-ui);
+}
+
+/* The mark: a tick for a pass, a cross for a fail. The glyph carries the state with the word. */
+.techsheet-check-mark {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+  align-self: center;
+  background: var(--paper-ink);
+  -webkit-mask: var(--mark-pass) center / contain no-repeat;
+  mask: var(--mark-pass) center / contain no-repeat;
+}
+
+.techsheet-check[data-ok] .techsheet-check-mark {
+  --mark-pass: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5l3.2 3.2L13 5' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.techsheet-check:not([data-ok]) .techsheet-check-mark {
+  background: var(--error);
+  --mark-pass: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 4l8 8 M12 4l-8 8' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+.techsheet-check-status {
+  color: var(--paper-ink);
+  font-weight: 600;
+}
+
+.techsheet-check-msg {
+  color: var(--paper-ink);
+}
+
+.techsheet-warning {
+  margin: 0;
+  color: var(--warn);
+  font-size: var(--font-small);
+  line-height: var(--leading-ui);
+}
+
+/* A phone-width window: one column throughout, so nothing spills sideways. */
+@media (max-width: 560px) {
+  .techsheet-columns,
+  .techsheet-views {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- print: one page, the chrome gone, the page flat ---- */
+@media print {
+  .app > *:not(.techsheet-overlay) {
+    display: none;
+  }
+
+  .techsheet-overlay {
+    position: static;
+    background: none;
+  }
+
+  .techsheet-chrome {
+    display: none;
+  }
+
+  .techsheet-scroll {
+    overflow: visible;
+    padding: 0;
+    background: none;
+    display: block;
+  }
+
+  .techsheet-sheet {
+    max-width: none;
+    width: auto;
+    gap: var(--gap-10);
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  /* The four views in one row keep the tables on the same page. */
+  .techsheet-views {
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--gap-8);
+  }
+
+  .techsheet-still {
+    break-inside: avoid;
+  }
+
+  .techsheet-block,
+  .techsheet-tile,
+  .techsheet-check,
+  .techsheet-stone {
+    break-inside: avoid;
+  }
+
+  @page {
+    margin: 12mm;
+  }
+}

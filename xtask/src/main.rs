@@ -23,7 +23,8 @@ commands:
   ui [--strict]   the interface's gate: bun type check, tests and build in apps/ui (skipped,
                   with a note, where bun is missing; --strict makes that a failure)
   test            cargo nextest run (cargo test without nextest) plus the doctests
-  ci              fmt --check, clippy -D warnings, test, assets, layers, wasm, ui (stops at first failure)
+  ci              fmt --check, clippy -D warnings, test, assets, layers, wasm, ui (stops at
+                  first failure)
   corpus [--download]
                   show where test corpora live; --download fetches PngSuite into corpus/pngsuite
   stats [--exact] count tests and lines per crate (--exact: ask the test harness via `-- --list`)

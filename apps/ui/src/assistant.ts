@@ -464,6 +464,35 @@ export function systemPrompt(b: Briefing): string {
     "6. Pictures the reader attaches are in the message and you can see them, but they have no\n" +
     "file path here, so they cannot be traced or measured with code — describe what you see.\n\n";
   s +=
+    "Fine jewelry is drafted here with the trade's own numbers, and they are commands. Each takes\n" +
+    "millimetres whatever the drawing's units are, and reports what it measured:\n" +
+    "- `ringsizes` converts a finger size between US, UK, EU, JP and CN; `ring` draws the blank a\n" +
+    "size and a wall make, and weighs it in the alloy named.\n" +
+    "- `gem` places a stone on its cut's real girdle (round, oval, emerald, marquise, pear and more)\n" +
+    "and reports its carat weight; `gemlist` lists the cuts and the stones.\n" +
+    "- `setting` builds prongs, a bezel, a halo of melee or channel rails on a stone named by its\n" +
+    "handle.\n" +
+    "- `pave` lays calibrated melee along a path or through a closed region; `gemfit` says how many\n" +
+    "stones of each size fit before anything is placed.\n" +
+    "- `piece` is a whole ring from a few numbers (a band, a solitaire or an eternity band): give\n" +
+    "it again with only what changed and the sheet rebuilds; its reply carries the weight, the\n" +
+    "stones and five checks. Prefer it to drawing a ring by hand.\n" +
+    "- `techsheet` is the bench sheet: the stones by cut and size with their carats, and the bands\n" +
+    "with their grams. Read it after a change to a piece and report its numbers.\n" +
+    "A jeweler speaks in finger sizes, millimetres, carats and grams: answer in those, and say when\n" +
+    "a fit failed or a size is off the calibrated list.\n\n";
+  s +=
+    "Propose a change; the person decides. When asked to change the piece or the drawing, run it\n" +
+    "through `propose`: it runs the commands, reports the figures before and after, the checks that\n" +
+    "would fail or pass and the objects, and puts the drawing back. The person sees a card and\n" +
+    "accepts or rejects it.\n" +
+    "`(cmd \"propose\" '((TITLE . \"Wider band\") (STEPS . (((COMMAND . \"piece\") (PARAMS . ((WIDTH . 2.8))))))))`\n" +
+    "- An open request (\"options under $2,000\", \"something lighter\") gets two to four `VARIANTS`,\n" +
+    "each `((TITLE . …) (STEPS . …))`. Say in a line each what they come to, with the numbers, and\n" +
+    "ask which to accept.\n" +
+    "- `accept` is the person's: call it only when they name the one to take.\n" +
+    "- When the person says to just do it, run the commands directly.\n\n";
+  s +=
     "How to report what you did:\n" +
     "- Say what you changed and **the numbers that came out of it**: how many objects, which handles or " +
     "layers, the size, the measured length, area or weight the tools reported. A report of a drawing is a " +
@@ -1934,4 +1963,16 @@ function asRecord(v: unknown): Record<string, unknown> {
 
 function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+// ---- Whether the panel starts open ----------------------------------------------------------
+
+/** The narrowest window the assistant opens in by itself: the sidebar, a drawing and the panel side by side. */
+export const ASSISTANT_AUTO_WIDTH = 1200;
+
+/** Whether the assistant starts open: as this browser last left it, else by the window's width. */
+export function assistantStartsOpen(stored: string | null, windowWidth: number): boolean {
+  if (stored === "1") return true;
+  if (stored === "0") return false;
+  return windowWidth >= ASSISTANT_AUTO_WIDTH;
 }

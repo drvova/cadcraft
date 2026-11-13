@@ -174,3 +174,6 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
     </aside>
   );
 }
+
+/** The name's hint: one wording, said once. */
+export { layerHint };

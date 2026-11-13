@@ -20,8 +20,8 @@
  * drawn at 12, 14 or 16 (`vector-effect: non-scaling-stroke`), not a width on the 24 grid that
  * thins as the glyph shrinks.
  *
- * The toolbar table lives in `ToolStrip.tsx` and uses these ids (the Save button draws the `save`
- * path but invokes the engine's `qsave` command).
+ * The ribbon's table lives in `ribbon.ts` and uses these ids (the Save button draws the `save`
+ * path but invokes the engine's `qsave` command). The band draws a tool's glyph at the same 16.
  *
  * This module is `.ts`, so the component is built with Solid's hyperscript instead of JSX.
  */
@@ -58,6 +58,14 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
   "ui.toggle.palettes": "M4 5h16v14H4z M9 5v14",
   /** Three stacked sheets. */
   "ui.dialog.layers": "M12 3l8 5-8 5-8-5z M4 13l8 5 8-5 M4 17l8 5 8-5",
+  /** A band seen from the front with its stone on top: the ring blank. */
+  ring: "M12 7.5a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13 M12 2.5l3 2.5-3 2.5-3-2.5z",
+  /** A brilliant from the side: the table, the girdle, and the pavilion's facets to the culet. */
+  gem: "M7.5 5.25h9l4.5 4.5-9 10.5-9-10.5z M3 9.75h18 M9 9.75l3 10.5 M15 9.75l-3 10.5",
+  /** Five small stones in two offset rows: melee laid as a brick pavé. */
+  pave: "M6 6a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M12 6a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M18 6a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M9 13a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M15 13a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5",
+  /** A stone from above with a prong at each corner. */
+  setting: "M12 5.5a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13 M6 4a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M18 4a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M6 16a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M18 16a2 2 0 1 0 0 4a2 2 0 1 0 0-4",
   /** A ruler laid on the diagonal, with ticks. */
   dist: "M3 17L17 3l4 4L7 21z M8 12l2 2 M11 9l2 2 M14 6l2 2",
   /** Three bullets with three lines: the Main menu key. */
@@ -93,6 +101,36 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
   erase: "M14 4l7 7-8 8H9l-5-5z M9 9l7 7 M13 19h8",
   /** A span between two extension lines, an arrow at each end, over the edge it measures: the linear dimension tool. */
   "dimension-linear": "M4 4v11 M20 4v11 M4 8h16 M7 5L4 8l3 3 M17 5l3 3-3 3 M4 20h16",
+  /** A six-sided figure about its centre: the polygon tool. */
+  polygon: "M7.5 3.75h9l4.5 8.25-4.5 8.25h-9L3 12z M12 12h0",
+  /** An oval struck from four centres, as a drafter's compass draws one, a dot at its centre: the ellipse tool. */
+  ellipse: "M3.9 9.3A10.125 10.125 0 0 1 20.1 9.3A4.5 4.5 0 0 1 20.1 14.7A10.125 10.125 0 0 1 3.9 14.7A4.5 4.5 0 0 1 3.9 9.3 M12 12h0",
+  /** One curve that turns both ways between two end grips: the spline tool (the line's grips, an S between them). */
+  spline: "M5.6 17.1A5.5 5.5 0 0 1 12 12A5.5 5.5 0 0 0 18.4 6.9 M5 17a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M19 3a2 2 0 1 0 0 4a2 2 0 1 0 0-4",
+  /** A small square, the large one it grows into from the same corner, and the arrow of its growth: the scale tool. */
+  scale: "M3.75 3.75h16.5v16.5H3.75z M3.75 12.75h7.5v7.5 M13.5 10.5l3.75-3.75 M14.25 6.75h3v3",
+  /** A boundary edge, a line that stops short of it, and the arrow that carries it there: the extend tool. */
+  extend: "M18.75 3v18 M3 12.75h5.25 M11.25 12.75h4.5 M13.5 9.75l3 3-3 3",
+  /** Two long legs joined by one straight cut, a dot where the sharp corner was: the chamfer tool (the fillet's corner, cut flat). */
+  chamfer: "M3.75 3.75h9l7.5 7.5v9 M20.25 3.75h0",
+  /** A slanted edge and, parallel to it between two extension lines, its measure with an arrow at each end: the aligned dimension tool. */
+  "dimension-aligned": "M7.5 20.5l13-7.5 M3.5 13.6l13-7.5 M6.75 19.2l-4-6.9 M19.75 11.7l-4-6.9 M6.3 13.7l-2.8-.1 1.3-2.5 M13.7 6l2.8.1-1.3 2.5",
+  /** A circle, its centre, and an arrow from the centre out to the curve: the radius dimension tool. */
+  "dimension-radius": "M12 3.75a8.25 8.25 0 1 0 0 16.5a8.25 8.25 0 1 0 0-16.5 M12 12h0 M12 12l5.8-5.8 M14.9 6.2h2.9v2.9",
+  /** Two legs from one vertex and the arc that spans the angle between them: the angular dimension tool. */
+  "dimension-angular": "M20.25 20.25H3.75L14 4.5 M15.75 20.25A12 12 0 0 0 10.3 10.2",
+  /** An arrow on what it points at, bent to a landing beside two lines of a note: the leader tool. */
+  mleader: "M4.3 16.3L3.75 20.25l3.6-1.8 M3.75 20.25l7.5-10.5h3 M15.75 8.25h4.5 M15.75 11.25h4.5",
+  /** A ruled grid under a heading row: the table tool. */
+  table: "M3.75 5.25h16.5v13.5H3.75z M3.75 9.75h16.5 M3.75 14.25h16.5 M9.75 9.75v9",
+  /** A ring mandrel, the tapered stick a finger size is read from, with its size marks: the ring-size table. */
+  ringsizes: "M3 10.75L20.25 7.5v9L3 13.25z M8.25 9.75v4.5 M12.75 9v6 M17.25 8.25v7.5",
+  /** A stone from above and a tick beside it: the stones fit their seats. */
+  gemfit: "M9.75 3.75a6 6 0 1 0 0 12a6 6 0 1 0 0-12 M13 17.5l3 3 5-7.5",
+  /** A sheet with a stone drawn at its head and the rows of its list: the tech sheet. */
+  techsheet: "M5.25 3.75h13.5v16.5H5.25z M9.75 6a2.25 2.25 0 1 0 0 4.5a2.25 2.25 0 1 0 0-4.5 M14.25 8.25h1.5 M8.25 14.25h7.5 M8.25 17.25h7.5",
+  /** A balance, a pan for the stones and a pan for the metal: the bench sheet's weights. */
+  bench: "M12.75 3.75v16.5 M9.75 20.25h6 M6.25 6.75h13 M6.25 6.75l-2.5 6a2.5 2.5 0 0 0 5 0z M19.25 6.75l-2.5 6a2.5 2.5 0 0 0 5 0z",
   /** Two tracks with a knob on each: the properties inspector. */
   properties: "M4 8h9 M17 8h3 M15 6a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M4 16h3 M11 16h9 M9 14a2 2 0 1 0 0 4a2 2 0 1 0 0-4",
   /** An arrow rising out of a floor line: send (the composer's right-hand action). */
@@ -109,6 +147,8 @@ export const ICON_PATHS: Readonly<Record<string, string>> = {
   "chevron-right": "M9 6l6 6-6 6",
   /** A down chevron: an open activity row. */
   "chevron-down": "M6 9l6 6 6-6",
+  /** An up chevron: the key that folds the ribbon's band away. */
+  "chevron-up": "M6 15l6-6 6 6",
   /** Two offset sheets: copy the message or code. */
   copy: "M9 9h10v10H9z M15 5H5v10",
   /** A circular arrow: retry the turn. */
@@ -149,8 +189,9 @@ export const COMPOSER_ICONS: readonly string[] = ["send", "stop", "plus", "close
 
 /** The shell's own glyphs: the layers palette's states (on, frozen and locked, each with its
  *  opposite; `LayersPanel.tsx`), the command centre's magnifier, the sidebar key and the panel key
- *  (`TopBar.tsx`), and the Main menu key's list (`MenuBar.tsx`). */
-export const PANEL_ICONS: readonly string[] = ["layer.on", "layer.off", "layer.frozen", "layer.thawed", "layer.locked", "layer.unlocked", "search", "layout.bottom", "ui.toggle.palettes", "list"];
+ *  (`TopBar.tsx`), the Main menu key's list (`MenuBar.tsx`), and the up chevron of the ribbon's
+ *  fold key (`ToolStrip.tsx`). */
+export const PANEL_ICONS: readonly string[] = ["layer.on", "layer.off", "layer.frozen", "layer.thawed", "layer.locked", "layer.unlocked", "search", "layout.bottom", "ui.toggle.palettes", "list", "chevron-up"];
 
 /** The path for a toolbar id, or null when there is none. */
 export function iconPath(id: string): string | null {

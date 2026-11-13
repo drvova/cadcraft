@@ -11,14 +11,14 @@ Foundation: hand-rolled. Traps checked: trap/button-div, trap/role-button, trap/
 Not applicable: hand-rolled — the editor tab (13px type on a 12px inset in the 35px strip, the active one filled with `--tab-active`, the `.08` fill on hover, a hairline between tabs) is measured from the running Cursor 3.27.22 (`docs/system/decisions.md`), and no registry item ships it. It replaces two hand-built tabs: the raw `<button class="layout-tab" role="tab">` of the layout strip, and a `Row` in a width cell beside a close `IconButton` in the assistant's header.
 
 ### Parts
-- `TabPanels` (the same file) is the whole tabs pattern for views that swap in place, a dialog's pages: a `role="tablist"` strip of `sm` tabs named by `ariaLabel`, and one `role="tabpanel"` per tab, tied both ways (`aria-controls`, `aria-labelledby`). The caller passes `panels` (`{ id, label, content }`), the `selected` id and `onChange(id)`. The strip is one Tab stop; Left, Right, Home and End move the focus and bring that page to the front at once (automatic activation: a page is already built, so showing it costs nothing, where the layout strip switches only on Enter because a switch redraws the drawing). A page behind is `hidden`, not removed, so a field keeps what was typed in it. Used at 1 call site, `src/components/DraftingSettings.tsx:350`.
+- `TabPanels` (the same file) is the whole tabs pattern for views that swap in place, a dialog's pages: a `role="tablist"` strip of `sm` tabs named by `ariaLabel`, and one `role="tabpanel"` per tab, tied both ways (`aria-controls`, `aria-labelledby`). The caller passes `panels` (`{ id, label, content }`), the `selected` id and `onChange(id)`. The strip is one Tab stop; Left, Right, Home and End move the focus and bring that page to the front at once (automatic activation: a page is already built, so showing it costs nothing, where the layout strip switches only on Enter because a switch redraws the drawing). A page behind is `hidden`, not removed, so a field keeps what was typed in it. Used at 1 call site, `src/components/DraftingSettings.tsx:259`.
 
 ## Examples
 `<Tab selected onClick={show}>Model</Tab>` — the model-space tab over the drawing.
 
-Real uses, 2 call sites (`rg -c "<Tab" src/components` → `src/components/AssistantPane.tsx:4`, `src/components/StatusBar.tsx:1`):
-- `src/components/StatusBar.tsx:76` — `LayoutTabs`, the editor tabs over the drawing (`size="md"`): Model, then each layout; `selected` marks the space in front, `title` says what the tab switches to.
-- `src/components/AssistantPane.tsx:513` — the chat tabs in the assistant's header when more than one chat is open (`size="sm"`): `selected` marks the chat in front, `onClose` closes that chat, `closeLabel` names it ("Close hello"), `title` carries the full chat title when the label clips.
+Real uses, 4 call sites (`rg -c "<Tab" src/components` → `src/components/AssistantPane.tsx:4`, `src/components/StatusBar.tsx:1`):
+- `src/components/StatusBar.tsx:80` — `LayoutTabs`, the editor tabs over the drawing (`size="md"`): Model, then each layout; `selected` marks the space in front, `title` says what the tab switches to.
+- `src/components/AssistantPane.tsx:573` — the chat tabs in the assistant's header when more than one chat is open (`size="sm"`): `selected` marks the chat in front, `onClose` closes that chat, `closeLabel` names it ("Close hello"), `title` carries the full chat title when the label clips.
 - The menu titles in `src/components/MenuBar.tsx` stay native buttons: they open menus, a different role.
 - The status bar's drafting toggles in `src/components/StatusBar.tsx` are `Toggle`: a drafting toggle is an `aria-pressed` switch, not a tab.
 
@@ -49,7 +49,7 @@ import { Tab } from "../../../../src/ui/Tab";
 
 export default function InLayoutTabs() {
   return (
-    <div class="editor-tabs" role="tablist" aria-label="Layouts">
+    <div class="editor-tabs" role="tablist" aria-label="Views">
       <Tab selected title="Switch to model space">Model</Tab>
       <Tab title="Switch to Layout1">Layout1</Tab>
       <Tab title="Switch to Layout2">Layout2</Tab>
@@ -201,23 +201,23 @@ export default function Selected() {
 - The label is a short fact with no view behind it. Use `Chip` instead.
 
 ### Rules
-- `rule/tab-selected-marked`: When a strip has a tab in front, pass `selected` on it, because the fill alone is colour and a screen reader needs `aria-selected="true"` to hear which view shows. Evidence: app 2/2 strips mark the tab in front, `src/components/StatusBar.tsx:57` and `src/components/AssistantPane.tsx:488`. Check: test `src/ui/Tab.test.tsx`.
+- `rule/tab-selected-marked`: When a strip has a tab in front, pass `selected` on it, because the fill alone is colour and a screen reader needs `aria-selected="true"` to hear which view shows. Evidence: app 2/2 strips mark the tab in front, `src/components/StatusBar.tsx:57` and `src/components/AssistantPane.tsx:548`. Check: test `src/ui/Tab.test.tsx`.
   - Don't: `<Tab onClick={show}>Model</Tab>` for the tab whose view is showing.
   - Do: `<Tab selected onClick={show}>Model</Tab>`
-- `rule/tab-in-tablist`: When tabs are rendered, place them in 1 container carrying `role="tablist"` and an `aria-label`, because a `tab` role outside a `tablist` is announced without its strip and its position. Evidence: app 2/2 strips, `src/components/StatusBar.tsx:54` and `src/components/AssistantPane.tsx:570`. Check: review `src/components/StatusBar.tsx`.
+- `rule/tab-in-tablist`: When tabs are rendered, place them in 1 container carrying `role="tablist"` and an `aria-label`, because a `tab` role outside a `tablist` is announced without its strip and its position. Evidence: app 2/2 strips, `src/components/StatusBar.tsx:54` and `src/components/AssistantPane.tsx:630`. Check: review `src/components/StatusBar.tsx`.
   - Don't: `<div class="editor-tabs"><Tab selected>Model</Tab></div>`
-  - Do: `<div class="editor-tabs" role="tablist" aria-label="Layouts"><Tab selected>Model</Tab></div>`
-- `rule/tab-close-sibling`: When a tab can be closed, pass `onClose` rather than putting a button in the tab's children, because a `<button>` cannot nest a `<button>` and `Tab` renders the close key as a sibling. Evidence: single use `src/components/AssistantPane.tsx:443`, the one closable strip. Check: test `src/ui/Tab.test.tsx`.
+  - Do: `<div class="editor-tabs" role="tablist" aria-label="Views"><Tab selected>Model</Tab></div>`
+- `rule/tab-close-sibling`: When a tab can be closed, pass `onClose` rather than putting a button in the tab's children, because a `<button>` cannot nest a `<button>` and `Tab` renders the close key as a sibling. Evidence: single use `src/components/AssistantPane.tsx:503`, the one closable strip. Check: test `src/ui/Tab.test.tsx`.
   - Don't: `<Tab onClick={show}>hello<IconButton icon="close" title="Close hello" onClick={close} /></Tab>`
   - Do: `<Tab onClick={show} onClose={close} closeLabel="Close hello">hello</Tab>`
 
 ### Content
-- `rule/tab-close-label-names`: When `onClose` is passed, pass `closeLabel` as "Close" plus the tab's label ("Close hello"), because 2 close keys both named "Close" in one strip cannot be told apart by a screen reader. Evidence: single use `src/components/AssistantPane.tsx:434`. Check: review `src/components/AssistantPane.tsx`.
+- `rule/tab-close-label-names`: When `onClose` is passed, pass `closeLabel` as "Close" plus the tab's label ("Close hello"), because 2 close keys both named "Close" in one strip cannot be told apart by a screen reader. Evidence: single use `src/components/AssistantPane.tsx:494`. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Tab onClose={close}>hello</Tab>` in a strip of 2 closable tabs.
   - Do: `<Tab onClose={close} closeLabel="Close hello">hello</Tab>`
 
 ### Anti-slop
-- `rule/tab-canonical-element`: When a surface needs a tab, render `Tab` rather than a raw `<button role="tab">` with its own class or a `Row` in a width cell, because the 2 replaced recipes painted 2 different selected fills and only 1 of them set `aria-selected`. Evidence: app 2/2 hand-built tabs replaced (`.layout-tab` and `.assistant-tab-row`), `src/components/StatusBar.tsx:57` and `src/components/AssistantPane.tsx:434`. Check: review `src/ui/Tab.tsx`.
+- `rule/tab-canonical-element`: When a surface needs a tab, render `Tab` rather than a raw `<button role="tab">` with its own class or a `Row` in a width cell, because the 2 replaced recipes painted 2 different selected fills and only 1 of them set `aria-selected`. Evidence: app 2/2 hand-built tabs replaced (`.layout-tab` and `.assistant-tab-row`), `src/components/StatusBar.tsx:57` and `src/components/AssistantPane.tsx:440`. Check: review `src/ui/Tab.tsx`.
   - Don't: `<button class="layout-tab is-active" role="tab">Model</button>`
   - Do: `<Tab selected>Model</Tab>`
 

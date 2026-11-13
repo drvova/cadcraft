@@ -10,8 +10,8 @@
  * local signals; anything else classified "none" does nothing.
  */
 
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { AppFacade, type CommandInfo, type DrawingState, type Grip, type GripOption, type LayerInfo, type SettingsState } from "./facade";
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, untrack, type JSX } from "solid-js";
+import { AppFacade, type CommandInfo, type DrawingState, type Grip, type GripOption, type LayerInfo, type SampleName, type ScriptReport, type SettingsState } from "./facade";
 import type { DisplayList } from "./display";
 import { padView, regionCovers, regionOf, VIEW_PAD, viewScale, type DisplayRegion } from "./display-cache";
 import { emptyPrompt, formatPoint, formatSelectBox, pointerWants, type PromptState } from "./prompt";
@@ -32,12 +32,27 @@ import { draftingTabFor, opensDraftingSettings, type DraftingTab } from "./draft
 import { ContextMenu, isMenuKey, type MenuPoint, type OpenContextMenu } from "./components/ContextMenu";
 import { AssistantPane } from "./components/AssistantPane";
 import { createAssistantSession, type AssistantSession } from "./assistant-session";
+import { createProposals, createStillCache, patchTitle } from "./proposals";
+import { assistantStartsOpen } from "./assistant";
 import { CanvasView } from "./components/CanvasView";
 import { LayersPanel } from "./components/LayersPanel";
 import { PropertiesPanel } from "./components/PropertiesPanel";
+import { SourcePanel } from "./components/SourcePanel";
+import { Viewport3D } from "./components/Viewport3D";
+import { TechSheet } from "./components/TechSheet";
+import { BenchPanel } from "./components/BenchPanel";
+import { ObjectsPanel } from "./components/ObjectsPanel";
+import { OBJECTS_LIMIT, parseObjects, type ObjectList } from "./objects";
+import { PiecePanel } from "./components/PiecePanel";
+import { NO_CHOICES, NO_PIECE, parsePieceReply, readPieceChoices, type PieceChoices, type PieceState } from "./piece";
+import { InlineAsk } from "./components/InlineAsk";
+import { parseBench, type BenchSheet } from "./bench";
 import { CommandLine } from "./components/CommandLine";
 import { createRecovery, RecoveryBar } from "./components/RecoveryBar";
+import { GemDialog, RingDialog } from "./components/JewelryDialog";
+import { PriceBookDialog } from "./components/PriceBookDialog";
 import { LayerManager } from "./components/LayerManager";
+import { TemplateGallery } from "./components/TemplateGallery";
 import { opensLayerManager } from "./layer-manager";
 
 export interface AppProps {
@@ -48,7 +63,7 @@ type ThemeChoice = "dark" | "light" | "system";
 type AnimChoice = "on" | "off" | "system";
 
 /** The engine's file ids (and their `ui.*` twins) the browser handles itself. */
-const FILE_IDS: Readonly<Record<string, "open" | "save" | "new" | "sample">> = {
+const FILE_IDS: Readonly<Record<string, "open" | "save" | "new" | "sample" | "bracket">> = {
   open: "open",
   "ui.open": "open",
   qsave: "save",
@@ -56,6 +71,7 @@ const FILE_IDS: Readonly<Record<string, "open" | "save" | "new" | "sample">> = {
   "ui.saveas": "save",
   new: "new",
   "ui.sample": "sample",
+  "ui.sample.bracket": "bracket",
 };
 
 /** What takes the keyboard's focus inside a region when nothing names a better control. */
@@ -142,6 +158,27 @@ function saveRecent(ids: readonly string[]): void {
   }
 }
 
+const ASSISTANT_OPEN_KEY = "cadcraft.assistant.open";
+
+function loadAssistantOpen(): boolean {
+  if (typeof window === "undefined") return false;
+  let stored: string | null = null;
+  try {
+    stored = localStorage.getItem(ASSISTANT_OPEN_KEY);
+  } catch {
+    // a blocked storage leaves the width to decide
+  }
+  return assistantStartsOpen(stored, window.innerWidth);
+}
+
+function saveAssistantOpen(open: boolean): void {
+  try {
+    localStorage.setItem(ASSISTANT_OPEN_KEY, open ? "1" : "0");
+  } catch {
+    // a full or blocked storage is not worth failing a toggle over
+  }
+}
+
 export function App(props: AppProps): JSX.Element {
   const [drawing, setDrawing] = createSignal<DrawingState | null>(null);
   const [prompt, setPrompt] = createSignal<PromptState>(emptyPrompt());
@@ -187,12 +224,47 @@ export function App(props: AppProps): JSX.Element {
   const [showStatusbar, setShowStatusbar] = createSignal(true);
   const [showCmdline, setShowCmdline] = createSignal(true);
   const [showLayers, setShowLayers] = createSignal(true);
-  const [showAssistant, setShowAssistant] = createSignal(false);
+  // The assistant is part of the window, as the editor's agent panel is: it starts open where
+  // the window has the room for it beside the drawing, and stays as this browser last left it.
+  const [showAssistant, setShowAssistant] = createSignal(loadAssistantOpen());
+  createEffect(() => saveAssistantOpen(showAssistant()));
+  /** The Source panel: the drawing's script beside the drawing. It starts closed. */
+  const [showSource, setShowSource] = createSignal(false);
+  /** The stage shows the piece's 3D view (the "3D" tab over the drawing) instead of the drawing. */
+  const [stage3d, setStage3d] = createSignal(false);
   /** The left sidebar as a whole (its palettes keep their own switches inside it). */
-  const [showSidebar, setShowSidebar] = createSignal(true);
+  // In a window of a phone's width it would take the whole workspace (styles.css), so it starts closed there.
+  const [showSidebar, setShowSidebar] = createSignal(typeof window === "undefined" || window.innerWidth > 560);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
+  /** The line over the drawing that asks the assistant (Ctrl+K). */
+  const [askOpen, setAskOpen] = createSignal(false);
   const [recentCommands, setRecentCommands] = createSignal<readonly string[]>(loadRecent());
   const [showProperties, setShowProperties] = createSignal(true);
+  const [showBench, setShowBench] = createSignal(true);
+  /** The piece's stones and metal, as the engine last counted them. */
+  const [bench, setBench] = createSignal<BenchSheet | null>(null);
+  /** The revision and space the bench sheet was counted at: a refresh that changed nothing counts nothing. */
+  let benchAt: string | null = null;
+  /** Whether the Price Book editor is open. */
+  const [pricebookOpen, setPricebookOpen] = createSignal(false);
+  /** Whether the engine has the Price Book command (the running wasm may not yet). */
+  const canPrice = createMemo(() => commands().some((c) => c.id === "pricebook"));
+  /** The Piece section: the drawing's parametric ring, as the engine last described it. */
+  const [showPiece, setShowPiece] = createSignal(true);
+  const [piece, setPiece] = createSignal<PieceState>(NO_PIECE);
+  /** What the engine lets a piece be made of; asked once, when the first piece is shown. */
+  const [pieceChoices, setPieceChoices] = createSignal<PieceChoices>(NO_CHOICES);
+  let pieceChoicesRead = false;
+  /** The revision the piece was read at; and whether the engine said it has no `piece` (never asked again). */
+  let pieceAt: string | null = null;
+  let pieceMissing = false;
+  /** The Objects section: what the space on screen holds, as the engine last listed it. */
+  const [showObjects, setShowObjects] = createSignal(true);
+  const [objects, setObjects] = createSignal<ObjectList | null>(null);
+  /** Whether the engine has `objects` at all (an engine without it is asked once and never again). */
+  const [objectsAvailable, setObjectsAvailable] = createSignal(true);
+  /** The revision and space the objects were listed at. */
+  let objectsAt: string | null = null;
   const [theme, setTheme] = createSignal<ThemeChoice>("dark");
   const [animations, setAnimations] = createSignal<AnimChoice>("on");
 
@@ -208,6 +280,8 @@ export function App(props: AppProps): JSX.Element {
   };
   /** A refusal was said during the key being handled (the Properties rows commit on Enter). */
   let saidOnKey = false;
+  /** Alt is down, as the last key or press reported it: a Piece edit committed then is proposed. */
+  let altHeld = false;
 
   /**
    * The window the current display list covers (the view the fetch was made for, padded) and the
@@ -320,7 +394,119 @@ export function App(props: AppProps): JSX.Element {
     setLayouts(props.facade.layouts().map((l) => l.name));
     setSpace(state?.space ?? "Model");
     setCommands(props.facade.commands());
+    readBench(state);
+    readPiece(state);
+    readObjects(state);
+    // What waits for a decision: a `propose` changes no revision, so this is read after every
+    // command, every tool call of the assistant's and every accept (cheap when nothing waits).
+    proposals.sync();
     syncDisplay();
+  };
+
+  /** Count the piece again when the drawing changed under the sheet (or the panel came back). */
+  const readBench = (state: DrawingState | null): void => {
+    if (!showBench() || !showSidebar()) return;
+    const at = state === null ? "" : `${state.revision}/${state.entityCount}/${state.title}`;
+    if (at === benchAt) return;
+    benchAt = at;
+    const env = props.facade.execute("techsheet", {});
+    setBench(env.ok ? parseBench(env.result) : null);
+  };
+
+  // The sheet is not counted while its panel is away; it is counted when the panel comes back.
+  createEffect(() => {
+    if (showBench() && showSidebar()) readBench(untrack(drawing));
+  });
+
+  /** A `piece` reply into the section: the piece, none, or (once and for good) no such command. */
+  const takePiece = (env: Parameters<typeof parsePieceReply>[0]): void => {
+    const next = parsePieceReply(env, untrack(piece));
+    if (next.kind === "unavailable") pieceMissing = true;
+    if (next.kind === "piece" && !pieceChoicesRead) {
+      pieceChoicesRead = true;
+      setPieceChoices(readPieceChoices(props.facade));
+    }
+    setPiece(next);
+  };
+
+  /** Ask the engine for the piece again when the drawing changed under the section (or it came back). */
+  const readPiece = (state: DrawingState | null): void => {
+    if (pieceMissing || !showPiece() || !showSidebar()) return;
+    const at = state === null ? "" : `${state.revision}/${state.entityCount}/${state.title}`;
+    if (at === pieceAt) return;
+    pieceAt = at;
+    // An engine that lists its commands without `piece` is not asked: its refusal of an unknown
+    // command would stand on the command line as an error nobody caused.
+    const listed = props.facade.commands();
+    if (listed.length > 0 && !listed.some((c) => c.id === "piece")) {
+      takePiece({ ok: false, error: "unknown command `piece`" });
+      return;
+    }
+    takePiece(props.facade.execute("piece", { query: true }));
+  };
+
+  createEffect(() => {
+    if (showPiece() && showSidebar()) readPiece(untrack(drawing));
+  });
+
+  /** List the space's objects again when the drawing changed under the section (or it came back). */
+  const readObjects = (state: DrawingState | null): void => {
+    if (!untrack(objectsAvailable) || !showObjects() || !showSidebar()) return;
+    const at = state === null ? "" : `${state.revision}/${state.entityCount}/${state.title}/${state.space}`;
+    if (at === objectsAt) return;
+    objectsAt = at;
+    // An engine that lists its commands without `objects` is not asked: its refusal of an unknown
+    // command would stand on the command line as an error nobody caused. It is never asked again.
+    const listed = props.facade.commands();
+    if (listed.length > 0 && !listed.some((c) => c.id === "objects")) {
+      setObjectsAvailable(false);
+      setObjects(null);
+      return;
+    }
+    const env = props.facade.execute("objects", { limit: OBJECTS_LIMIT });
+    setObjects(env.ok ? parseObjects(env.result) : null);
+  };
+
+  createEffect(() => {
+    if (showObjects() && showSidebar()) readObjects(untrack(drawing));
+  });
+
+  /**
+   * The Piece section built, rebuilt or removed the piece. A refusal is said beside the command
+   * field and handed back in the engine's words, for the row it names.
+   */
+  const onPieceRun = (params: Record<string, unknown>): string | null => {
+    // Alt held as the edit is committed (Alt+Enter in a field, Alt and a press on a choice): the
+    // edit is proposed, not made. The card shows what it would come to; the drawing is untouched.
+    if (altHeld && !("kind" in params) && !("remove" in params) && !("query" in params)) {
+      const env = props.facade.execute("propose", { steps: [{ command: "piece", params }], title: patchTitle(params) });
+      saidOnKey = !env.ok;
+      setNotice(env.ok ? null : env.error);
+      // The field shows the piece's own value again: nothing changed until the proposal is accepted.
+      pieceAt = null;
+      refresh();
+      return env.ok ? null : env.error;
+    }
+    const env = props.facade.execute("piece", params);
+    saidOnKey = !env.ok;
+    setNotice(env.ok ? null : env.error);
+    if (env.ok) pieceAt = null;
+    // A piece started, or made another kind, is a new sheet: the drawing is framed on it. An
+    // edit of one number leaves the view where the reader put it.
+    if (env.ok && "kind" in params && props.facade.execute("zoom.extents", {}).ok) adoptView();
+    refresh();
+    return env.ok ? null : env.error;
+  };
+
+  /**
+   * The template gallery chose a preset: start it from a clean slate. Any current piece is removed
+   * first (so no stale parameter survives the merge), then the template's own parameters build it —
+   * both through the Piece section's own handler, so a template reaches `piece` exactly as a start
+   * button does. Answers null when it built, else the engine's refusal for the card to show.
+   */
+  const onTemplateChoose = (params: Record<string, unknown>): string | null => {
+    if (untrack(piece).kind === "piece") onPieceRun({ remove: true });
+    return onPieceRun(params);
   };
 
   // Recovery copies of unsaved work, and the bar that offers one after an unclean close.
@@ -342,6 +528,29 @@ export function App(props: AppProps): JSX.Element {
   // Each chat is its own session (its conversation, draft and running turn); a new chat is added
   // beside the others, as the editor keeps its chats in tabs, and never wipes one.
   const newChat = (): AssistantSession => createAssistantSession({ facade: props.facade, onChanged: () => refresh() });
+  // Proposals: changes read before they are made (`propose`), shown as cards over the assistant's
+  // composer until they are accepted or rejected. A proposal that arrives brings the panel out, so
+  // a decision that waits is always in view, wherever it was made (the command line, the Piece
+  // section, the assistant).
+  /** Whether the engine has the proposal commands; an engine without them is never asked. */
+  let proposalsKnown: boolean | null = null;
+  const proposals = createProposals({
+    execute: (command, params) => props.facade.execute(command, params),
+    available: () => {
+      if (proposalsKnown === null) {
+        const listed = props.facade.commands();
+        if (listed.length === 0) return false;
+        proposalsKnown = listed.some((c) => c.id === "proposals");
+      }
+      return proposalsKnown;
+    },
+    onChanged: () => refresh(),
+    onArrive: () => {
+      if (!untrack(showAssistant)) setShowAssistant(true);
+    },
+  });
+  const stills = createStillCache((command, params) => props.facade.execute(command, params));
+  onCleanup(() => stills.dispose());
   const [chats, setChats] = createSignal<readonly AssistantSession[]>([newChat()]);
   const [chatIndex, setChatIndex] = createSignal(0);
   const assistant = createMemo(() => chats()[Math.min(chatIndex(), chats().length - 1)]);
@@ -485,11 +694,42 @@ export function App(props: AppProps): JSX.Element {
     };
     window.addEventListener("keydown", onKeyCapture, true);
     window.addEventListener("keydown", onKey);
+    // Whether Alt is down, read on the way in of every key and press (a Piece edit committed
+    // with it is proposed); a window that loses focus forgets it.
+    const noteAlt = (e: KeyboardEvent | PointerEvent): void => void (altHeld = e.altKey);
+    const forgetAlt = (): void => void (altHeld = false);
+    for (const type of ["keydown", "keyup", "pointerdown", "pointerup"] as const) window.addEventListener(type, noteAlt, true);
+    window.addEventListener("blur", forgetAlt);
     onCleanup(() => {
       window.removeEventListener("keydown", onKeyCapture, true);
       window.removeEventListener("keydown", onKey);
+      for (const type of ["keydown", "keyup", "pointerdown", "pointerup"] as const) window.removeEventListener(type, noteAlt, true);
+      window.removeEventListener("blur", forgetAlt);
     });
   });
+
+  /** Open the line that asks the assistant, or close it and give the keyboard back to the drawing. */
+  const toggleAsk = (): void => {
+    if (askOpen()) closeAsk();
+    else setAskOpen(true);
+  };
+  const closeAsk = (): void => {
+    setAskOpen(false);
+    regionTarget({ root: ".canvas-stage", first: null })?.focus({ preventScroll: true });
+  };
+  /**
+   * Send the line's draft to the chat in front and show its panel, where the turn is read. With
+   * no model set up the draft stays in the composer, and the panel is where one is set up.
+   */
+  const sendAsk = (): void => {
+    const chat = assistant();
+    if (chat === undefined) return;
+    const outcome = chat.send();
+    if (outcome === "empty") return;
+    setAskOpen(false);
+    setShowAssistant(true);
+    if (outcome === "too-long") setNotice("the message is too long to send; shorten it in the assistant's panel");
+  };
 
   /** Show the command line if it is folded away and put the keyboard in its field. */
   const focusCommandLine = (): void => {
@@ -592,6 +832,21 @@ export function App(props: AppProps): JSX.Element {
   const [drafting, setDrafting] = createSignal<{ open: boolean; tab: DraftingTab }>({ open: false, tab: "snap-grid" });
   /** Whether the Layer Properties Manager shows. */
   const [layerManager, setLayerManager] = createSignal(false);
+  /** Which of the Ring and Gem dialogs shows, if either. */
+  const [jewelry, setJewelry] = createSignal<"ring" | "gem" | null>(null);
+  /** Whether the "Start from a template" gallery shows. */
+  const [showTemplates, setShowTemplates] = createSignal(false);
+  /** Whether the Tech Sheet view (the printable bench sheet) shows over the editor. */
+  const [showTechSheet, setShowTechSheet] = createSignal(false);
+  /**
+   * A ring or a stone was placed from its dialog: show it. Its weight is read on the Bench
+   * section, which counts again here; the line beside the command field is for refusals, in the
+   * error ink, and a placed piece is not one.
+   */
+  const onJewelryPlaced = (_message: string | null): void => {
+    setNotice(null);
+    refresh();
+  };
   const openDrafting = (tab: DraftingTab = "snap-grid"): void => {
     setDrafting({ open: true, tab });
   };
@@ -655,7 +910,9 @@ export function App(props: AppProps): JSX.Element {
   const newDrawing = (): void => {
     setNotice(null);
     recovery.flush();
-    const env = props.facade.execute("new", {});
+    // A new drawing is millimetres: it is what a jeweler drafts in, and what the piece, the
+    // stones and the bench sheet are said in.
+    const env = props.facade.execute("new", { metric: true });
     if (!env.ok) {
       setNotice(env.error);
       return;
@@ -664,16 +921,32 @@ export function App(props: AppProps): JSX.Element {
     refresh();
   };
 
-  const loadSample = (): void => {
+  const loadSample = (name: SampleName): void => {
     setNotice(null);
     recovery.flush();
-    const env = props.facade.loadSample();
+    const env = props.facade.loadSample(name);
     if (!env.ok) {
       setNotice(env.error);
       return;
     }
     adoptView();
     refresh();
+  };
+
+  /**
+   * The Source panel applied its text: the drawing is rebuilt from the script, and the window
+   * follows as after any command (a waiting command is cancelled first, as the engine would; the
+   * view moves only if the script moved it; every surface reads the drawing again).
+   */
+  const applySource = (text: string): ScriptReport => {
+    setNotice(null);
+    recovery.flush();
+    if (prompt().running !== null) setPrompt(props.facade.cancel(prompt()));
+    const before = engineView();
+    const report = props.facade.applyScript(text);
+    followView(before);
+    refresh();
+    return report;
   };
 
   /** Everything the palette can run: the registry's commands and the shell's own items. */
@@ -703,8 +976,14 @@ export function App(props: AppProps): JSX.Element {
       newDrawing();
       return;
     }
-    if (file === "sample") {
-      loadSample();
+    if (file === "sample" || file === "bracket") {
+      loadSample(file === "sample" ? "solitaire" : "bracket");
+      return;
+    }
+    // The ribbon's and the menu's Tech Sheet open the printable view; typed at the command line
+    // (TECHSHEET, BOM) the engine command still inserts its table, and `execute` still runs it.
+    if (id === "techsheet") {
+      setShowTechSheet(true);
       return;
     }
     switch (classify(id)) {
@@ -723,11 +1002,20 @@ export function App(props: AppProps): JSX.Element {
       case "palette":
         setPaletteOpen(true);
         return;
+      case "ask":
+        toggleAsk();
+        return;
       case "layers":
         setLayerManager(true);
         return;
       case "drafting":
         openDrafting();
+        return;
+      case "jewelry":
+        setJewelry(id === "gem" ? "gem" : "ring");
+        return;
+      case "templates":
+        setShowTemplates(true);
         return;
       case "focus":
         if (id === "ui.focus.cmdline") focusCommandLine();
@@ -746,8 +1034,23 @@ export function App(props: AppProps): JSX.Element {
       case "ui.panel.properties":
         setShowProperties((v) => !v);
         return;
+      case "ui.panel.bench":
+        setShowBench((v) => !v);
+        return;
+      case "ui.panel.piece":
+        setShowPiece((v) => !v);
+        return;
+      case "ui.panel.objects":
+        setShowObjects((v) => !v);
+        return;
+      case "ui.view.techsheet":
+        setShowTechSheet((v) => !v);
+        return;
       case "ui.toggle.assistant":
         setShowAssistant((v) => !v);
+        return;
+      case "ui.toggle.source":
+        setShowSource((v) => !v);
         return;
       case "ui.toggle.sidebar":
         setShowSidebar((v) => !v);
@@ -768,6 +1071,12 @@ export function App(props: AppProps): JSX.Element {
         return;
     }
   };
+
+  /** What the Source panel reads the drawing's script again for: another drawing, or a change of this one. */
+  const sourceStamp = createMemo(() => {
+    const d = drawing();
+    return d === null ? "" : `${d.revision}/${d.entityCount}/${d.layerCount}/${d.title}`;
+  });
 
   /** What the pointer is for on the drawing: the running command's prompt decides. */
   const wants = createMemo(() => pointerWants(prompt()));
@@ -851,6 +1160,13 @@ export function App(props: AppProps): JSX.Element {
       [rect.x1, rect.y1],
     ];
     pickAtRest({ window: corners, crossing: kind === "crossing" }, "rect", shift);
+  };
+
+  /** A bench line was pressed: what it counts becomes the selection (none: the selection goes). */
+  const onBenchSelect = (handles: readonly string[]): void => {
+    const env = props.facade.execute("select", handles.length === 0 ? { clear: true } : { handles: [...handles] });
+    setNotice(env.ok ? null : env.error);
+    refresh();
   };
 
   const onLayerToggle = (name: string, flag: "on" | "frozen" | "locked", value: boolean): void => {
@@ -1036,100 +1352,181 @@ export function App(props: AppProps): JSX.Element {
 
   const currentLayer = createMemo(() => drawing()?.currentLayer ?? layers().find((l) => l.current)?.name ?? "0");
 
-  return (
-    <div class="app">
-      <TopBar
-        drawing={drawing}
-        menu={
-          <Show when={showMenubar()}>
-            <MenuBar commands={commands()} onInvoke={onInvoke} />
-          </Show>
-        }
-        paletteShortcut={shortcutLabel("Cmd+Shift+P", isMacPlatform())}
-        onOpenPalette={() => setPaletteOpen(true)}
-        sidebarOpen={showSidebar}
-        onToggleSidebar={() => setShowSidebar((v) => !v)}
-        panelOpen={showCmdline}
-        onTogglePanel={() => setShowCmdline((v) => !v)}
-        assistantOpen={showAssistant}
-        onToggleAssistant={() => setShowAssistant((v) => !v)}
+  /** The shell's regions, placed below in a grid of bars and a flex workspace (`styles.css`). */
+  const topBar = (): JSX.Element => (
+    <TopBar
+      drawing={drawing}
+      menu={
+        <Show when={showMenubar()}>
+          <MenuBar commands={commands()} onInvoke={onInvoke} />
+        </Show>
+      }
+      paletteShortcut={shortcutLabel("Cmd+Shift+P", isMacPlatform())}
+      onOpenPalette={() => setPaletteOpen(true)}
+      sidebarOpen={showSidebar}
+      onToggleSidebar={() => setShowSidebar((v) => !v)}
+      panelOpen={showCmdline}
+      onTogglePanel={() => setShowCmdline((v) => !v)}
+      assistantOpen={showAssistant}
+      onToggleAssistant={() => setShowAssistant((v) => !v)}
+    />
+  );
+  const ribbon = (): JSX.Element => (
+    <Show when={showToolbar()}>
+      <ToolStrip onInvoke={onInvoke} commands={commands()} />
+    </Show>
+  );
+  /** The sidebar is on screen: its switch is on and it has a section to show. */
+  const sidebarShown = (): boolean => showSidebar() && (showPiece() || showLayers() || showObjects() || showProperties() || showBench());
+  const railSections = (): JSX.Element => (
+    <>
+      <Show when={showPiece()}>
+        <PiecePanel state={piece()} choices={pieceChoices()} onRun={onPieceRun} onNotice={onPropertyNotice} onTemplates={() => setShowTemplates(true)} />
+      </Show>
+      <Show when={showLayers()}>
+        <LayersPanel layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} onMenu={(name, at) => openContext({ kind: "layer", name }, at)} />
+      </Show>
+      <Show when={showObjects()}>
+        <ObjectsPanel list={objects()} available={objectsAvailable()} selection={selection()} onSelect={onBenchSelect} />
+      </Show>
+      <Show when={showProperties()}>
+        <PropertiesPanel properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={onPropertyNotice} />
+      </Show>
+    </>
+  );
+  const benchSection = (): JSX.Element => (
+    <Show when={showBench()}>
+      <BenchPanel sheet={bench()} selection={selection()} onSelect={onBenchSelect} canPrice={canPrice()} onEditPrices={() => setPricebookOpen(true)} />
+    </Show>
+  );
+  const recoveryBar = (): JSX.Element => <RecoveryBar {...recovery.bar} />;
+  const layoutTabs = (): JSX.Element => (
+    <LayoutTabs
+      layouts={layouts()}
+      space={space()}
+      onLayout={(name) => {
+        // Back from the 3D view to the space that was under it: nothing is asked of the
+        // engine, so the drawing is exactly as it was left.
+        const from3d = stage3d();
+        setStage3d(false);
+        if (!from3d || name.toLowerCase() !== space().toLowerCase()) onLayout(name);
+      }}
+      onMenu={(name, at) => openContext({ kind: "layout", name }, at)}
+      view3d={stage3d()}
+      onView3d={() => setStage3d(true)}
+    />
+  );
+  const editorRow = (): JSX.Element => (
+    <div class="editor-row">
+    <main class="stage">
+      <CanvasView
+        facade={props.facade}
+        view={view}
+        display={display}
+        selection={selection}
+        extents={() => unionRects(drawing()?.extents ?? null, display().sheet?.paper ?? null)}
+        onViewChange={onViewChange}
+        onNotice={setNotice}
+        onPick={onPick}
+        onSelectRect={onSelectRect}
+        wants={wants}
+        onPoint={onPoint}
+        onMenu={onDrawingMenu}
+        engineState={engineState}
+        base={() => prompt().anchor.base}
+        gripEditing={() => prompt().running === "grip"}
+        onGripStart={onGripStart}
+        onGripMenu={onGripMenu}
+        onBeforeQuery={tellView}
+        onCursor={setCursor}
       />
-      <Show when={showToolbar()}>
-        <ToolStrip onInvoke={onInvoke} commands={commands()} />
+      {/* Over the drawing, which stays mounted under it at its own view. */}
+      <Show when={stage3d()}>
+        <Viewport3D execute={(command, params) => props.facade.execute(command, params)} revision={drawing()?.revision ?? 0} onNotice={setNotice} />
       </Show>
-      <div class={showAssistant() ? "workspace has-assistant" : "workspace"}>
-        <Show when={showSidebar() && (showLayers() || showProperties())}>
-          <aside class="sidebar" aria-label="Drawing">
-            <Show when={showLayers()}>
-              <LayersPanel layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} onMenu={(name, at) => openContext({ kind: "layer", name }, at)} />
-            </Show>
-            <Show when={showProperties()}>
-              <PropertiesPanel properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={onPropertyNotice} />
-            </Show>
-          </aside>
-        </Show>
-        <div class="editor">
-          <RecoveryBar {...recovery.bar} />
-          <LayoutTabs layouts={layouts()} space={space()} onLayout={onLayout} onMenu={(name, at) => openContext({ kind: "layout", name }, at)} />
-          <main class="stage">
-            <CanvasView
-              facade={props.facade}
-              view={view}
-              display={display}
-              selection={selection}
-              extents={() => unionRects(drawing()?.extents ?? null, display().sheet?.paper ?? null)}
-              onViewChange={onViewChange}
-              onNotice={setNotice}
-              onPick={onPick}
-              onSelectRect={onSelectRect}
-              wants={wants}
-              onPoint={onPoint}
-              onMenu={onDrawingMenu}
-              engineState={engineState}
-              base={() => prompt().anchor.base}
-              gripEditing={() => prompt().running === "grip"}
-              onGripStart={onGripStart}
-              onGripMenu={onGripMenu}
-              onBeforeQuery={tellView}
-              onCursor={setCursor}
-            />
-          </main>
-          <Show when={showCmdline()}>
-            <CommandLine prompt={prompt} notice={notice} onSubmit={onCommand} />
-          </Show>
-        </div>
-        <Show when={showAssistant() ? assistant() : undefined} keyed>
-          {(chat) => (
-            <AssistantPane
-              session={chat}
-              selection={selection}
-              commands={palette}
-              onRunCommand={onPaletteRun}
-              chats={() => chats().map((c) => c.title())}
-              chatIndex={chatIndex}
-              onSelectChat={setChatIndex}
-              onNewChat={onNewChat}
-              onCloseChat={onCloseChat}
-              onClose={() => setShowAssistant(false)}
-            />
-          )}
-        </Show>
-      </div>
-      <Show when={showStatusbar()}>
-        <StatusBar
-          settings={settings()}
-          mode={props.facade.mode}
-          currentLayer={currentLayer()}
-          entityCount={drawing()?.entityCount ?? 0}
-          layerCount={drawing()?.layerCount ?? 0}
-          cursor={cursor()}
-          formatPoint={coordText}
-          selectionCount={selection().length}
-          onCommand={onStatusCommand}
-          onSettings={(id) => openDrafting(draftingTabFor(id))}
+      <InlineAsk
+        open={askOpen()}
+        draft={assistant()?.input() ?? ""}
+        onDraft={(text) => assistant()?.setInput(text)}
+        selected={selection().length}
+        ready={assistant()?.ready() ?? false}
+        onSend={sendAsk}
+        onClose={closeAsk}
+        offer={prompt().running === null && !stage3d()}
+        onOpen={() => setAskOpen(true)}
+        shortcut={shortcutLabel("Cmd+K", isMacPlatform())}
+      />
+    </main>
+    <SourcePanel
+      open={showSource()}
+      stamp={sourceStamp()}
+      readSource={() => props.facade.scriptSource()}
+      onApply={applySource}
+      onClose={() => setShowSource(false)}
+      applyShortcut={shortcutLabel("Cmd+Enter", isMacPlatform())}
+    />
+    </div>
+  );
+  const commandLine = (): JSX.Element => (
+    <Show when={showCmdline()}>
+      <CommandLine prompt={prompt} notice={notice} onSubmit={onCommand} />
+    </Show>
+  );
+  const assistantPane = (): JSX.Element => (
+    <Show when={showAssistant() ? assistant() : undefined} keyed>
+      {(chat) => (
+        <AssistantPane
+          session={chat}
+          selection={selection}
+          layers={layers().map((l) => l.name)}
+          bench={bench()}
+          commands={palette}
+          onRunCommand={onPaletteRun}
+          chats={() => chats().map((c) => c.title())}
+          chatIndex={chatIndex}
+          onSelectChat={setChatIndex}
+          onNewChat={onNewChat}
+          onCloseChat={onCloseChat}
+          onClose={() => setShowAssistant(false)}
+          proposals={proposals}
+          stills={stills}
         />
-      </Show>
+      )}
+    </Show>
+  );
+  const statusBar = (): JSX.Element => (
+    <Show when={showStatusbar()}>
+      <StatusBar
+        settings={settings()}
+        mode={props.facade.mode}
+        currentLayer={currentLayer()}
+        entityCount={drawing()?.entityCount ?? 0}
+        layerCount={drawing()?.layerCount ?? 0}
+        cursor={cursor()}
+        formatPoint={coordText}
+        selectionCount={selection().length}
+        onCommand={onStatusCommand}
+        onSettings={(id) => openDrafting(draftingTabFor(id))}
+      />
+    </Show>
+  );
+  const overlays = (): JSX.Element => (
+    <>
       <LayerManager facade={props.facade} open={layerManager()} onClose={() => setLayerManager(false)} onChanged={refresh} />
+      <RingDialog facade={props.facade} open={jewelry() === "ring"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
+      <GemDialog facade={props.facade} open={jewelry() === "gem"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
+      <PriceBookDialog
+        facade={props.facade}
+        open={pricebookOpen()}
+        sheet={bench()}
+        onClose={() => setPricebookOpen(false)}
+        onSaved={() => {
+          benchAt = null;
+          readBench(drawing());
+        }}
+      />
+      <TemplateGallery open={showTemplates()} onClose={() => setShowTemplates(false)} execute={(command, params) => props.facade.execute(command, params)} onChoose={onTemplateChoose} />
+      <TechSheet open={showTechSheet()} execute={(command, params) => props.facade.execute(command, params)} revision={drawing()?.revision ?? 0} onClose={() => setShowTechSheet(false)} />
       <DraftingSettings
         facade={props.facade}
         open={drafting().open}
@@ -1139,6 +1536,30 @@ export function App(props: AppProps): JSX.Element {
       />
       <CommandPalette open={paletteOpen} items={palette} recent={recentCommands} onRun={onPaletteRun} onClose={() => setPaletteOpen(false)} />
       <ContextMenu menu={contextMenu} onInvoke={onContextInvoke} onClose={() => setContextAt(null)} />
+    </>
+  );
+
+  return (
+    <div class="app">
+      {topBar()}
+      {ribbon()}
+      <div class={showAssistant() ? "workspace has-assistant" : "workspace"}>
+        <Show when={sidebarShown()}>
+          <aside class="sidebar" aria-label="Drawing">
+            {railSections()}
+            {benchSection()}
+          </aside>
+        </Show>
+        <div class="editor">
+          {recoveryBar()}
+          {layoutTabs()}
+          {editorRow()}
+          {commandLine()}
+        </div>
+        {assistantPane()}
+      </div>
+      {statusBar()}
+      {overlays()}
     </div>
   );
 }

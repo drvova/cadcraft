@@ -1,0 +1,233 @@
+/*
+ * The 3D view of the piece (components/Viewport3D.tsx): a stage that lies over the drawing while
+ * the "3D" tab is in front. The solid is drawn in WebGL on the canvas; what stands over it (the
+ * bar of view keys, the readout, a state said in words) is the system's chrome. Every value is a
+ * token. The background the solid is drawn on is `--canvas`, read by the viewport from this
+ * element, so it is the drawing area's own surface.
+ */
+
+.view3d {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--canvas);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The canvas fills the stage by its box, never by its backing store: the store is sized from the
+   box, and a box sized from the store would feed back. */
+.view3d-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  outline: none;
+}
+
+.view3d-canvas[data-gesture] {
+  cursor: grabbing;
+}
+
+/* The keyboard is on the solid: the drawing's own ring, inside the edge. */
+.view3d-canvas:focus-visible {
+  outline: var(--focus-outline-w) solid var(--canvas-focus-ring);
+  outline-offset: calc(-1 * var(--focus-outline-w));
+}
+
+/* The foot of the stage: the readout at its start, the bar at its end. It lets the pointer
+   through to the solid everywhere but on the two boxes, and in a narrow stage the bar goes under
+   the readout. */
+.view3d-foot {
+  position: absolute;
+  inset: auto var(--gap-12) var(--gap-12);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--gap-8);
+  pointer-events: none;
+}
+
+/* Both boxes are the elevated surface, so they read over the dark stage in either theme. */
+.view3d-bar,
+.view3d-readout {
+  pointer-events: auto;
+  background: var(--surface-elevated);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-block);
+  box-shadow: var(--shadow-popover);
+  font-family: var(--font-family);
+}
+
+.view3d-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-4);
+  margin-inline-start: auto;
+  padding: var(--gap-2) var(--gap-4);
+}
+
+.view3d-readout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-2);
+  max-width: 44ch;
+  padding: var(--gap-4) var(--gap-8);
+  color: var(--text-dim);
+  font-size: var(--font-small);
+  line-height: var(--leading-ui);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.view3d-fact {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A state said in words takes the whole stage, on the pane's own surface. */
+.view3d-message {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gap-16);
+  background: var(--panel);
+  color: var(--text-dim);
+  font-family: var(--font-family);
+  font-size: var(--font-body);
+  line-height: var(--leading-ui);
+  text-align: center;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.view3d-message p {
+  max-width: 48ch;
+  margin: 0;
+}
+
+/* The part under the pointer, by the engine's name for it. The line is always there where a
+   pointer can rest over the stage, so the box does not change height as the pointer crosses the
+   piece; while it names nothing it is the quietest ink. */
+.view3d-pointed[data-empty] {
+  color: var(--text-faint);
+}
+
+/* ---- The orientation gizmo: the engine's three axes as the camera sees them, in the corner the
+   foot never reaches. A round plate of the elevated surface, so its inks are the theme's in
+   either theme (the stage under it is dark in both). The axes' inks are the drawing's own axis
+   tokens; there is no token for a third axis, so Z takes the neutral faint ink. ---- */
+.view3d-gizmo {
+  --gizmo-size: calc(var(--control-h-button) * 4);
+  position: absolute;
+  inset-block-start: var(--gap-12);
+  inset-inline-end: var(--gap-12);
+  width: var(--gizmo-size);
+  height: var(--gizmo-size);
+  background: var(--surface-elevated);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-round);
+  box-shadow: var(--shadow-popover);
+  font-family: var(--font-family);
+}
+
+.view3d-gizmo-axes {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.view3d-gizmo-axis {
+  stroke: var(--text-faint);
+  stroke-width: calc(var(--hairline) * 3);
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.view3d-gizmo-axis[data-axis="x"] {
+  stroke: var(--axis-x);
+}
+
+.view3d-gizmo-axis[data-axis="y"] {
+  stroke: var(--axis-y);
+}
+
+/* The half of an axis that runs to its negative end is a thin line: the positive half leads. */
+.view3d-gizmo-axis[data-back] {
+  stroke-width: var(--hairline);
+}
+
+/* An end is a key on a small plate ringed in its axis's ink. `--gx` and `--gy` are where the
+   camera sees it, in halves of the gizmo; the nearer end is stacked over the farther. */
+.view3d-gizmo-end {
+  position: absolute;
+  left: calc(50% + var(--gx, 0) * 50%);
+  top: calc(50% + var(--gy, 0) * 50%);
+  display: flex;
+  transform: translate(-50%, -50%);
+  border: var(--hairline) solid var(--text-faint);
+  border-radius: var(--radius-round);
+  background: var(--surface-elevated);
+}
+
+.view3d-gizmo-end[data-axis="x"] {
+  border-color: var(--axis-x);
+}
+
+.view3d-gizmo-end[data-axis="y"] {
+  border-color: var(--axis-y);
+}
+
+/* ---- The region names: words hung on places of the ring, over the solid and under the foot.
+   They take no pointer: the solid under them still turns. ---- */
+.view3d-regions {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* `--lx` and `--ly` are the anchor in hundredths of the stage; `--dx` and `--dy` the direction
+   the word stands off in, away from the ring's middle as the eye sees it. */
+.view3d-label {
+  position: absolute;
+  left: calc(var(--lx, 0) * 1%);
+  top: calc(var(--ly, 0) * 1%);
+  transform: translate(calc((var(--dx, 0) - 1) * 50% + var(--dx, 0) * var(--gap-8)), calc((var(--dy, 0) - 1) * 50% + var(--dy, 0) * var(--gap-8)));
+  padding: var(--gap-2) var(--gap-6);
+  background: var(--surface-elevated);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-small);
+  color: var(--text-dim);
+  font-family: var(--font-family);
+  font-size: var(--font-small);
+  line-height: var(--leading-ui);
+  white-space: nowrap;
+}
+
+/* The finger's axis: a faint dashed line through the hole. The stage is dark in both themes, so
+   the line takes the one line ink made for it (the drawing's focus ring), held back. */
+.view3d-axis {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.view3d-axis line {
+  stroke: var(--canvas-focus-ring);
+  stroke-width: var(--hairline);
+  stroke-dasharray: var(--gap-6) var(--gap-4);
+  stroke-opacity: 0.6;
+}

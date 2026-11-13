@@ -19,11 +19,12 @@
  * so needs none.
  *
  * No engine call lives here: the shell owns the facade, shows a notice for a refused set, and
- * refreshes the reply.
+ * refreshes the reply. What becomes of a row's value is decided in `../props-edit`.
  */
 
 import { createEffect, createMemo, createSignal, Index, Match, onCleanup, Show, Switch, untrack, type Accessor, type JSX } from "solid-js";
-import { judgeDraft, VARIES, type PropRow, type PropertiesReply } from "../props";
+import { VARIES, type PropRow, type PropertiesReply } from "../props";
+import { createPropEdit, propertiesSubject, propertiesTitle, rowMode } from "../props-edit";
 import { Checkbox } from "../ui/Checkbox";
 import { Field } from "../ui/Field";
 import { IconButton } from "../ui/IconButton";
@@ -39,9 +40,6 @@ export interface PropertiesPanelProps {
   onSet: (patch: Record<string, unknown>) => void;
   onNotice?: (message: string) => void;
 }
-
-/** A count as the status bar writes it: grouped in threes ("1,284"). */
-const count = (n: number): string => n.toLocaleString("en-US");
 
 /**
  * Marks the ends of a list that scrolls where rows lie past them (`data-clip-top`,
@@ -67,20 +65,10 @@ function scrollEnds(list: HTMLElement): () => void {
 
 export function PropertiesPanel(props: PropertiesPanelProps): JSX.Element {
   // One count, one name: the heading says what the status bar says ("21 selected").
-  const title = (): string => {
-    const reply = props.properties;
-    if (reply === null) return props.selectionCount > 0 ? `${count(props.selectionCount)} selected` : "No selection";
-    if (reply.kind === "defaults") return "No selection";
-    return `${count(reply.count)} selected`;
-  };
+  const title = (): string => propertiesTitle(props.properties, props.selectionCount);
 
   /** What the rows describe: a row drops its unfinished edit when this changes under it. */
-  const subject = createMemo((): string => {
-    const reply = props.properties;
-    if (reply === null) return "";
-    if (reply.kind === "defaults") return "defaults";
-    return reply.objects.map((o) => String(o["handle"])).join(",");
-  });
+  const subject = createMemo((): string => propertiesSubject(props.properties));
 
   /** The section folds to its heading, as the editor's sidebar sections do. */
   const [open, setOpen] = createSignal(true);
@@ -142,23 +130,22 @@ function PropRowView(props: PropRowViewProps): JSX.Element {
   const [draft, setDraft] = createSignal(props.row().value);
   /** Typed into since the last commit or cancel: only then is there an edit to keep or send. */
   const [dirty, setDirty] = createSignal(false);
-  /** The draft was refused as it stands; cleared by the next keystroke, cancel or commit. */
-  const [invalid, setInvalid] = createSignal(false);
-  /** The text the last number warning was for, so Enter-then-blur does not warn twice. */
-  let warned = "";
-  /** Set when the row leaves the page: the blur a removed field fires must not send anything. */
-  let gone = false;
-  onCleanup(() => {
-    gone = true;
+  /** Why the draft was refused as it stands; cleared by the next keystroke, cancel or commit. */
+  const [fault, setFault] = createSignal<string | null>(null);
+  const invalid = (): boolean => fault() !== null;
+  const edit = createPropEdit({
+    row: () => props.row(),
+    draft,
+    setDraft,
+    dirty,
+    setDirty,
+    fault,
+    setFault,
+    send: (patch) => props.onSet(patch),
+    notice: (message) => props.onNotice?.(message),
   });
-
-  /** Back to the engine's value, with no edit pending. */
-  const settle = (): void => {
-    warned = "";
-    setDirty(false);
-    setInvalid(false);
-    setDraft(props.row().value);
-  };
+  // The blur a removed field fires must not send anything.
+  onCleanup(() => edit.gone());
 
   // Re-seed when the engine's value changes (a refresh after a set), never over text being typed.
   createEffect(() => {
@@ -168,58 +155,23 @@ function PropRowView(props: PropRowViewProps): JSX.Element {
   // Another selection, or another property in this place: the unfinished edit was not for it.
   createEffect((before: string) => {
     const now = `${props.subject()}/${props.row().key}`;
-    if (now !== before) untrack(settle);
+    if (now !== before) untrack(edit.settle);
     return now;
   }, `${props.subject()}/${props.row().key}`);
-
-  /** A picked value (a choice, a tick): sent unless it is the one already there. */
-  const commit = (value: string): void => {
-    const verdict = judgeDraft(props.row(), value);
-    if (verdict.kind === "send") props.onSet(verdict.patch);
-  };
-
-  /**
-   * Commit the typed text. A number that cannot be one is said once and stays in the field,
-   * marked, while it has the focus (`leaving` false); on the way out the old value comes back.
-   */
-  const commitText = (leaving: boolean): void => {
-    if (gone || !dirty()) return;
-    const value = draft();
-    const verdict = judgeDraft(props.row(), value);
-    if (verdict.kind === "refuse") {
-      if (warned !== value) props.onNotice?.(verdict.message);
-      if (leaving) {
-        settle();
-        return;
-      }
-      warned = value;
-      setInvalid(true);
-      return;
-    }
-    if (verdict.kind === "keep") {
-      settle();
-      return;
-    }
-    warned = "";
-    setDirty(false);
-    setInvalid(false);
-    props.onSet(verdict.patch);
-  };
 
   const onKeyDown = (e: KeyboardEvent): void => {
     if (e.key === "Enter") {
       e.preventDefault();
-      commitText(false);
-    } else if (e.key === "Escape" && (dirty() || invalid())) {
+      edit.commitText(false);
+    } else if (e.key === "Escape" && edit.cancel()) {
       // Escape cancels this edit only; with nothing to cancel it is the shell's (it clears the selection).
       e.preventDefault();
       e.stopPropagation();
-      settle();
     }
   };
 
   /** Which control the row gets; the control is kept across refreshes, so focus survives one. */
-  const mode = createMemo((): "readonly" | PropRow["kind"] => (props.row().editable ? props.row().kind : "readonly"));
+  const mode = createMemo((): "readonly" | PropRow["kind"] => rowMode(props.row()));
   /** A choice row's options, as `parseProperties` set them (the layer row's are the drawing's layers). */
   const options = createMemo((): SelectOption[] => choiceOptions(props.row().choices));
   /** A tick box over objects that disagree (or a value that is neither) is neither on nor off. */
@@ -240,11 +192,7 @@ function PropRowView(props: PropRowViewProps): JSX.Element {
               ariaLabel={props.row().label}
               checked={draft() === "true"}
               mixed={mixed()}
-              onChange={(checked) => {
-                const value = checked ? "true" : "false";
-                setDraft(value);
-                commit(value);
-              }}
+              onChange={(checked) => edit.pick(checked ? "true" : "false")}
             />
           </Match>
           <Match when={mode() === "choice"}>
@@ -258,10 +206,7 @@ function PropRowView(props: PropRowViewProps): JSX.Element {
                 mixed={draft() === VARIES}
                 placeholder={VARIES}
                 options={options()}
-                onChange={(value) => {
-                  setDraft(value);
-                  commit(value);
-                }}
+                onChange={(value) => edit.pick(value)}
               />
             </span>
           </Match>
@@ -278,13 +223,9 @@ function PropRowView(props: PropRowViewProps): JSX.Element {
                 inputMode={mode() === "number" ? "decimal" : undefined}
                 spellcheck={false}
                 autocomplete="off"
-                onInput={(value) => {
-                  setDirty(true);
-                  setInvalid(false);
-                  setDraft(value);
-                }}
+                onInput={(value) => edit.typed(value)}
                 onKeyDown={onKeyDown}
-                onBlur={() => commitText(true)}
+                onBlur={() => edit.commitText(true)}
               />
             </span>
           </Match>

@@ -30,6 +30,116 @@
   border-radius: 0;
 }
 
+/* The bench sheet under it is a shorter reading: a third of the rail at most, then it scrolls. */
+.bench {
+  max-height: 40%;
+  max-height: round(down, 40%, 1px);
+}
+
+/* A bench line's value is short and whole ("14 pc · 0.18 ct"): it takes the room it needs on one
+   line and the label gives way, where a property's two columns are equal. */
+.bench .prop-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.bench .prop-readonly {
+  white-space: nowrap;
+}
+
+/* A line that selects what it counts is the system's row in a list item. The item's insets put
+   the row's label on the rail's text column and its value on the values' edge, the row's own
+   inset included, so a pressed line and a property under it read as one table. */
+.bench-line {
+  flex: 0 0 auto;
+  display: flex;
+  padding-inline: calc(var(--rail-text, var(--gap-8)) - var(--gap-4)) calc(var(--gap-8) + var(--prop-arrow-slot) - var(--gap-4));
+}
+
+.bench-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bench-value {
+  flex: 0 0 auto;
+  margin-inline-start: var(--gap-8);
+  font-variant-numeric: lining-nums tabular-nums;
+  white-space: nowrap;
+}
+
+/* What the engine found wrong with a stone's record: a line of the list in the warning ink, which
+   wraps (it is a sentence, not a value). */
+.bench-warning {
+  align-items: start;
+  padding-block: var(--gap-2);
+  color: var(--warn);
+  font-size: var(--font-chip);
+  line-height: var(--leading-ui);
+}
+
+/* The estimated cost under the stones and bands: a short group of money, then any lines the engine
+   could not price. It is the user's own prices, said to be an estimate, never a market quote. */
+.bench-cost {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-4);
+  margin-top: var(--gap-4);
+  padding: var(--gap-8) var(--rail-text, var(--gap-8)) var(--gap-6);
+  border-top: var(--hairline) solid var(--border-soft);
+}
+.bench-cost-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-8);
+}
+.bench-cost-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-2);
+  margin: 0;
+}
+.bench-cost-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--gap-8);
+  font-size: var(--font-label);
+  line-height: var(--leading-ui);
+  color: var(--text-dim);
+}
+.bench-cost-row dt {
+  min-width: 0;
+}
+.bench-cost-row dd {
+  margin: 0;
+  font-variant-numeric: lining-nums tabular-nums;
+  white-space: nowrap;
+}
+.bench-cost-total {
+  color: var(--text);
+  font-weight: 600;
+}
+.bench-cost-unpriced {
+  margin: 0;
+  color: var(--warn);
+  font-size: var(--font-chip);
+  line-height: var(--leading-ui);
+}
+.bench-cost-note {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--font-chip);
+  line-height: var(--leading-ui);
+}
+.bench-set {
+  flex: 0 0 auto;
+  padding: var(--gap-6) var(--rail-text, var(--gap-8));
+}
+
 .properties-head {
   flex: 0 0 auto;
   display: flex;
@@ -187,4 +297,256 @@
   align-items: center;
   gap: var(--gap-4);
   padding: var(--gap-2) 0;
+}
+
+/* ---- Piece ---- */
+
+/* The piece is the rail's first section and its longest reading (a solitaire with a halo is
+   fifteen rows before the results): under half the rail at most, then it scrolls, so that in a
+   window 800 tall the layers, the properties and the bench sheet under it keep their rows. */
+.piece {
+  max-height: 44%;
+  max-height: round(down, 44%, 1px);
+  border-top: none;
+}
+
+/* A sentence in the place of the rows (no piece yet; no piece tools in this build): it wraps. */
+.piece-note {
+  padding-block: var(--gap-2);
+  line-height: var(--leading-ui);
+}
+
+/* The three kinds a piece starts as, on the rail's text column. */
+.piece-starts {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-4);
+  padding: var(--gap-2) var(--gap-8) var(--gap-6) var(--rail-text, var(--gap-8));
+}
+
+/* The parameters, the engine's results and its checks are three lists of one column of rows; a
+   hairline parts what is typed from what the engine answers. */
+.piece-list {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.piece-results,
+.piece-checks {
+  margin-top: var(--gap-2);
+  padding-top: var(--gap-2);
+  border-top: var(--hairline) solid var(--border-soft);
+}
+
+/* A result's value is whole and may be long (the size in four other systems): the label takes
+   the room it needs and the value wraps in the rest, as the bench sheet's lines do. */
+.piece-results .prop-row {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+/* A check is its sentence, read whole (it wraps), and the word for how it went on the values'
+   edge. The word says it; the ink only repeats it. */
+.piece-check {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: var(--gap-8);
+  min-height: var(--control-h-row);
+  padding: var(--gap-2) calc(var(--gap-8) + var(--prop-arrow-slot)) var(--gap-2) var(--rail-text, var(--gap-8));
+}
+
+.piece-check-text {
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: var(--font-chip);
+  line-height: var(--leading-ui);
+  overflow-wrap: anywhere;
+}
+
+.piece-check-mark {
+  color: var(--text-faint);
+  font-size: var(--font-chip);
+  line-height: var(--leading-ui);
+  white-space: nowrap;
+}
+
+.piece-check.is-failed .piece-check-text {
+  color: var(--text);
+}
+
+.piece-check.is-failed .piece-check-mark {
+  color: var(--warn);
+}
+
+/* The way out of the piece, quiet under everything else: its label (inside the button's own
+   inset) starts on the rail's text column. */
+.piece-foot {
+  flex: 0 0 auto;
+  display: flex;
+  padding: var(--gap-4) var(--gap-8) var(--gap-4) calc(var(--rail-text, var(--gap-8)) - var(--gap-6));
+}
+
+/* ---- Objects ---- */
+
+/* The objects section sits under the layers: a search over a tree of what the drawing holds. It
+   is a shorter reading than the palette under it (its groups start folded): two fifths of the
+   rail at most, then its tree scrolls. Open, it keeps its search and three rows however the rail
+   is squeezed, so it is never a heading over nothing. */
+.objects {
+  /* In a rail too short for every open section this one gives way first, and by the most: its
+     tree scrolls and can be searched, where a squeezed piece or bench sheet loses its rows. */
+  flex-shrink: 10;
+  max-height: 40%;
+  max-height: round(down, 40%, 1px);
+}
+
+.objects:not(.is-folded):has(.objects-tree) {
+  min-height: calc(2 * var(--control-h-input) + 3 * var(--control-h-row) + 3 * var(--gap-4));
+}
+
+/* The body is the search, which stays, over the tree, which scrolls. `hidden` takes it out of the
+   page and the Tab order when the section folds. */
+.objects-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.objects-body[hidden] {
+  display: none;
+}
+
+/* The heading's count ends on the counts' edge under it, as the properties' state ends on the
+   values' edge. */
+.objects-state {
+  margin-inline-end: 0;
+}
+
+/* The field fills the rail between the headings' insets: a grid cell stretches the field's own
+   box, which nothing here restyles. */
+.objects-search {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: var(--gap-4) var(--gap-8) var(--gap-2) var(--gap-6);
+}
+
+.objects-tree {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-block: var(--gap-2);
+}
+
+/* A tree item holds its row and, open, its group; the focus is the item's and the ring is drawn
+   on its row, so an open group's ring does not run round every row under it. */
+.objects-item {
+  outline: none;
+}
+
+/* The row is the rail's list row, value for value (the system's row: its height, its type, its
+   fills), flush to both edges as a layer's is. The twist stands under the headings' fold key and
+   a first-level label starts on the rail's text column; each level steps in by one gap. */
+.objects-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-2);
+  height: var(--control-h-row);
+  padding-inline: calc(var(--gap-2) + (var(--objects-level, 1) - 1) * var(--gap-12)) var(--gap-8);
+  color: var(--text-dim);
+  font-size: var(--font-body);
+  line-height: var(--leading-ui);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: background-color var(--dur-fast) var(--ease-standard);
+}
+
+@media (hover: hover) {
+  .objects-item:not([aria-selected="true"]) > .objects-row:hover {
+    background: var(--hover);
+  }
+}
+
+/* Selected on the drawing: the list's selected fill and the full ink (and `aria-selected`). */
+.objects-item[aria-selected="true"] > .objects-row {
+  background: var(--fill-active);
+  color: var(--text);
+}
+
+.objects-item:focus-visible > .objects-row {
+  outline: var(--focus-outline-w) solid var(--focus-ring);
+  outline-offset: var(--focus-outline-offset);
+}
+
+/* The twist is a cell the size of the headings' fold key: a group's chevron points right and
+   turns down when the group is open; an object's cell is empty, so the labels of a level share
+   one column. */
+.objects-twist {
+  flex: 0 0 var(--control-h-chip);
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--icon);
+}
+
+.objects-twist .tool-icon {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.objects-item[aria-expanded="true"] > .objects-row .tool-icon {
+  transform: rotate(90deg);
+}
+
+.objects-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* What a search matched, as the command palette marks it. */
+.objects-hit {
+  background: transparent;
+  color: var(--text-accent);
+  font-weight: 600;
+}
+
+/* How many objects a group holds ("18"), or how many of them are selected ("3/18"). */
+.objects-count {
+  flex: 0 0 auto;
+  margin-inline-start: var(--gap-8);
+  color: var(--text-faint);
+  font-size: var(--font-chip);
+  font-variant-numeric: lining-nums tabular-nums;
+  white-space: nowrap;
+}
+
+/* The row that shows the rest of a long group is an action, in the accent's text ink. */
+.objects-item--more > .objects-row {
+  color: var(--text-accent);
+}
+
+/* A sentence in the place of the tree or under it (nothing drawn, nothing found, a list cut
+   short, no list in this build): it wraps. */
+.objects-note {
+  padding-block: var(--gap-2);
+  line-height: var(--leading-ui);
+}
+
+/* Under a finger a row is a 24px target. */
+@media (pointer: coarse) {
+  .objects-row {
+    height: var(--control-h-input);
+  }
 }

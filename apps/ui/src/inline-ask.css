@@ -1,0 +1,78 @@
+/*
+ * The inline ask: one line over the top of the drawing (components/InlineAsk.tsx). The box is the
+ * command palette's: the elevated surface, the popover's stroke, radius and shadow, a bare field
+ * inside. It stands in the stage, over the canvas, and takes no room from it. Every value is a
+ * token.
+ */
+
+/* The stage holds the canvas and, over it, this line. */
+.stage {
+  position: relative;
+}
+
+/* A band across the top of the drawing that lets the pointer through everywhere but the box. */
+.inline-ask {
+  position: absolute;
+  inset: var(--gap-12) var(--gap-16) auto;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.inline-ask-box {
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--gap-8);
+  width: min(64ch, 100%);
+  min-height: var(--control-h-tab);
+  padding: 0 var(--gap-8) 0 var(--gap-12);
+  background: var(--surface-elevated);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-block);
+  box-shadow: var(--shadow-popover);
+  caret-color: var(--accent);
+  font-family: var(--font-family);
+  font-size: var(--font-body);
+}
+
+/* The keyboard is in the line: the box's stroke says so, as the composer's card does. */
+.inline-ask-box:focus-within {
+  border-color: var(--focus-ring);
+}
+
+/* The offer: the system's quiet button in a small box of the elevated surface, so it reads over
+   any drawing. The box takes the pointer; the band around it does not. */
+.inline-ask-offer {
+  pointer-events: auto;
+  display: inline-flex;
+  padding: var(--gap-2);
+  background: var(--surface-elevated);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-block);
+  box-shadow: var(--shadow-popover);
+}
+
+.inline-ask-offer-icon {
+  display: inline-flex;
+  margin-inline-end: var(--gap-6);
+  color: var(--icon);
+}
+
+.inline-ask-offer-icon .tool-icon {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+}
+
+/* The assistant's mark is the field's leading adornment: its box carries the gap to the text. */
+.inline-ask-icon {
+  display: inline-flex;
+  padding-right: var(--gap-8);
+  color: var(--icon);
+}
+
+.inline-ask-icon .tool-icon {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+}

@@ -271,6 +271,102 @@ pub fn floor_plan() -> Drawing {
     d
 }
 
+/// A fine-jewelry drawing: a size 6 solitaire in 18k gold. The front view of the band with its
+/// side section, the centre stone in plan with six prongs and a halo of melee, and a strip of the
+/// shank set with pavé, each built by the jewelry commands themselves so the bench sheet reads
+/// the drawing back. Units: millimetres.
+///
+/// A step the engine refuses is left out and the rest still stands: a sample never fails to open.
+pub fn solitaire() -> Drawing {
+    use serde_json::{Value, json};
+
+    let mut d = Drawing::new_metric();
+    d.linetypes.extend(cadcraft_doc::library::standard_linetypes());
+    d.layers.extend([
+        // Gold for the metal, a pale blue for the stones, and greys for everything that is
+        // said about them, so the piece is what the eye finds first.
+        layer("Metal", 40, "Continuous", 35),
+        layer("Stones", 151, "Continuous", 25),
+        layer("Settings", 9, "Continuous", 25),
+        layer("Dimensions", 252, "Continuous", 13),
+        layer("Notes", 253, "Continuous", 18),
+        layer("Construction", 251, "Continuous", 13),
+    ]);
+    // Dimensions sized for a piece a few millimetres across: 1 mm text.
+    for style in &mut d.dim_styles {
+        style.scale = 0.4;
+    }
+    // The drawing's own style (the metric one), not the first in the table.
+    let dim_style = d.header.str("DIMSTYLE", "Standard");
+    d.header.set_i64("INSUNITS", 4);
+    d.header.set_i64("LUPREC", 2);
+    d.header.set_str("CLAYER", "Metal");
+
+    let mut s = crate::Session::empty();
+    s.open_drawing(d, "Solitaire", None);
+    let handle_of = |r: &Value| r.get("handle").and_then(Value::as_str).map(str::to_string);
+
+    // Front view: the finger circle, the outside circle and the band's section under them.
+    let _ = s.execute("ring", &json!({"at": [0, 0], "size": 6, "wall": 1.8, "width": 2.4, "metal": "gold18", "layer": "Metal"}));
+
+    // The centre stone in plan: a 6.5 mm round brilliant, six prongs, a halo of 1.3 mm melee.
+    let centre = [30.0, 0.0];
+    if let Ok(stone) = s.execute("gem", &json!({"at": centre, "cut": "round", "diameter": 6.5, "stone": "diamond", "layer": "Stones"}))
+        && let Some(h) = handle_of(&stone)
+    {
+        let _ = s.execute("setting", &json!({"handle": h, "style": "prong", "prongs": 6, "diameter": 0.9, "metal": "gold18", "layer": "Settings"}));
+        let _ = s.execute("setting", &json!({"handle": h, "style": "halo", "stoneWidth": 1.3, "gap": 0.2, "layer": "Stones"}));
+    }
+
+    // A strip of the shank in plan, 2.4 mm wide, with one row of 1.5 mm melee down its middle.
+    let (x0, x1, half) = (46.0, 70.0, 1.2);
+    let shank = json!({"points": [[x0, -half], [x1, -half], [x1, half], [x0, half]], "closed": true, "layer": "Metal"});
+    if let Ok(strip) = s.execute("pline", &shank)
+        && let Some(h) = handle_of(&strip).or_else(|| strip.get("handles").and_then(|h| h.get(0)).and_then(Value::as_str).map(str::to_string))
+    {
+        let _ = s.execute("pave", &json!({"handles": [h], "pattern": "grid", "stoneWidth": 1.5, "layer": "Stones"}));
+    }
+    let _ = s.execute("select", &json!({"clear": true}));
+
+    let Ok(built) = s.doc() else { return Drawing::new_metric() };
+    let mut d = built.clone();
+    let m = Space::Model;
+    let mut add = |c: Common, k: EntityKind| {
+        let _ = d.add(&m, c, k);
+    };
+    // Centre lines through the front view and the stone.
+    let dashed = |layer: &str| Common { layer: layer.into(), linetype: "CENTER".into(), ..Common::default() };
+    add(dashed("Construction"), line(Vec2::new(-13.0, 0.0), Vec2::new(13.0, 0.0)));
+    add(dashed("Construction"), line(Vec2::new(0.0, -13.0), Vec2::new(0.0, 13.0)));
+    add(dashed("Construction"), line(Vec2::new(centre[0] - 7.0, 0.0), Vec2::new(centre[0] + 7.0, 0.0)));
+    add(dashed("Construction"), line(Vec2::new(centre[0], -7.0), Vec2::new(centre[0], 7.0)));
+    // The sizes a bench reads first: the finger, the band's section, the stone, the strip.
+    let mut measure = |from: Vec2, to: Vec2, at: Vec2, rotation: f64| {
+        if let EntityKind::Dimension(mut dimension) = dim(DimKind::Linear { rotation }, from, to, at) {
+            dimension.style = dim_style.clone();
+            add(on("Dimensions"), EntityKind::Dimension(dimension));
+        }
+    };
+    let (inner, outer, wall) = (8.2735, 10.0735, 1.8);
+    let section_top = -(outer + 6.0);
+    let upright = std::f64::consts::FRAC_PI_2;
+    measure(Vec2::new(-inner, 0.0), Vec2::new(inner, 0.0), Vec2::new(0.0, outer + 3.0), 0.0);
+    measure(Vec2::new(-half, section_top - wall), Vec2::new(half, section_top - wall), Vec2::new(0.0, section_top - wall - 2.5), 0.0);
+    // The wall is read on the section's other side, so its figure and the width's never meet.
+    measure(Vec2::new(-half, section_top), Vec2::new(-half, section_top - wall), Vec2::new(-half - 3.0, section_top - wall / 2.0), upright);
+    measure(Vec2::new(centre[0] - 3.25, 0.0), Vec2::new(centre[0] + 3.25, 0.0), Vec2::new(centre[0], outer + 3.0), 0.0);
+    measure(Vec2::new(x0, half), Vec2::new(x1, half), Vec2::new((x0 + x1) / 2.0, outer + 3.0), 0.0);
+    measure(Vec2::new(x1, -half), Vec2::new(x1, half), Vec2::new(x1 + 3.0, 0.0), upright);
+    // What the sheet is, and what each view is: one line each, on one baseline.
+    add(on("Notes"), text(Vec2::new(-outer, outer + 10.0), 2.0, "SOLITAIRE"));
+    add(on("Notes"), text(Vec2::new(-outer, outer + 7.6), 1.0, "US 6, 18K YELLOW GOLD, 6.5 MM ROUND BRILLIANT"));
+    let captions = section_top - wall - 6.5;
+    add(on("Notes"), text(Vec2::new(-outer, captions), 1.0, "BAND, FRONT AND SECTION"));
+    add(on("Notes"), text(Vec2::new(centre[0] - 4.75, captions), 1.0, "CENTRE STONE, PLAN"));
+    add(on("Notes"), text(Vec2::new(x0, captions), 1.0, "SHANK PAVE, PLAN"));
+    d
+}
+
 /// The sample used by `--sample`.
 pub fn default_sample() -> Drawing {
     bracket()

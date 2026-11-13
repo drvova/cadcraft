@@ -17,3 +17,6 @@ node_modules/
 
 # Unlazy orchestration state (gates, leases, logs): local only.
 .unlazy/
+
+# Hegel (property-based tests) keeps the failing examples it found here, to replay them first.
+.hegel/

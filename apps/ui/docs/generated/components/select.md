@@ -13,9 +13,10 @@ Not applicable: hand-rolled — a native `<select>` under a drawn face in Field'
 ## Examples
 `<Select value={layer} options={layers} ariaLabel="Layer" onChange={setLayer} />` — the layer an object is on, picked from the drawing's layers.
 
-Real uses, 6 call sites (`rg -c "<Select" src` → `src/components/DraftingSettings.tsx:1`, `src/components/LayerManager.tsx:4`, `src/components/PropertiesPanel.tsx:1`):
-- `src/components/DraftingSettings.tsx:244` — the Drafting Settings dialog's increment angle (`variant="field"`, `size="md"`): the usual angles and Custom, named by a visible `<label for>` through `id`.
-- `src/components/PropertiesPanel.tsx:252` — the palette's choice rows (layer, linetype, colour): `variant="inline" size="sm" align="end"`, `mixed` with the `*VARIES*` placeholder when the picked objects disagree.
+Real uses, 16 call sites (`rg -c "<Select" src` → `src/components/DraftingSettings.tsx:1`, `src/components/JewelryDialog.tsx:4`, `src/components/LayerManager.tsx:4`, `src/components/PropertiesPanel.tsx:1`):
+- `src/components/JewelryDialog.tsx` — the Ring dialog's size system and metal, the Gem dialog's cut and stone: each list is the engine's own, named by its row's `<label for>`. Added 2026-11-12.
+- `src/components/DraftingSettings.tsx:153` — the Drafting Settings dialog's increment angle (`variant="field"`, `size="md"`): the usual angles and Custom, named by a visible `<label for>` through `id`.
+- `src/components/PropertiesPanel.tsx:200` — the palette's choice rows (layer, linetype, colour): `variant="inline" size="sm" align="end"`, `mixed` with the `*VARIES*` placeholder when the picked objects disagree.
 
 ### Example files
 | File | Covers | Caption |
@@ -371,12 +372,12 @@ export default function Invalid() {
   - Do: `<div class="prop-row"><span>Layer</span><Select variant="inline" size="sm" align="end" value={layer} options={options} ariaLabel="Layer" /></div>`
 
 ### Content
-- `rule/select-option-label-noun`: When an option's label is written, use the value's own name as the drawing or the setting spells it (Walls, Continuous, ByLayer), with 0 leading verbs, because the closed control shows the label alone as the current value. Evidence: single use `src/components/PropertiesPanel.tsx:235`, the palette's choices: layer and linetype names. Check: review `src/components/PropertiesPanel.tsx`.
+- `rule/select-option-label-noun`: When an option's label is written, use the value's own name as the drawing or the setting spells it (Walls, Continuous, ByLayer), with 0 leading verbs, because the closed control shows the label alone as the current value. Evidence: single use `src/components/PropertiesPanel.tsx:187`, the palette's choices: layer and linetype names. Check: review `src/components/PropertiesPanel.tsx`.
   - Don't: `{ value: "walls", label: "Move to Walls" }`
   - Do: `{ value: "walls", label: "Walls" }`
 
 ### Anti-slop
-- `rule/select-canonical-element`: When a surface needs a choice from a list, render `Select` rather than a raw `<select>` with its own class or a hand-built listbox, because the replaced class removes the arrow and clips a long value with 0 ellipsis, and a hand-built list loses type-ahead and the phone's picker. Evidence: single use `src/components/PropertiesPanel.tsx:208`, which replaced `.prop-select` (`appearance: none`, no arrow, a long value cut with no ellipsis). Check: review `src/ui/Select.tsx`.
+- `rule/select-canonical-element`: When a surface needs a choice from a list, render `Select` rather than a raw `<select>` with its own class or a hand-built listbox, because the replaced class removes the arrow and clips a long value with 0 ellipsis, and a hand-built list loses type-ahead and the phone's picker. Evidence: single use `src/components/PropertiesPanel.tsx:201`, which replaced `.prop-select` (`appearance: none`, no arrow, a long value cut with no ellipsis). Check: review `src/ui/Select.tsx`.
   - Don't: `<select class="prop-select" onChange={pick}>{options}</select>`
   - Do: `<Select variant="inline" size="sm" align="end" value={value} options={options} ariaLabel={label} onChange={pick} />`
 

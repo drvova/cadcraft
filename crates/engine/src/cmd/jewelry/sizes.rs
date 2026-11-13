@@ -66,8 +66,8 @@ impl RingSize {
             circumference,
             us: (diameter - US_BASE) / US_STEP,
             // The chart's granularity is a half letter; snapping here keeps floating-point noise
-            // from naming US 6 as K½.
-            uk_index: ((uk_index_of(diameter) * 2.0).round() / 2.0).clamp(0.0, 25.0),
+            // from naming US 6 as K½. The chart ends at Z½ (22.40 mm), which `from_uk` reads.
+            uk_index: ((uk_index_of(diameter) * 2.0).round() / 2.0).clamp(0.0, 25.5),
             eu: circumference.round().clamp(0.0, 999.0) as u32,
             jp: ((diameter - JP_BASE) * 3.0 + 1.0).round().clamp(0.0, 999.0) as u32,
             cn: (circumference - CN_OFFSET).round().clamp(0.0, 999.0) as u32,
@@ -180,7 +180,7 @@ pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("ringsizes", "Ring Sizes", run_table)
             .alias(&["ringsize"])
-            .params("{system?: us|uk|eu|jp|cn (default us), size?: number|string (in that system), from?, to?: a range, step?: (default 1), limit? (default 60)} → {system, count, sizes: [{mm, diameter, circumference, us, usText, uk, eu, jp, cn}], message}: every system for each size; with no `size` the system's usual range is listed")
+            .params("{system?: us|uk|eu|jp|cn (default us), size?: number|string (in that system), handle?|handles?: a drawn finger hole to measure (a circle, an arc, a closed polyline or ellipse, or a RING insert; of several concentric ones the smallest is the finger), from?, to?: a range, step?: (default 1), limit? (default 60)} → {system, count, sizes: [{mm, diameter, circumference, us, usText, uk, eu, jp, cn}], measured?: {handle, from: circle|arc|ellipse|polyline|ring, diameter, circumference, nearest: {system, size, …the size's row}, offBy: mm over (+) or under (−) the nearest size, nearestIn: {us|uk|eu|jp|cn: {size, mm, offBy}}, wall?, outOfRound?}, message}: every system for each size; with no `size` the system's usual range is listed; with `handle` the object's inside diameter is measured in millimetres (a polyline's or an ellipse's is its perimeter ÷ π) and refused outside 11.6–25 mm")
             .noundo(),
         CommandSpec::new("ring", "Ring", run_ring)
             .menu(&["Draw", "Ring"])
@@ -192,6 +192,13 @@ pub fn specs() -> Vec<CommandSpec> {
 fn run_table(s: &mut Session, p: &Value) -> Result<Value> {
     let cmd = "ringsizes";
     let system = system_param(p);
+    let has = |key: &str| p.get(key).is_some_and(|v| !v.is_null());
+    if has("handle") || has("handles") {
+        if has("size") {
+            return Err(bad(cmd, "give `size` to convert or `handle` to measure, not both"));
+        }
+        return run_measure(s, p, &system);
+    }
     let rows: Vec<RingSize> = if let Some(size) = p.get("size").filter(|v| !v.is_null()) {
         vec![one(cmd, &system, size)?]
     } else {
@@ -229,6 +236,251 @@ fn run_table(s: &mut Session, p: &Value) -> Result<Value> {
         "count": rows.len(),
         "sizes": rows.iter().map(|r| r.json()).collect::<Vec<_>>(),
         "message": rows.iter().map(|r| r.line()).collect::<Vec<_>>().join("\n"),
+    }))
+}
+
+// ---------------------------------------------------------------------------------------------
+// Measuring a drawn ring
+// ---------------------------------------------------------------------------------------------
+
+/// Most objects one measurement reads.
+const MAX_MEASURED: usize = 16;
+/// How far apart two centres may be and still be the same ring (mm).
+const CONCENTRIC: f64 = 0.05;
+
+/// A finger hole read off a drawn object, in millimetres.
+struct Hole {
+    handle: Handle,
+    /// What the object is: `circle`, `arc`, `ellipse`, `polyline` or `ring`.
+    from: &'static str,
+    /// The inside diameter: a circle's own, or the perimeter over π (a finger size is a
+    /// circumference).
+    diameter: f64,
+    centre: Vec2,
+    /// The widest less the narrowest diameter through the centre, when the hole is not a circle.
+    out_of_round: f64,
+    /// The outside diameter, when the object carries one (a RING insert).
+    outer: Option<f64>,
+}
+
+/// Read one object as a finger hole. `k` is the millimetres one drawing unit measures.
+fn hole_of(d: &cadcraft_doc::Drawing, h: Handle, k: f64) -> std::result::Result<Hole, String> {
+    let e = d.entity(h).ok_or_else(|| format!("no object {}", h.hex()))?;
+    let not_closed = || format!("{} is not closed: a finger hole is a closed outline", h.hex());
+    let hole = match &e.kind {
+        EntityKind::Circle(c) => {
+            Hole { handle: h, from: "circle", diameter: 2.0 * c.radius * k, centre: c.center.xy() * k, out_of_round: 0.0, outer: None }
+        }
+        // An arc is part of the hole's circle (a ring drawn as two arcs, or a sector of it).
+        EntityKind::Arc(a) => {
+            Hole { handle: h, from: "arc", diameter: 2.0 * a.radius * k, centre: a.center.xy() * k, out_of_round: 0.0, outer: None }
+        }
+        EntityKind::Ellipse(el) => {
+            if (cadcraft_geom::ccw_sweep(el.start, el.end) - cadcraft_geom::TAU).abs() > 1e-9 {
+                return Err(not_closed());
+            }
+            let (pts, _) = entity_loop(e, k).ok_or_else(not_closed)?;
+            let centre = el.center.xy() * k;
+            Hole {
+                handle: h,
+                from: "ellipse",
+                diameter: loop_length(&pts) / cadcraft_geom::PI,
+                centre,
+                out_of_round: spread(&pts, centre),
+                outer: None,
+            }
+        }
+        EntityKind::LwPolyline(pl) => {
+            if !pl.closed {
+                return Err(not_closed());
+            }
+            let poly = cadcraft_geom::Polyline { vertices: pl.vertices.clone(), closed: true };
+            let (pts, _) = entity_loop(e, k).ok_or_else(not_closed)?;
+            if pts.len() < 3 {
+                return Err(format!("{} has no inside", h.hex()));
+            }
+            let centre = poly.centroid().map(|c| c * k).filter(|c| c.is_finite()).ok_or_else(|| format!("{} has no inside", h.hex()))?;
+            // The perimeter with its arcs exact: a finger size is a circumference.
+            Hole {
+                handle: h,
+                from: "polyline",
+                diameter: poly.len() * k / cadcraft_geom::PI,
+                centre,
+                out_of_round: spread(&pts, centre),
+                outer: None,
+            }
+        }
+        EntityKind::Insert(ins) if ins.block.to_ascii_uppercase().starts_with("RING-") => {
+            let blk = d.block(&ins.block).ok_or_else(|| format!("{} names a block that is not in the drawing", h.hex()))?;
+            let (sx, sy) = (ins.scale.x.abs(), ins.scale.y.abs());
+            if (sx - sy).abs() > 1e-9 * sx.max(sy) {
+                return Err(format!("{} is scaled unevenly: its hole is not round", h.hex()));
+            }
+            // The blank's circles: the smallest is the finger, the largest the outside.
+            let radii = || {
+                blk.entities.iter().filter_map(|b| match &b.kind {
+                    EntityKind::Circle(c) if c.radius.is_finite() && c.radius > 0.0 => Some(c.radius),
+                    _ => None,
+                })
+            };
+            let inner = radii().fold(f64::INFINITY, f64::min);
+            let outer = radii().fold(0.0f64, f64::max);
+            if !inner.is_finite() {
+                return Err(format!("{} holds no finger circle", h.hex()));
+            }
+            let outer = if outer > inner { Some(2.0 * outer * sx * k) } else { None };
+            Hole { handle: h, from: "ring", diameter: 2.0 * inner * sx * k, centre: ins.insert.xy() * k, out_of_round: 0.0, outer }
+        }
+        _ => return Err(format!("{} is not a finger hole (a circle, an arc, a closed polyline or ellipse, or a RING insert)", h.hex())),
+    };
+    if !(hole.diameter.is_finite() && hole.diameter > 0.0 && hole.centre.is_finite() && hole.out_of_round.is_finite()) {
+        return Err(format!("{} has no size to measure", h.hex()));
+    }
+    Ok(hole)
+}
+
+/// The length of a closed loop of sampled points.
+fn loop_length(pts: &[Vec2]) -> f64 {
+    pts.iter().zip(pts.iter().cycle().skip(1)).map(|(a, b)| a.dist(*b)).sum()
+}
+
+/// How far from round a sampled outline is: twice its furthest point from `centre` less twice
+/// its nearest (the widest diameter less the narrowest).
+fn spread(pts: &[Vec2], centre: Vec2) -> f64 {
+    let far = pts.iter().map(|p| p.dist(centre)).fold(0.0f64, f64::max);
+    let near = pts.iter().zip(pts.iter().cycle().skip(1)).map(|(a, b)| super::pave::segment_distance(centre, *a, *b)).fold(f64::INFINITY, f64::min);
+    if near.is_finite() { 2.0 * (far - near).max(0.0) } else { 0.0 }
+}
+
+/// The standard size of `system` nearest an inside diameter: a quarter size in the US, a half
+/// letter in the UK, a whole number elsewhere. `None` when no standard size is in the trade's
+/// range on either side.
+fn nearest_in(system: &str, diameter: f64) -> Option<RingSize> {
+    let pi = cadcraft_geom::PI;
+    let index = match system {
+        "us" => (diameter - US_BASE) / US_STEP * 4.0,
+        "uk" => uk_index_of(diameter) * 2.0,
+        "eu" => diameter * pi,
+        "jp" => (diameter - JP_BASE) * 3.0 + 1.0,
+        "cn" => diameter * pi - CN_OFFSET,
+        _ => return None,
+    };
+    let make = |i: f64| match system {
+        "us" => RingSize::from_us(i / 4.0),
+        "uk" if (0.0..=51.0).contains(&i) => RingSize::from_diameter(uk_diameter((i / 2.0).floor(), i.rem_euclid(2.0) >= 0.5)),
+        "eu" => RingSize::from_eu(i),
+        "jp" => RingSize::from_jp(i),
+        "cn" => RingSize::from_cn(i),
+        _ => None,
+    };
+    [index.floor(), index.ceil()].into_iter().filter_map(make).min_by(|a, b| (a.diameter - diameter).abs().total_cmp(&(b.diameter - diameter).abs()))
+}
+
+/// A size as its own system writes it: `6¼`, `L½`, `52`.
+fn label(system: &str, r: &RingSize) -> String {
+    match system {
+        "uk" => r.uk(),
+        "eu" => r.eu.to_string(),
+        "jp" => r.jp.to_string(),
+        "cn" => r.cn.to_string(),
+        _ => r.us_text(),
+    }
+}
+
+/// `RINGSIZES {handle}`: measure a drawn finger hole and name its size in every system.
+fn run_measure(s: &mut Session, p: &Value, system: &str) -> Result<Value> {
+    let cmd = "ringsizes";
+    let hs = targets(s, p)?;
+    if hs.is_empty() {
+        return Err(bad(cmd, "give `handle`: the circle, arc, closed outline or RING insert to measure"));
+    }
+    if hs.len() > MAX_MEASURED {
+        return Err(bad(cmd, format!("give at most {MAX_MEASURED} objects: one ring's outlines")));
+    }
+    let k = mm_per_unit(s);
+    let d = s.doc()?;
+    let mut holes = Vec::with_capacity(hs.len());
+    for h in hs {
+        holes.push(hole_of(d, h, k).map_err(|m| bad(cmd, m))?);
+    }
+    // Of several outlines of one ring, the smallest is the finger; the rest must share its
+    // centre, or they are not one ring and there is nothing to choose between them by.
+    let Some(hole) = holes.iter().min_by(|a, b| a.diameter.total_cmp(&b.diameter)) else {
+        return Err(bad(cmd, "nothing to measure"));
+    };
+    if let Some(stray) = holes.iter().find(|o| o.centre.dist(hole.centre) > CONCENTRIC) {
+        return Err(bad(
+            cmd,
+            format!(
+                "{} and {} do not share a centre: give the finger's own outline, or the concentric outlines of one ring",
+                hole.handle.hex(),
+                stray.handle.hex()
+            ),
+        ));
+    }
+    let outer = holes.iter().map(|o| o.diameter).chain(hole.outer).fold(hole.diameter, f64::max);
+    let wall = (outer - hole.diameter) / 2.0;
+    let dia = hole.diameter;
+    let size = RingSize::from_diameter(dia).ok_or_else(|| {
+        bad(cmd, format!("{} measures {} mm inside, which is outside the ring sizes ({MIN_DIA}–{MAX_DIA} mm)", hole.handle.hex(), size_json(dia)))
+    })?;
+    let off = |r: &RingSize| size_json(dia - r.diameter);
+    let nearest = nearest_in(system, dia);
+    let mut each = serde_json::Map::new();
+    for sys in ["us", "uk", "eu", "jp", "cn"] {
+        let v = match nearest_in(sys, dia) {
+            Some(r) => json!({ "size": label(sys, &r), "mm": size_json(r.diameter), "offBy": off(&r) }),
+            None => Value::Null,
+        };
+        each.insert(sys.to_string(), v);
+    }
+    let nearest_json = nearest.map(|r| {
+        let mut v = r.json();
+        if let Some(o) = v.as_object_mut() {
+            o.insert("system".into(), json!(system));
+            o.insert("size".into(), json!(label(system, &r)));
+        }
+        v
+    });
+    let mut measured = json!({
+        "handle": hole.handle.hex(),
+        "from": hole.from,
+        "diameter": size_json(dia),
+        "circumference": size_json(size.circumference),
+        "nearest": nearest_json,
+        "offBy": nearest.as_ref().map(off),
+        "nearestIn": each,
+    });
+    if let Some(o) = measured.as_object_mut() {
+        if wall > 1e-6 {
+            o.insert("wall".into(), json!(size_json(wall)));
+        }
+        if hole.out_of_round > 1e-6 {
+            o.insert("outOfRound".into(), json!(size_json(hole.out_of_round)));
+        }
+    }
+    let mut message = format!("Measured {} {}: {}", hole.from, hole.handle.hex(), size.line());
+    if let Some(r) = &nearest {
+        let by = off(r);
+        let name = format!("{} {}", system.to_ascii_uppercase(), label(system, r));
+        message.push_str(&if by.abs() < 0.0005 {
+            format!("; exactly {name}")
+        } else {
+            format!("; nearest {name} ({} mm), {} mm {}", size_json(r.diameter), by.abs(), if by > 0.0 { "over" } else { "under" })
+        });
+    }
+    if wall > 1e-6 {
+        message.push_str(&format!("; wall {} mm", size_json(wall)));
+    }
+    if hole.out_of_round > 0.1 {
+        message.push_str(&format!("; out of round by {} mm, sized by its perimeter", size_json(hole.out_of_round)));
+    }
+    Ok(json!({
+        "system": system,
+        "count": 1,
+        "sizes": [size.json()],
+        "measured": measured,
+        "message": message,
     }))
 }
 
@@ -409,6 +661,7 @@ fn run_ring(s: &mut Session, p: &Value) -> Result<Value> {
         metal,
         geom.grams(density)
     );
+    let name = distinct_block(s, name, &kinds, &desc)?;
     let scale = 1.0 / mm_per_unit(s);
     let h = define_block_and_insert(s, &name, kinds, &desc, at, scale)?;
     on_layer(s, h, layer.as_deref())?;
@@ -436,6 +689,25 @@ fn run_ring(s: &mut Session, p: &Value) -> Result<Value> {
 
 /// Define a block of jewelry geometry (in millimetres) and insert it at `at` in drawing units,
 /// scaled by `scale` (the units one millimetre measures).
+/// The name a block of this geometry and description is drawn under: `name`, unless the drawing
+/// already has a block of that name that is something else, and then the name with the first
+/// free number after it (`RING-16.51x2-2`). A ring blank is named by its size and width alone,
+/// so a second blank of another wall or metal used to redefine the first one's block: the ring
+/// already drawn changed its wall, its metal and its weight on the bench sheet.
+fn distinct_block(s: &Session, name: String, kinds: &[EntityKind], desc: &str) -> Result<String> {
+    let d = s.doc()?;
+    let free = |n: &str| {
+        d.block(n).is_none_or(|b| b.description == desc && b.entities.len() == kinds.len() && b.entities.iter().zip(kinds).all(|(e, k)| e.kind == *k))
+    };
+    if free(&name) {
+        return Ok(name);
+    }
+    (2..=MAX_STONES)
+        .map(|i| format!("{name}-{i}"))
+        .find(|n| free(n))
+        .ok_or_else(|| bad("ring", "too many different rings of one size and width in this drawing"))
+}
+
 pub(super) fn define_block_and_insert(s: &mut Session, name: &str, kinds: Vec<EntityKind>, desc: &str, at: Vec2, scale: f64) -> Result<Handle> {
     if !super::blocks::valid_block_name(name) {
         return Err(bad("jewelry", format!("`{name}` is not a usable block name")));

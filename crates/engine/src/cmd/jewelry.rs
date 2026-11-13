@@ -14,7 +14,26 @@
 
 mod bench;
 mod gem;
+mod mesh;
+#[cfg(test)]
+#[path = "jewelry/mesh_tests.rs"]
+mod mesh_tests;
 mod pave;
+mod piece;
+#[cfg(test)]
+#[path = "jewelry/piece_agree_tests.rs"]
+mod piece_agree_tests;
+#[cfg(test)]
+#[path = "jewelry/piece_more_tests.rs"]
+mod piece_more_tests;
+mod piece_params;
+#[cfg(test)]
+#[path = "jewelry/piece_tests.rs"]
+mod piece_tests;
+mod pricing;
+#[cfg(test)]
+#[path = "jewelry/property_tests.rs"]
+mod property_tests;
 mod setting;
 mod sizes;
 #[cfg(test)]
@@ -36,6 +55,9 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(pave::specs());
     v.extend(setting::specs());
     v.extend(bench::specs());
+    v.extend(pricing::specs());
+    v.extend(piece::specs());
+    v.extend(mesh::specs());
     v
 }
 
@@ -93,15 +115,28 @@ pub(super) fn fmt_mm(v: f64) -> String {
     if s.is_empty() { "0".to_string() } else { s.to_string() }
 }
 
+/// A dimension as a stone's block name and description carry it: exactly, in the shortest text
+/// that reads back as the same number (`1.3`, `8`, `1.125`). Rounded to the hundredth, as it used
+/// to be, a 1.125 mm stone and a 1.12 mm one were one block, and placing the second redrew the
+/// first.
+fn name_mm(v: f64) -> String {
+    // To twelve significant digits: every size a bench or a file gives reads back exactly, and a
+    // computed one (sixty per cent of 8 mm is 4.799999999999999) is not named by its rounding
+    // error.
+    format!("{:.11e}", v).parse::<f64>().map(|r| format!("{r}")).unwrap_or_else(|_| format!("{v}"))
+}
+
 /// The block a stone is inserted as — the trade's library key: the cut and the size, and then
 /// the material and any unusual depth when they are not the default (`GEM-ROUND-1.3`,
 /// `GEM-ROUND-1.3-SAPPHIRE`, `GEM-OVAL-8x6-SG4.2-D4.1`). Two stones share a block exactly when
 /// they are interchangeable, which is what makes a drawing countable.
 pub(super) fn gem_block_name(cut: &str, length: f64, width: f64, material: Option<&str>, sg: Option<f64>, depth: Option<f64>) -> String {
     let cut = cut.to_ascii_uppercase();
-    let size = if (length - width).abs() < 1e-6 { fmt_mm(width) } else { format!("{}x{}", fmt_mm(length), fmt_mm(width)) };
+    let size = if length == width { name_mm(width) } else { format!("{}x{}", name_mm(length), name_mm(width)) };
     let mut name = format!("GEM-{cut}-{size}");
     match material {
+        // Diamond is the default: named or not, it is the same stone and the same block.
+        Some(m) if m.eq_ignore_ascii_case("diamond") => {}
         Some(m) => {
             let m: String = m.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
             if !m.is_empty() {
@@ -111,12 +146,12 @@ pub(super) fn gem_block_name(cut: &str, length: f64, width: f64, material: Optio
         }
         None => {
             if let Some(sg) = sg {
-                name.push_str(&format!("-SG{}", fmt_mm(sg)));
+                name.push_str(&format!("-SG{}", name_mm(sg)));
             }
         }
     }
     if let Some(d) = depth {
-        name.push_str(&format!("-D{}", fmt_mm(d)));
+        name.push_str(&format!("-D{}", name_mm(d)));
     }
     name
 }
@@ -156,11 +191,12 @@ pub(super) fn parse_gem_block(name: &str) -> Option<GemName> {
         if token.is_empty() {
             return None;
         }
+        // `D4.1` is a depth; a stone's name that begins with the same letter (`DIAMOND`,
+        // `DIOPSIDE`) is a material.
+        let number = |v: &str| v.parse::<f64>().ok().filter(|x| x.is_finite() && *x > 0.0);
         if let Some(v) = token.strip_prefix("SG") {
-            let v = v.parse::<f64>().ok().filter(|x| x.is_finite() && *x > 0.0)?;
-            sg = Some(v);
-        } else if let Some(v) = token.strip_prefix('D') {
-            let v = v.parse::<f64>().ok().filter(|x| x.is_finite() && *x > 0.0)?;
+            sg = Some(number(v)?);
+        } else if let Some(v) = token.strip_prefix('D').and_then(number) {
             depth = Some(v);
         } else {
             material = Some(token.to_ascii_lowercase());
@@ -183,8 +219,8 @@ pub(super) struct GemMeta {
 /// The `gem: cut=round, mm=1.30, depth=0.80, sg=3.52, ct=0.0086` line written into a stone
 /// block's description. Text a user adds around it is kept.
 pub(super) fn gem_description(cut: &str, length: f64, width: f64, depth: f64, sg: f64, carat: f64) -> String {
-    let size = if (length - width).abs() < 1e-6 { fmt_mm(width) } else { format!("{}x{}", fmt_mm(length), fmt_mm(width)) };
-    format!("gem: cut={cut}, mm={size}, depth={}, sg={sg}, ct={carat:.5}", fmt_mm(depth))
+    let size = if length == width { name_mm(width) } else { format!("{}x{}", name_mm(length), name_mm(width)) };
+    format!("gem: cut={cut}, mm={size}, depth={}, sg={sg}, ct={carat:.5}", name_mm(depth))
 }
 
 /// Read a `gem:` line back out of a block description.

@@ -44,6 +44,8 @@ import {
   runTurn,
   StreamAssembler,
   systemPrompt,
+  assistantStartsOpen,
+  ASSISTANT_AUTO_WIDTH,
   trimToBudget,
   wireMessages,
   focusIsOurs,
@@ -256,6 +258,27 @@ describe("the tool surface", () => {
     expect(p).toContain("You have exactly one tool, `run`");
     expect(p).toContain("This is the browser build: there is no filesystem");
     expect(p).not.toContain("; 0 selected");
+  });
+
+  test("the system prompt names the jewelry commands and the trade's units", () => {
+    const p = systemPrompt(BRIEFING);
+    for (const id of ["piece", "ringsizes", "ring", "gem", "gemlist", "setting", "pave", "gemfit", "techsheet"]) expect(p).toContain(`\`${id}\``);
+    expect(p).toContain("finger sizes, millimetres, carats and grams");
+    // The jewelry section stands between how the tool works and how to report.
+    expect(p.indexOf("Fine jewelry is drafted")).toBeGreaterThan(p.indexOf("You have exactly one tool"));
+    expect(p.indexOf("Fine jewelry is drafted")).toBeLessThan(p.indexOf("How to report what you did"));
+  });
+
+  test("the system prompt asks for a proposal, with variants for an open request, and leaves accept to the person", () => {
+    const p = systemPrompt(BRIEFING);
+    expect(p).toContain("`propose`");
+    expect(p).toContain("`VARIANTS`");
+    expect(p).toContain(`(cmd "propose" '((TITLE . "Wider band") (STEPS . (((COMMAND . "piece") (PARAMS . ((WIDTH . 2.8))))))))`);
+    expect(p).toContain("`accept` is the person's");
+    expect(p).toContain("just do it, run the commands directly");
+    // It stands after the jewelry commands it proposes, and before how to report.
+    expect(p.indexOf("Propose a change")).toBeGreaterThan(p.indexOf("Fine jewelry is drafted"));
+    expect(p.indexOf("Propose a change")).toBeLessThan(p.indexOf("How to report what you did"));
   });
 
   test("a selection is named; a blank briefing still reads", () => {
@@ -1500,5 +1523,21 @@ describe("a hostile provider", () => {
     expect(failure(events).length).toBeLessThan(600);
     const raw = await turn(new Response("e".repeat(3_000_000), { status: 500 }));
     expect(failure(raw.events).length).toBeLessThan(600);
+  });
+});
+
+describe("whether the panel starts open", () => {
+  test("a browser that has not chosen gets it where the window has the room", () => {
+    expect(assistantStartsOpen(null, ASSISTANT_AUTO_WIDTH)).toBe(true);
+    expect(assistantStartsOpen(null, 1440)).toBe(true);
+    expect(assistantStartsOpen(null, ASSISTANT_AUTO_WIDTH - 1)).toBe(false);
+    expect(assistantStartsOpen(null, 390)).toBe(false);
+  });
+
+  test("the last choice in this browser wins over the width, and anything else stored is no choice", () => {
+    expect(assistantStartsOpen("0", 1920)).toBe(false);
+    expect(assistantStartsOpen("1", 390)).toBe(true);
+    expect(assistantStartsOpen("yes", 390)).toBe(false);
+    expect(assistantStartsOpen("", 1920)).toBe(true);
   });
 });

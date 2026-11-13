@@ -80,3 +80,4 @@ build_interface() {
   (cd "$ROOT/apps/ui" && bun install --frozen-lockfile && bun run build:wasm && bun run typecheck && bun x vite build "$@")
   return
 }
+

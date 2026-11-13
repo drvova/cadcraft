@@ -1,0 +1,122 @@
+/**
+ * The "Start from a template" gallery (components/TemplateGallery.tsx): the grid of preset pieces
+ * inside the registry Dialog. Every colour, space, radius and type is a token from tokens.css; the
+ * one-off lengths (the grid's minimum column, the thumbnail's size) live on custom properties so
+ * they stay out of the scale.
+ */
+
+.template-gallery-intro {
+  margin: 0 0 var(--gap-16);
+  color: var(--text-dim);
+  font: var(--font-body) / var(--leading-ui) var(--font-family);
+}
+
+.template-group {
+  margin-bottom: var(--gap-16);
+}
+
+.template-group:last-child {
+  margin-bottom: 0;
+}
+
+.template-grid {
+  /* The smallest a card may be before the grid drops a column; the grid reflows to one at a phone's width. */
+  --template-col-min: 13rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--template-col-min), 1fr));
+  gap: var(--gap-12);
+  margin: var(--gap-8) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* At a phone's width the dialog is a sheet; the cards stand in one column. */
+@media (max-width: 560px) {
+  .template-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.template-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-8);
+  padding: var(--gap-10);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-inset);
+}
+
+.template-card.is-failed {
+  border-color: var(--border-soft);
+}
+
+.template-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-small);
+  background: var(--canvas);
+  overflow: hidden;
+}
+
+.template-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.template-thumb-svg {
+  width: 62%;
+  height: 62%;
+}
+
+.template-ring-band {
+  fill: none;
+  stroke: var(--canvas-grip-hover);
+  stroke-width: 7;
+}
+
+.template-ring-hole {
+  fill: var(--canvas);
+  stroke: none;
+}
+
+.template-ring-stone {
+  fill: var(--accent);
+  stroke: none;
+}
+
+.template-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-3);
+  flex: 1;
+}
+
+.template-name {
+  color: var(--text);
+  font: var(--font-body) / var(--leading-ui) var(--font-family);
+  font-weight: 600;
+}
+
+.template-blurb {
+  margin: 0;
+  color: var(--text-dim);
+  font: var(--font-small) / var(--leading-ui) var(--font-family);
+}
+
+.template-note {
+  margin: 0;
+  color: var(--warn);
+  font: var(--font-small) / var(--leading-ui) var(--font-family);
+}
+
+.template-card-foot {
+  display: flex;
+}
+
+.template-card-foot .ui-button {
+  width: 100%;
+}

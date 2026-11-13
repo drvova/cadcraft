@@ -1,0 +1,236 @@
+/*
+ * The Source panel (components/SourcePanel.tsx): the drawing's script beside the drawing, in the
+ * editor's own row. A panel like the sidebar's sections: the section's heading in a band with its
+ * keys, the text, and a band of status and actions under it. Every value is a token.
+ */
+
+/* The row the drawing and the panel share, between the layout tabs and the command line. */
+.editor-row {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.source-panel {
+  /* A third of the editor, between a width that holds a line of script and one that leaves the
+     drawing the larger part. */
+  --source-min: 280px;
+  --source-max: 620px;
+  /* The script's line: the layer's line and one step, for 12px monospaced type. */
+  --source-leading: calc(var(--leading-ui) + var(--gap-2));
+  --source-inset: var(--gap-8);
+  flex: 0 0 clamp(var(--source-min), 34%, var(--source-max));
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: var(--hairline) solid var(--border);
+}
+
+/* The heading band: the sidebar sections' own. */
+.source-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-8);
+  height: var(--control-h-input);
+  padding: 0 var(--gap-4) 0 var(--source-inset);
+  border-bottom: var(--hairline) solid var(--border);
+}
+
+.source-measure {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--text-faint);
+  font-size: var(--font-chip);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.source-head-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-2);
+}
+
+/* The text's region. It takes the room between the bands whatever the text needs: the editor
+   inside is sized from it, never the other way round. */
+.source-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: var(--gap-6) 0 0;
+}
+
+/* The bare editor draws no ring: its region shows the focus, one line inside its own edge. */
+.source-body:focus-within {
+  outline: var(--focus-outline-w) solid var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-outline-w));
+}
+
+.source-editor {
+  display: flex;
+  align-items: flex-start;
+  min-height: 0;
+  color: var(--text);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-mono);
+  font-variant-ligatures: none;
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: var(--source-leading);
+  tab-size: 4;
+}
+
+/* The numbers: a column as wide as its longest number, as tall as the editor beside it. Its
+   scroll is the editor's (the script sets it), so it shows no bar of its own. */
+.source-gutter {
+  --source-digits: 3;
+  position: relative;
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: calc(var(--source-digits) * 1ch + var(--source-inset) * 2);
+  color: var(--text-faint);
+  user-select: none;
+}
+
+.source-gutter-scroll {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* Room under the last number: the editor scrolls a bar's height further when a long line gives
+   it a horizontal bar. */
+.source-gutter-inner {
+  position: relative;
+  padding: 0 var(--source-inset) calc(var(--source-leading) * 2);
+}
+
+.source-gutter-lines {
+  margin: 0;
+  font: inherit;
+  text-align: right;
+}
+
+/* The line an error names: its number again in the error ink, with a bar at the panel's edge
+   (the status line under the text says the line in words). */
+.source-mark {
+  position: absolute;
+  top: calc((var(--source-line) - 1) * var(--source-leading));
+  left: 0;
+  right: 0;
+  height: var(--source-leading);
+  padding-right: var(--source-inset);
+  border-left: var(--gap-2) solid var(--error);
+  background: var(--panel);
+  color: var(--error);
+  text-align: right;
+}
+
+/* A script too long for the editor: its start, to read and to select, scrolling as one box. */
+.source-editor--preview {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.source-editor--preview:focus-visible {
+  outline: none;
+}
+
+.source-editor--preview .source-gutter-lines {
+  flex: 0 0 auto;
+  padding: 0 var(--source-inset);
+  color: var(--text-faint);
+  user-select: none;
+}
+
+.source-text {
+  flex: 1 0 auto;
+  margin: 0;
+  padding-right: var(--source-inset);
+  font: inherit;
+  white-space: pre;
+}
+
+.source-note {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: var(--gap-6) var(--source-inset);
+  border-top: var(--hairline) solid var(--border-soft);
+  color: var(--text-dim);
+  font-size: var(--font-label);
+  line-height: var(--leading-ui);
+}
+
+/* The band under the text: what the engine said, over the two actions. The line keeps two lines
+   of room, so the text above does not move when a short message changes; a long error takes up
+   to four and scrolls past them. */
+.source-foot {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-6);
+  padding: var(--gap-6) var(--gap-8) var(--gap-8) var(--source-inset);
+  border-top: var(--hairline) solid var(--border);
+}
+
+.source-status {
+  min-height: calc(var(--leading-ui) * 2);
+  max-height: calc(var(--leading-ui) * 4);
+  margin: 0;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  color: var(--text-dim);
+  font-size: var(--font-label);
+  line-height: var(--leading-ui);
+}
+
+.source-status--error {
+  color: var(--error);
+}
+
+.source-status--ok {
+  color: var(--text);
+}
+
+.source-foot-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--gap-6);
+}
+
+/* Type a finger edits is 16px (the layer's rule for a text area); the numbers and the line keep
+   step with it. */
+@media (pointer: coarse) {
+  .source-panel {
+    --source-leading: calc(var(--leading-ui) * 1.25 + var(--gap-2));
+  }
+
+  .source-gutter,
+  .source-editor--preview {
+    font-size: max(16px, 1em);
+  }
+}
+
+/* A phone's width holds one part at a time: open, the panel takes the drawing's place (and the
+   tabs over it); the drawing is one key away. */
+@media (max-width: 560px) {
+  .editor-row:has(> .source-panel) > .stage,
+  .editor:has(.source-panel) > .editor-tabs {
+    display: none;
+  }
+
+  .source-panel {
+    flex: 1 1 auto;
+    border-left: none;
+  }
+}

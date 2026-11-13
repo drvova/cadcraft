@@ -41,6 +41,27 @@ pub struct Cut {
     style: Style,
 }
 
+impl Cut {
+    /// Whether this cut's girdle at these dimensions is a circle: a round brilliant always, and
+    /// an oval or cabochon as long as it is wide. Such a stone has no orientation.
+    pub(super) fn is_circle(&self, length: f64, width: f64) -> bool {
+        self.style == Style::Round || (self.style == Style::Oval && (length - width).abs() < 1e-9)
+    }
+
+    /// The length-to-width ratio this cut is usually bought in (a marquise or a baguette 2:1, a
+    /// pear 3:2, an emerald or a radiant 7:5, an oval 4:3; the rest as long as wide). `GEMFIT`
+    /// sizes a cut by its calibrated width and this ratio when none is given.
+    pub(super) fn usual_ratio(&self) -> f64 {
+        match self.style {
+            Style::Marquise | Style::Baguette => 2.0,
+            Style::Pear => 1.5,
+            Style::Emerald | Style::Radiant => 1.4,
+            Style::Oval => 4.0 / 3.0,
+            Style::Round | Style::Heart | Style::Triangle | Style::Square | Style::Cushion => 1.0,
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Style {
     Round,
@@ -158,7 +179,7 @@ pub fn outline(cut: &Cut, length: f64, width: f64) -> EntityKind {
             let (major, ratio) = if length >= width {
                 (Vec3::new(0.0, length / 2.0, 0.0), width / length)
             } else {
-                (Vec3::new(length / 2.0, 0.0, 0.0), length / width)
+                (Vec3::new(width / 2.0, 0.0, 0.0), length / width)
             };
             EntityKind::Ellipse(cadcraft_doc::Ellipse { center: Vec3::ZERO, major, ratio, start: 0.0, end: cadcraft_geom::TAU })
         }
@@ -231,9 +252,12 @@ fn rounded_polygon(verts: &[Vec2], radius: f64) -> EntityKind {
         let to_next = (next - cur).normalized();
         // Half the shorter edge bounds the radius, so two corners never overlap.
         let r = radius.min(cur.dist(prev) / 2.0).min(cur.dist(next) / 2.0);
+        // The angle inside the corner, from the edge that arrives to the edge that leaves. The
+        // arc between the tangent points sweeps what is left of a half turn, the other way: the
+        // way the outline itself turns, so the corner is rounded outward and not scooped out.
         let turn = (to_prev.x * to_next.y - to_prev.y * to_next.x).atan2(to_prev.dot(to_next));
         out.push(cur + to_prev * r);
-        bulges.push(cadcraft_geom::arc_to_bulge(turn.abs() * turn.signum()));
+        bulges.push(cadcraft_geom::arc_to_bulge((cadcraft_geom::PI - turn.abs()) * -turn.signum()));
         out.push(cur + to_next * r);
         bulges.push(0.0);
     }

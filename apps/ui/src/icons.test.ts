@@ -9,9 +9,10 @@
 
 import { describe, expect, test } from "bun:test";
 import { COMPOSER_ICONS, ICON_PATHS, iconPath, PANEL_ICONS, STROKE, ToolIcon } from "./icons";
-import { TOOLBAR, toolEnabled, toolNote } from "./components/ToolStrip";
+import { TOOLBAR, toolEnabled, toolHint, toolNote } from "./components/ToolStrip";
 import { UI_ITEMS } from "./commands";
 import type { CommandInfo } from "./facade";
+import { RIBBON, RIBBON_TOOLS } from "./ribbon";
 
 /** SVG path data: command letters, digits and the separators between numbers. */
 const PATH_RE = /^[MmLlHhVvCcSsQqTtAaZz0-9 .,+-]+$/;
@@ -19,16 +20,15 @@ const PATH_RE = /^[MmLlHhVvCcSsQqTtAaZz0-9 .,+-]+$/;
 const entries = TOOLBAR.flat();
 
 describe("the toolbar table", () => {
-  test("has eight groups, each non-empty, the drafting tools ahead of the ones the overflow may take", () => {
-    expect(TOOLBAR.map((group) => group.map((e) => e.id))).toEqual([
-      ["new", "open", "qsave"],
-      ["u", "redo"],
-      ["line", "pline", "circle", "arc", "rectang", "hatch", "mtext"],
-      ["move", "copy", "rotate", "mirror", "offset", "trim", "fillet", "erase"],
-      ["dimlinear"],
-      ["zoom.extents", "zoom.window", "pan"],
-      ["ui.panel.properties", "layer", "dist"],
-      ["plot"],
+  test("is every tool of the ribbon once, and the ribbon's tabs hold these tools in these groups", () => {
+    expect(entries).toEqual([...RIBBON_TOOLS]);
+    expect(RIBBON.map((tab) => [tab.label, ...tab.groups.map((group) => `${group.name}: ${group.tools.map((e) => e.id).join(" ")}`)])).toEqual([
+      ["Home", "File: new open qsave plot", "History: u redo", "Draw: line pline circle arc rectang", "Modify: move copy rotate trim erase", "Zoom: zoom.extents zoom.window pan"],
+      ["Jewelry", "Build: ring gem setting pave", "Check: ringsizes gemfit", "Bench: techsheet ui.panel.bench"],
+      ["Draw", "Lines: line pline rectang polygon", "Curves: circle arc ellipse spline", "Fill: hatch"],
+      ["Modify", "Place: move copy rotate mirror scale", "Shape: offset trim extend fillet chamfer", "Remove: erase"],
+      ["Annotate", "Notes: mtext mleader table", "Dimension: dimlinear dimaligned dimradius dimangular", "Measure: dist", "Fill: hatch"],
+      ["View", "Zoom: zoom.extents zoom.window pan", "Drawing: layer dist", "Panels: ui.panel.properties ui.panel.bench"],
     ]);
   });
 
@@ -65,12 +65,48 @@ describe("the toolbar table", () => {
     expect(toolNote(undo, false)).toBe("Not available now");
   });
 
-  test("every command id is non-empty and unique, and every label is set", () => {
+  test("a labelled tool's hint is what its label leaves out: the note, or the label beside its shortcut's key cap", () => {
+    const find = (id: string) => {
+      const entry = entries.find((candidate) => candidate.id === id);
+      if (entry === undefined) throw new Error(`the ribbon lost ${id}`);
+      return entry;
+    };
+    expect(toolHint(find("line"), true)).toBe("Type L");
+    expect(toolHint(find("u"), true)).toBe("Undo");
+    expect(toolHint(find("u"), false)).toBe("Not available now");
+    expect(toolHint(find("ring"), true)).toBeUndefined();
+  });
+
+  test("every command id is non-empty and unique, and every label is set and names one tool", () => {
     const ids = entries.map((entry) => entry.id);
     expect(new Set(ids).size).toBe(ids.length);
+    expect(new Set(entries.map((entry) => entry.label)).size).toBe(entries.length);
+    expect(new Set(entries.map((entry) => entry.icon)).size).toBe(entries.length);
     for (const entry of entries) {
       expect(entry.id.length).toBeGreaterThan(0);
       expect(entry.label.length).toBeGreaterThan(0);
+    }
+  });
+
+  test("a tab holds a tool once, and names each of its groups once", () => {
+    for (const tab of RIBBON) {
+      const ids = tab.groups.flatMap((group) => group.tools.map((entry) => entry.id));
+      expect(new Set(ids).size, `${tab.label} repeats a tool`).toBe(ids.length);
+      const names = tab.groups.map((group) => group.name);
+      expect(new Set(names).size, `${tab.label} repeats a group`).toBe(names.length);
+      for (const group of tab.groups) expect(group.tools.length, `${tab.label}'s ${group.name} is empty`).toBeGreaterThan(0);
+    }
+  });
+
+  test("the word under a glyph is one or two words, and a shortened one is a word of the tool's own label", () => {
+    for (const entry of entries) {
+      const caption = entry.short ?? entry.label;
+      expect(caption.split(" ").length, `${entry.label} is a long caption`).toBeLessThanOrEqual(2);
+      if (entry.short === undefined) continue;
+      // The name a screen reader hears and speech input says holds the word that is drawn.
+      expect(entry.short.split(" ").length).toBe(1);
+      expect(entry.label.toLowerCase()).toContain(entry.short.toLowerCase());
+      expect(entry.short.length).toBeLessThan(entry.label.length);
     }
   });
 
@@ -223,7 +259,7 @@ describe("the strip's glyphs are one family", () => {
       )
       .map((glyph) => glyph.icon);
     // The two whose stem is the box's own centre line, which an even size has no pixel for.
-    expect(soft).toEqual(["text", "pan"]);
+    expect(soft).toEqual(["pan", "text"]);
   });
 
   test("the pairs a drafter must tell apart at a glance differ in how they are built", () => {

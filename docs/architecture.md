@@ -123,6 +123,8 @@ The desktop shell never lets a request path reach the file system.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-13 | minor | Slab removed: the `surface` row, the `cadcraft-cli` options and the `xtask` commands that went with it are gone; the interface is SolidJS alone |
+| 2026-11-12 | minor | `surface` (L5, optional): the piece card, bench sheet page and terminal dashboard on Slab, which is pinned and patched in `third_party/slab` and fetched by `cargo xtask slab`; the `cadcraft-cli` row gains `run --card/--sheet` and `tui` behind its `surfaces` feature |
 | 2026-11-12 | minor | The display list carries `space` and a layout's `sheet`, and the canvas draws a layout on its paper; the drafting font covers 362 characters with composed glyphs and a nearest-character fallback |
 | 2026-11-11 | major | The interface is `apps/ui` over the wasm facade and the desktop app is that interface in a native webview (egui removed, d5cad47). Workspace table: `wasm`, `ai`, `cadcraft` and `ui` rows rewritten, line counts recounted (57,000 → about 149,000 lines of Rust, tests included). Rendering rewritten: a 2D canvas over the facade's display list, no GPU path. Agent control: the control channel is not served; the assistant runs in the interface. Data model: Helix, MLine, Region, Tolerance noted. Safety: the facade's bounds |
 | 2026-10-10 | major | First committed architecture doc, measured from the code (crate sizes, entity kinds, command counts) |

@@ -31,11 +31,15 @@
  * shape).
  */
 
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack, type JSX } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack, type JSX } from "solid-js";
 import { activityParts, clampPanelWidth, failedNote, focusIsOurs, followAfterScroll, growReply, listProviderModels, MAX_MESSAGE_CHARS, MAX_REQUEST_CHARS, PANEL_WIDTH, parseInline, presetFor, PROVIDER_PRESETS, providerReady, reachedNote, relativeTime, saveBlocker, setupStatus, type ChatImage, type ConnectionNote, type ProviderConfig, type ReplyBlock, type ReplyParse } from "../assistant";
 import { turnStart, type AssistantSession } from "../assistant-session";
+import type { BenchSheet } from "../bench";
+import { mentionKey, mentionLabel, mentionOptions, mentionQuery, rankMentions, takeMention, type Mention } from "../mentions";
 import { highlight, rankCommands, slashQuery, SLASH_LIMIT, type PaletteItem } from "../palette";
 import { ToolIcon } from "../icons";
+import type { ProposalsModel, StillCache } from "../proposals";
+import { ProposalCards } from "./ProposalCards";
 import { Button } from "../ui/Button";
 import { Chip } from "../ui/Chip";
 import { Field } from "../ui/Field";
@@ -53,6 +57,9 @@ export interface AssistantPaneProps {
   session: AssistantSession;
   /** The canvas selection's handles (the shell's signal); drives the context chip. */
   selection: () => readonly string[];
+  /** The drawing's layers by name, and its bench sheet: what a `@` in the composer can point at. */
+  layers: readonly string[];
+  bench: BenchSheet | null;
   /** Every open chat's title, in tab order, and which one this panel shows. */
   /** Every command the shell can run: a draft that starts with `/` searches them. */
   commands: () => readonly PaletteItem[];
@@ -66,6 +73,10 @@ export interface AssistantPaneProps {
   onCloseChat: (index: number) => void;
   /** The panel's close button. */
   onClose: () => void;
+  /** The proposals waiting for a decision, drawn as cards over the composer (`./ProposalCards`). */
+  proposals?: ProposalsModel;
+  /** Draws the stills of a proposal's piece before and after. */
+  stills?: StillCache;
 }
 
 /** How many of the models a provider lists the setup offers as chips; the rest are typed by name. */
@@ -75,14 +86,14 @@ const MODEL_CHIPS = 12;
 const MIN_LIST_ROWS = 3;
 
 /** The empty transcript's one line: what the assistant does in this product. */
-const EMPTY_LINE = "Ask it to draw, measure or change this drawing.";
+const EMPTY_LINE = "Ask it to design, measure or change this piece.";
 
 /** The empty state's suggestions, once a model is set up: one click fills the composer and sends
- *  nothing (each is one of the system's list rows). Each works on whatever drawing is open. */
+ *  nothing (each is one of the system's list rows). Each is a jeweler's sentence for any drawing. */
 const EXAMPLES: readonly { icon: string; text: string }[] = [
-  { icon: "circle", text: "Draw a 20 mm circle at 0,0" },
-  { icon: "dist", text: "What is the total length of the lines?" },
-  { icon: "ui.dialog.layers", text: "List the layers and what is on them" },
+  { icon: "ring", text: "Draw a size 7 platinum band, 2.5 mm wide" },
+  { icon: "gem", text: "Set a 6 mm oval sapphire with a halo" },
+  { icon: "dist", text: "Total the stones, carats and grams" },
 ];
 
 /** How many pictures one message may carry, and how large each may be. */
@@ -300,20 +311,21 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
 
   /** What is on its way out of the card (the canvas selection, a picture): drawn closing, then
    *  taken out of the message when that has played. */
-  const [leaving, setLeaving] = createSignal<readonly (ChatImage | "selection")[]>([]);
-  const takeOut = (item: ChatImage | "selection"): void => {
+  const [leaving, setLeaving] = createSignal<readonly (ChatImage | "selection" | Mention)[]>([]);
+  const takeOut = (item: ChatImage | "selection" | Mention): void => {
     if (!leaving().includes(item)) return;
     setLeaving(leaving().filter((other) => other !== item));
     if (item === "selection") s.setSelectionIncluded(false);
+    else if ("kind" in item) s.setMentions(s.mentions().filter((other) => other !== item));
     else s.setAttached(s.attached().filter((picture) => picture !== item));
   };
-  const remove = (item: ChatImage | "selection"): void => {
+  const remove = (item: ChatImage | "selection" | Mention): void => {
     if (leaving().includes(item)) return;
     setLeaving([...leaving(), item]);
     // With the interface's motion off nothing plays, so nothing would end: it goes at once.
     if (document.documentElement.dataset["animations"] === "off") takeOut(item);
   };
-  const chipClass = (item: ChatImage | "selection", base: string): string => (leaving().includes(item) ? `${base} is-leaving` : base);
+  const chipClass = (item: ChatImage | "selection" | Mention, base: string): string => (leaving().includes(item) ? `${base} is-leaving` : base);
 
   /** The box the chips sit in, the row inside it, and the height the row last had. */
   let chipsBox: HTMLDivElement | undefined;
@@ -340,7 +352,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   onMount(() => {
     chipsHeight = chipsRow?.isConnected === true ? chipsRow.offsetHeight : 0;
   });
-  createEffect(on([s.attached, selectionShown], () => queueMicrotask(easeChips), { defer: true }));
+  createEffect(on([s.attached, selectionShown, s.mentions], () => queueMicrotask(easeChips), { defer: true }));
 
   const send = (): void => {
     // What the reader took out a moment ago is out, whether or not its chip has finished closing.
@@ -376,6 +388,31 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     const query = slash();
     return query === null ? [] : rankCommands(query, props.commands(), [], SLASH_LIMIT);
   });
+  /** The `@` list: the word the caret is in starts with `@`, and lists what in the drawing the
+   *  message can point at (`../mentions`). It shares the slash list's highlight, keys and pointer. */
+  const [caret, setCaret] = createSignal(0);
+  /** Where the `@word` the reader closed the list on starts: that word stays closed. */
+  const [mentionClosed, setMentionClosed] = createSignal(-1);
+  const mentionAt = createMemo(() => mentionQuery(s.input(), caret()), undefined, { equals: (a, b) => a?.query === b?.query && a?.start === b?.start && a?.end === b?.end });
+  const mention = createMemo(() => (mentionAt()?.start === mentionClosed() ? null : (mentionAt() ?? null)));
+  createEffect(() => {
+    if (mentionAt() === null && untrack(mentionClosed) !== -1) setMentionClosed(-1);
+  });
+  /** What can still be pointed at: everything offered, less what this message already carries. */
+  const mentionChoices = createMemo(() => {
+    const picked = new Set(s.mentions().map(mentionKey));
+    return mentionOptions(props.layers, props.bench, props.selection().length).filter((option) => !picked.has(option.key));
+  });
+  const mentionMatches = createMemo(() => {
+    const asked = mention();
+    return asked === null ? [] : rankMentions(mentionChoices(), asked.query);
+  });
+  /** The picked things that draw a chip of their own (the selection has its chip already). */
+  const mentionChips = createMemo(() => s.mentions().filter((m) => m.kind !== "selection"));
+  /** Which list the composer drives now, what it was asked, and how many rows it has. */
+  const listed = (): "mention" | "slash" | null => (mention() !== null ? "mention" : slash() !== null ? "slash" : null);
+  const listAsked = createMemo(() => (mention() !== null ? `@${mention()?.query ?? ""}` : slash()));
+  const listCount = (): number => (listed() === "mention" ? mentionMatches().length : slashMatches().length);
   const [slashIndex, setSlashIndex] = createSignal(0);
   /** The lit row follows the keys into view; a row lit by the pointer is already under it. */
   let slashFollow = true;
@@ -386,7 +423,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     setSlashIndex(index);
   };
   createEffect(
-    on(slash, (now, before) => {
+    on(listAsked, (now, before) => {
       // The list opened: the pointer is found again where it already was before it counts as moving.
       if (now !== null && (before === null || before === undefined)) slashPointer = "";
       lightSlash(0);
@@ -416,14 +453,37 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     props.onRunCommand(item.id);
   };
 
+  /** Point the message at a row of the `@` list: its `@word` leaves the draft and a chip arrives. */
+  const pickMention = (index: number): void => {
+    const option = mentionMatches()[index]?.option;
+    const asked = mention();
+    if (option === undefined || asked === null) return;
+    const next = takeMention(s.input(), asked);
+    batch(() => {
+      // A selection chip on its way out stays: it was just asked for again.
+      if (option.mention.kind === "selection") setLeaving(leaving().filter((item) => item !== "selection"));
+      s.setInput(next.text);
+      setCaret(next.caret);
+      s.mention(option.mention);
+    });
+    queueMicrotask(() => {
+      inputEl?.focus();
+      inputEl?.setSelectionRange(next.caret, next.caret);
+    });
+  };
+
   const onKeyDown = (e: KeyboardEvent): void => {
-    const count = slashMatches().length;
-    if (slash() !== null && count > 0) {
+    const count = listCount();
+    if (listed() !== null && count > 0) {
       if (e.key === "ArrowDown") lightSlash((slashIndex() + 1) % count);
       else if (e.key === "ArrowUp") lightSlash((slashIndex() - 1 + count) % count);
-      else if (e.key === "Enter" || e.key === "Tab") runSlash(slashIndex());
-      else if (e.key === "Escape") {
-        s.setInput("");
+      else if (e.key === "Enter" || e.key === "Tab") {
+        if (listed() === "mention") pickMention(slashIndex());
+        else runSlash(slashIndex());
+      } else if (e.key === "Escape") {
+        // The `@` list closes and the draft stays; a slash draft is only its `/word`, and goes.
+        if (listed() === "mention") setMentionClosed(mention()?.start ?? -1);
+        else s.setInput("");
         e.stopPropagation();
       } else return;
       e.preventDefault();
@@ -723,17 +783,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
     );
   };
 
-  return (
-    <aside
-      class="assistant-panel"
-      ref={panelEl}
-      role="complementary"
-      aria-label="Assistant"
-      style={{ "--assistant-width": `${width()}px` }}
-      on:keydown={onEscape}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={onDrop}
-    >
+  const resizeStrip = (): JSX.Element => (
       <div
         class="assistant-resize"
         role="separator"
@@ -756,6 +806,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         onDblClick={() => resizeTo(PANEL_WIDTH.initial)}
         onKeyDown={onResizeKey}
       />
+  );
+  const head = (): JSX.Element => (
       <div class="assistant-head">
         {/* While a model is being set up the panel is that task: its title says so. One chat needs
             no title of its own (its first prompt is the first thing under this band, and a title cut
@@ -784,7 +836,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
           <IconButton icon="close" title="Close the assistant" onClick={() => props.onClose()} />
         </div>
       </div>
-
+  );
+  const main = (): JSX.Element => (
       <div class="assistant-main">
       <div
         class="assistant-body"
@@ -847,6 +900,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 <div class="assistant-prompt">
                   {entry.kind === "user" ? entry.text : ""}
                   {entry.kind === "user" && entry.pictures > 0 ? <span class="assistant-prompt-pics">{` · ${entry.pictures} picture${entry.pictures === 1 ? "" : "s"}`}</span> : ""}
+                  {entry.kind === "user" && entry.context !== undefined && entry.context.length > 0 ? <span class="assistant-prompt-pics">{entry.context.map((label) => ` · @${label}`).join("")}</span> : ""}
                 </div>
               </Match>
               <Match when={entry.kind === "assistant"}>
@@ -1095,10 +1149,23 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
           </section>
         </Show>
       </div>
-
-      {/* The setup sheet takes the panel to its foot: the composer, which cannot send without a
-          model, is out of the page (and the tab order) until the sheet closes. */}
-      <div class="assistant-composer" hidden={menuOpen()}>
+  );
+  const stack = (): JSX.Element => (
+      <>
+        {/* A decision that waits stands first over the input. */}
+        <Show when={props.proposals}>
+          {(model) => (
+            <ProposalCards
+              model={model()}
+              stills={props.stills}
+              busy={s.running()}
+              onDecided={(title) => {
+                if (title !== null) s.noteAccepted(`Proposal: ${title}`);
+                queueMicrotask(() => inputEl?.focus());
+              }}
+            />
+          )}
+        </Show>
         <Show when={s.running() || s.status() !== "" || s.queued.length > 0 || s.changes() !== null || over() > 0}>
           <div class="assistant-stack">
             <Show when={s.queued.length > 0}>
@@ -1197,12 +1264,41 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
             </Show>
           </div>
         </Show>
-        <div class="assistant-box">
-          {/* The chips' box is always there, so the card eases to and from the height of its row
-              (`easeChips`). A chip that is taken away fades first (`is-leaving`) and leaves the
-              message when that has played. */}
+        <Show when={mention() !== null}>
+          <div class="assistant-stack assistant-slash">
+            <Show when={mentionMatches().length > 0}>
+              {/* The same listbox as the slash list's: the editor is its combobox and keeps the keyboard. */}
+              <div class="assistant-slash-list" id="assistant-mentions" role="listbox" aria-label="Context from the drawing" onMouseDown={(e) => e.preventDefault()}>
+                <For each={mentionMatches()}>
+                  {(match, index) => (
+                    <Row option id={slashOptionId(index())} selected={index() === slashIndex()} onPointerMove={(e) => onSlashPointerMove(e, index())} onClick={() => pickMention(index())}>
+                      <span class="assistant-mention-icon">
+                        <ToolIcon id={match.option.icon} />
+                      </span>
+                      <span class="assistant-slash-label">
+                        <For each={highlight(match.option.label, match.indices)}>{(part) => (part.hit ? <mark class="assistant-slash-hit">{part.text}</mark> : part.text)}</For>
+                      </span>
+                      <span class="assistant-mention-detail">{match.option.detail}</span>
+                    </Row>
+                  )}
+                </For>
+              </div>
+            </Show>
+            <Show when={mentionMatches().length === 0}>
+              <div class="assistant-stack-row">
+                <span class="assistant-stack-text">No layer or bench line matches. Keep typing to send it as written.</span>
+              </div>
+            </Show>
+          </div>
+        </Show>
+      </>
+  );
+  /* The chips' box is always there, so the card eases to and from the height of its row
+     (`easeChips`). A chip that is taken away fades first (`is-leaving`) and leaves the
+     message when that has played. */
+  const chips = (): JSX.Element => (
           <div class="assistant-attachments-clip" ref={chipsBox}>
-            <Show when={selectionShown() || s.attached().length > 0}>
+            <Show when={selectionShown() || s.attached().length > 0 || mentionChips().length > 0}>
               <div class="assistant-attachments-row" ref={chipsRow}>
                 <Show when={selectionShown()}>
                   <span class={chipClass("selection", "assistant-attachment assistant-attachment--context")} onAnimationEnd={(e) => e.animationName === "assistant-attachment-out" && takeOut("selection")}>
@@ -1213,6 +1309,19 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                     <IconButton icon="close" size="sm" title="Leave the selection out" onClick={() => remove("selection")} />
                   </span>
                 </Show>
+                <For each={mentionChips()}>
+                  {(item) => (
+                    <span class={chipClass(item, "assistant-attachment assistant-attachment--context")} onAnimationEnd={(e) => e.animationName === "assistant-attachment-out" && takeOut(item)}>
+                      <span class="assistant-attachment-icon">
+                        <ToolIcon id={item.kind === "layer" ? "list" : "gem"} />
+                      </span>
+                      <span class="assistant-attachment-name" data-hint="" data-hint-note={item.kind === "bench" ? item.value : "Layer"}>
+                        {mentionLabel(item)}
+                      </span>
+                      <IconButton icon="close" size="sm" title={`Leave ${mentionLabel(item)} out`} onClick={() => remove(item)} />
+                    </span>
+                  )}
+                </For>
                 <For each={s.attached()}>
                   {(picture) => (
                     <span class={chipClass(picture, "assistant-attachment")} onAnimationEnd={(e) => e.animationName === "assistant-attachment-out" && takeOut(picture)}>
@@ -1228,6 +1337,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               </div>
             </Show>
           </div>
+  );
+  const editor = (): JSX.Element => (
           <label class="assistant-input" for={COMPOSER_ID}>
             <TextArea
               variant="bare"
@@ -1235,13 +1346,19 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
                 inputEl = el;
                 // The label around the editor names it by id: a press on the card's inset lands in it.
                 el.id = COMPOSER_ID;
+                // The `@` list follows the caret, which moves without the text changing.
+                const sync = (): void => void setCaret(el.selectionEnd);
+                for (const type of ["keyup", "click", "select", "focus"]) el.addEventListener(type, sync);
               }}
               rows={COMPOSER_ROWS}
               maxRows={COMPOSER_MAX_ROWS}
-              placeholder={s.running() ? "Queue a follow-up" : "Ask, or / for commands"}
+              placeholder={s.running() ? "Queue a follow-up" : "Ask, @ for context, / for commands"}
               value={s.input()}
               onInput={(value) => {
-                s.setInput(value);
+                batch(() => {
+                  setCaret(inputEl?.selectionEnd ?? value.length);
+                  s.setInput(value);
+                });
                 // A notice (a refused attachment, a restore) has been read once typing resumes.
                 if (!s.running() && s.status() !== "") s.setStatus("");
               }}
@@ -1250,13 +1367,15 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               ariaLabel="Ask the assistant"
               invalid={over() > 0}
               describedBy={over() > 0 ? "assistant-over" : undefined}
-              role={slash() === null ? undefined : "combobox"}
-              expanded={slash() === null ? undefined : slashMatches().length > 0}
-              controls={slashMatches().length > 0 ? "assistant-slash" : undefined}
-              activeDescendant={slashMatches().length > 0 ? slashOptionId(slashIndex()) : undefined}
-              autocompleteKind={slash() === null ? undefined : "list"}
+              role={listed() === null ? undefined : "combobox"}
+              expanded={listed() === null ? undefined : listCount() > 0}
+              controls={listCount() > 0 ? (listed() === "mention" ? "assistant-mentions" : "assistant-slash") : undefined}
+              activeDescendant={listCount() > 0 ? slashOptionId(slashIndex()) : undefined}
+              autocompleteKind={listed() === null ? undefined : "list"}
             />
           </label>
+  );
+  const toolbar = (): JSX.Element => (
           <div class="assistant-row">
             {/* The model chip and the context meter share one line: in a narrow panel the meter
                 is the first to go, and only then does the model's name give way. */}
@@ -1313,6 +1432,8 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               </Show>
             </div>
           </div>
+  );
+  const picker = (): JSX.Element => (
           <input
             type="file"
             accept="image/*"
@@ -1325,6 +1446,30 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
               void addFiles(files);
             }}
           />
+  );
+  return (
+    <aside
+      class="assistant-panel"
+      ref={panelEl}
+      role="complementary"
+      aria-label="Assistant"
+      style={{ "--assistant-width": `${width()}px` }}
+      on:keydown={onEscape}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={onDrop}
+    >
+      {resizeStrip()}
+      {head()}
+      {main()}
+      {/* The setup sheet takes the panel to its foot: the composer, which cannot send without a
+          model, is out of the page (and the tab order) until the sheet closes. */}
+      <div class="assistant-composer" hidden={menuOpen()}>
+        {stack()}
+        <div class="assistant-box">
+          {chips()}
+          {editor()}
+          {toolbar()}
+          {picker()}
         </div>
       </div>
     </aside>

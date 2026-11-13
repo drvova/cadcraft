@@ -1,0 +1,235 @@
+/* The proposals over the assistant's composer (`components/ProposalCards.tsx`). They stand above
+   the stack's rows on the composer's gutter, as cards of the elevated surface: a decision that
+   waits is the first thing over the input. The list scrolls inside its own cap, so a long one
+   never pushes the composer out of the panel. */
+
+.assistant-proposals {
+  /* Two variants side by side need this much each; narrower, they stand one under another. */
+  --proposal-min: 216px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-8);
+  margin: 0 var(--gap-8) var(--gap-6);
+  max-height: calc(var(--block-max-height) * 2.5);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.proposal-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-4);
+}
+
+.proposal-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-6);
+  min-height: var(--control-h-input);
+  color: var(--text-faint);
+  font-size: var(--font-body);
+}
+
+.proposal-group-count {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proposal-variants {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--proposal-min)), 1fr));
+  gap: var(--gap-6);
+}
+
+.proposal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-6);
+  min-width: 0;
+  padding: var(--gap-8);
+  background: var(--surface-elevated);
+  border: var(--hairline) solid var(--composer-border);
+  border-radius: var(--radius-card);
+  color: var(--text);
+  font-size: var(--font-body);
+  line-height: var(--leading-ui);
+}
+
+.proposal-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-6);
+  min-height: var(--control-h-chip);
+}
+
+.proposal-title {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-body);
+  font-weight: 600;
+}
+
+/* Before and after, the same size side by side: a cut-out of the piece on the card's surface. */
+.proposal-stills {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap-6);
+}
+
+.proposal-still {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-2);
+  min-width: 0;
+  margin: 0;
+}
+
+.proposal-still-tile {
+  display: block;
+  width: 100%;
+  /* A band of the card, not a picture of its width: three variants stacked stay readable. */
+  height: calc(var(--block-max-height) / 2);
+  margin: 0;
+  background: var(--surface-inset);
+  border-radius: var(--radius-small);
+  object-fit: contain;
+}
+
+/* No picture (no WebGL, a mesh refused): the reason in words where the picture would be. */
+.proposal-still-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gap-6);
+  box-sizing: border-box;
+  color: var(--text-faint);
+  font-size: var(--font-small);
+  text-align: center;
+  overflow: hidden;
+}
+
+.proposal-still figcaption {
+  color: var(--text-faint);
+  font-size: var(--font-small);
+}
+
+/* The figures that differ: label, before, after, the signed difference. Figures hold their width. */
+.proposal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}
+
+.proposal-table th,
+.proposal-table td {
+  padding: var(--gap-2) 0;
+  text-align: left;
+  font-weight: 400;
+  vertical-align: baseline;
+}
+
+.proposal-table tbody th {
+  padding-right: var(--gap-6);
+  color: var(--text-dim);
+}
+
+.proposal-table td.proposal-before {
+  padding-right: var(--gap-4);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+/* The arrow is drawn, not written: a copy of the row is its figures, and a screen reader reads
+   the column's header instead. */
+.proposal-after {
+  white-space: nowrap;
+}
+
+.proposal-after::before {
+  content: "\2192\00a0";
+  color: var(--text-faint);
+}
+
+.proposal-table td.proposal-delta {
+  padding-left: var(--gap-8);
+  color: var(--text-dim);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.proposal-checks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-dim);
+}
+
+.proposal-check-word {
+  font-weight: 600;
+}
+
+/* What would fail is said first and in the warning ink, and in words ("Would fail"): never by
+   colour alone. */
+.proposal-checks--broken {
+  padding: var(--gap-4) var(--gap-6);
+  background: var(--surface-inset);
+  border-left: var(--gap-2) solid var(--warn);
+  border-radius: var(--radius-small);
+  color: var(--text);
+}
+
+.proposal-checks--broken .proposal-check-word {
+  color: var(--warn);
+}
+
+.proposal-line {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+.proposal-line--stale {
+  color: var(--warn);
+}
+
+.proposal.is-stale .proposal-table,
+.proposal.is-stale .proposal-stills {
+  opacity: 0.6;
+}
+
+.proposal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--gap-4);
+}
+
+/* The columns' names are for a screen reader (each figure's cell is read with its column): drawn
+   at no size, so they take no room and set no column's width, and stay in the table. */
+.proposal-table-head th {
+  height: 0;
+  padding: 0;
+  overflow: hidden;
+  font-size: 0;
+  line-height: 0;
+}
+
+/* Said for a screen reader; not drawn and taking no room. */
+.proposal-said {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

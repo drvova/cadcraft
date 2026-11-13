@@ -134,8 +134,15 @@ describe("classify", () => {
     expect(classify("ui.open")).toBe("open");
     expect(classify("dsettings")).toBe("drafting");
     expect(classify("layer")).toBe("layers");
+    expect(classify("ring")).toBe("jewelry");
+    expect(classify("gem")).toBe("jewelry");
+    expect(classify("pave")).toBe("engine");
     expect(classify("ui.saveas")).toBe("save");
     expect(classify("ui.sample")).toBe("sample");
+    expect(classify("ui.sample.bracket")).toBe("sample");
+    expect(classify("ui.assistant.ask")).toBe("ask");
+    expect(classify("ui.panel.bench")).toBe("visibility");
+    expect(classify("ui.view.techsheet")).toBe("visibility");
     expect(classify("ui.panel.layers")).toBe("visibility");
     expect(classify("ui.panel.properties")).toBe("visibility");
     expect(classify("ui.toggle.cmdline")).toBe("visibility");
@@ -149,6 +156,7 @@ describe("classify", () => {
     expect(classify("ui.animations.off")).toBe("animations");
     expect(classify("ui.animations.system")).toBe("animations");
     expect(classify("ui.dialog.commands")).toBe("palette");
+    expect(classify("ui.dialog.templates")).toBe("templates");
     expect(classify("ui.focus.cmdline")).toBe("focus");
     expect(classify("ui.focus.next")).toBe("focus");
     expect(classify("ui.focus.previous")).toBe("focus");
@@ -180,13 +188,21 @@ describe("UI_ITEMS", () => {
     expect([...UI_ITEMS.map((item) => item.id)].sort()).toEqual(
       [
         "ui.dialog.commands",
+        "ui.dialog.templates",
         "ui.toggle.sidebar",
         "ui.open",
         "ui.saveas",
         "ui.sample",
+        "ui.sample.bracket",
+        "ui.assistant.ask",
+        "ui.panel.bench",
         "ui.panel.layers",
+        "ui.panel.objects",
+        "ui.view.techsheet",
+        "ui.panel.piece",
         "ui.panel.properties",
         "ui.toggle.assistant",
+        "ui.toggle.source",
         "ui.toggle.cmdline",
         "ui.toggle.statusbar",
         "ui.toggle.toolbar",
@@ -212,6 +228,8 @@ describe("UI_ITEMS", () => {
     expect(byId.get("ui.sample")?.menu).toEqual(["Help", "Open Sample Drawing"]);
     expect(byId.get("ui.panel.layers")?.menu).toEqual(["Window", "Layers Palette"]);
     expect(byId.get("ui.toggle.cmdline")?.shortcut).toBe("Cmd+9");
+    expect(byId.get("ui.toggle.source")?.menu).toEqual(["Window", "Source"]);
+    expect(byId.get("ui.toggle.source")?.shortcut).toBe("Cmd+U");
     expect(byId.get("ui.toggle.menubar")?.label).toBe("In-window Menu Bar");
     expect(byId.get("ui.theme.dark")?.menu).toEqual(["View", "Interface Theme", "Dark"]);
     expect(byId.get("ui.animations.off")?.menu).toEqual(["View", "Accessibility", "Animation Effects", "Off"]);
@@ -315,7 +333,7 @@ describe("the menus' groups", () => {
 
   test("a menu without groups keeps its registered order, and no row leads a group", () => {
     const help = menu("Help", [], UI_ITEMS);
-    expect(help?.children.map((n) => n.label)).toEqual(["Open Sample Drawing", "Command Palette..."]);
+    expect(help?.children.map((n) => n.label)).toEqual(["Open Sample Drawing", "Open Sample Bracket", "Command Palette..."]);
     expect(help?.children.some((n) => n.group)).toBe(false);
   });
 
@@ -355,7 +373,7 @@ describe("the menus' groups", () => {
     }
     expect(groups[0]).toEqual(["Line", "Construction Line", "Ray", "Multiline", "Polyline", "3D Polyline", "Rectangle", "Polygon"]);
     expect(groups[1]).toEqual(["Arc", "Circle", "Donut", "Ellipse", "Spline", "Helix", "Revision Cloud"]);
-    expect(groups.map((g) => g.length)).toEqual([8, 7, 3, 5, 3, 4]);
+    expect(groups.map((g) => g.length)).toEqual([8, 7, 3, 5, 3, 5]);
   });
 });
 

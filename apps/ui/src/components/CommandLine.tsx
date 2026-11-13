@@ -13,20 +13,18 @@
  * field is an alert. A long error wraps to two lines and is then cut; it takes the focus (Tab, a
  * click) and shows its whole text while it has it; one cut by its width is the system's hint too.
  *
- * The typed line is the system's `Field`, bare: the strip around it (`.cmd-field`) draws the
- * edge, the fill and the focus, and sets the mono face the field takes; the prompt mark is the
- * field's `start` adornment, so it stands in a gutter of its own and the typed text starts after
- * it, on the panel's column. The field is not given a value: the history writes the element's
- * own, as before, so nothing is assigned back while an input method is composing.
+ * The typed line, its keys and its history are `./CommandField`.
  *
  * The props accept the value or the accessor form (Solid passes an attribute expression through
  * as written, so a parent may hand either); the component reads both.
  */
 
-import { createEffect, createSignal, For, onCleanup, onMount, Show, type Accessor, type JSX } from "solid-js";
-import { promptText, type PromptState } from "../prompt";
+import { createEffect, For, Show, type Accessor, type JSX } from "solid-js";
+import { freshError, promptText, type PromptState } from "../prompt";
 import { Chip } from "../ui/Chip";
-import { Field } from "../ui/Field";
+import { CommandField, readProp } from "./CommandField";
+
+export { commandLineLink, MAX_HISTORY, type CommandLineLink } from "./CommandField";
 
 export interface CommandLineProps {
   prompt: PromptState | Accessor<PromptState>;
@@ -34,128 +32,18 @@ export interface CommandLineProps {
   onSubmit: (text: string) => void;
 }
 
-/** How many submitted lines the Up/Down walk keeps. */
-export const MAX_HISTORY = 200;
-
-/**
- * What the drawing's dynamic input (`CanvasView`) needs of the command line on screen. What is
- * typed beside the pointer is the same input, so it goes through this field and no other way:
- * `echo` writes the typed part into the field as it is typed, and `submit` sends a line exactly
- * as Enter here, or a keyword's chip, does (remembered for the arrows, echoed to the history, the
- * field cleared), leaving the keyboard where it is.
- */
-export interface CommandLineLink {
-  echo: (text: string) => void;
-  submit: (text: string) => void;
-}
-
-/** The command line on screen; the window has one at most. */
-let mounted: CommandLineLink | null = null;
-
-/** The command line on screen, or null while it is folded away. */
-export function commandLineLink(): CommandLineLink | null {
-  return mounted;
-}
-
-/** Read a prop that may be a value or an accessor. */
-function read<T>(value: T | Accessor<T>): T {
-  return typeof value === "function" ? (value as Accessor<T>)() : value;
-}
-
 export function CommandLine(props: CommandLineProps): JSX.Element {
-  let input: HTMLInputElement | undefined;
   let scrollback: HTMLDivElement | undefined;
-  /** Submitted lines, most recent first; `walk` is the position the arrows are on (-1: none). */
-  const history: string[] = [];
-  let walk = -1;
-  /** The strip shows the field's focus (the field is bare and draws no ring of its own). */
-  const [focused, setFocused] = createSignal(false);
+  /** How a keyword's chip submits: the field's own way (`CommandField`). */
+  let submit: (text: string) => void = () => undefined;
 
-  const state = (): PromptState => read(props.prompt);
-
-  // The shell finds the field by this name (F6, Ctrl+J, typing from the drawing: `.cmd-input` in
-  // `app.tsx`). It is a hook only, added once the field has written its own classes: no rule
-  // styles it.
-  onMount(() => input?.classList.add("cmd-input"));
+  const state = (): PromptState => readProp(props.prompt);
 
   // Follow the tail as output arrives.
   createEffect(() => {
     state().output.length;
     if (scrollback !== undefined) scrollback.scrollTop = scrollback.scrollHeight;
   });
-
-  /**
-   * Submit a line: remembered for the arrows, cleared from the input, sent to the shell. The
-   * keyboard comes to the field, unless the line was typed on the drawing (`focus` false).
-   */
-  const submit = (text: string, focus = true): void => {
-    if (text.trim() !== "" && history[0] !== text) {
-      history.unshift(text);
-      if (history.length > MAX_HISTORY) history.length = MAX_HISTORY;
-    }
-    walk = -1;
-    if (input !== undefined) {
-      input.value = "";
-      if (focus) input.focus();
-    }
-    props.onSubmit(text);
-  };
-
-  // The drawing's dynamic input types into this command line while it is on screen.
-  const link: CommandLineLink = {
-    echo: (text) => {
-      walk = -1;
-      if (input !== undefined && input.value !== text) input.value = text;
-    },
-    submit: (text) => submit(text, false),
-  };
-  onMount(() => {
-    mounted = link;
-  });
-  onCleanup(() => {
-    if (mounted === link) mounted = null;
-  });
-
-  /** Move the walk: +1 is older (Up), -1 is newer (Down); beyond either end the input stays. */
-  const recall = (direction: number): void => {
-    if (input === undefined || history.length === 0) return;
-    const next = walk + direction;
-    if (next < -1 || next >= history.length) return;
-    walk = next;
-    input.value = walk === -1 ? "" : (history[walk] ?? "");
-    const end = input.value.length;
-    input.setSelectionRange(end, end);
-  };
-
-  const onKeyDown = (e: KeyboardEvent): void => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      submit(input?.value ?? "");
-    } else if (e.key === "Escape") {
-      // Typed text is what Escape takes first: the field is cleared and the key stops here. On
-      // an empty field the key is the shell's, which cancels the running command.
-      walk = -1;
-      if (input !== undefined && input.value !== "") {
-        e.preventDefault();
-        e.stopPropagation();
-        input.value = "";
-      }
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      recall(1);
-    } else if (e.key === "ArrowDown") {
-      e.preventDefault();
-      recall(-1);
-    }
-  };
-
-  /** The error to show beside the field: none when the history's last line already says it. */
-  const freshError = (): string | null => {
-    const error = state().error ?? read(props.notice);
-    if (error === null || error === undefined || error === "") return null;
-    const last = (state().output[state().output.length - 1] ?? "").trim();
-    return last !== "" && (last === error.trim() || last.includes(error.trim())) ? null : error;
-  };
 
   return (
     <section class="cmdline" aria-label="Command line">
@@ -175,30 +63,15 @@ export function CommandLine(props: CommandLineProps): JSX.Element {
         </div>
       </Show>
       <div class="cmd-entry">
-        <div class="cmd-field" classList={{ "is-focused": focused() }}>
-          <Field
-            variant="bare"
-            ref={(el) => {
-              input = el;
-            }}
-            spellcheck={false}
-            autocomplete="off"
-            placeholder={promptText(state())}
-            ariaLabel="Command line"
-            onKeyDown={onKeyDown}
-            onInput={() => {
-              walk = -1;
-            }}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            start={
-              <span class={state().running !== null ? "cmd-caret is-running" : "cmd-caret"} aria-hidden="true">
-                ›
-              </span>
-            }
-          />
-        </div>
-        <Show when={freshError()}>
+        <CommandField
+          placeholder={promptText(state())}
+          running={state().running !== null}
+          onSubmit={(text) => props.onSubmit(text)}
+          submitter={(run) => {
+            submit = run;
+          }}
+        />
+        <Show when={freshError(state(), readProp(props.notice))}>
           {(error) => (
             <span class="cmd-error" role="alert" data-hint="" tabindex="0">
               {error()}

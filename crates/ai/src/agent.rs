@@ -137,6 +137,37 @@ pub fn system_prompt(b: &Briefing) -> String {
          then fix up and size the geometry — that is how a photograph becomes a part.\n\n",
     );
     s.push_str(
+        "Fine jewelry is drafted here with the trade's own numbers, and they are commands. Each takes\n\
+         millimetres whatever the drawing's units are, and reports what it measured:\n\
+         - `ringsizes` converts a finger size between US, UK, EU, JP and CN; `ring` draws the blank a\n\
+         size and a wall make, and weighs it in the alloy named.\n\
+         - `gem` places a stone on its cut's real girdle (round, oval, emerald, marquise, pear and more)\n\
+         and reports its carat weight; `gemlist` lists the cuts and the stones.\n\
+         - `setting` builds prongs, a bezel, a halo of melee or channel rails on a stone named by its\n\
+         handle.\n\
+         - `pave` lays calibrated melee along a path or through a closed region; `gemfit` says how many\n\
+         stones of each size fit before anything is placed.\n\
+         - `piece` is a whole ring from a few numbers (a band, a solitaire or an eternity band): give\n\
+         it again with only what changed and the sheet rebuilds; its reply carries the weight, the\n\
+         stones and five checks. Prefer it to drawing a ring by hand.\n\
+         - `techsheet` is the bench sheet: the stones by cut and size with their carats, and the bands\n\
+         with their grams. Read it after a change to a piece and report its numbers.\n\
+         A jeweler speaks in finger sizes, millimetres, carats and grams: answer in those, and say when\n\
+         a fit failed or a size is off the calibrated list.\n\n",
+    );
+    s.push_str(
+        "Propose a change; the person decides. When asked to change the piece or the drawing, run it\n\
+         through `propose`: it runs the commands, reports the figures before and after, the checks that\n\
+         would fail or pass and the objects, and puts the drawing back. The person sees a card and\n\
+         accepts or rejects it.\n\
+         `(cmd \"propose\" '((TITLE . \"Wider band\") (STEPS . (((COMMAND . \"piece\") (PARAMS . ((WIDTH . 2.8))))))))`\n\
+         - An open request (\"options under $2,000\", \"something lighter\") gets two to four `VARIANTS`,\n\
+         each `((TITLE . …) (STEPS . …))`. Say in a line each what they come to, with the numbers, and\n\
+         ask which to accept.\n\
+         - `accept` is the person's: call it only when they name the one to take.\n\
+         - When the person says to just do it, run the commands directly.\n\n",
+    );
+    s.push_str(
         "How to report what you did:\n\
          - Say what you changed and **the numbers that came out of it**: how many objects, which handles or \
          layers, the size, the measured length, area or weight the tools reported. A report of a drawing is a \
@@ -326,6 +357,30 @@ mod tests {
         assert!(p.contains("Verify"));
         assert!(p.contains("the numbers that came out of it"), "a report of a drawing is measurements");
         assert!(p.contains("Silence about a surprise"));
+        // A change is proposed for the person to accept, with variants for an open request.
+        assert!(p.contains("`propose`"));
+        assert!(p.contains("`VARIANTS`"));
+        assert!(p.contains(r#"(cmd "propose" '((TITLE . "Wider band") (STEPS . (((COMMAND . "piece") (PARAMS . ((WIDTH . 2.8))))))))"#));
+        assert!(p.contains("`accept` is the person's"));
+        assert!(p.contains("just do it, run the commands directly"));
+    }
+
+    #[test]
+    fn the_proposal_paragraph_is_the_interface_s_word_for_word() {
+        // The interface's port (`apps/ui/src/assistant.ts`) carries the same paragraph; the two
+        // prompts differ only where the builds do (a file system, pictures on disk).
+        // Read at run time, so the crate builds on its own; a tree without the interface skips this.
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps/ui/src/assistant.ts");
+        let Ok(ui) = std::fs::read_to_string(&path) else {
+            return;
+        };
+        let p = system_prompt(&Briefing::default());
+        let start = p.find("Propose a change").unwrap_or(0);
+        let end = p[start..].find("\n\n").map_or(p.len(), |e| start + e);
+        for line in p[start..end].lines() {
+            let escaped = line.replace('\\', "\\\\").replace('"', "\\\"");
+            assert!(ui.contains(&escaped), "the interface's prompt lacks: {line}");
+        }
     }
 
     #[test]
