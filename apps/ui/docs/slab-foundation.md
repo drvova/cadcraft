@@ -232,6 +232,12 @@ Every region of the shell has a Slab part now. What is still SolidJS, and why:
    every list change a second, settling frame. Behaviour, keys and the screen reader's tree were
    the same (the options had to be mirrored in the page: `aria-activedescendant` cannot name a
    node in a shadow tree). The experiment is kept outside the repository as a patch.
+   **The menus** (the menu bar's, the ribbon's overflow, the context menus): built in Slab, each
+   level its own surface placed by the host, and not shipped. Behaviour matched the SolidJS menu
+   key for key, but Draw opened in 21.5 ms against 17.5 (median; 28 against 18 at p95), a row
+   crossed by the pointer cost about 9 ms of script against under 1, and an arrow key 9 against
+   0.6. The cost is the driver's: each frame it solves, serialises the whole scene and syncs an
+   accessibility node per scene node (230 for Draw). Kept outside the repository as a patch.
    **The tech sheet**: not attempted.
 2. **Text**: every free-text field, the assistant's conversation and editor. These wait on the
    kernel: word selection, a placeholder, copy that follows paragraphs, links, variable-height
