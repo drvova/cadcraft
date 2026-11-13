@@ -1701,6 +1701,12 @@ fn run_stlout(_s: &mut Session, p: &Value) -> Result<Value> {
     );
     let volume = solid.volume();
     let band = piece.band_volume();
+    if solid.bodies > 1 {
+        notes.push(format!(
+            "The metal is in {} separate pieces, not one: a seat cuts a part clean through (stones crowding each other or a prong) — give the stones more room.",
+            solid.bodies
+        ));
+    }
     let agreement = SOLID_AGREEMENT_PER_MM * solid.step;
     if piece.kind == PieceKind::Band && band > 0.0 && ((volume - band) / band).abs() > agreement {
         notes.push(format!(
@@ -1718,6 +1724,7 @@ fn run_stlout(_s: &mut Session, p: &Value) -> Result<Value> {
         "units": "mm",
         "step": r3(solid.step),
         "seats": mesh.seats,
+        "bodies": solid.bodies,
         "metal": {
             "name": piece.metal,
             "density": piece.density,

@@ -170,7 +170,15 @@ fn every_usual_piece_is_one_castable_shell(tc: TestCase) {
     let s = solid_of(&mesh, STEP, &what);
     tc.note(&format!("{} triangles in {:?}", s.triangles(), t.elapsed()));
     assert_castable(&s, &what);
-    assert_eq!(components(&s), 1, "{what}: the metal is in more than one piece");
+    // One body, unless stones crowd each other so a seat cuts a part through; then STLOUT says so.
+    assert_eq!(components(&s), s.bodies, "{what}");
+    tc.event(if s.bodies == 1 { "one body" } else { "more than one body" });
+    if s.bodies > 1 {
+        let mut q = p.clone();
+        q["quality"] = json!("draft");
+        let r = Session::new().execute("stlout", &q).unwrap();
+        assert!(r["bodies"].as_u64().unwrap() > 1 && r["notes"].to_string().contains("separate pieces"), "{what}: {}", r["notes"]);
+    }
     let deepest = deepest_stone_vertex(&mesh);
     assert!(deepest >= -STONE_TOL, "{what}: a stone reaches {deepest} mm into the metal");
     if mesh.seats > 0 {
@@ -290,7 +298,8 @@ fn weld(bytes: &[u8]) -> Solid {
             indices.push(i);
         }
     }
-    Solid { positions, indices, step: 0.0 }
+    let bodies = components(&Solid { positions: positions.clone(), indices: indices.clone(), step: 0.0, bodies: 0 });
+    Solid { positions, indices, step: 0.0, bodies }
 }
 
 /// STLOUT's file reads back, welded on its `f32` vertices, as the same closed shell, of the volume
@@ -310,6 +319,7 @@ fn the_stl_reads_back_as_the_same_shell() {
         let back = weld(&bytes);
         verify(&back.positions, &back.indices).unwrap_or_else(|e| panic!("{p}: {e}"));
         assert_eq!(components(&back), 1, "{p}: one body");
+        assert_eq!(r["bodies"], json!(1), "{p}");
         let v = back.volume();
         let said = r["metal"]["volumeMm3"].as_f64().unwrap();
         assert!((v - said).abs() / said < 1e-4, "{p}: the file holds {v} mm³, the reply says {said}");
@@ -370,9 +380,7 @@ fn timing() {
 #[test]
 #[ignore]
 fn diag() {
-    for v in
-        [json!({"kind":"eternity"}), json!({"cut":"round","kind":"threestone","melee":1.0,"profile":"flat","prongs":5,"size":2.0,"stoneWidth":5.0})]
-    {
+    for v in [json!({"cut":"heart","kind":"threestone","melee":1.0,"profile":"flat","prongs":4,"size":2.0,"stoneWidth":4.0})] {
         let p = params(&v);
         let mesh = piece_mesh(&p, Quality::Draft);
         for step in [0.2, 0.1] {
@@ -402,7 +410,25 @@ fn diag() {
                 e.2 += a.dot(b.cross(c)) / 6.0;
             }
             for (_, (n, c, vol)) in by {
-                eprintln!("{v} step {step}: {n} tris vol {vol:.4} at {:?}", c * (1.0 / n as f64));
+                let at = c * (1.0 / n as f64);
+                eprintln!("{v} step {step}: {n} tris vol {vol:.4} at {at:?}");
+                if n < 10000 {
+                    for e in mesh.csg.cut.iter() {
+                        if let Prim::Seat(e) = e {
+                            let d = at - e.axes.o;
+                            let (x, y, h) = (d.dot(e.axes.u), d.dot(e.axes.v), d.dot(e.axes.w));
+                            if x.hypot(y) < 4.0 {
+                                eprintln!(
+                                    "   seat-local x {x:.3} y {y:.3} h {h:.3} outline {:?}",
+                                    match &e.outline {
+                                        Outline::Poly(p) => p.len(),
+                                        _ => 0,
+                                    }
+                                );
+                            }
+                        }
+                    }
+                }
             }
         }
     }

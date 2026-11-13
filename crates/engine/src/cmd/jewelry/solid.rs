@@ -372,6 +372,9 @@ pub(super) struct Solid {
     pub indices: Vec<u32>,
     /// The grid step it was sampled at, in millimetres.
     pub step: f64,
+    /// How many separate bodies (closed shells) it is in, crumbs left out: one for a piece that
+    /// casts whole.
+    pub bodies: usize,
 }
 
 impl Solid {
@@ -625,11 +628,11 @@ pub(super) fn extract(csg: &Csg, step: f64, max_tris: usize) -> Result<Solid, Fa
         return Err(Fail::Empty);
     }
     verify(&positions, &indices).map_err(Fail::Broken)?;
-    let (positions, indices) = drop_crumbs(positions, indices);
+    let (positions, indices, bodies) = drop_crumbs(positions, indices);
     if indices.is_empty() {
         return Err(Fail::Empty);
     }
-    Ok(Solid { positions, indices, step })
+    Ok(Solid { positions, indices, step, bodies })
 }
 
 /// The closed shells smaller than this fraction of the whole (by volume) are sampling crumbs —
@@ -637,8 +640,8 @@ pub(super) fn extract(csg: &Csg, step: f64, max_tris: usize) -> Result<Solid, Fa
 const CRUMB: f64 = 1e-3;
 
 /// The shell without its crumbs: each edge-connected shell is closed on its own, so leaving one
-/// out leaves the rest closed and manifold.
-fn drop_crumbs(positions: Vec<Vec3>, indices: Vec<u32>) -> (Vec<Vec3>, Vec<u32>) {
+/// out leaves the rest closed and manifold. Also how many shells are kept.
+fn drop_crumbs(positions: Vec<Vec3>, indices: Vec<u32>) -> (Vec<Vec3>, Vec<u32>, usize) {
     let mut parent: Vec<u32> = (0..u32::try_from(positions.len()).unwrap_or(u32::MAX)).collect();
     fn find(p: &mut [u32], mut i: u32) -> u32 {
         while let Some(&up) = p.get(i as usize) {
@@ -673,9 +676,10 @@ fn drop_crumbs(positions: Vec<Vec3>, indices: Vec<u32>) -> (Vec<Vec3>, Vec<u32>)
         *volume.entry(r).or_default() += at(*a).dot(at(*b).cross(at(*c))) / 6.0;
     }
     if volume.len() <= 1 {
-        return (positions, indices);
+        return (positions, indices, volume.len());
     }
     let total: f64 = volume.values().map(|v| v.abs()).sum();
+    let bodies = volume.values().filter(|v| v.abs() >= CRUMB * total).count();
     let keep: Vec<u32> = indices
         .chunks_exact(3)
         .zip(&roots)
@@ -694,7 +698,7 @@ fn drop_crumbs(positions: Vec<Vec3>, indices: Vec<u32>) -> (Vec<Vec3>, Vec<u32>)
         }
         out.push(*slot);
     }
-    (kept, out)
+    (kept, out, bodies)
 }
 
 /// Every edge used once each way, no triangle repeating a vertex.
