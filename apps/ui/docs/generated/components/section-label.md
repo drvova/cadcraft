@@ -16,7 +16,7 @@ Not applicable: hand-rolled — the 11px uppercase header is measured from the r
 Real uses, 18 call sites (`rg -c "<SectionLabel" src/components` → `src/components/AssistantPane.tsx:4`, `src/components/BenchPanel.tsx:1`, `src/components/DraftingSettings.tsx:1`, `src/components/JewelryDialog.tsx:1`, `src/components/LayersPanel.tsx:1`, `src/components/PropertiesPanel.tsx:1`):
 - `src/components/JewelryDialog.tsx` — the heading over the Ring and Gem dialogs' read-out. Added 2026-11-12.
 - `src/components/DraftingSettings.tsx:209` — "Snap modes", over the Drafting Settings dialog's grid of object snap boxes.
-- `src/components/AssistantPane.tsx:1051` — the setup sheet's "Provider" heading over its list.
+- `src/components/AssistantPane.tsx:1057` — the setup sheet's "Provider" heading over its list.
 - `src/components/LayersPanel.tsx:83` — the "Layers" heading.
 - `src/components/BenchPanel.tsx` — the "Bench" heading over the piece's stones and metal. Added 2026-11-12.
 - `src/components/PropertiesPanel.tsx:88` — the "Properties" heading.

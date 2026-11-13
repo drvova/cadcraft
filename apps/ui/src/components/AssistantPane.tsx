@@ -38,6 +38,8 @@ import type { BenchSheet } from "../bench";
 import { mentionKey, mentionLabel, mentionOptions, mentionQuery, rankMentions, takeMention, type Mention } from "../mentions";
 import { highlight, rankCommands, slashQuery, SLASH_LIMIT, type PaletteItem } from "../palette";
 import { ToolIcon } from "../icons";
+import type { ProposalsModel, StillCache } from "../proposals";
+import { ProposalCards } from "./ProposalCards";
 import { Button } from "../ui/Button";
 import { Chip } from "../ui/Chip";
 import { Field } from "../ui/Field";
@@ -71,6 +73,10 @@ export interface AssistantPaneProps {
   onCloseChat: (index: number) => void;
   /** The panel's close button. */
   onClose: () => void;
+  /** The proposals waiting for a decision, drawn as cards over the composer (`./ProposalCards`). */
+  proposals?: ProposalsModel;
+  /** Draws the stills of a proposal's piece before and after. */
+  stills?: StillCache;
   /**
    * Draw the panel's frame another way (the Slab shell's `../slab/SlabAssistant`). Absent, the
    * panel draws itself as below. Either way every decision is this component's: the frame is
@@ -1209,6 +1215,20 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   );
   const stack = (): JSX.Element => (
       <>
+        {/* A decision that waits stands first over the input, in both shells. */}
+        <Show when={props.proposals}>
+          {(model) => (
+            <ProposalCards
+              model={model()}
+              stills={props.stills}
+              busy={s.running()}
+              onDecided={(title) => {
+                if (title !== null) s.noteAccepted(`Proposal: ${title}`);
+                queueMicrotask(() => inputEl?.focus());
+              }}
+            />
+          )}
+        </Show>
         <Show when={s.running() || s.status() !== "" || s.queued.length > 0 || s.changes() !== null || over() > 0}>
           <div class="assistant-stack">
             <Show when={s.queued.length > 0}>

@@ -33,6 +33,7 @@ import { draftingTabFor, opensDraftingSettings, type DraftingTab } from "./draft
 import { ContextMenu, isMenuKey, type MenuPoint, type OpenContextMenu } from "./components/ContextMenu";
 import { AssistantPane } from "./components/AssistantPane";
 import { createAssistantSession, type AssistantSession } from "./assistant-session";
+import { createProposals, createStillCache, patchTitle } from "./proposals";
 import { assistantStartsOpen } from "./assistant";
 import { CanvasView } from "./components/CanvasView";
 import { LayersPanel, type LayersPanelProps } from "./components/LayersPanel";
@@ -288,6 +289,8 @@ export function App(props: AppProps): JSX.Element {
   };
   /** A refusal was said during the key being handled (the Properties rows commit on Enter). */
   let saidOnKey = false;
+  /** Alt is down, as the last key or press reported it: a Piece edit committed then is proposed. */
+  let altHeld = false;
 
   /**
    * The window the current display list covers (the view the fetch was made for, padded) and the
@@ -403,6 +406,9 @@ export function App(props: AppProps): JSX.Element {
     readBench(state);
     readPiece(state);
     readObjects(state);
+    // What waits for a decision: a `propose` changes no revision, so this is read after every
+    // command, every tool call of the assistant's and every accept (cheap when nothing waits).
+    proposals.sync();
     syncDisplay();
   };
 
@@ -479,6 +485,17 @@ export function App(props: AppProps): JSX.Element {
    * field and handed back in the engine's words, for the row it names.
    */
   const onPieceRun = (params: Record<string, unknown>): string | null => {
+    // Alt held as the edit is committed (Alt+Enter in a field, Alt and a press on a choice): the
+    // edit is proposed, not made. The card shows what it would come to; the drawing is untouched.
+    if (altHeld && !("kind" in params) && !("remove" in params) && !("query" in params)) {
+      const env = props.facade.execute("propose", { steps: [{ command: "piece", params }], title: patchTitle(params) });
+      saidOnKey = !env.ok;
+      setNotice(env.ok ? null : env.error);
+      // The field shows the piece's own value again: nothing changed until the proposal is accepted.
+      pieceAt = null;
+      refresh();
+      return env.ok ? null : env.error;
+    }
     const env = props.facade.execute("piece", params);
     saidOnKey = !env.ok;
     setNotice(env.ok ? null : env.error);
@@ -520,6 +537,29 @@ export function App(props: AppProps): JSX.Element {
   // Each chat is its own session (its conversation, draft and running turn); a new chat is added
   // beside the others, as the editor keeps its chats in tabs, and never wipes one.
   const newChat = (): AssistantSession => createAssistantSession({ facade: props.facade, onChanged: () => refresh() });
+  // Proposals: changes read before they are made (`propose`), shown as cards over the assistant's
+  // composer until they are accepted or rejected. A proposal that arrives brings the panel out, so
+  // a decision that waits is always in view, wherever it was made (the command line, the Piece
+  // section, the assistant).
+  /** Whether the engine has the proposal commands; an engine without them is never asked. */
+  let proposalsKnown: boolean | null = null;
+  const proposals = createProposals({
+    execute: (command, params) => props.facade.execute(command, params),
+    available: () => {
+      if (proposalsKnown === null) {
+        const listed = props.facade.commands();
+        if (listed.length === 0) return false;
+        proposalsKnown = listed.some((c) => c.id === "proposals");
+      }
+      return proposalsKnown;
+    },
+    onChanged: () => refresh(),
+    onArrive: () => {
+      if (!untrack(showAssistant)) setShowAssistant(true);
+    },
+  });
+  const stills = createStillCache((command, params) => props.facade.execute(command, params));
+  onCleanup(() => stills.dispose());
   const [chats, setChats] = createSignal<readonly AssistantSession[]>([newChat()]);
   const [chatIndex, setChatIndex] = createSignal(0);
   const assistant = createMemo(() => chats()[Math.min(chatIndex(), chats().length - 1)]);
@@ -663,9 +703,17 @@ export function App(props: AppProps): JSX.Element {
     };
     window.addEventListener("keydown", onKeyCapture, true);
     window.addEventListener("keydown", onKey);
+    // Whether Alt is down, read on the way in of every key and press (a Piece edit committed
+    // with it is proposed); a window that loses focus forgets it.
+    const noteAlt = (e: KeyboardEvent | PointerEvent): void => void (altHeld = e.altKey);
+    const forgetAlt = (): void => void (altHeld = false);
+    for (const type of ["keydown", "keyup", "pointerdown", "pointerup"] as const) window.addEventListener(type, noteAlt, true);
+    window.addEventListener("blur", forgetAlt);
     onCleanup(() => {
       window.removeEventListener("keydown", onKeyCapture, true);
       window.removeEventListener("keydown", onKey);
+      for (const type of ["keydown", "keyup", "pointerdown", "pointerup"] as const) window.removeEventListener(type, noteAlt, true);
+      window.removeEventListener("blur", forgetAlt);
     });
   });
 
@@ -1468,6 +1516,8 @@ export function App(props: AppProps): JSX.Element {
           onNewChat={onNewChat}
           onCloseChat={onCloseChat}
           onClose={() => setShowAssistant(false)}
+          proposals={proposals}
+          stills={stills}
         />
       )}
     </Show>

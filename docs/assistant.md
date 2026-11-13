@@ -65,6 +65,8 @@ The panel is laid out like an agent panel, not a chat. It is
   changed the drawing, a row says how many changes there are and opens to one line per step.
   **Undo all** takes the drawing back to before them (the engine's `undoto`); **Keep** accepts
   them. The conversation stays either way.
+- **Proposals.** A change the model (or anyone) proposed waits as a card above the rows, with
+  Accept and Reject; see [Proposals](#proposals-a-change-shown-before-it-is-made).
 - **Pictures.** Attach with the paperclip, paste, or drop: up to four per message, 4 MB each.
   The model sees them. In the interface a picture has no file path, so the model cannot trace or
   measure it with code (see below).
@@ -221,8 +223,35 @@ proposals {"id": 3, "of": "after", "run": {"command": "techsheet"}}
 - **Reading a side**: `proposals {id, of, run}` runs `piece` (as a question), `techsheet`,
   `gemlist`, `objects` or `ringsizes` on the drawing as it was or as it would be. The solid of a
   side is `piecemesh` of that side's `piece.params`.
-- Nothing draws a proposal yet: the commands are the engine's (`crates/engine/src/cmd/proposal.rs`),
-  reachable from the command line, the tool and MCP like any other.
+- **The card.** The interface draws each proposal that waits as a card over the assistant's
+  composer, in both shells (`apps/ui/src/components/ProposalCards.tsx` over
+  `apps/ui/src/proposals.ts`). It has its title; the checks the change would fail, first, under
+  the words "Would fail" in the warning ink; a still of the piece before and after when both sides
+  have a piece and it differs (drawn by the 3D stage's renderer from `piecemesh` of each side's
+  parameters, lazily and one at a time, kept by the parameters; with no WebGL the tile says so in
+  words); a table of the figures that differ (label, before, after, the signed difference with its
+  unit, money in the price book's currency, each to the engine's precision); the checks it would
+  make pass and how many fail either way; and, when there is no piece to describe, a line of the
+  objects added, removed and changed. **Accept** (primary) and **Reject** end it; Accept waits
+  while the assistant's turn runs. A proposal the drawing has moved past says "Out of date" and
+  offers only Reject. The variants of one `propose` stand side by side where the panel has the
+  room and one under another where it has not, each with its own Accept, under one **Reject all**.
+- **Where it comes from.** The interface reads `proposals {}` after every command, every tool call
+  of the assistant's and every accept, so a proposal made anywhere is shown: typed at the command
+  line (`propose {…}` takes the JSON form), made by the assistant, or a Piece edit committed with
+  **Alt** held (Alt+Enter in a field, Alt and a press on a choice), which is proposed instead of
+  made. A proposal that arrives brings the assistant's panel out.
+- **Keyboard and screen reader.** The buttons are in the Tab order and Enter presses them; after a
+  decision the keyboard goes back to the composer. Each card is a region named by its title, the
+  figures are a table with its column headers, and a polite status says when a proposal arrives
+  and when one is accepted or rejected.
+- **Undo.** Accepting is one undo step, "Proposal: <title>". When the assistant's changes row is
+  open, an accepted proposal joins it, so **Undo all** says what it takes back; with no row open,
+  Undo takes it back like any other step.
+- **The model proposes.** The brief tells the model to change a piece or the drawing through
+  `propose`, with two to four variants for an open request, to say what each comes to, and to
+  leave `accept` to the person unless they name the one to take; when the person says to just do
+  it, the model runs the commands directly.
 
 ## The same tool over MCP
 
@@ -277,6 +306,7 @@ and that is the boundary.
 | `apps/ui/src/assistant.ts` | the interface's port: provider presets and checks, the wire protocol, the bounds, the brief, the transcript's text |
 | `apps/ui/src/assistant-session.ts` | one chat: the conversation, the queue, the changes, the stored setup |
 | `apps/ui/src/components/AssistantPane.tsx` | the panel and the setup sheet |
+| `apps/ui/src/proposals.ts`, `apps/ui/src/components/ProposalCards.tsx` | what waits for a decision, its rows and stills, and the cards over the composer |
 
 The tests are worth reading. `crates/mcp/src/tests.rs` drives the whole drafting workflow —
 a plate with holes, entity queries, texts, the report, a traced picture — **through `run` and
@@ -290,6 +320,7 @@ a provider's output, the queue and the changes row.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-13 | minor | The proposal card: each waiting proposal is a card over the composer in both shells (the checks it would fail first, the stills before and after, the figures that differ, Accept and Reject, Reject all over variants, a stale one says so). The interface reads what waits after every command and tool call; Alt+Enter in the Piece section proposes the edit. The brief asks the model to propose (variants for an open request) and leave `accept` to the person, in the interface and in `crates/ai` |
 | 2026-11-13 | minor | Proposals: `propose` reads a change (the piece's parameters, weight, stones, cost, checks, objects) and puts the drawing back; `accept` makes it as one undo step, `reject` forgets it, `proposals` lists them and reads either side. Engine commands only; nothing draws a proposal yet |
 | 2026-11-12 | minor | `@` context in the composer: the selection, bench lines and layers as chips that ride with one message |
 | 2026-11-12 | patch | The panel starts open on a wide window and remembers how it was left; a selection on the drawing offers the inline ask; the empty panel's suggestions are short enough to read whole at the panel's first width |

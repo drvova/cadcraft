@@ -13,9 +13,10 @@ Not applicable: hand-rolled — the pill radius, the 20px height and the accent 
 ## Examples
 `<Chip>26 objects</Chip>` — the selection count as a static fact.
 
-Real uses, 4 call sites (`rg -c "<Chip" src/components` → `src/components/AssistantPane.tsx:4`, `src/components/CommandLine.tsx:1`, `src/components/InlineAsk.tsx:1`):
+Real uses, 5 call sites (`rg -c "<Chip" src/components` → `src/components/AssistantPane.tsx:4`, `src/components/CommandLine.tsx:1`, `src/components/InlineAsk.tsx:1`, `src/components/ProposalCards.tsx:1`):
+- `src/components/ProposalCards.tsx:78` — a stale proposal's state beside its title (`neutral`, static): "Out of date", with a hint that the drawing changed since it was proposed. Added 2026-11-13.
 - `src/components/InlineAsk.tsx` — the inline ask's selection (`neutral`, static): how many objects on the drawing go with the message ("3 selected"), with a hint that says so. Added 2026-11-12.
-- `src/components/AssistantPane.tsx:820` — the setup sheet's model chips: one per model the connection check listed, click to put it in the Model field; the one in the field takes `tone="accent"`, the rest `neutral`.
+- `src/components/AssistantPane.tsx:826` — the setup sheet's model chips: one per model the connection check listed, click to put it in the Model field; the one in the field takes `tone="accent"`, the rest `neutral`.
 - `src/components/CommandLine.tsx:60` — the command line's keyword row (`tone="accent"`): one chip per keyword the open command offers, click to submit it.
 
 ### Example files

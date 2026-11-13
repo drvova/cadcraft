@@ -7,7 +7,9 @@
 import { describe, expect, test } from "bun:test";
 import { MAX_MESSAGE_CHARS, MAX_REQUEST_CHARS, type ProviderConfig } from "./assistant";
 import { createAssistantSession, loadProvider, MAX_ENTRIES, parseStoredProvider, STORAGE_KEY, turnStart, type AssistantSession, type SessionFacade } from "./assistant-session";
-import type { Envelope } from "./facade";
+import { AppFacade, type Envelope } from "./facade";
+import { MockFacade } from "./mock";
+import { createProposals } from "./proposals";
 
 const PROVIDER: ProviderConfig = { baseUrl: "http://127.0.0.1:11434/v1", model: "test-model", apiKey: "" };
 
@@ -417,6 +419,22 @@ describe("the checkpoint", () => {
     await say(session, "draw");
     await say(session, "again");
     expect(session.changes()).toEqual({ depth: 0, steps: 2, labels: ["Ran CIRCLE", "Ran CIRCLE"] });
+  });
+
+  test("a proposal accepted while the changes are open joins them, so Undo all says what it takes back", async () => {
+    const fake = fakeFacade();
+    const session = sessionWith(scriptedFetch(changing()).fetch, fake);
+    // Accepting with no changes open is an ordinary undo step: no row appears.
+    session.noteAccepted("Proposal: Wider");
+    expect(session.changes()).toBeNull();
+    await say(session, "draw");
+    // The accept is one more undo step above the checkpoint.
+    fake.setDepth(2);
+    session.noteAccepted("Proposal: Wider");
+    expect(session.changes()).toEqual({ depth: 0, steps: 2, labels: ["Ran CIRCLE", "Proposal: Wider"] });
+    session.undoChanges();
+    expect(fake.undone).toEqual([0]);
+    expect(session.status()).toBe("Undid 2 changes to the drawing");
   });
 
   test("a facade that names no depth never offers the bar", async () => {
@@ -992,5 +1010,45 @@ describe("what the reader pointed at with @", () => {
     session.mention({ kind: "layer", name: "Stones" });
     session.clear();
     expect(session.mentions()).toEqual([]);
+  });
+});
+
+describe("a turn that proposes", () => {
+  test("the model's propose lands as a waiting proposal; the drawing is untouched until the person accepts", async () => {
+    // The mock engine stands in for the drawing, and its `run` answers the one call this turn
+    // makes. The provider is the local fetch double: no model, no network.
+    const mock = new AppFacade(new MockFacade(), { kind: "mock", detail: "test" });
+    mock.execute("piece", { kind: "solitaire" });
+    const code = `(cmd "propose" '((VARIANTS . (((TITLE . "Wider") (STEPS . (((COMMAND . "piece") (PARAMS . ((WIDTH . 2.8))))))) ((TITLE . "Thin wall") (STEPS . (((COMMAND . "piece") (PARAMS . ((WALL . 0.5))))))))))))`;
+    const facade: SessionFacade = {
+      drawingState: () => mock.drawingState(),
+      selection: () => mock.selection(),
+      execute: (command, params) =>
+        command === "run" && String((params as { code?: string }).code).startsWith('(cmd "propose"')
+          ? mock.execute("propose", {
+              variants: [
+                { title: "Wider", steps: [{ command: "piece", params: { width: 2.8 } }] },
+                { title: "Thin wall", steps: [{ command: "piece", params: { wall: 0.5 } }] },
+              ],
+            })
+          : mock.execute(command, params),
+    };
+    const model = createProposals({ execute: (c, p) => mock.execute(c, p) });
+    const session = createAssistantSession({ facade, onChanged: () => model.sync(), fetchImpl: scriptedFetch([toolReply(code), textReply("Two options wait: accept one.")]).fetch });
+    session.setProvider(PROVIDER);
+    const width = (): unknown => {
+      const env = mock.execute("piece", { query: true });
+      return env.ok ? (env.result as { piece: { params: { width: number } } }).piece.params.width : null;
+    };
+    await say(session, "Show me a wider band and a lighter one");
+    expect(model.groups().map((g) => g.items.map((p) => p.title))).toEqual([["Wider", "Thin wall"]]);
+    expect(width()).toBe(2.2);
+    // A propose records no undo: the turn leaves no changes row to undo.
+    expect(session.changes()).toBeNull();
+    const wider = model.list()[0];
+    if (wider === undefined) throw new Error("nothing waits");
+    expect(model.accept(wider.id)).toBeNull();
+    expect(width()).toBe(2.8);
+    expect(model.list()).toEqual([]);
   });
 });

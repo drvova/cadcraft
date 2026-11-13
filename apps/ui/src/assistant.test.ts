@@ -269,6 +269,18 @@ describe("the tool surface", () => {
     expect(p.indexOf("Fine jewelry is drafted")).toBeLessThan(p.indexOf("How to report what you did"));
   });
 
+  test("the system prompt asks for a proposal, with variants for an open request, and leaves accept to the person", () => {
+    const p = systemPrompt(BRIEFING);
+    expect(p).toContain("`propose`");
+    expect(p).toContain("`VARIANTS`");
+    expect(p).toContain(`(cmd "propose" '((TITLE . "Wider band") (STEPS . (((COMMAND . "piece") (PARAMS . ((WIDTH . 2.8))))))))`);
+    expect(p).toContain("`accept` is the person's");
+    expect(p).toContain("just do it, run the commands directly");
+    // It stands after the jewelry commands it proposes, and before how to report.
+    expect(p.indexOf("Propose a change")).toBeGreaterThan(p.indexOf("Fine jewelry is drafted"));
+    expect(p.indexOf("Propose a change")).toBeLessThan(p.indexOf("How to report what you did"));
+  });
+
   test("a selection is named; a blank briefing still reads", () => {
     expect(systemPrompt({ ...BRIEFING, selection: 3 })).toContain("46; 3 selected");
     const blank = systemPrompt({ app: "", drawing: "", units: "", objects: 0, selection: 0, extents: null });

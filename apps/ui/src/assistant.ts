@@ -482,6 +482,17 @@ export function systemPrompt(b: Briefing): string {
     "A jeweler speaks in finger sizes, millimetres, carats and grams: answer in those, and say when\n" +
     "a fit failed or a size is off the calibrated list.\n\n";
   s +=
+    "Propose a change; the person decides. When asked to change the piece or the drawing, run it\n" +
+    "through `propose`: it runs the commands, reports the figures before and after, the checks that\n" +
+    "would fail or pass and the objects, and puts the drawing back. The person sees a card and\n" +
+    "accepts or rejects it.\n" +
+    "`(cmd \"propose\" '((TITLE . \"Wider band\") (STEPS . (((COMMAND . \"piece\") (PARAMS . ((WIDTH . 2.8))))))))`\n" +
+    "- An open request (\"options under $2,000\", \"something lighter\") gets two to four `VARIANTS`,\n" +
+    "each `((TITLE . …) (STEPS . …))`. Say in a line each what they come to, with the numbers, and\n" +
+    "ask which to accept.\n" +
+    "- `accept` is the person's: call it only when they name the one to take.\n" +
+    "- When the person says to just do it, run the commands directly.\n\n";
+  s +=
     "How to report what you did:\n" +
     "- Say what you changed and **the numbers that came out of it**: how many objects, which handles or " +
     "layers, the size, the measured length, area or weight the tools reported. A report of a drawing is a " +

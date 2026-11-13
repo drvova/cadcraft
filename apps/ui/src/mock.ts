@@ -97,6 +97,9 @@ export class MockFacade implements RawFacade {
   private viewport: [number, number] = [1200, 800];
   /** The drafting toggles the status bar shows (GRID, SNAP, ORTHO). */
   private toggles = { grid: true, snap: false, ortho: false };
+  /** The mock's proposals (`propose`): each with the drawing it was read on and the one it would leave. */
+  private proposals: MockProposal[] = [];
+  private proposalId = 0;
 
   constructor() {
     this.reset();
@@ -526,11 +529,153 @@ export class MockFacade implements RawFacade {
         return this.techSheet();
       case "pricebook":
         return this.priceBookCommand(params);
-      case "circle":
+      case "propose":
+        return this.proposeCommand(params);
+      case "accept":
+        return this.acceptCommand(params);
+      case "reject":
+        return this.rejectCommand(params);
+      case "proposals":
+        return this.proposalsCommand();
+      case "circle": {
+        // The JSON form the engine takes (`{center: [x, y], radius}`), so a proposal can add circles.
+        const c = params["center"];
+        const r = params["radius"];
+        if (Array.isArray(c) && typeof c[0] === "number" && typeof c[1] === "number" && typeof r === "number" && Number.isFinite(r) && r > 0) {
+          this.entities.push({ kind: "circle", layer: this.currentLayer, color: this.colorOf(this.currentLayer), cx: c[0], cy: c[1], r });
+          this.touch();
+          return envelope(true, { handles: [String(this.entities.length)], message: "circle: 1 drawn (mock)" });
+        }
         return envelope(false, { error: "circle: use the command line (`cmdline`) or centre/radius params in the mock" });
+      }
       default:
         return envelope(false, { error: `unknown command \`${command}\`` });
     }
+  }
+
+  // ---- proposals (a stand-in for `crates/engine/src/cmd/proposal.rs`) ----
+
+  private hold(): MockHeld {
+    return { entities: [...this.entities], piece: this.piece === null ? null : { ...this.piece }, revision: this.revision, dirty: this.dirty };
+  }
+
+  private putBack(held: MockHeld): void {
+    this.entities = [...held.entities];
+    this.piece = held.piece === null ? null : { ...held.piece };
+    this.revision = held.revision;
+    this.dirty = held.dirty;
+  }
+
+  /** What a drawing comes to, as `propose` reads it: the piece, its stones and grams, the estimate. */
+  private facts(): Record<string, unknown> {
+    const piece = this.piece === null ? null : this.pieceJson(this.piece);
+    const sheet = JSON.parse(this.techSheet()) as { result?: { bands?: { grams: number }[]; cost?: Record<string, unknown> } };
+    const r = sheet.result ?? {};
+    const grams = this.piece === null ? null : (r.bands ?? []).reduce((n, b) => n + b.grams, 0);
+    const cost = r.cost === undefined ? null : { total: r.cost["total"], metal: r.cost["metal"], stones: r.cost["stones"], currency: r.cost["currency"], unpriced: r.cost["unpriced"] };
+    const stones = piece === null ? null : piece["stones"];
+    return { piece, stones, grams: grams === null ? null : Math.round(grams * 100) / 100, cost };
+  }
+
+  private proposeCommand(params: Record<string, unknown>): string {
+    const bad = (error: string): string => envelope(false, { error: `propose: ${error}` });
+    type MockStep = { command: string; params: Record<string, unknown> };
+    const asSteps = (v: unknown): MockStep[] | string => {
+      if (!Array.isArray(v)) return "`steps` must be a list of {command, params}";
+      if (v.length === 0) return "a proposal needs at least one step";
+      const out: MockStep[] = [];
+      for (const [i, step] of v.entries()) {
+        const rec = typeof step === "object" && step !== null ? (step as Record<string, unknown>) : {};
+        if (typeof rec["command"] !== "string") return `step ${i + 1}: \`command\` must be a command's name`;
+        const command = rec["command"].toLowerCase();
+        if (["propose", "accept", "reject", "proposals", "undo", "redo", "pricebook"].includes(command)) return `step ${i + 1}: \`${command}\` cannot be proposed`;
+        const p = rec["params"];
+        out.push({ command, params: typeof p === "object" && p !== null && !Array.isArray(p) ? (p as Record<string, unknown>) : {} });
+      }
+      return out;
+    };
+    const variants: { title: string; steps: MockStep[] }[] = [];
+    if (Array.isArray(params["variants"])) {
+      for (const [i, v] of params["variants"].entries()) {
+        const rec = typeof v === "object" && v !== null ? (v as Record<string, unknown>) : {};
+        const steps = asSteps(rec["steps"]);
+        if (typeof steps === "string") return bad(`variant ${i + 1}: ${steps}`);
+        const t = rec["title"];
+        variants.push({ title: typeof t === "string" && t.trim() !== "" ? t.trim() : `Option ${i + 1}`, steps });
+      }
+      if (variants.length === 0) return bad("`variants` is empty");
+    } else {
+      const steps = asSteps(params["steps"]);
+      if (typeof steps === "string") return bad(steps);
+      const t = params["title"];
+      variants.push({ title: typeof t === "string" && t.trim() !== "" ? t.trim() : [...new Set(steps.map((s) => s.command))].join(", "), steps });
+    }
+    const base = this.hold();
+    const read: MockProposal[] = [];
+    for (const v of variants) {
+      const before = this.facts();
+      for (const [i, step] of v.steps.entries()) {
+        const reply = JSON.parse(this.execute(step.command, JSON.stringify(step.params))) as { ok: boolean; error?: string };
+        if (!reply.ok) {
+          this.putBack(base);
+          return bad(`step ${i + 1} (\`${step.command}\`) failed: ${reply.error ?? "it was refused"}`);
+        }
+      }
+      const after = this.facts();
+      const left = this.hold();
+      this.putBack(base);
+      read.push({ id: 0, group: 0, title: v.title, base: this.stamp(base), after: left, report: mockReport(v.title, v.steps, before, after, base.entities.length, left.entities.length) });
+    }
+    this.proposalId += 1;
+    const group = this.proposalId;
+    for (const p of read) {
+      this.proposalId += 1;
+      p.id = this.proposalId;
+      p.group = group;
+      p.report = { ...p.report, id: p.id, group };
+      this.proposals.push(p);
+    }
+    this.proposals = this.proposals.slice(-16);
+    const message = read.length === 1 ? String(read[0]?.report["message"] ?? "") : `${read.length} options proposed; accept one by its id`;
+    return envelope(true, { proposals: read.map((p) => p.report), message });
+  }
+
+  /** What a proposal is for: the drawing as it stood (a change of it makes the proposal stale). */
+  private stamp(held: MockHeld): string {
+    return JSON.stringify([held.entities, held.piece]);
+  }
+
+  private acceptCommand(params: Record<string, unknown>): string {
+    const id = params["id"];
+    const found = this.proposals.find((p) => p.id === id);
+    if (found === undefined) return envelope(false, { error: `there is no proposal ${String(id)} waiting` });
+    if (this.stamp(this.hold()) !== found.base) return envelope(false, { error: `the drawing changed since proposal ${found.id} was made; propose it again` });
+    this.putBack(found.after);
+    this.touch();
+    this.proposals = this.proposals.filter((p) => p.group !== found.group);
+    return envelope(true, { accepted: found.id, title: found.title, message: `Accepted: ${found.title}` });
+  }
+
+  private rejectCommand(params: Record<string, unknown>): string {
+    const id = params["id"];
+    let rejected: number[];
+    if (id === undefined || id === null) {
+      rejected = this.proposals.map((p) => p.id);
+      this.proposals = [];
+    } else {
+      const found = this.proposals.find((p) => p.id === id);
+      if (found === undefined) return envelope(false, { error: `there is no proposal ${String(id)} waiting` });
+      this.proposals = this.proposals.filter((p) => p !== found);
+      rejected = [found.id];
+    }
+    const message = rejected.length === 0 ? "No proposal was waiting" : rejected.length === 1 ? "Rejected the proposal; the drawing is as it was" : `Rejected ${rejected.length} proposals; the drawing is as it was`;
+    return envelope(true, { rejected, message });
+  }
+
+  private proposalsCommand(): string {
+    const now = this.stamp(this.hold());
+    const list = this.proposals.map((p) => ({ ...p.report, stale: p.base !== now }));
+    return envelope(true, { proposals: list, message: list.length === 0 ? "No proposal is waiting" : `${list.length} proposals are waiting` });
   }
 
   /**
@@ -630,7 +775,12 @@ export class MockFacade implements RawFacade {
       { cut: "round", width: 6.5, length: 6.5, depth: 4, sg: 3.52, count: 1, caratEach: 1.031, carat: 1.031, depthFrom: "name", calibrated: false, handles: [] as string[] },
       { cut: "round", width: 1.3, length: 1.3, depth: 0.8, sg: 3.52, count: 18, caratEach: 0.008, carat: 0.149, depthFrom: "default", calibrated: true, handles: [] as string[] },
     ];
-    const bands = [{ block: "RING-16.51x2.4", size: "US 6", mm: 16.51, metal, grams: 3.86, width: 2.4, wall: 1.8, handle: "A1" }];
+    // The band's weight follows the piece's width and wall, so a proposal has a weight to compare
+    // (3.86 g at the defaults, as before; nothing here is a real weight).
+    const width = typeof this.piece?.["width"] === "number" ? this.piece["width"] : 2.2;
+    const wall = typeof this.piece?.["wall"] === "number" ? this.piece["wall"] : 1.8;
+    const grams = Math.round(3.86 * (width / 2.2) * (wall / 1.8) * 100) / 100;
+    const bands = [{ block: "RING-16.51x2.4", size: "US 6", mm: 16.51, metal, grams, width: 2.4, wall: 1.8, handle: "A1" }];
     const reply: Record<string, unknown> = {
       stones: { groups, count: 19, carat: 1.18 },
       bands,
@@ -965,6 +1115,10 @@ export class MockFacade implements RawFacade {
       { id: "layer", label: "Layers", menu: ["Format", "Layers"], shortcut: "", aliases: ["la"], params: "{} → layers", enabled: true },
       { id: "layer.set", label: "Set Layer Properties", menu: [], shortcut: "", aliases: [], params: "{name, on?, frozen?, locked?}", enabled: true },
       { id: "layer.current", label: "Make Current", menu: [], shortcut: "", aliases: [], params: "{name}", enabled: true },
+      { id: "propose", label: "Propose a Change", menu: [], shortcut: "", aliases: [], params: "{steps: [{command, params?}], title?} | {variants: [{title?, steps}]} → {proposals, message}", enabled: true },
+      { id: "accept", label: "Accept Proposal", menu: [], shortcut: "", aliases: [], params: "{id} → {accepted, title, message}", enabled: true },
+      { id: "reject", label: "Reject Proposal", menu: [], shortcut: "", aliases: [], params: "{id?} → {rejected, message}", enabled: true },
+      { id: "proposals", label: "Proposals", menu: [], shortcut: "", aliases: [], params: "{} → {proposals: [report + {stale}]}", enabled: true },
       { id: "piece", label: "Piece", menu: [], shortcut: "", aliases: [], params: "{kind?: band|solitaire|eternity, metal?: gold24|22|18|14|platinum|silver (default gold18), query?, remove?} → {piece}", enabled: true },
       { id: "objects", label: "Objects", menu: [], shortcut: "", aliases: [], params: "{limit?: n (default 2000, at most 5000)} → {objects: [{handle, kind, layer, size?}], total, truncated, space}", enabled: true },
       { id: "techsheet", label: "Tech Sheet", menu: ["Inquiry", "Tech Sheet"], shortcut: "", aliases: ["bom", "stonesheet"], params: "{handles?, metal?, section?, size?, system?, price?} → {stones, bands, metal, cost?, message}", enabled: true },
@@ -1253,4 +1407,87 @@ function mockStl(meshes: readonly MockMesh[], name: string): Record<string, unkn
   let binary = "";
   for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return { format: "stl-binary", base64: btoa(binary), bytes: bytes.length, triangles, name };
+}
+
+// ---- the mock's proposals ----
+
+interface MockHeld {
+  entities: Entity[];
+  piece: Record<string, unknown> | null;
+  revision: number;
+  dirty: boolean;
+}
+
+interface MockProposal {
+  id: number;
+  group: number;
+  title: string;
+  /** The drawing it was read on, as one string: another drawing makes it stale. */
+  base: string;
+  after: MockHeld;
+  report: Record<string, unknown>;
+}
+
+/** The piece's parameters a card names, with the engine's words for them (the mock's subset). */
+const MOCK_PARAMS: readonly [string, string, string | null][] = [
+  ["kind", "Kind", null],
+  ["width", "Width", "mm"],
+  ["wall", "Wall", "mm"],
+  ["profile", "Profile", null],
+  ["metal", "Metal", null],
+  ["cut", "Cut", null],
+  ["stone", "Stone", null],
+  ["stoneLength", "Stone length", "mm"],
+  ["stoneWidth", "Stone width", "mm"],
+  ["prongs", "Prongs", null],
+  ["halo", "Halo", null],
+];
+
+/** A `propose` report in the engine's shape, from the mock's own canned figures. */
+function mockReport(title: string, steps: readonly unknown[], before: Record<string, unknown>, after: Record<string, unknown>, objectsBefore: number, objectsAfter: number): Record<string, unknown> {
+  const at = (v: unknown, path: readonly string[]): unknown => path.reduce<unknown>((cur, key) => (typeof cur === "object" && cur !== null ? (cur as Record<string, unknown>)[key] : undefined), v) ?? null;
+  const rows: Record<string, unknown>[] = [];
+  const change = (key: string, label: string, b: unknown, a: unknown, unit: string | null): void => {
+    if (JSON.stringify(b) === JSON.stringify(a)) return;
+    const row: Record<string, unknown> = { key, label, before: b, after: a };
+    if (typeof a === "number" && typeof b === "number") row["delta"] = Math.round((a - b) * 1000) / 1000;
+    if (unit !== null) row["unit"] = unit;
+    rows.push(row);
+  };
+  for (const [key, label, unit] of MOCK_PARAMS) change(`piece.${key}`, label, at(before, ["piece", "params", key]), at(after, ["piece", "params", key]), unit);
+  change("grams", "Metal weight", at(before, ["grams"]), at(after, ["grams"]), "g");
+  change("stones.count", "Stones", at(before, ["stones", "count"]), at(after, ["stones", "count"]), "pc");
+  change("stones.carat", "Stone weight", at(before, ["stones", "carat"]), at(after, ["stones", "carat"]), "ct");
+  const currency = at(after, ["cost", "currency"]) ?? at(before, ["cost", "currency"]);
+  change("cost.total", "Estimate", at(before, ["cost", "total"]), at(after, ["cost", "total"]), typeof currency === "string" ? currency : null);
+  type Check = { id: string; ok: boolean; message: string };
+  const checks = (v: unknown): Check[] => {
+    const list = at(v, ["piece", "checks"]);
+    return Array.isArray(list) ? (list as Check[]) : [];
+  };
+  const was = checks(before);
+  const now = checks(after);
+  const okBefore = (id: string): boolean | undefined => was.find((c) => c.id === id)?.ok;
+  const row = (c: Check): Record<string, unknown> => ({ id: c.id, message: c.message });
+  const turned = {
+    fixed: now.filter((c) => c.ok && okBefore(c.id) === false).map(row),
+    broken: now.filter((c) => !c.ok && okBefore(c.id) !== false).map(row),
+    failing: now.filter((c) => !c.ok).map(row),
+  };
+  const added = Math.max(0, objectsAfter - objectsBefore);
+  const removed = Math.max(0, objectsBefore - objectsAfter);
+  const parts = rows.slice(0, 4).map((r) => `${String(r["label"])} ${String(r["before"] ?? "none")} → ${String(r["after"] ?? "none")}${r["unit"] === undefined ? "" : ` ${String(r["unit"])}`}`);
+  if (parts.length === 0) parts.push(`${added} added, ${removed} removed, 0 changed`);
+  if (turned.broken.length > 0) parts.push(`${turned.broken.length} check(s) would fail`);
+  return {
+    title,
+    steps,
+    before,
+    after,
+    changes: rows,
+    checks: turned,
+    objects: { before: objectsBefore, after: objectsAfter, added, removed, modified: 0 },
+    unchanged: rows.length === 0 && added === 0 && removed === 0,
+    message: `${title}: ${parts.join("; ")}`,
+  };
 }

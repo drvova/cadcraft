@@ -494,6 +494,18 @@ export function createAssistantSession(opts: SessionOptions) {
     opts.onChanged();
   };
 
+  /**
+   * The reader accepted a proposal (one undo step, `label` its name) while the assistant's changes
+   * were still open: the row counts it, so Undo all says what it takes back. With no changes open
+   * the accepted step is an ordinary one, undone like any other.
+   */
+  const noteAccepted = (label: string): void => {
+    const c = changes();
+    if (c === null || running()) return;
+    const now = undoDepth();
+    setChanges({ depth: c.depth, steps: now === null ? c.steps + 1 : Math.max(c.steps, now - c.depth), labels: [...c.labels, label] });
+  };
+
   const keepChanges = (): void => {
     ranSince = [];
     setChanges(null);
@@ -559,6 +571,7 @@ export function createAssistantSession(opts: SessionOptions) {
     canRetry,
     retry,
     undoChanges,
+    noteAccepted,
     keepChanges,
     clear,
     toggleTool,
