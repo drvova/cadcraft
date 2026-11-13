@@ -108,8 +108,13 @@ export function SlabShell(props: SlabShellProps): JSX.Element {
       return { total: work.w, height: work.h, sizes };
     };
 
+    /** The bench height last reported: a param that is set asks for a frame, and this is called from one. */
+    let benchReported = -1;
     const reportBench = (height: number): void => {
-      host.setParam("bench_h", Math.max(0, Math.min(benchNatural, Math.floor(height * BENCH_SHARE))));
+      const next = Math.max(0, Math.min(benchNatural, Math.floor(height * BENCH_SHARE)));
+      if (next === benchReported) return;
+      benchReported = next;
+      host.setParam("bench_h", next);
     };
 
     const detach = attachSurface(host, ["panes_resized"], () => {

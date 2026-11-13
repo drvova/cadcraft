@@ -181,21 +181,36 @@ standard 429 ms, Slab 659 ms). Loaded at start by the standard interface: no Sla
 - Better: the layout cannot overlap or overflow, the document is checked by a compiler, and the
   same file would paint in the native and terminal drivers.
 
-## Next panels (agent-hours, in the order recommended)
+## Ported regions
 
-1. **Layers** (4 to 6): a list with three toggles and a swatch; needs a context-menu signal and
-   the host's tooltip. Proves lists with several controls per row.
-2. **Piece** (6 to 8): buttons, rows of results and checks; little input.
-3. **Objects** (8 to 12): a tree (`list` of `list`), a search field (the kernel's text editing and
-   IME, untested here), `virtual` for long lists.
-4. **Properties** (12 to 16): fields, selects and checkboxes per row. A select is an anchored
-   overlay the host must dismiss and focus-manage (§6.10); this is the first real test of fields.
-5. **Status bar and tabs** (4 to 6 each).
-6. **Ribbon** (12 to 16): overflow folding, a menu, tooltips on every key.
-7. **Dialogs** (16 to 24 for the layer, then 4 to 8 each): no modal primitive; focus trapping and
+Each is a document in `slab/`, a host in `src/slab/`, an optional member of `SlabParts` added by a
+`with…` step in `main.tsx`; the SolidJS one shows in its place when its document does not load,
+and the notice names the part. Logic is shared with the SolidJS component, not forked.
+
+| Region | Document | Notes |
+|---|---|---|
+| Bench | `bench.slab` | above |
+| Layers | `layers.slab` | host tooltips through `hints.ts`; the layer menu by pointer and keyboard; capped at 500 rows with a line for the rest; the off, frozen and locked inks are read from the page (`color-mix` is not in the token bridge) |
+| Piece | `piece.slab` | the kernel's text field for numbers (a `hole` is forbidden in an `each`); a choice opens inline, not as a popup; focusing a field selects its value; the edit machine is `src/piece-edit.ts`, shared |
+| Objects | `objects.slab` | a `virtual` list (about twenty rows laid out whatever the drawing holds); the search field is the SolidJS `ObjectsSearch` in a hole: the kernel's field has no word selection, no search role, and draws IME text over its placeholder |
+| Status bar | `statusbar.slab` | toggles are switches (no `aria-pressed`); a pointer move over the drawing costs about 2 ms more script than the SolidJS bar (the driver re-syncs the whole accessibility layer each frame) |
+| View tabs | `tabs.slab` | finger pan and edge fades are the host's |
+
+Known to be worse than SolidJS in all of them: one tab stop with arrows per surface; a pointer
+press can show the focus ring; no kerning; a screen reader sees switches where SolidJS has pressed
+buttons. The standard shell carries no Slab code, but sharing logic split its bundle: it loads a
+few more chunks than before.
+
+## Next (agent-hours)
+
+1. **Properties** (12 to 16): fields, selects and checkboxes per row. The Piece port shows the
+   kernel's field is usable for numbers with host workarounds; a select needs an anchored overlay
+   the host must dismiss and focus-manage (§6.10).
+2. **Ribbon** (12 to 16): overflow folding, a menu, tooltips on every key.
+3. **Dialogs** (16 to 24 for the layer, then 4 to 8 each): no modal primitive; focus trapping and
    restoration are the host's.
 
-Before 3 and 4, settle tooltips and a keyboard convention for surfaces (one stop with arrows, or
+Before these, settle tooltips and a keyboard convention for surfaces (one stop with arrows, or
 let Tab through per control with a kernel change).
 
 Missing or broken for this application at the pinned commit:
@@ -211,6 +226,13 @@ Missing or broken for this application at the pinned commit:
 - No `prefers-reduced-motion`, no host motion switch (§14).
 - `max-w`/`max-h` take no percentage (§5).
 - No `aria-current`, `aria-pressed` (§15.2).
+- New list items' accessibility nodes are appended, not placed in order (`element.ts`
+  `#syncSemantics`); every frame re-syncs the whole layer.
+- An `each` directly under `wrap` is one block; a `hole` is forbidden in an `each`; a `virtual`
+  list must be a root list.
+- A focused end-aligned field is scrolled 8 and keeps the scroll after blur.
+- `when coarse { tokens … }` does not apply under a named theme; a scroll row does not pan by touch.
+- The focus ring stays after blur and shows on a pointer press.
 - `registerFont` needs bytes (patch 0003 of the series adds `registerFontMetrics`).
 - The fonts are compiled in with no switch, and `slab-compile` does not build from a clean
   checkout (patches 0002 and 0001).

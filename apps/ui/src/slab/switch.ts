@@ -25,3 +25,11 @@ export function slabFailed(reason: string): string {
   const line = reason.replace(/\s+/g, " ").trim().slice(0, 160);
   return `The Slab shell did not load (${line === "" ? "unknown error" : line}); showing the standard interface.`;
 }
+
+/**
+ * The same, for one part of the shell (a section, the status bar, the tabs): the shell itself is
+ * shown, and only that part is the standard one. `reason` is what the loader said of the document.
+ */
+export function slabPartNotice(part: string, reason: string): string {
+  return reason.replace("The Slab shell did not load", `The Slab ${part} did not load`).replace("showing the standard interface.", "showing the standard one in its place.");
+}

@@ -120,17 +120,17 @@ export function LayoutTabs(props: LayoutTabsProps): JSX.Element {
 }
 
 /** A count as it is read: grouped in threes ("1,284,019"), so a large drawing's is not a run of digits. */
-const count = (n: number): string => n.toLocaleString("en-US");
+export const count = (n: number): string => n.toLocaleString("en-US");
 
 /** The fewest characters a long layer name keeps in a bar too short for all of it. */
-const LAYER_FLOOR = 6;
+export const LAYER_FLOOR = 6;
 
 /**
  * The coordinate readout's width in characters: room for three four-digit ordinates with a sign
  * ("-1234.5678, -1234.5678, 0.0000") to start with, and the most a longer position may claim.
  */
-const COORD_FLOOR = 30;
-const COORD_CEILING = 48;
+export const COORD_FLOOR = 30;
+export const COORD_CEILING = 48;
 
 export interface StatusBarProps {
   settings: SettingsState;

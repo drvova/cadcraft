@@ -1,0 +1,164 @@
+// The status bar: at the start what the window is working on (which engine is live, the current
+// layer, how much the drawing holds, how much of it is selected), then the drafting toggles, and
+// at the end the pointer's position in a box of a reserved width. The view only: every text is
+// shaped, and what gives way in a short bar is decided, in TypeScript
+// (src/slab/statusbar-params.ts); a press, a right click and the pointer's rest come back as
+// signals.
+//
+// Measures follow src/chrome.css (.statusbar and below) and src/ui/ui.css (.ui-toggle--text): a
+// line is the row's height less the bar's own top hairline, a fact is 12px type with 12 after it,
+// a toggle is a word in capitals at 11px, tracked, on a chip 3 short of the line above and below.
+import "gen/tokens.slab"
+
+tokens {
+  status {
+    // One line of the bar, and the chip a toggle's word stands on.
+    line 21; chip 15
+    // Under a finger the line is the button's height (chrome.css: `pointer: coarse`). Each node
+    // that is a line high says so itself (and a toggle's word takes more room around it, on a
+    // chip never narrower than the target: ui.css, `.ui-toggle--text`): a `when coarse` over the tokens holds in the default
+    // theme only, and the light theme is a named one.
+    line-touch 27; chip-touch 19
+    // A toggle's tracking (.04em of 11px) and the height of the rule before the position.
+    track 0.44; rule 12; dot 6
+    // The room after a fact that is whole or gone: the 12 after every fact, and the hairline of
+    // slack the SolidJS bar's one-line box ends with (chrome.css: `.status-fit::after`).
+    after 13
+    // The room between the rule and the position's box: the bar's 8, less the rule itself.
+    rule-gap 7
+    // The type size of words that are read out and not drawn (what a value is, which a sighted
+    // reader has from its place in the bar): they take no room to speak of, and no ink.
+    said 0.01
+  }
+}
+
+
+// One drafting toggle: the whole line is its target, the chip is its face. `name` is what it is
+// called and `shortcut` its function key; `face` is the word drawn. The room between two toggles
+// is before each one but a line's first (`lead`; an `each` sets its items side by side and takes
+// no gap).
+def StatusToggle(name="", face="", shortcut="", on=false, lead=true) export {
+  row {
+    when lead { pad-l=space.g4 }
+    row h=status.line align=center color=color.text-faint role=switch label=name desc=shortcut checked=on \
+        act=toggle context=toggle_settings pointer-move=hint transition=dur.fast {
+      when coarse { h=status.line-touch }
+      when hover { color=color.text-dim }
+      when on { color=color.text }
+      when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+      // Off, the word is on nothing and takes the faintest fill under the pointer; on, it stands
+      // on that fill and takes the selected one under the pointer.
+      when !on {
+        row h=status.chip pad=0,space.g3 align=center radius=radius.control transition=dur.fast {
+          when coarse { h=status.chip-touch pad=0,space.g8 min-w=size.control-h-input pack=center }
+          when hover { bg=color.hover }
+          text face style=text.chip tracking=status.track nowrap
+        }
+      }
+      when on {
+        row h=status.chip pad=0,space.g3 align=center radius=radius.control bg=color.hover transition=dur.fast {
+          when coarse { h=status.chip-touch pad=0,space.g8 min-w=size.control-h-input pack=center }
+          when hover { bg=color.fill-active }
+          text face style=text.chip tracking=status.track nowrap
+        }
+      }
+    }
+  }
+}
+
+// One line of the toggles' run. The host breaks the run into lines (statusbar-params.ts): an
+// `each` under a `wrap` is one box to the wrap at this commit, and a wrap sets its lines from
+// the start, where the run stands at the end of the bar's room.
+def ToggleLine(toggles=list(StatusToggle)) export {
+  row pack=end {
+    each toggles
+  }
+}
+
+params {
+  // The engine that is live, and whether it is the real one.
+  mode text = ""
+  live bool = false
+  layer text = ""
+  // The width of the layer's name: its own, never less than its first letters' and never more
+  // than the bar lets one name take; the host narrows it first of all.
+  layer_w num = 0
+  objects text = ""
+  layers text = ""
+  selection text = ""
+  selected bool = false
+  // What a bar too short for everything still shows (the host's order: statusbar-params.ts).
+  show_mode bool = true
+  show_objects bool = true
+  show_layers bool = true
+  show_coord bool = true
+  coord text = ""
+  // The position's box: the widest text it has held, in the mono face.
+  coord_w num = 0
+  lines list(ToggleLine) = []
+}
+
+col #bar w=fill bg=color.chrome-dark pad-t=size.hairline stroke=color.border stroke-sides=t \
+    stroke-align=inside role=contentinfo label="Status" pointer-move=hint_off {
+  row #line w=fill min-h=status.line pad=0,space.g8 align=center color=color.text-faint {
+    when coarse { min-h=status.line-touch }
+    // A fact that has given way is absent. (A `when`'s children come after the node's own, so
+    // each fact that comes and goes has a box of its own at its place in the bar.) The words a
+    // sighted reader has from a value's place ("Engine:", "Current layer:") are set at `status.said`.
+    row #mode h=status.line align=center pointer-move=hint {
+      when coarse { h=status.line-touch }
+      when show_mode {
+        pad-r=status.after
+        text "Engine:" style=text.label size=status.said opacity=0 nowrap
+        rect w=status.dot h=status.dot radius=radius.round bg=color.warn {
+          when live { bg=color.toggle-on }
+        }
+        row pad-l=space.g6 align=center { text param.mode style=text.label nowrap }
+      }
+    }
+    row #layer h=status.line pad-r=space.g12 align=center pointer-move=hint {
+      when coarse { h=status.line-touch }
+      text "Current layer:" style=text.label size=status.said opacity=0 nowrap
+      text param.layer style=text.label w=param.layer_w nowrap ellipsis
+    }
+    row #objects h=status.line align=center pointer-move=hint {
+      when coarse { h=status.line-touch }
+      when show_objects {
+        pad-r=status.after
+        text param.objects style=text.label nowrap
+      }
+    }
+    row #layers h=status.line align=center pointer-move=hint {
+      when coarse { h=status.line-touch }
+      when show_layers {
+        pad-r=status.after
+        text param.layers style=text.label nowrap
+      }
+    }
+    // A live region, there from the start, so that what arrives in it is announced.
+    row #selection h=status.line align=center role=status live=polite pointer-move=hint {
+      when coarse { h=status.line-touch }
+      when selected {
+        pad-r=status.after
+        text param.selection style=text.label nowrap
+      }
+    }
+    spacer
+    // The toggles keep every word whole and take a second line when the bar has no room left
+    // to give them; the bar grows by it.
+    col #toggles role=toolbar label="Drafting settings" {
+      each param.lines
+    }
+    row #coord h=status.line align=center pointer-move=hint {
+      when coarse { h=status.line-touch }
+      when show_coord {
+        pad-l=space.g8
+        text "Pointer position:" style=text.label size=status.said opacity=0 nowrap
+        rect w=size.hairline h=status.rule bg=color.border
+        row w=param.coord_w pad-l=status.rule-gap pack=end align=center {
+          text param.coord style=text.mono color=color.text-dim nowrap
+        }
+      }
+    }
+  }
+}

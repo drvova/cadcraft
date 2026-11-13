@@ -1,0 +1,47 @@
+/*
+ * The page side of the two bars drawn by Slab (`SlabStatusBar.tsx`, `SlabTabs.tsx`): the box each
+ * surface stands in, and the invisible stand-ins the interface's hint is placed by (`chrome-hints.ts`).
+ * Everything that is drawn is the documents' (`slab/statusbar.slab`, `slab/tabs.slab`).
+ */
+
+/* The box a surface stands in: as tall as the surface, and what the stand-ins are placed in. */
+.slab-status,
+.slab-tabs {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+/* The status bar's box carries the SolidJS bar's class, which the menus look for to stop above
+   it. Nothing of that bar's own layout or paint applies: the document draws all of it. */
+.statusbar.slab-status {
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  overflow: visible;
+}
+
+.slab-surface {
+  display: block;
+}
+
+/* A finger on the strip of tabs pans it (the host scrolls it), and does nothing else. */
+.slab-tabs .slab-surface {
+  touch-action: none;
+}
+
+/* A stand-in for one control of a surface: laid over the control's rectangle, never seen, never
+   in the pointer's way. The hint is placed beside it. Its text (what the control already shows)
+   is there to be compared, not drawn. */
+.slab-hint-anchor {
+  position: absolute;
+  left: var(--slab-hint-x, 0);
+  top: var(--slab-hint-y, 0);
+  width: var(--slab-hint-w, 0);
+  height: var(--slab-hint-h, 0);
+  overflow: hidden;
+  font-size: 0;
+  visibility: hidden;
+  pointer-events: none;
+}

@@ -9,7 +9,7 @@
 import { render } from "solid-js/web";
 import { App } from "./app";
 import { createFacade } from "./facade";
-import { shellChoice } from "./slab/switch";
+import { shellChoice, slabPartNotice } from "./slab/switch";
 import type { SlabParts } from "./slab/parts";
 import "./tokens.css";
 import "./ui/ui.css";
@@ -31,7 +31,7 @@ async function loadSlabParts(): Promise<SlabBoot> {
   const shell = await loadSlab("shell");
   if (!shell.ok) return { notice: shell.reason };
   const [{ SlabShell }, bench] = await Promise.all([import("./slab/SlabShell"), loadSlab("bench")]);
-  if (!bench.ok) return { parts: { Shell: SlabShell }, notice: bench.reason };
+  if (!bench.ok) return { parts: { Shell: SlabShell }, notice: slabPartNotice("Bench section", bench.reason) };
   const { SlabBench } = await import("./slab/SlabBench");
   return { parts: { Shell: SlabShell, Bench: SlabBench } };
 }
@@ -41,7 +41,7 @@ async function withLayers(boot: SlabBoot): Promise<SlabBoot> {
   if (boot.parts === undefined) return boot;
   const { loadSlab } = await import("./slab/loader");
   const layers = await loadSlab("layers");
-  if (!layers.ok) return { ...boot, notice: boot.notice ?? layers.reason };
+  if (!layers.ok) return { ...boot, notice: boot.notice ?? slabPartNotice("Layers section", layers.reason) };
   const { SlabLayers } = await import("./slab/SlabLayers");
   return { ...boot, parts: { ...boot.parts, Layers: SlabLayers } };
 }
@@ -51,7 +51,7 @@ async function withPiece(boot: SlabBoot): Promise<SlabBoot> {
   if (boot.parts === undefined) return boot;
   const { loadSlab } = await import("./slab/loader");
   const piece = await loadSlab("piece");
-  if (!piece.ok) return { ...boot, notice: boot.notice ?? piece.reason };
+  if (!piece.ok) return { ...boot, notice: boot.notice ?? slabPartNotice("Piece section", piece.reason) };
   const { SlabPiece } = await import("./slab/SlabPiece");
   return { ...boot, parts: { ...boot.parts, Piece: SlabPiece } };
 }
@@ -61,10 +61,22 @@ async function withObjects(boot: SlabBoot): Promise<SlabBoot> {
   if (boot.parts === undefined) return boot;
   const { loadSlab } = await import("./slab/loader");
   const objects = await loadSlab("objects");
-  if (!objects.ok) return { ...boot, notice: boot.notice ?? objects.reason };
+  if (!objects.ok) return { ...boot, notice: boot.notice ?? slabPartNotice("Objects section", objects.reason) };
   const { SlabObjects } = await import("./slab/SlabObjects");
   return { ...boot, parts: { ...boot.parts, Objects: SlabObjects } };
 }
 
-const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects) : Promise.resolve<SlabBoot>({})]);
+/** The status bar and the tabs over the drawing, each when its document loads; the SolidJS one is shown otherwise. */
+async function withChromeParts(boot: SlabBoot): Promise<SlabBoot> {
+  if (boot.parts === undefined) return boot;
+  const { loadSlab } = await import("./slab/loader");
+  const [status, tabs] = await Promise.all([loadSlab("statusbar"), loadSlab("tabs")]);
+  const parts: SlabParts = { ...boot.parts };
+  if (status.ok) parts.StatusBar = (await import("./slab/SlabStatusBar")).SlabStatusBar;
+  if (tabs.ok) parts.Tabs = (await import("./slab/SlabTabs")).SlabTabs;
+  const notice = boot.notice ?? (!status.ok ? slabPartNotice("status bar", status.reason) : !tabs.ok ? slabPartNotice("view tabs", tabs.reason) : undefined);
+  return notice === undefined ? { parts } : { parts, notice };
+}
+
+const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects).then(withChromeParts) : Promise.resolve<SlabBoot>({})]);
 render(() => <App facade={facade} slab={slab.parts} shellNotice={slab.notice} />, root);

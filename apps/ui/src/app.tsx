@@ -26,6 +26,7 @@ import { TopBar } from "./components/TopBar";
 import { MenuBar } from "./components/MenuBar";
 import { ToolStrip } from "./components/ToolStrip";
 import { LayoutTabs, STATUS_TOGGLES, StatusBar } from "./components/StatusBar";
+import type { LayoutTabsProps, StatusBarProps } from "./components/StatusBar";
 import { CommandPalette } from "./components/CommandPalette";
 import { DraftingSettings } from "./components/DraftingSettings";
 import { draftingTabFor, opensDraftingSettings, type DraftingTab } from "./drafting";
@@ -1371,8 +1372,9 @@ export function App(props: AppProps): JSX.Element {
     </Show>
   );
   const recoveryBar = (): JSX.Element => <RecoveryBar {...recovery.bar} />;
-  const layoutTabs = (): JSX.Element => (
-    <LayoutTabs
+  /** The tabs over the drawing, drawn by `Tabs`: the SolidJS strip, or the one ported to Slab. */
+  const layoutTabs = (Tabs: Component<LayoutTabsProps> = LayoutTabs): JSX.Element => (
+    <Tabs
       layouts={layouts()}
       space={space()}
       onLayout={(name) => {
@@ -1463,9 +1465,10 @@ export function App(props: AppProps): JSX.Element {
       )}
     </Show>
   );
-  const statusBar = (): JSX.Element => (
+  /** The status bar, drawn by `Bar`: the SolidJS one, or the one ported to Slab. */
+  const statusBar = (Bar: Component<StatusBarProps> = StatusBar): JSX.Element => (
     <Show when={showStatusbar()}>
-      <StatusBar
+      <Bar
         settings={settings()}
         mode={props.facade.mode}
         currentLayer={currentLayer()}
@@ -1526,11 +1529,11 @@ export function App(props: AppProps): JSX.Element {
             ),
             bench: () => <Show when={sidebarShown() && slab.Bench}>{(Bench) => benchSection(Bench())}</Show>,
             recovery: recoveryBar,
-            tabs: layoutTabs,
+            tabs: () => layoutTabs(slab.Tabs),
             stage: editorRow,
             cmdline: commandLine,
             assistant: assistantPane,
-            status: statusBar,
+            status: () => statusBar(slab.StatusBar),
           }}
           sidebar={sidebarShown}
           assistant={showAssistant}

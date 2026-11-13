@@ -9,6 +9,7 @@ import type { BenchPanelProps } from "../components/BenchPanel";
 import type { LayersPanelProps } from "../components/LayersPanel";
 import type { PiecePanelProps } from "../components/PiecePanel";
 import type { ObjectsPanelProps } from "../components/ObjectsPanel";
+import type { LayoutTabsProps, StatusBarProps } from "../components/StatusBar";
 import type { SlabShellProps } from "./SlabShell";
 
 export interface SlabParts {
@@ -21,4 +22,8 @@ export interface SlabParts {
   Piece?: Component<PiecePanelProps>;
   /** The Objects section; absent when its document did not load, and the SolidJS one is shown. */
   Objects?: Component<ObjectsPanelProps>;
+  /** The status bar; absent when its document did not load, and the SolidJS one is shown. */
+  StatusBar?: Component<StatusBarProps>;
+  /** The tabs over the drawing; absent when their document did not load, and the SolidJS strip is shown. */
+  Tabs?: Component<LayoutTabsProps>;
 }

@@ -8,7 +8,7 @@ import { buildMetrics, codepoints, UNITS_PER_PX } from "./fonts";
 import { compareArtifacts, describeReport, formatLock, matchesLock, parseLock, parsePin, type SlabLock } from "./lock";
 import { readPaneWidths, sizesMatch, targetSizes, widthClass, widthsAfterDrag, writePaneWidths } from "./panes";
 import { themeName } from "./surface";
-import { shellChoice, slabFailed } from "./switch";
+import { shellChoice, slabFailed, slabPartNotice } from "./switch";
 import { familyName, mapTokens, readTokenSheet, resolveToken, slabColor, slabDuration, slabLength, slabTokenSource } from "./tokens";
 import { signalDetail } from "./types";
 
@@ -348,5 +348,13 @@ describe("the switch and the surface", () => {
     expect(signalDetail(new CustomEvent("x", { detail: null }))).toBeNull();
     expect(signalDetail(new CustomEvent("x", { detail: { item: "line-1", meta: { key: "a/b" } } }))).toEqual({ item: "line-1", meta: { key: "a/b" } });
     expect(signalDetail(new CustomEvent("x", { detail: { item: 7, text: "252", meta: 3 } }))).toEqual({ item: "", text: "252", meta: { key: "" } });
+  });
+});
+
+describe("the notice for one part", () => {
+  test("names the part and says the shell is still shown", () => {
+    const said = slabPartNotice("Layers section", slabFailed("404"));
+    expect(said).toBe("The Slab Layers section did not load (404); showing the standard one in its place.");
+    expect(slabPartNotice("status bar", "something else")).toBe("something else");
   });
 });

@@ -1,0 +1,68 @@
+// The tabs over the drawing: Model, then each of the drawing's layouts, then (when the host
+// offers it) the 3D view; the one in front is filled with the pane's surface. The view only:
+// which tabs there are and which is in front is shaped in TypeScript (src/slab/tabs-params.ts),
+// and a press, a right click and the pointer's rest come back as signals.
+//
+// Measures follow src/ui/ui.css (.ui-tab, .ui-tab--md) and src/chrome.css (.editor-tabs): one
+// strip as high as a tab, 13px type on a 12px inset, a hairline closing each tab on the right, a
+// name clipped with an ellipsis at the cap the host measures (24 characters of the page's face).
+// A strip longer than the pane scrolls sideways, and fades at the edge that hides a tab.
+import "gen/tokens.slab"
+
+// One tab. `front` is the one shown; `cap` the widest a tab may be. The hairline that closes it
+// on the right is part of it, under its fill and inside its focus ring.
+def ViewTab(name="", hint="", front=false, cap=200) export {
+  row h=size.control-h-tab max-w=cap color=color.text-faint \
+      role=tab label=name desc=hint selected=front \
+      act=tab_pressed context=tab_menu pointer-move=tab_hint transition=dur.fast {
+    when hover { bg=color.hover color=color.text }
+    when front { bg=color.tab-active color=color.text }
+    when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+    row h=fill pad=0,space.g12 align=center {
+      text name style=text.body nowrap ellipsis
+    }
+    rect w=size.hairline h=fill bg=color.border-soft
+  }
+}
+
+params {
+  tabs list(ViewTab) = []
+  // The strip is scrolled past its start / stops short of its end: that edge fades.
+  clip_start bool = false
+  clip_end   bool = false
+}
+
+stack #views w=fill h=size.control-h-tab bg=color.chrome {
+  // The strip's closing hairline lies under the tabs, so the tab in front covers it and runs
+  // into the drawing.
+  col w=fill h=fill pack=end inert {
+    rect w=fill h=size.hairline bg=color.border
+  }
+  row #strip w=fill h=fill scroll role=tablist label="Views" pointer-move=tab_hint_off {
+    each param.tabs
+  }
+  // A gradient takes no token at this commit, so the fade is six steps of the strip's own fill.
+  row #fades w=fill h=fill inert {
+    row h=fill {
+      when clip_start {
+        rect w=space.g4 h=fill bg=color.chrome opacity=0.9
+        rect w=space.g4 h=fill bg=color.chrome opacity=0.75
+        rect w=space.g4 h=fill bg=color.chrome opacity=0.6
+        rect w=space.g4 h=fill bg=color.chrome opacity=0.45
+        rect w=space.g4 h=fill bg=color.chrome opacity=0.3
+        rect w=space.g4 h=fill bg=color.chrome opacity=0.15
+      }
+    }
+    spacer
+    row h=fill {
+      when clip_end {
+        rect w=space.g4 h=fill bg=color.chrome opacity=0.15
+        rect w=space.g4 h=fill bg=color.chrome opacity=0.3
+        rect w=space.g4 h=fill bg=color.chrome opacity=0.45
+        rect w=space.g4 h=fill bg=color.chrome opacity=0.6
+        rect w=space.g4 h=fill bg=color.chrome opacity=0.75
+        rect w=space.g4 h=fill bg=color.chrome opacity=0.9
+      }
+    }
+  }
+}
