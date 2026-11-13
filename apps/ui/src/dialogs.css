@@ -33,6 +33,12 @@
   visibility: hidden;
 }
 
+/* A checked box's tick sets its own visibility (to show only when checked), which drew the ticks
+   of a page behind through the page in front: inside a page behind, it stays hidden. */
+.drafting .ui-tabs-panel[hidden] .ui-checkbox-mark {
+  visibility: hidden;
+}
+
 .drafting-page {
   display: flex;
   flex-direction: column;

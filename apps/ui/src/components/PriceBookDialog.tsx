@@ -92,7 +92,7 @@ export function PriceBookDialog(props: PriceBookDialogProps): JSX.Element {
     <Dialog
       open={props.open}
       title="Price Book"
-      size="md"
+      size="sm"
       initialFocus={`#${CSS.escape(inputId(firstField()))}`}
       describedBy="price-intro"
       dismissOnBackdrop={untouched()}

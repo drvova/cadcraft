@@ -14,7 +14,7 @@ Not applicable: hand-rolled — a native `<kbd>` on one recipe. It replaces two 
 `<Kbd>esc</Kbd>` — the key that stops a running request, beside Stop.
 
 Real uses, 6 call sites (`rg -c "<Kbd" src` → `src/components/AssistantPane.tsx:1`, `src/components/CommandPalette.tsx:4`, `src/components/DynamicInput.tsx:1`):
-- `src/components/AssistantPane.tsx:932` — the `esc` cap beside the Stop button on the run row over the composer, shown while a request runs.
+- `src/components/AssistantPane.tsx:934` — the `esc` cap beside the Stop button on the run row over the composer, shown while a request runs.
 - `src/components/CommandPalette.tsx:267` — each command's shortcut at the end of its palette row, written by `shortcutLabel` for the platform; a command with no shortcut draws no cap.
 - `src/components/CommandPalette.tsx:288` — the palette footer's three caps (Enter, Tab, Esc) beside Run, Complete and Close.
 
@@ -93,7 +93,7 @@ Not applicable: no motion.
 - `rule/kbd-beside-action`: When a cap is rendered, place it directly after the 1 action its key runs (the button, or the row's label), because a cap on its own names a key without saying what the key does. Evidence: app 2/2 caps follow their action, `src/components/AssistantPane.tsx:765` and `src/components/CommandPalette.tsx:141`. Check: review `src/components/AssistantPane.tsx`.
   - Don't: `<Kbd>esc</Kbd>` alone on a status row.
   - Do: `<Button variant="ghost" size="sm" onClick={stop}>Stop</Button><Kbd>esc</Kbd>`
-- `rule/kbd-not-a-control`: When the shortcut's action must be clickable, put the handler on the `Button` or `Row` beside the cap rather than on the cap, because a `<kbd>` has no role and no tab stop, so a click handler on it is unreachable by keyboard. Evidence: app 2/2 caps take no handler, `src/components/AssistantPane.tsx:1020` and `src/components/CommandPalette.tsx:145`. Check: test `src/ui/Kbd.test.tsx`.
+- `rule/kbd-not-a-control`: When the shortcut's action must be clickable, put the handler on the `Button` or `Row` beside the cap rather than on the cap, because a `<kbd>` has no role and no tab stop, so a click handler on it is unreachable by keyboard. Evidence: app 2/2 caps take no handler, `src/components/AssistantPane.tsx:1022` and `src/components/CommandPalette.tsx:145`. Check: test `src/ui/Kbd.test.tsx`.
   - Don't: `<span onClick={stop}><Kbd>esc</Kbd></span>`
   - Do: `<Button variant="ghost" size="sm" onClick={stop}>Stop</Button><Kbd>esc</Kbd>`
 

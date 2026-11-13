@@ -44,7 +44,8 @@
   align-items: center;
   gap: var(--gap-6);
   min-height: var(--control-h-input);
-  color: var(--text-faint);
+  /* The instruction over the options is read, not skimmed past: the secondary ink. */
+  color: var(--text-dim);
   font-size: var(--font-body);
 }
 
@@ -265,6 +266,14 @@
   color: var(--text-dim);
 }
 
+/* Out of date is a state of the whole card, said in words beside its title in the warning ink. */
+.proposal-stale-tag {
+  flex: none;
+  color: var(--warn);
+  font-size: var(--font-small);
+  font-weight: 600;
+}
+
 .proposal-line--stale {
   color: var(--warn);
 }
@@ -299,4 +308,10 @@
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+/* An empty chat with proposals waiting keeps no strip over them: the cards start under the title. */
+.assistant-panel:has(.assistant-proposals) .assistant-body:has(> .assistant-transcript:empty) {
+  flex: 0 0 0;
+  min-height: 0;
 }

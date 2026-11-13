@@ -955,3 +955,21 @@ notice first. Local styles only; no token, component or wording changed.
   `--text-accent` (decoration, `aria-hidden`); its band leads with a Start group holding Templates
   (`ui.dialog.templates`, a new code-drawn four-sheet glyph on the strip pixel grid). Wording
   added: "Start", "Templates" as a tool label.
+## The assistant and dialogs pass (2026-11-13)
+
+- **A page behind in Drafting Settings no longer draws its ticks through the page in front.** The
+  checkbox's tick sets its own `visibility` (shown only when checked), which overrode the hidden
+  page's inherited `visibility: hidden`: the Object Snap page's ticks showed as stray marks over
+  Snap and Grid, one inside the empty Snap box and a doubled tick in Grid. Inside a hidden page the
+  tick stays hidden (`dialogs.css`). No change to `Checkbox` itself.
+- **Waiting proposals own the assistant when the chat is empty.** The empty state's line was
+  squeezed into a clipped strip over the cards, touching "3 options: accept one". With no messages
+  and proposals waiting, the empty state gives way and the empty transcript takes no height, so
+  the cards start under the title. The group's line is drawn in the secondary ink (was faint).
+- **Out of date is said in the warning ink.** A stale card's tag was a neutral `Chip`, read as a
+  label; it is now a word beside the title in `--warn` at 600 (8.79:1 dark on
+  `--surface-elevated`, 4.53:1 light). Same wording.
+- **The small field dialogs are small.** Ring, Stone and Price book were the medium width, which
+  put a value 40 characters from its name ("Wall, in mm" ... "1.8"). They are `sm` (52ch), so the
+  name and value read as one line and the refusal under a field stands near it. Drafting Settings
+  keeps `md`: its Object Snap page wraps to more rows at `sm` and every page takes its height.

@@ -132,7 +132,7 @@ export function RingDialog(props: JewelryDialogProps): JSX.Element {
     <Dialog
       open={props.open}
       title="Ring"
-      size="md"
+      size="sm"
       initialFocus={`#${id("size")}`}
       describedBy={summary() === "" ? undefined : "ring-summary"}
       dismissOnBackdrop={untouched()}
@@ -225,7 +225,7 @@ export function GemDialog(props: JewelryDialogProps): JSX.Element {
     <Dialog
       open={props.open}
       title="Gem"
-      size="md"
+      size="sm"
       initialFocus={elongated() ? `#${id("length")}` : `#${id("diameter")}`}
       describedBy={summary() === "" ? undefined : "gem-summary"}
       dismissOnBackdrop={untouched()}

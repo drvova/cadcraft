@@ -861,7 +861,9 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
         <Show when={from() === 0 && s.dropped() > 0}>
           <p class="assistant-earlier-note">{`This chat is long: its oldest ${s.dropped().toLocaleString()} messages and steps are no longer kept.`}</p>
         </Show>
-        <Show when={s.entries.length === 0}>
+        {/* While proposals wait they are the panel's subject: the empty line would be squeezed into
+            the strip over the cards, so it gives way to them. */}
+        <Show when={s.entries.length === 0 && (props.proposals?.list().length ?? 0) === 0}>
           <div class="assistant-empty">
             {/* One quiet line. Before a model is set up the composer under it is the way in (its
                 model slot, or Send); after, the suggestions follow the line. */}

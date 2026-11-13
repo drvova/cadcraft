@@ -19,7 +19,6 @@
 import { createEffect, For, Match, Show, Switch, untrack, type JSX } from "solid-js";
 import { changeRows, checkLines, hasStills, objectsLine, rowsTsv, type ChangeRow, type Proposal, type ProposalGroup, type ProposalsModel, type StillCache } from "../proposals";
 import { Button } from "../ui/Button";
-import { Chip } from "../ui/Chip";
 import "../proposals.css";
 
 export interface ProposalCardsProps {
@@ -94,7 +93,7 @@ function Card(props:{ proposal: Proposal; cards: ProposalCardsProps }): JSX.Elem
           {p().title}
         </h3>
         <Show when={p().stale}>
-          <Chip title="The drawing changed since this was proposed">Out of date</Chip>
+          <span class="proposal-stale-tag">Out of date</span>
         </Show>
       </div>
       <Show when={checks().broken.length > 0}>
