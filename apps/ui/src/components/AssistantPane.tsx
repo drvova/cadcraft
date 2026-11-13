@@ -1152,7 +1152,7 @@ export function AssistantPane(props: AssistantPaneProps): JSX.Element {
   );
   const stack = (): JSX.Element => (
       <>
-        {/* A decision that waits stands first over the input, in both shells. */}
+        {/* A decision that waits stands first over the input. */}
         <Show when={props.proposals}>
           {(model) => (
             <ProposalCards

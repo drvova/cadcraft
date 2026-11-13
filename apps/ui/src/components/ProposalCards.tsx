@@ -1,5 +1,5 @@
 /**
- * The proposals waiting for a decision, as cards over the assistant's composer (both shells draw
+ * The proposals waiting for a decision, as cards over the assistant's composer (drawn as
  * this one component in the stack, `AssistantPane`'s `stack`): what a change would do to the
  * drawing, with Accept and Reject, before anything is changed.
  *

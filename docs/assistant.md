@@ -224,7 +224,7 @@ proposals {"id": 3, "of": "after", "run": {"command": "techsheet"}}
   `gemlist`, `objects` or `ringsizes` on the drawing as it was or as it would be. The solid of a
   side is `piecemesh` of that side's `piece.params`.
 - **The card.** The interface draws each proposal that waits as a card over the assistant's
-  composer, in both shells (`apps/ui/src/components/ProposalCards.tsx` over
+  composer (`apps/ui/src/components/ProposalCards.tsx` over
   `apps/ui/src/proposals.ts`). It has its title; the checks the change would fail, first, under
   the words "Would fail" in the warning ink; a still of the piece before and after when both sides
   have a piece and it differs (drawn by the 3D stage's renderer from `piecemesh` of each side's

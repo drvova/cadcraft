@@ -187,18 +187,6 @@ of metal. A material the book cannot price is listed in `lines` with its quantit
 no amount, and left out of the total, never guessed. These are estimates from the user's own
 prices, not market quotes. With no prices known there is no `cost` and the reply is unchanged.
 
-### As a card, a page and a dashboard
-
-The same figures can be handed over as pictures of the data: a **piece card** (kind, size in two
-systems, metal weight, stones and carats, each check as a PASS or FAIL row, the cost when prices
-are set), the **bench sheet as a page** with the drawing's views, and a **terminal dashboard**
-with a command line. `cadcraft-cli run … --card card.svg --sheet sheet.svg`, `cadcraft-cli tui`,
-and `(card)` inside the assistant's `run`, which an MCP client receives as an image. Nothing is
-measured or priced in them: they print what `piece {query: true}` and `techsheet {}` reply. They
-are an optional part of the command-line tool (`cargo xtask surfaces build`), an SVG needs no
-font, and a PNG is drawn with a font of the machine's because none is shipped:
-[surfaces.md](surfaces.md).
-
 ## A parametric piece
 
 `PIECE {kind: band|solitaire|eternity, …}` draws one ring per drawing as a sheet: the front view
@@ -359,7 +347,8 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-11-12 | minor | The piece card, the bench sheet as a page and a terminal dashboard (`cadcraft-cli run --card/--sheet`, `tui`, `(card)`): an optional build of the command-line tool, laid out by Slab without its fonts ([surfaces.md](surfaces.md)) |
+| 2026-11-13 | minor | The piece card, the bench sheet page, the terminal dashboard and `(card)` removed with Slab |
+| 2026-11-12 | minor | The piece card, the bench sheet as a page and a terminal dashboard (`cadcraft-cli run --card/--sheet`, `tui`, `(card)`): an optional build of the command-line tool, laid out by Slab without its fonts |
 | 2026-11-12 | minor | `PIECE` gains five band profiles and a three-stone ring; property tests with Hegel, with six faults fixed and three set aside as gap rows J5–J7 |
 | 2026-11-12 | minor | `PRICEBOOK` and a `cost` on the bench sheet, from the user's own prices; in the interface a Cost group and Price Book editor, a rendered Tech Sheet, and a gallery of templates |
 | 2026-11-12 | major | A parametric piece: `PIECE` (sheet, stored parameters, checks), `PIECEMESH` and `STLOUT` (the solid), one shared definition for both; `OBJECTS`. In the interface: the Piece section, the 3D tab with display modes, the Objects section, Source, a tabbed ribbon; new drawings are millimetres |

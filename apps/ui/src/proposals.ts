@@ -1,7 +1,7 @@
 /**
  * Proposals: a change to the drawing read before it is made (the engine's `propose`, `accept`,
  * `reject` and `proposals`, `crates/engine/src/cmd/proposal.rs`). This module is the interface's
- * side of them, for whichever shell draws the cards:
+ * side of them, for the cards that draw them:
  *
  * - **The reports, read strictly** (`parseProposals`): a reply is the engine's, but nothing in it
  *   is trusted to have a shape; a report that is not one is left out, never half-read.
