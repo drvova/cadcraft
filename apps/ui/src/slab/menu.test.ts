@@ -62,9 +62,9 @@ describe("the document", () => {
   });
 
   test("a row is a menuitem with its own label, description and place in its list, and the separator is a separator", () => {
-    expect(source).toContain("role=menuitem label=caption desc=said pos-in-set=pos set-size=count act=row");
-    expect(source).toContain("role=separator");
-    expect(source).toContain("when sub { expanded=open }");
+    expect(source).toContain("when !sep {\n        role=menuitem label=caption desc=said pos-in-set=pos set-size=count act=row");
+    expect(source).toMatch(/when sep \{\n\s+role=separator/);
+    expect(source).toContain("when sub { pad-r=menu.end-pad expanded=open }");
   });
 });
 
@@ -89,20 +89,20 @@ describe("a menu's surface", () => {
   test("the tracks are shared down a column: the labels' as wide as the longest, then the names', then the shortcuts'", () => {
     const s = menuSurface(input([leaf("Line", { name: "L", shortcut: "Ctrl+L" }), leaf("Construction", { name: "XL" })]));
     const [a, b] = s.cols[0]?.rows ?? [];
-    expect(a?.lw).toBe(12 * 6);
-    expect(b?.lw).toBe(12 * 6);
-    expect(a?.nw).toBe(2 * 6);
-    expect(a?.g1).toBe(m.gap);
-    expect(a?.g2).toBe(m.gap);
-    expect(a?.sw).toBe(rowShortcut(leaf("x", { shortcut: "Ctrl+L" }), false).length * 6 + m.padEnd - m.rowEnd);
-    expect(s.width).toBe(2 * m.frame + m.padStart + 72 + m.gap + 12 + m.gap + (a?.sw ?? 0) - (m.padEnd - m.rowEnd) + m.padEnd);
+    // Each track with the row's gap after it.
+    expect(a?.lw).toBe(12 * 6 + m.gap);
+    expect(b?.lw).toBe(12 * 6 + m.gap);
+    expect(a?.nw).toBe(2 * 6 + m.gap);
+    expect(a?.sw).toBe(rowShortcut(leaf("x", { shortcut: "Ctrl+L" }), false).length * 6);
+    expect(a?.rh).toBe(m.row);
+    expect(s.width).toBe(2 * m.frame + m.padStart + (a?.lw ?? 0) + (a?.nw ?? 0) + (a?.sw ?? 0) + m.padEnd);
   });
 
   test("a box narrower than its least width gives the rest to the labels", () => {
     const s = menuSurface(input([leaf("Ray")], { minWidth: 300 }));
     expect(s.width).toBe(300);
     const row = s.cols[0]?.rows[0];
-    expect((row?.lw ?? 0) + m.padStart + (row?.g1 ?? 0) + (row?.nw ?? 0) + (row?.g2 ?? 0) + (row?.sw ?? 0) + m.rowEnd).toBeCloseTo(300 - 2 * m.frame, 3);
+    expect((row?.lw ?? 0) + m.padStart + (row?.nw ?? 0) + (row?.sw ?? 0) + m.padEnd).toBeCloseTo(300 - 2 * m.frame, 3);
   });
 
   test("a menu taller than its room stands in columns, broken between groups, with the labels' tracks equal and no separator leading a column", () => {
@@ -120,8 +120,15 @@ describe("a menu's surface", () => {
   test("a separator is drawn above the first row of a group inside a column, half a row high", () => {
     const s = menuSurface(input([leaf("A"), leaf("B", { group: true })]));
     expect(s.cols[0]?.rows.map((r) => (r.sep ? "—" : r.caption))).toEqual(["A", "—", "B"]);
+    expect(s.cols[0]?.rows[1]?.rh).toBe(m.sep);
     expect(s.entries[1]?.top).toBe(m.row + m.sep);
     expect(s.height).toBe(2 * m.row + m.sep + 2 * m.frame);
+  });
+
+  test("a submenu's row gives its chevron's part of the shortcuts' track to the chevron", () => {
+    const s = menuSurface(input([leaf("A", { shortcut: "Ctrl+A" }), sub("B", [])]));
+    const [a, b] = s.cols[0]?.rows ?? [];
+    expect(b?.sw).toBe((a?.sw ?? 0) - m.chevron);
   });
 
   test("a row that is not available is off; a submenu never is; the open one is open", () => {
@@ -147,11 +154,12 @@ describe("a menu's surface", () => {
   test("in a stacked row the typed name gives way first, whole, then the label is cut", () => {
     const row = (width: number) => menuSurface(input([leaf("Rectangle", { name: "REC", shortcut: "Ctrl+R" })], { stacked: true, stackedWidth: width })).cols[0]?.rows[0];
     const wide = row(400);
-    expect(wide?.nw).toBe(18);
+    expect(wide?.nw).toBe(18 + m.gap);
     const narrow = row(110);
-    expect(narrow?.nw).toBe(0);
-    expect(narrow?.g1).toBe(0);
-    expect(narrow?.lw).toBeLessThan(9 * 6);
+    // Gone, whole: no name, only the room before the shortcut.
+    expect(narrow?.name).toBe("");
+    expect(narrow?.nw).toBe(m.gap);
+    expect(narrow?.lw).toBeLessThan(9 * 6 + m.gap);
     expect(narrow?.sw).toBeGreaterThan(0);
   });
 
@@ -172,7 +180,7 @@ describe("a menu's surface", () => {
     const s = menuSurface(input([leaf("A", { name: "AB", shortcut: "Ctrl+A" })], { measure: nan, minWidth: Number.NaN, maxHeight: Number.NaN, stackedWidth: Number.POSITIVE_INFINITY }));
     expect(Number.isFinite(s.width)).toBe(true);
     expect(Number.isFinite(s.height)).toBe(true);
-    for (const row of s.cols[0]?.rows ?? []) for (const value of [row.lw, row.nw, row.sw, row.g1, row.g2]) expect(Number.isFinite(value) && value >= 0).toBe(true);
+    for (const row of s.cols[0]?.rows ?? []) for (const value of [row.lw, row.nw, row.sw, row.rh]) expect(Number.isFinite(value) && value >= 0).toBe(true);
     const many = Array.from({ length: MAX_MENU_ROWS + 50 }, (_, i) => leaf(`R${i}`));
     expect(menuSurface(input(many)).entries.length).toBe(MAX_MENU_ROWS);
     const huge: TextMeasure = () => 1e12;

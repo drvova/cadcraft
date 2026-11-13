@@ -74,6 +74,7 @@ interface Lender {
   key: (event: KeyboardEvent) => void;
   signal: (event: Event) => void;
   move: (event: PointerEvent) => void;
+  down: () => void;
   leave: () => void;
   frame: () => void;
 }
@@ -84,9 +85,14 @@ interface Kept {
 }
 
 let shelf: HTMLDivElement | null = null;
+let lastByKey = false;
 const free: Kept[] = [];
 
-/** One surface: made, wired once for good, and put on the shelf, where it mounts its document. */
+/**
+ * One surface: made and wired once for good, and put on the shelf, where it mounts its document
+ * and paints a first frame; then it is taken off the page. A surface out of the page keeps its
+ * kernel and paints nothing; the opening that borrows it puts it in its box.
+ */
 function makeKept(): Kept | null {
   if (typeof document === "undefined" || shelf === null) return null;
   const element = document.createElement(TAG);
@@ -100,6 +106,7 @@ function makeKept(): Kept | null {
   ringForKeysOnly(host);
   host.addEventListener("pointermove", (event) => kept.lender?.move(event));
   host.addEventListener("pointerleave", () => kept.lender?.leave());
+  host.addEventListener("pointerdown", () => kept.lender?.down(), true);
   host.addEventListener("slab-frame", () => kept.lender?.frame());
   // The surface stands over the drawing's own surfaces: the browser's menu stays away from it.
   host.addEventListener("contextmenu", (event) => event.preventDefault());
@@ -107,6 +114,11 @@ function makeKept(): Kept | null {
   host.setParam("w", 240);
   host.setParam("h", 40);
   host.setList("cols", "", [{ key: "c0", cw: 230, rows: [{ key: "r0", caption: " " }] }]);
+  const settle = (): void => {
+    host.removeEventListener("slab-frame", settle);
+    if (kept.lender === null) host.remove();
+  };
+  host.addEventListener("slab-frame", settle);
   shelf.appendChild(host);
   roundStrokes(host);
   return kept;
@@ -118,6 +130,10 @@ function makeKept(): Kept | null {
  */
 export function prepareMenus(count = 3): void {
   if (shelf !== null || typeof document === "undefined") return;
+  // What moved last, the keys or a pointer: a menu opened with the keyboard on its first row shows
+  // the ring only after a key, as the browser's `:focus-visible` does for the SolidJS rows.
+  document.addEventListener("keydown", () => (lastByKey = true), true);
+  document.addEventListener("pointerdown", () => (lastByKey = false), true);
   shelf = document.createElement("div");
   shelf.className = "slab-menu-shelf";
   shelf.setAttribute("aria-hidden", "true");
@@ -138,7 +154,7 @@ function borrow(lender: Lender): Kept | null {
 function giveBack(kept: Kept): void {
   kept.lender = null;
   kept.host.clearFocus();
-  shelf?.appendChild(kept.host);
+  kept.host.remove();
   free.push(kept);
 }
 
@@ -179,7 +195,6 @@ class Level {
   ) {
     this.box = box;
     this.kept = borrow(lender);
-    if (this.kept !== null) box.appendChild(this.kept.host);
   }
 
   get host(): SlabControlHost | null {
@@ -207,6 +222,8 @@ class Level {
     this.cols = withLit(surface.cols, this.litKeys());
     host.setList("cols", "", this.cols);
     this.stale = true;
+    // Into the page last, at its size: the driver measures it as it arrives, once.
+    if (host.parentElement !== this.box) this.box.appendChild(host);
   }
 
   /** The rows lit: the one under the pointer, the one the keys are on, and the open submenus' rows. */
@@ -278,11 +295,34 @@ class Level {
     const now = host.getScroll(BODY, 0);
     const to = group === undefined ? groupScroll(entry.top, entry.top + entry.height, view, now) : stackedBlock(end - entry.top, view) === "start" ? entry.top : groupScroll(entry.top, end, view, now);
     if (Math.abs(to - now) > 0.5) host.setScroll(BODY, 0, to);
+    // The kernel clamps an offset to the content it last laid out: a group just opened is not in
+    // it yet, so the offset is asked for again once the frame that lays the group out is painted.
+    this.scrollTo = this.stale ? to : null;
   }
+
+  private scrollTo: number | null = null;
+
+  /**
+   * The frames after a press in which the kernel's ring is put away again (`SlabTopBar.tsx`):
+   * the driver moves the page's focus onto the pressed row's accessible node in the frame after
+   * the press, and takes that for the keyboard's.
+   */
+  calm = 0;
 
   /** The frame was painted: the scene is this list's. */
   painted(): void {
     this.stale = false;
+    const host = this.host;
+    if (this.scrollTo !== null && host !== null) {
+      const to = this.scrollTo;
+      this.scrollTo = null;
+      if (Math.abs(host.getScroll(BODY, 0) - to) > 0.5) host.setScroll(BODY, 0, to);
+    }
+    if (this.calm > 0 && host !== null) {
+      this.calm -= 1;
+      const held = host.focusedKey();
+      if (held !== null && this.pending === null) host.setFocus(held, false);
+    }
     this.flush();
     this.say();
   }
@@ -300,6 +340,8 @@ class Level {
           if (node.hasAttribute(name)) node.removeAttribute(name);
         } else if (node.getAttribute(name) !== value) node.setAttribute(name, value);
       }
+      // Every row takes the focus, as a `Row menuitem` does (the driver gives a tab index to its one stop only).
+      if (!node.hasAttribute("tabindex")) node.setAttribute("tabindex", "-1");
     }
   }
 
@@ -372,7 +414,7 @@ export function SlabMenu(props: MenuProps): JSX.Element {
       const rows = first?.surface?.entries.filter((entry) => entry.depth === 0) ?? [];
       const row = rows[last ? rows.length - 1 : 0];
       if (first === undefined || row === undefined) return false;
-      first.focus(row, true);
+      first.focus(row, lastByKey);
       return true;
     },
     collapse: () => setChain([]),
@@ -384,20 +426,32 @@ export function SlabMenu(props: MenuProps): JSX.Element {
   /** The window less the menu's own inset (`Menu.tsx` reads it as the box's padding: 4). */
   const bounds = (): Box => menuBounds(window.innerWidth, floorOf(), MENU_METRICS.frame - 1);
 
-  /** What the box's sheet says: the least it is wide, the most it is tall, and the width of a stacked one. */
-  const sheet = (box: HTMLElement, sub: boolean): { min: number; max: number; stackedW: number } => {
+  /**
+   * What the menu's own box's sheet says (chrome.css: `.menu-drop`), read once per layout: the
+   * least it is wide (30ch; a submenu's is 24ch), the most it is tall above the status bar, the
+   * width of a stacked one (40ch, or the window less its gutters), and the room between a menu and
+   * its submenu.
+   */
+  interface Sheet {
+    min: number;
+    subMin: number;
+    max: number;
+    stackedW: number;
+    gap: number;
+  }
+  const sheet = (box: HTMLElement): Sheet => {
     box.style.setProperty("--menu-floor", `${Math.max(0, window.innerHeight - floorOf())}px`);
     const style = getComputedStyle(box);
-    const min = px(style.minWidth);
-    const ch = (Number.isFinite(min) ? min : 0) / (sub ? 24 : 30);
+    const read = px(style.minWidth);
+    const min = Number.isFinite(read) ? read : 0;
+    const ch = min / 30;
+    const gap = px(style.getPropertyValue("--menu-sub-gap"));
     const gutter = 8;
-    return { min: Number.isFinite(min) ? min : 0, max: px(style.maxHeight), stackedW: Math.min(40 * ch, window.innerWidth - 2 * gutter) };
+    return { min, subMin: 24 * ch, max: px(style.maxHeight), stackedW: Math.min(40 * ch, window.innerWidth - 2 * gutter), gap: Number.isFinite(gap) ? gap : 2 };
   };
 
-  const surfaceFor = (path: MenuPath, items: readonly MenuItem[], box: HTMLElement, sub: boolean): MenuSurface => {
-    const s = sheet(box, sub);
-    return menuSurface({ items, path, chain: chain(), stacked: stacked(), coarse: coarseQuery?.matches ?? false, minWidth: s.min, stackedWidth: s.stackedW, maxHeight: s.max, measure, mac });
-  };
+  const surfaceFor = (path: MenuPath, items: readonly MenuItem[], s: Sheet, sub: boolean): MenuSurface =>
+    menuSurface({ items, path, chain: chain(), stacked: stacked(), coarse: coarseQuery?.matches ?? false, minWidth: sub ? s.subMin : s.min, stackedWidth: s.stackedW, maxHeight: s.max, measure, mac });
 
   /** Pulls the menu's own box back inside the window (`menuShift`), from where its sheet hangs it. */
   const placeRoot = (): void => {
@@ -410,11 +464,9 @@ export function SlabMenu(props: MenuProps): JSX.Element {
   };
 
   /** Stands a submenu beside its row, outside its whole parent menu, on the side with room. */
-  const placeSub = (level: Level, parent: Level, row: MenuEntry): void => {
+  const placeSub = (level: Level, parent: Level, row: MenuEntry, g: number): void => {
     const surface = level.surface;
     if (surface === null) return;
-    const gap = px(getComputedStyle(level.box).getPropertyValue("--menu-sub-gap"));
-    const g = Number.isFinite(gap) ? gap : 2;
     const parentBox = parent.box.getBoundingClientRect();
     const rowBox = parent.rowBox(row);
     const b = bounds();
@@ -422,8 +474,9 @@ export function SlabMenu(props: MenuProps): JSX.Element {
     const left = place.flipped ? parentBox.left - g - surface.width : parentBox.right + g;
     const top = rowBox.top - MENU_METRICS.frame;
     const shift = menuShift({ left, top, right: left + surface.width, bottom: top + surface.height }, b);
-    level.box.style.setProperty("--slab-sub-x", `${Math.round(left + (shift.x ?? 0))}px`);
-    level.box.style.setProperty("--slab-sub-y", `${Math.round(top + (shift.y ?? 0))}px`);
+    const frame = root?.getBoundingClientRect() ?? { left: 0, top: 0 };
+    level.box.style.setProperty("--slab-sub-x", `${Math.round(left + (shift.x ?? 0) - frame.left)}px`);
+    level.box.style.setProperty("--slab-sub-y", `${Math.round(top + (shift.y ?? 0) - frame.top)}px`);
     level.box.classList.toggle("is-flipped", place.flipped);
   };
 
@@ -515,6 +568,8 @@ export function SlabMenu(props: MenuProps): JSX.Element {
   // ---- the keys ----
 
   const onKey = (level: Level, event: KeyboardEvent): void => {
+    // A key shows the ring again.
+    for (const one of levels) one.calm = 0;
     const entry = level.focused();
     if (entry === undefined) return;
     const action = rowKeyAction(event.key, entry.path.length, entry.item.id === null);
@@ -576,6 +631,13 @@ export function SlabMenu(props: MenuProps): JSX.Element {
       const level = get();
       if (level !== undefined) onMove(level, event);
     },
+    down: () => {
+      const level = get();
+      if (level === undefined) return;
+      level.calm = 3;
+      level.keyed = null;
+      level.relight();
+    },
     leave: () => {
       const level = get();
       if (level === undefined || level.hovered === null) return;
@@ -607,6 +669,7 @@ export function SlabMenu(props: MenuProps): JSX.Element {
     if (own === undefined) return;
     const wanted = stacked() ? [{ path: [] as MenuPath, items: props.items }] : openLevels(props.items, chain());
     while (levels.length > wanted.length) levels.pop()?.close();
+    const s = sheet(own);
     wanted.forEach((want, index) => {
       let level = levels[index];
       if (level === undefined) {
@@ -616,15 +679,15 @@ export function SlabMenu(props: MenuProps): JSX.Element {
           box = document.createElement("div");
           box.className = "menu-drop slab-menu slab-menu-sub";
           box.setAttribute("role", "menu");
-          // Beside the menu's own box, not in it: that box is translated, and would hold a fixed box to itself.
-          own.parentElement?.appendChild(box);
+          // In the menu's own box, after its surface: fixed in the window, and inside its menu for a screen reader.
+          own.appendChild(box);
         }
         const made: Level = new Level(box, lender(() => made), mac);
         level = made;
         levels.push(made);
       }
       if (index > 0) level.box.setAttribute("aria-label", want.path[want.path.length - 1] ?? "");
-      level.show(surfaceFor(want.path, want.items, level.box, index > 0));
+      level.show(surfaceFor(want.path, want.items, s, index > 0));
     });
     placeRoot();
     revealOpened();
@@ -633,7 +696,7 @@ export function SlabMenu(props: MenuProps): JSX.Element {
       const level = levels[i];
       const label = wanted[i]?.path[i - 1];
       const row = parent?.surface?.entries.find((entry) => entry.item.id === null && entry.item.label === label);
-      if (parent !== undefined && level !== undefined && row !== undefined) placeSub(level, parent, row);
+      if (parent !== undefined && level !== undefined && row !== undefined) placeSub(level, parent, row, s.gap);
     }
   };
 

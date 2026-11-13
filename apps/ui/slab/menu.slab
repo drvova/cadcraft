@@ -27,14 +27,11 @@ tokens {
     inset 5
     // A row's corner: the popover's 14 less the inset (4) and the hairline.
     row-radius 9
-    // A separator: half a row (half a button's under a finger).
-    sep 12
-    sep-coarse 14
     // A group opened in place: 12 in, a hairline, 4 more.
     guide 17
     // A row's glyph (the overflow menu's) and the room after it.
     glyph-box 22
-    // The row's inset at its end: the chevron's box stands 4 past the shortcuts' edge.
+    // A submenu row's inset at its end: the chevron's box stands 4 past the shortcuts' edge.
     end-pad 4
   }
 }
@@ -193,61 +190,54 @@ def MenuGuide(on=true) export {
   }
 }
 
-// One row, or the separator above a group (`sep`). `caption` is the row's label and `short` its
-// shortcut (a prop named `label` or `keys` would shadow the attribute). The tracks are the host's: `lw` the label's
-// (less the glyph's room, when the row has one), `nw` the typed name's (0 when it is not drawn),
-// `sw` the shortcut's or the chevron's, `g1` and `g2` the room between them; the whole row is as
-// wide as its column. `off` is a row that is not available: it keeps its place and the keyboard
-// still reaches it (the host says it is unavailable, and does not run it). `sub` opens a submenu
-// and `open` is the one that is open (`down`: in place, under it, its chevron turned down); `lit` is the row under the pointer or the keyboard, or the
-// open one. `said` is the typed name said as the row's description; `pos` and `count` its place in
-// its own list (a stacked menu holds the groups opened in place in the same one).
+// One row, or the separator above a group (`sep`), as few nodes as it can be: every node of a
+// row is laid out, put in the scene and synced to the accessibility layer on every frame, and a
+// menu has thirty rows. `caption` is the row's label and `short` its shortcut (a prop named
+// `label` or `keys` would shadow the attribute). The tracks are the host's: `lw` the label's with
+// the room after it (less the glyph's box, when the row has one), `nw` the typed name's with the
+// room after it (0 when it is not drawn), `sw` the shortcut's; `rh` the row's height (a row, a
+// separator, each a step taller under a finger). `off` is a row that is not available: it keeps
+// its place and the keyboard still reaches it (the host says it is unavailable, and does not run
+// it). `sub` opens a submenu and `open` is the one that is open (`down`: in place, under it, its
+// chevron turned down); `lit` is the row under the pointer or the keyboard, or the open one.
+// `said` is the typed name said as the row's description; `pos` and `count` its place in its own
+// list (a stacked menu holds the groups opened in place in the same one).
 def MenuRow(caption="", name="", short="", said="", glyph="", iconed=false, sub=false, open=false, off=false, lit=false, \
-            down=false, sep=false, pos=1, count=1, lw=0, nw=0, sw=0, g1=0, g2=0, guides=list(MenuGuide)) export {
+            down=false, sep=false, pos=1, count=1, rh=24, lw=0, nw=0, sw=0, guides=list(MenuGuide)) export {
   row w=fill {
     each guides
-    col w=fill {
+    row #row w=fill h=rh pad=0,space.g8 align=center radius=menu.row-radius color=color.text {
+      // (A `when`'s children come after the node's own, in the order the patches are written: so
+      // the row has none of its own, and the glyph's patch comes before the texts'.)
       when sep {
-        row w=fill h=menu.sep pad=0,space.g8 align=center role=separator {
-          when coarse { h=menu.sep-coarse }
-          rect w=fill h=size.hairline bg=color.border
+        role=separator
+        rect w=fill h=size.hairline bg=color.border
+      }
+      when sub { pad-r=menu.end-pad expanded=open }
+      when lit { bg=color.hover }
+      when off { bg=none color=color.text-disabled }
+      when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
+      when iconed {
+        row w=menu.glyph-box h=fill align=center inert {
+          icon glyph size=size.icon-size-md color=color.icon {
+            when off { color=color.text-disabled }
+          }
         }
       }
       when !sep {
-        row #row w=fill h=size.control-h-input pad=0,menu.end-pad,0,space.g8 align=center radius=menu.row-radius \
-            color=color.text role=menuitem label=caption desc=said pos-in-set=pos set-size=count act=row {
-          when coarse { h=size.control-h-button }
-          when sub { expanded=open }
-          when lit { bg=color.hover }
-          when off { bg=none color=color.text-disabled }
-          when focus-visible { stroke=color.focus-ring stroke-w=1 stroke-align=inside }
-          when iconed {
-            row w=menu.glyph-box h=fill align=center inert {
-              icon glyph size=size.icon-size-md color=color.icon {
-                when off { color=color.text-disabled }
-              }
-            }
-          }
-          text caption style=text.body w=lw nowrap ellipsis inert
-          rect w=g1 h=1 inert
-          text name style=text.mono w=nw color=color.text-faint nowrap clip inert {
-            when lit { color=color.text-dim }
-            when off { color=color.text-disabled }
-          }
-          rect w=g2 h=1 inert
-          row w=sw h=fill align=center pack=end inert {
-            when !sub {
-              pad-r=menu.end-pad
-              text short style=text.label color=color.text-faint nowrap {
-                when off { color=color.text-disabled }
-              }
-            }
-            when sub {
-              icon glyph-chevron-right size=size.icon-size-sm color=color.text-faint {
-                when down { rotate=90 }
-              }
-            }
-          }
+        role=menuitem label=caption desc=said pos-in-set=pos set-size=count act=row
+        text caption style=text.body w=lw nowrap ellipsis inert
+        text name style=text.mono w=nw color=color.text-faint nowrap clip inert {
+          when lit { color=color.text-dim }
+          when off { color=color.text-disabled }
+        }
+        text short style=text.label w=sw align-text=end color=color.text-faint nowrap clip inert {
+          when off { color=color.text-disabled }
+        }
+      }
+      when sub {
+        icon glyph-chevron-right size=size.icon-size-sm color=color.text-faint inert {
+          when down { rotate=90 }
         }
       }
     }

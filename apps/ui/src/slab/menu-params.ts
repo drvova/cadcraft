@@ -112,11 +112,11 @@ export interface MenuRowParam {
   /** Its place among its own list's rows, and their count (a stacked menu holds several lists). */
   pos: number;
   count: number;
+  /** The row's height; the label's track with the room after it; the name's with the room after it; the shortcut's (a submenu's chevron stands after it). */
+  rh: number;
   lw: number;
   nw: number;
   sw: number;
-  g1: number;
-  g2: number;
   guides: { key: string; on: boolean }[];
 }
 
@@ -318,7 +318,7 @@ export function menuSurface(input: MenuSurfaceInput): MenuSurface {
       if (flat === undefined || one === undefined) continue;
       const guides = Array.from({ length: flat.depth }, (_, g) => ({ key: `g${g}`, on: true }));
       if (seps[i] === true) {
-        rows.push({ ...blankRow(`s${i}`), sep: true, guides });
+        rows.push({ ...blankRow(`s${i}`), sep: true, rh: sepH, guides });
         top += sepH;
       }
       const item = flat.item;
@@ -326,6 +326,7 @@ export function menuSurface(input: MenuSurfaceInput): MenuSurface {
       const open = sub && isOnPath(input.chain, flat.path, item.label);
       let lw: number;
       let nw: number;
+      let named = true;
       let g1: number;
       let g2: number;
       let sw: number;
@@ -335,6 +336,7 @@ export function menuSurface(input: MenuSurfaceInput): MenuSurface {
         const inner = Math.max(0, colW - flat.depth * m.guide - m.padStart - m.padEnd);
         const tail = one.shortcut > 0 ? m.gap + one.shortcut : 0;
         const withName = one.name > 0 && one.label + m.gap + one.name + tail <= inner;
+        named = withName;
         g1 = withName ? m.gap : 0;
         nw = withName ? one.name : 0;
         g2 = one.shortcut > 0 ? m.gap : 0;
@@ -351,7 +353,7 @@ export function menuSurface(input: MenuSurfaceInput): MenuSurface {
       rows.push({
         key: `r${entries.length}`,
         caption: paramText(item.label),
-        name: one.nameText,
+        name: named ? one.nameText : "",
         short: one.shortcutText,
         said: item.name === undefined || item.name === "" ? "" : paramText(`Type ${item.name}`),
         glyph: iconed ? glyphName(item.icon ?? "") : "",
@@ -364,12 +366,12 @@ export function menuSurface(input: MenuSurfaceInput): MenuSurface {
         sep: false,
         pos: Math.min(flat.at + 1, MAX_MENU_ROWS),
         count: Math.min(flat.siblings.length, MAX_MENU_ROWS),
-        lw: whole(iconed ? lw - m.glyphBox : lw),
-        nw: whole(nw),
-        // The cell holds the shortcut and the inset left at the row's end (the chevron's box stands in it).
-        sw: whole(sw + (m.padEnd - m.rowEnd)),
-        g1: whole(g1),
-        g2: whole(g2),
+        rh: rowH,
+        lw: whole((iconed ? lw - m.glyphBox : lw) + g1),
+        nw: whole(nw + g2),
+        // A submenu's row ends on its chevron (12, at an inset of `rowEnd`, so 4 past the
+        // shortcuts' edge): the chevron's 8 of the track are its own, the rest an empty shortcut.
+        sw: whole(sub ? sw - m.chevron : sw),
         guides,
       });
       entries.push({ key: `r${entries.length}`, item, path: flat.path, at: flat.at, siblings: flat.siblings, depth: flat.depth, column, top, height: rowH });
@@ -392,7 +394,7 @@ function whole(value: number): number {
 }
 
 function blankRow(key: string): MenuRowParam {
-  return { key, caption: "", name: "", short: "", said: "", glyph: "", iconed: false, sub: false, open: false, down: false, off: false, lit: false, sep: false, pos: 1, count: 1, lw: 0, nw: 0, sw: 0, g1: 0, g2: 0, guides: [] };
+  return { key, caption: "", name: "", short: "", said: "", glyph: "", iconed: false, sub: false, open: false, down: false, off: false, lit: false, sep: false, pos: 1, count: 1, rh: 0, lw: 0, nw: 0, sw: 0, guides: [] };
 }
 
 /** The columns with the rows in `lit` lit, and every other row not; the same objects where nothing changed. */
