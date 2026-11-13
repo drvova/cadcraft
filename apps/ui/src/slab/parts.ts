@@ -12,6 +12,8 @@ import type { ObjectsPanelProps } from "../components/ObjectsPanel";
 import type { PropertiesPanelProps } from "../components/PropertiesPanel";
 import type { LayoutTabsProps, StatusBarProps } from "../components/StatusBar";
 import type { SlabShellProps } from "./SlabShell";
+import type { JewelryDialogProps } from "../components/JewelryDialog";
+import type { PriceBookDialogProps } from "../components/PriceBookDialog";
 
 export interface SlabParts {
   Shell: Component<SlabShellProps>;
@@ -29,4 +31,9 @@ export interface SlabParts {
   StatusBar?: Component<StatusBarProps>;
   /** The tabs over the drawing; absent when their document did not load, and the SolidJS strip is shown. */
   Tabs?: Component<LayoutTabsProps>;
+  /** The Price Book dialog; absent when its document did not load, and the SolidJS one is shown. */
+  PriceBook?: Component<PriceBookDialogProps>;
+  /** The Ring and Gem dialogs (one document); absent when it did not load, and the SolidJS ones are shown. */
+  Ring?: Component<JewelryDialogProps>;
+  Gem?: Component<JewelryDialogProps>;
 }

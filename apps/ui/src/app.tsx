@@ -1484,12 +1484,16 @@ export function App(props: AppProps): JSX.Element {
       />
     </Show>
   );
+  /** The Ring, Gem and Price Book dialogs: the SolidJS ones, or those whose body Slab draws when their documents loaded. */
+  const Ring = props.slab?.Ring ?? RingDialog;
+  const Gem = props.slab?.Gem ?? GemDialog;
+  const PriceBook = props.slab?.PriceBook ?? PriceBookDialog;
   const overlays = (): JSX.Element => (
     <>
       <LayerManager facade={props.facade} open={layerManager()} onClose={() => setLayerManager(false)} onChanged={refresh} />
-      <RingDialog facade={props.facade} open={jewelry() === "ring"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
-      <GemDialog facade={props.facade} open={jewelry() === "gem"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
-      <PriceBookDialog
+      <Ring facade={props.facade} open={jewelry() === "ring"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
+      <Gem facade={props.facade} open={jewelry() === "gem"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
+      <PriceBook
         facade={props.facade}
         open={pricebookOpen()}
         sheet={bench()}

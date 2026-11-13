@@ -17,33 +17,9 @@
  * Neither component is mounted here: the shell owns `open`.
  */
 
-import { createEffect, createMemo, createSignal, For, on, Show, type JSX } from "solid-js";
-import {
-  gemFacts,
-  gemRefusalField,
-  isElongated,
-  place,
-  planGem,
-  planRing,
-  previewRing,
-  readGemChoices,
-  readRingChoices,
-  RING_SYSTEMS,
-  ringRefusalField,
-  ringSizeQuery,
-  sizeExample,
-  type Fact,
-  type GemChoices,
-  type GemErrors,
-  type GemField,
-  type GemForm,
-  type JewelryEngine,
-  type RingChoices,
-  type RingErrors,
-  type RingField,
-  type RingForm,
-  type RingPreview,
-} from "../jewelry-dialog";
+import { For, Show, type JSX } from "solid-js";
+import { RING_SYSTEMS, sizeExample, type Fact, type GemField, type JewelryEngine, type RingField } from "../jewelry-dialog";
+import { createGemEdit, createRingEdit } from "../jewelry-edit";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { Field } from "../ui/Field";
@@ -126,89 +102,14 @@ function Actions(props: { onCancel: () => void; onOk: () => void }): JSX.Element
   );
 }
 
-const NO_RING: RingChoices = { metals: [], form: { system: "us", size: "", wall: "", width: "", metal: "", x: "0", y: "0" } };
-
 export function RingDialog(props: JewelryDialogProps): JSX.Element {
-  const [choices, setChoices] = createSignal<RingChoices>(NO_RING);
-  const [form, setForm] = createSignal<RingForm>(NO_RING.form);
-  const [errors, setErrors] = createSignal<RingErrors>({});
-  const [summary, setSummary] = createSignal("");
   let body: HTMLDivElement | undefined;
 
   const id = (field: RingField): string => `ring-${field}`;
   const errorId = (field: RingField): string => `ring-${field}-error`;
 
-  // Every opening starts from what the engine lists: a form that was cancelled is gone.
-  createEffect(
-    on(
-      () => props.open,
-      (open) => {
-        if (!open) return;
-        const held = readRingChoices(props.facade);
-        setChoices(held);
-        setForm(held.form);
-        setErrors({});
-        setSummary("");
-      },
-    ),
-  );
-
-  const edit = (patch: Partial<RingForm>, ...fields: RingField[]): void => {
-    setForm((held) => ({ ...held, ...patch }));
-    setSummary("");
-    if (fields.some((field) => errors()[field] !== undefined)) {
-      setErrors((held) => {
-        const next = { ...held };
-        for (const field of fields) delete next[field];
-        return next;
-      });
-    }
-  };
-
-  // The engine is asked about a size once, when the size or its system changes, and not at all
-  // while the dialog is closed.
-  const sizeKey = createMemo(() => (props.open ? JSON.stringify(ringSizeQuery(form())) : "null"));
-  const preview = createMemo<RingPreview>(() => (sizeKey() === "null" ? { kind: "none" } : previewRing(props.facade, form())));
-  const facts = (): readonly Fact[] => {
-    const held = preview();
-    return held.kind === "sizes" ? held.facts : [];
-  };
-  /** The words under the size: what OK found, else what the engine says of it as it is typed. */
-  const sizeError = (): string | undefined => {
-    const held = preview();
-    return errors().size ?? (held.kind === "refused" ? held.error : undefined);
-  };
-  const untouched = createMemo(() => JSON.stringify(form()) === JSON.stringify(choices().form));
-
-  const mark = (found: RingErrors): void => {
-    setErrors(found);
-    const first = (Object.keys(found) as RingField[])[0];
-    if (first === undefined) return;
-    queueMicrotask(() => body?.querySelector<HTMLElement>(`#${id(first)}`)?.focus());
-  };
-
-  const apply = (): void => {
-    const plan = planRing(form());
-    if (!plan.ok) {
-      setSummary("");
-      mark(plan.errors);
-      return;
-    }
-    const placed = place(props.facade, "ring", plan.params);
-    if (placed.ok) {
-      props.onPlaced(placed.message);
-      props.onClose();
-      return;
-    }
-    const field = ringRefusalField(placed.error);
-    if (field === null) {
-      setErrors({});
-      setSummary(placed.error);
-    } else {
-      setSummary("");
-      mark({ [field]: placed.error });
-    }
-  };
+  // The state and what OK does are shared with the Slab-drawn dialog (`../jewelry-edit`).
+  const { choices, form, errors, summary, facts, sizeError, untouched, edit, apply } = createRingEdit(props, (field) => body?.querySelector<HTMLElement>(`#${id(field)}`)?.focus());
 
   const number = (field: "wall" | "width" | "x" | "y", label: string): JSX.Element => (
     <FormRow label={label} for={id(field)} error={errors()[field]} errorId={errorId(field)}>
@@ -295,77 +196,13 @@ export function RingDialog(props: JewelryDialogProps): JSX.Element {
   );
 }
 
-const NO_GEM: GemChoices = { list: { cuts: [], stones: [] }, cuts: [], stones: [], note: null, form: { cut: "", stone: "", diameter: "", length: "", width: "", x: "0", y: "0" } };
-
 export function GemDialog(props: JewelryDialogProps): JSX.Element {
-  const [choices, setChoices] = createSignal<GemChoices>(NO_GEM);
-  const [form, setForm] = createSignal<GemForm>(NO_GEM.form);
-  const [errors, setErrors] = createSignal<GemErrors>({});
-  const [summary, setSummary] = createSignal("");
   let body: HTMLDivElement | undefined;
 
   const id = (field: GemField): string => `gem-${field}`;
   const errorId = (field: GemField): string => `gem-${field}-error`;
 
-  createEffect(
-    on(
-      () => props.open,
-      (open) => {
-        if (!open) return;
-        const held = readGemChoices(props.facade);
-        setChoices(held);
-        setForm(held.form);
-        setErrors({});
-        setSummary("");
-      },
-    ),
-  );
-
-  const edit = (patch: Partial<GemForm>, ...fields: GemField[]): void => {
-    setForm((held) => ({ ...held, ...patch }));
-    setSummary("");
-    if (fields.some((field) => errors()[field] !== undefined)) {
-      setErrors((held) => {
-        const next = { ...held };
-        for (const field of fields) delete next[field];
-        return next;
-      });
-    }
-  };
-
-  const elongated = createMemo(() => isElongated(choices().list, form()));
-  const facts = createMemo(() => gemFacts(choices().list, form()));
-  const untouched = createMemo(() => JSON.stringify(form()) === JSON.stringify(choices().form));
-
-  const mark = (found: GemErrors): void => {
-    setErrors(found);
-    const first = (Object.keys(found) as GemField[])[0];
-    if (first === undefined) return;
-    queueMicrotask(() => body?.querySelector<HTMLElement>(`#${id(first)}`)?.focus());
-  };
-
-  const apply = (): void => {
-    const plan = planGem(choices().list, form());
-    if (!plan.ok) {
-      setSummary("");
-      mark(plan.errors);
-      return;
-    }
-    const placed = place(props.facade, "gem", plan.params);
-    if (placed.ok) {
-      props.onPlaced(placed.message);
-      props.onClose();
-      return;
-    }
-    const field = gemRefusalField(placed.error, elongated());
-    if (field === null) {
-      setErrors({});
-      setSummary(placed.error);
-    } else {
-      setSummary("");
-      mark({ [field]: placed.error });
-    }
-  };
+  const { choices, form, errors, summary, elongated, facts, untouched, edit, apply } = createGemEdit(props, (field) => body?.querySelector<HTMLElement>(`#${id(field)}`)?.focus());
 
   const number = (field: "diameter" | "length" | "width" | "x" | "y", label: string): JSX.Element => (
     <FormRow label={label} for={id(field)} error={errors()[field]} errorId={errorId(field)}>

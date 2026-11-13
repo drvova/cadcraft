@@ -1,0 +1,166 @@
+// The body of the Ring dialog and of the Gem dialog: one document, mounted once by each, told
+// which it is by `gem`. The view only, and only the body: the box, the title bar, the footer's
+// keys, the backdrop, Escape and the focus trap are the interface's own dialog
+// (src/ui/Dialog.tsx), which this surface stands inside (src/slab/modal.tsx).
+//
+// Every string and every boolean is shaped in TypeScript (src/slab/jewelry-params.ts); what is
+// typed comes back as a signal with the row's key and goes through the same state as the SolidJS
+// dialogs (src/jewelry-edit.ts).
+//
+// A measure is the kernel's text field. A choice from a list (the size system, the metal, the
+// cut, the stone) is the interface's own Select, in a hole: a hole cannot stand inside an `each`,
+// so those rows are written out here and the typed rows around them are lists.
+//
+//   Ring: size system (hole `first`), size · the sizes · wall, width, metal (hole) · position
+//   Gem:  cut (hole `first`), diameter or length and width, stone (hole) · the cut · position
+//
+// Measures follow src/dialogs.css (.jewelry, .jewelry-row, .jewelry-readout, .jewelry-fact,
+// .drafting-pair, .drafting-group) and src/ui/ui.css (.ui-field): groups 16 apart, rows 8 apart, a
+// refusal 4 under its control, the controls in one column 164 wide (the 20ch of .drafting-pair at the body size). A group that one of the two
+// dialogs lacks would still stand between two gaps, so the groups carry their own room above them
+// and give it up when they are empty.
+import "gen/tokens.slab"
+
+// One typed figure: its label, the field, the refusal standing on it or the example to go by.
+// A focused field is scrolled 8 by the kernel to keep the caret inside its content box, and one
+// without the focus is not: the 8 is given up from the inset while the field has the focus, so
+// the text stands in one place either way (slab/piece.slab says the same of its rows).
+// An `each` lays its items edge to edge (a column's gap does not come between them), so a row
+// carries the 8 over it itself, and the groups are written around that.
+def FormField(name="", shown="", hint="", bad=false, eg="", blank=false) export {
+  col w=fill gap=space.g4 pad=space.g8,0,0,0 {
+    row w=fill h=size.control-h-input gap=space.g12 align=center {
+      text name style=text.body color=color.text-dim w=fill nowrap ellipsis
+      text shown style=text.body color=color.text w=164 h=size.control-h-input \
+           pad=space.g4,space.g14,space.g4,space.g6 radius=radius.control nowrap clip align-text=end \
+           field=field_edit submit=field_submit field-sync=host label=name desc=hint \
+           bg=color.control stroke=color.border stroke-w=1 stroke-align=inside transition=dur.fast {
+        when focus { stroke=color.focus-ring stroke-w=2 pad=space.g4,space.g6 }
+        when bad { stroke=color.error }
+      }
+    }
+    when bad {
+      text hint style=text.label color=color.error w=fill
+    }
+    // The kernel's field has no placeholder: an empty field's example stands under it.
+    when blank {
+      text eg style=text.label color=color.text-faint w=fill align-text=end
+    }
+  }
+}
+
+// What happened to the whole form: said at once to a screen reader.
+def FormAlert(note="") export {
+  col w=fill pad=0,0,space.g16,0 {
+    row w=fill pad=space.g6,space.g8 radius=radius.card stroke=color.error stroke-w=1 role=alert label=note {
+      text note style=text.body color=color.text w=fill
+    }
+  }
+}
+
+// A quiet sentence: the engine's note over the form (16 over the first group).
+def FormNote(note="") export {
+  col w=fill pad=0,0,space.g16,0 {
+    text note style=text.label color=color.text-faint w=fill
+  }
+}
+
+// One figure of the engine's: read, never typed.
+def FormFact(name="", amount="", said="") export {
+  row w=fill gap=space.g12 pad=1,0 role=listitem label=said {
+    text name style=text.body color=color.text-dim nowrap
+    text amount style=text.body color=color.text w=fill align-text=end
+  }
+}
+
+// The line that stands where the figures would.
+def FormEmpty(note="") export {
+  row w=fill {
+    text note style=text.label color=color.text-faint w=fill
+  }
+}
+
+params {
+  // The Gem dialog: a stone under the measures, and no wall, width and metal.
+  gem bool = false
+  alerts list(FormAlert) = []
+  notes  list(FormNote) = []
+  // The first row's choice (the size system, the cut) and the refusal standing on it.
+  first_name text = ""
+  first_hint text = ""
+  first_bad  bool = false
+  // The measures under it: the size, or the diameter, or the length and the width.
+  top list(FormField) = []
+  stone_hint text = ""
+  stone_bad  bool = false
+  // The engine's figures: the heading as it reads and as it is said, the lines, the line that
+  // stands for none, and what the figures are not.
+  facts_head  text = ""
+  facts_title text = ""
+  facts       list(FormFact) = []
+  facts_empty list(FormEmpty) = []
+  facts_note  text = ""
+  // The ring's wall and width, over its metal.
+  mid list(FormField) = []
+  metal_hint text = ""
+  metal_bad  bool = false
+  // Where it is placed: X and Y.
+  place list(FormField) = []
+}
+
+col #body w=fill {
+  each param.alerts
+  each param.notes
+  col #first w=fill {
+    col w=fill gap=space.g4 {
+      row w=fill h=size.control-h-input gap=space.g12 align=center {
+        text param.first_name style=text.body color=color.text-dim w=fill nowrap ellipsis
+        hole first w=164 h=size.control-h-input
+      }
+      when first_bad {
+        text param.first_hint style=text.label color=color.error w=fill
+      }
+    }
+    each param.top
+    when gem {
+      col w=fill gap=space.g4 pad=space.g8,0,0,0 {
+        row w=fill h=size.control-h-input gap=space.g12 align=center {
+          text "Stone" style=text.body color=color.text-dim w=fill nowrap ellipsis
+          hole stone w=164 h=size.control-h-input
+        }
+        when stone_bad {
+          text param.stone_hint style=text.label color=color.error w=fill
+        }
+      }
+    }
+  }
+  col w=fill pad=space.g16,0,0,0 {
+    col #readout w=fill gap=space.g6 pad=space.g8,space.g10 radius=radius.card bg=color.surface-inset \
+        stroke=color.border-soft stroke-w=1 role=group label=param.facts_title {
+      text param.facts_head style=text.chip weight=700 color=color.text-faint nowrap role=heading level=2 label=param.facts_title
+      col #facts w=fill role=list label=param.facts_title live=polite {
+        each param.facts
+        each param.facts_empty
+      }
+      text param.facts_note style=text.label color=color.text-faint w=fill
+    }
+  }
+  col #mid w=fill pad=space.g8,0,0,0 {
+    when gem { pad=0 }
+    each param.mid
+    when !gem {
+      col w=fill gap=space.g4 pad=space.g8,0,0,0 {
+        row w=fill h=size.control-h-input gap=space.g12 align=center {
+          text "Metal" style=text.body color=color.text-dim w=fill nowrap ellipsis
+          hole metal w=164 h=size.control-h-input
+        }
+        when metal_bad {
+          text param.metal_hint style=text.label color=color.error w=fill
+        }
+      }
+    }
+  }
+  col #place w=fill pad=space.g8,0,0,0 {
+    each param.place
+  }
+}

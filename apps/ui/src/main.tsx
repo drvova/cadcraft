@@ -88,5 +88,21 @@ async function withChromeParts(boot: SlabBoot): Promise<SlabBoot> {
   return notice === undefined ? { parts } : { parts, notice };
 }
 
-const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts) : Promise.resolve<SlabBoot>({})]);
+/** The dialogs whose body Slab draws, each when its document loads; the SolidJS one is shown otherwise. */
+async function withDialogs(boot: SlabBoot): Promise<SlabBoot> {
+  if (boot.parts === undefined) return boot;
+  const { loadSlab } = await import("./slab/loader");
+  const [prices, jewelry] = await Promise.all([loadSlab("pricebook"), loadSlab("jewelry-dialog")]);
+  const parts: SlabParts = { ...boot.parts };
+  if (prices.ok) parts.PriceBook = (await import("./slab/SlabPriceBook")).SlabPriceBook;
+  if (jewelry.ok) {
+    const { SlabRing, SlabGem } = await import("./slab/SlabJewelry");
+    parts.Ring = SlabRing;
+    parts.Gem = SlabGem;
+  }
+  const notice = boot.notice ?? (!prices.ok ? slabPartNotice("Price Book dialog", prices.reason) : !jewelry.ok ? slabPartNotice("Ring and Gem dialogs", jewelry.reason) : undefined);
+  return notice === undefined ? { parts } : { parts, notice };
+}
+
+const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts).then(withDialogs) : Promise.resolve<SlabBoot>({})]);
 render(() => <App facade={facade} slab={slab.parts} shellNotice={slab.notice} />, root);
