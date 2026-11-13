@@ -215,6 +215,7 @@ and the notice names the part. Logic is shared with the SolidJS component, not f
 | Command line | `cmdline.slab` | the band, the history (a `virtual` list, selectable), the keywords, the error; the typed line is the page's field in a hole (`CommandField`): the kernel's field measured 12.5 ms from key to paint against 3 to 4, and selects no word |
 | Assistant | `assistant.slab` | the frame only: title band, empty state, chips, the composer's card and toolbar. The conversation and the editor are SolidJS in holes: a Slab conversation copied a line break at every drawn line, took no link press, had no headings or lists for a screen reader, and cost 30 times the script while streaming |
 | Drafting Settings, Template Gallery | `drafting.slab`, `template-gallery.slab` | on `modal.tsx`, a tab strip being one stop with arrows; a hidden surface measures the tallest page so the dialog does not move; the gallery's stills are the renderer's PNGs registered as images |
+| Layer Properties Manager | `layer-manager.slab` | the grid is one Tab stop with arrows between cells, the SolidJS keys exactly (`gridKeyAction`, run by both); state is `src/layer-manager-edit.ts`, shared. Not a `virtual` list: the web element writes a list whole, which cost 250 ms a key at 2,000 layers, so the host hands over the rows near the viewport between two spacers. Rename, description and the filter are the page's `Field`; a refusal reads at the foot of the grid, rows being one height |
 
 Known to be worse than SolidJS in all of them: one tab stop with arrows per surface; a pointer
 press can show the focus ring; no kerning; a screen reader sees switches where SolidJS has pressed
@@ -225,14 +226,12 @@ few more chunks than before.
 
 Every region of the shell has a Slab part now. What is still SolidJS, and why:
 
-1. **The Layer Manager** (16 to 24): an 892-line virtualised grid; decide first whether it keeps
-   the SolidJS model (one Tab stop, arrows between cells) or takes `modal.tsx`'s.
-2. **Menus, the command palette, the tech sheet**: not attempted; a menu must open over other
+1. **Menus, the command palette, the tech sheet**: not attempted; a menu must open over other
    regions, which a surface's overlay cannot.
-3. **Text**: every free-text field, the assistant's conversation and editor. These wait on the
+2. **Text**: every free-text field, the assistant's conversation and editor. These wait on the
    kernel: word selection, a placeholder, copy that follows paragraphs, links, variable-height
    virtual rows (`setItemExtent` on the web element).
-4. The status bar and the view tabs still bind `pointer-move`, a solve per move.
+3. The status bar and the view tabs still bind `pointer-move`, a solve per move.
 
 The driver clips every hole and paints it under the later ones, so `SlabShell` lets the bars'
 holes out and raises them (`OPEN_PAST_EDGE`): before that the menu bar's menus opened unseen.

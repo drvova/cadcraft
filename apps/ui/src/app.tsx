@@ -1495,9 +1495,10 @@ export function App(props: AppProps): JSX.Element {
   const PriceBook = props.slab?.PriceBook ?? PriceBookDialog;
   const Drafting = props.slab?.Drafting ?? DraftingSettings;
   const Templates = props.slab?.Templates ?? TemplateGallery;
+  const Manager = props.slab?.LayerManager ?? LayerManager;
   const overlays = (): JSX.Element => (
     <>
-      <LayerManager facade={props.facade} open={layerManager()} onClose={() => setLayerManager(false)} onChanged={refresh} />
+      <Manager facade={props.facade} open={layerManager()} onClose={() => setLayerManager(false)} onChanged={refresh} />
       <Ring facade={props.facade} open={jewelry() === "ring"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
       <Gem facade={props.facade} open={jewelry() === "gem"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
       <PriceBook

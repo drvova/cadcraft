@@ -186,6 +186,11 @@ export interface ModalSurfaceOptions {
    * answers true. Absent: the kernel's walk, as it was.
    */
   arrows?: (key: string) => boolean;
+  /**
+   * False for a body with no text field of the kernel's: nothing is synced after each frame (the
+   * walk of every stop it costs grows with the scene). Absent: the fields are synced.
+   */
+  fields?: boolean;
 }
 
 export interface ModalSurface {
@@ -418,6 +423,7 @@ export function attachModalSurface(host: SlabFieldHost, options: ModalSurfaceOpt
   host.addEventListener("pointerdown", onPointerDown);
 
   const afterFrame = (): void => {
+    if (options.fields === false) return;
     syncEditing();
     push();
   };

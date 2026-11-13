@@ -136,6 +136,16 @@ async function withMoreDialogs(boot: SlabBoot): Promise<SlabBoot> {
   return { parts, ...(notice === undefined ? {} : { notice }) };
 }
 
+/** The Layer Properties Manager, added to the parts when its document loads; the SolidJS one shows when it does not. */
+async function withLayerManager(boot: SlabBoot): Promise<SlabBoot> {
+  if (boot.parts === undefined) return boot;
+  const { loadSlab } = await import("./slab/loader");
+  const manager = await loadSlab("layer-manager");
+  if (!manager.ok) return { ...boot, notice: boot.notice ?? slabPartNotice("Layer Properties Manager", manager.reason) };
+  const { SlabLayerManager } = await import("./slab/SlabLayerManager");
+  return { ...boot, parts: { ...boot.parts, LayerManager: SlabLayerManager } };
+}
+
 /** The command line, added to the parts when its document loads; the SolidJS one shows when it does not. */
 async function withCommandLine(boot: SlabBoot): Promise<SlabBoot> {
   if (boot.parts === undefined) return boot;
@@ -159,5 +169,5 @@ async function withAssistant(boot: SlabBoot): Promise<SlabBoot> {
 const ask = shellChoice(window.location.search);
 /** A checkout that never built Slab shows the standard shell without a word, unless Slab was asked for by name. */
 const quietWhenAbsent = (boot: SlabBoot): SlabBoot => (!ask.asked && boot.parts === undefined && boot.notice === SLAB_ABSENT ? {} : boot);
-const [facade, slab] = await Promise.all([createFacade(), ask.shell === "slab" ? loadSlabParts().then(quietWhenAbsent).then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts).then(withDialogs).then(withMoreDialogs).then(withRibbon).then(withTopBar).then(withCommandLine).then(withAssistant) : Promise.resolve<SlabBoot>({})]);
+const [facade, slab] = await Promise.all([createFacade(), ask.shell === "slab" ? loadSlabParts().then(quietWhenAbsent).then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts).then(withDialogs).then(withMoreDialogs).then(withLayerManager).then(withRibbon).then(withTopBar).then(withCommandLine).then(withAssistant) : Promise.resolve<SlabBoot>({})]);
 render(() => <App facade={facade} slab={slab.parts} shellNotice={slab.notice} />, root);

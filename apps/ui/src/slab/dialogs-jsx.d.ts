@@ -12,6 +12,7 @@ declare module "solid-js" {
       "cadcraft-jewelry-dialog": HTMLAttributes<HTMLElement>;
       "cadcraft-drafting": HTMLAttributes<HTMLElement>;
       "cadcraft-template-gallery": HTMLAttributes<HTMLElement>;
+      "cadcraft-layer-manager": HTMLAttributes<HTMLElement>;
     }
   }
 }
