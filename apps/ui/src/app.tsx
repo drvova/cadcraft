@@ -1495,6 +1495,7 @@ export function App(props: AppProps): JSX.Element {
   const PriceBook = props.slab?.PriceBook ?? PriceBookDialog;
   const Drafting = props.slab?.Drafting ?? DraftingSettings;
   const Templates = props.slab?.Templates ?? TemplateGallery;
+  const Palette = props.slab?.Palette ?? CommandPalette;
   const overlays = (): JSX.Element => (
     <>
       <LayerManager facade={props.facade} open={layerManager()} onClose={() => setLayerManager(false)} onChanged={refresh} />
@@ -1519,7 +1520,7 @@ export function App(props: AppProps): JSX.Element {
         onClose={() => setDrafting((d) => ({ ...d, open: false }))}
         onApplied={refresh}
       />
-      <CommandPalette open={paletteOpen} items={palette} recent={recentCommands} onRun={onPaletteRun} onClose={() => setPaletteOpen(false)} />
+      <Palette open={paletteOpen} items={palette} recent={recentCommands} onRun={onPaletteRun} onClose={() => setPaletteOpen(false)} />
       <ContextMenu menu={contextMenu} onInvoke={onContextInvoke} onClose={() => setContextAt(null)} />
     </>
   );

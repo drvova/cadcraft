@@ -1,0 +1,24 @@
+/*
+ * The Slab palette's place in the palette's box (`SlabPalette.tsx`). The box, the field and the
+ * dialog are `../palette.css`'s; the document draws the list, the empty lines and the foot.
+ */
+
+/* The surface takes the height the document lays out (the driver sizes an element that has none
+   of its own), and gives way to the box's cap rather than growing past it. */
+.slab-palette-surface {
+  display: block;
+  flex: 0 1 auto;
+  width: 100%;
+  min-height: 0;
+}
+
+/* The field's listbox and the status line, for assistive tech only: the surface is hidden from
+   it (an id in its shadow tree is out of the combobox's reach). */
+.slab-palette-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

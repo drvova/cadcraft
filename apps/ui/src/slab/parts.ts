@@ -21,6 +21,7 @@ import type { JewelryDialogProps } from "../components/JewelryDialog";
 import type { PriceBookDialogProps } from "../components/PriceBookDialog";
 import type { DraftingSettingsProps } from "../components/DraftingSettings";
 import type { TemplateGalleryProps } from "../components/TemplateGallery";
+import type { CommandPaletteProps } from "../palette-model";
 
 /**
  * What the ribbon is given: the SolidJS strip's props, and the id of the command that is running
@@ -73,4 +74,6 @@ export interface SlabParts {
   CommandLine?: Component<CommandLineProps>;
   /** The assistant panel's frame; absent when its document did not load, and the SolidJS panel is shown. */
   Assistant?: Component<AssistantPaneProps>;
+  /** The command palette's list; absent when its document did not load, and the SolidJS palette is shown. */
+  Palette?: Component<CommandPaletteProps>;
 }

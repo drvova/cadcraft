@@ -1,0 +1,150 @@
+// The command palette's body: the list of commands that match what is typed, the lines that say
+// nothing matched, and the foot (how many there are, or why the lit one will not run; the keys).
+// The view only. The box, the field over the list, the dialog it stands in (the top layer, the
+// inert page, Escape, a press outside, the focus going back) are the host's
+// (src/slab/SlabPalette.tsx, over src/components/CommandPalette.tsx's frame); what is listed, in
+// what order, which row is lit and what every key and press does are src/palette-model.ts's, the
+// SolidJS palette's own; each row is shaped in src/slab/palette-params.ts.
+//
+// Nothing here takes the focus or emits a signal: the keyboard never leaves the field, so the lit
+// row is a state the host sets on one row (`lit`), not the kernel's focus, and a press or a move
+// of the pointer is found by the host from where it lands (the rows are all one height). So no
+// node binds a pointer or a key, no row is a focus stop, and no `transition=` eases anything:
+// each would ask the kernel for a frame per step. The rows are `inert`, so the pointer going
+// from one to the next changes no hit path and paints nothing.
+//
+// A screen reader is not given this tree (the host hides it): the field is a combobox whose
+// `aria-activedescendant` must name the lit option, and an id in this surface's shadow tree is
+// out of its reach. The host keeps a listbox of its own beside it (SlabPalette.tsx says what it
+// holds).
+//
+// Measures follow src/palette.css and src/ui/ui.css (.ui-row, .ui-kbd): the list is inset 4 on
+// every side, a row is 22 with a 4 inset and a card's corner, the label at the body size and a
+// 4 inset of its own, where it lives at the label size, the trailing column 12 after the path
+// and 4 before the edge with 8 between its parts; the foot is a button high under a hairline,
+// 12 in, its parts 12 apart; the empty lines 8 in, 4 apart, on a line of one and a half.
+import "gen/tokens.slab"
+
+tokens {
+  palette {
+    // The empty lines' leading (palette.css: `.palette-empty`, line-height 1.5).
+    leading 1.5
+    // A key cap: one 16 line of chip type inside a hairline (ui.css: `.ui-kbd`).
+    cap 18
+  }
+}
+
+// One run of a command's label: the letters the query matched take the accent's ink and weight.
+// A command that cannot run takes the disabled ink, the matched letters with it.
+def PaletteRun(t="", hit=false, off=false) export {
+  span t {
+    when hit { color=color.text-accent weight=600 }
+    when off { color=color.text-disabled }
+  }
+}
+
+// A key cap: the shortcut, quiet, on the soft hairline.
+def Cap(k="") {
+  row h=palette.cap pad=0,space.g4 radius=radius.small align=center stroke=color.border-soft stroke-w=1 {
+    text k style=text.chip color=color.text-faint nowrap
+  }
+}
+
+// One command: its label (the matched letters lit), where the menu keeps it, and at the end the
+// tags, the name typed at the command line and the shortcut. The path gives way first, then the
+// label; the trailing column keeps its width (a grid's hug column is measured before its fill).
+def PaletteRow(path="", placed=false, tag="", tagged=false, tag2="", tagged2=false, \
+               name="", named=false, shortcut="", keyed=false, off=false, runs=list(PaletteRun)) export {
+  row w=fill h=size.control-h-row pad=0,space.g4 radius=radius.card align=center color=color.text-dim inert {
+    when lit { bg=color.fill-active color=color.text }
+    when off { color=color.text-disabled }
+    grid w=fill cols=fill,hug {
+      row w=fill h=size.control-h-row align=center {
+        para h=hug nowrap ellipsis pad=0,space.g4 style=text.body color=color.text {
+          when off { color=color.text-disabled }
+          each runs
+        }
+        when placed {
+          text path w=fill pad=0,0,0,space.g4 style=text.label color=color.text-faint nowrap ellipsis {
+            when off { color=color.text-disabled }
+          }
+        }
+      }
+      row w=hug h=size.control-h-row pad=0,space.g4,0,space.g12 gap=space.g8 align=center {
+        when tagged {
+          text tag style=text.chip color=color.text-faint nowrap
+        }
+        when tagged2 {
+          text tag2 style=text.chip color=color.text-faint nowrap
+        }
+        when named {
+          text name style=text.mono color=color.text-faint nowrap ellipsis {
+            when off { color=color.text-disabled }
+          }
+        }
+        when keyed {
+          Cap k=shortcut
+        }
+      }
+    }
+  }
+}
+
+params {
+  rows      list(PaletteRow) = []
+  // There are rows; with none the lines that say so stand in the list's place.
+  filled    bool = true
+  // What was typed, trimmed, for the line that says nothing matched it.
+  query     text = ""
+  status    text = ""
+  // A window as narrow as a phone has no keys to name: the foot is the count alone.
+  narrow    bool = false
+  // The most the list may be tall: the room the box leaves it, in whole rows (the host works it
+  // out from the window as palette.css does).
+  list_max  num = 400
+}
+
+// The surface has no height of its own: the driver sizes the element to what is laid out, so the
+// box is as tall as its rows (up to the cap) or its empty lines, as the SolidJS one is.
+col #box w=fill bg=color.surface-elevated {
+  // The list and, in its place when nothing matched, the empty lines. A `when`'s children come
+  // after the node's own, so the two have a box of their own to keep the foot under them.
+  col #body w=fill {
+    col #list w=fill max-h=param.list_max pad=space.g4 scroll scrollbar=auto scrollbar-fg=color.scrollbar scrollbar-bg=none {
+      when !filled { max-h=0 pad=0 }
+      each param.rows key=rows virtual item-extent=22 overscan=8
+    }
+    when !filled {
+      col #empty w=fill pad=space.g4 {
+        col w=fill pad=space.g8 gap=space.g4 {
+          row w=fill gap=space.g4 {
+            text "No command matches" style=text.body leading=palette.leading color=color.text-dim nowrap
+            text param.query style=text.body leading=palette.leading color=color.text nowrap ellipsis
+          }
+          text "Try fewer letters, the menu it lives in (Draw, Modify, Dimension), or the name you would type at the command line." \
+               w=fill style=text.body leading=palette.leading color=color.text-faint
+        }
+      }
+    }
+  }
+  rect w=fill h=size.hairline bg=color.border-soft
+  row #foot w=fill h=size.control-h-button pad=0,space.g12 gap=space.g12 align=center {
+    text param.status w=fill style=text.chip color=color.text-faint nowrap ellipsis
+    when !narrow {
+      row gap=space.g12 align=center {
+        row gap=space.g4 align=center {
+          text "Run" style=text.chip color=color.text-faint nowrap
+          Cap k="Enter"
+        }
+        row gap=space.g4 align=center {
+          text "Complete" style=text.chip color=color.text-faint nowrap
+          Cap k="Tab"
+        }
+        row gap=space.g4 align=center {
+          text "Close" style=text.chip color=color.text-faint nowrap
+          Cap k="Esc"
+        }
+      }
+    }
+  }
+}
