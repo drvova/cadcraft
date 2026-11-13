@@ -45,6 +45,11 @@ export interface ButtonProps {
    * key. Never pass it over a label that already names the action.
    */
   ariaLabel?: string;
+  /** A disclosure: the button shows and hides a region of the page and says whether it is showing
+   *  now (`aria-expanded`). Pass `controls` with the region's `id`. */
+  expanded?: boolean;
+  /** The `id` of the region a disclosure shows and hides: sets `aria-controls`. */
+  controls?: string;
   /** The native type. Defaults to `button` so the button never submits a form implicitly. */
   type?: "button" | "submit" | "reset";
   /** Runs on click. A disabled button never fires it. */
@@ -69,6 +74,8 @@ export function Button(props: ButtonProps): JSX.Element {
       data-hint-keys={props.shortcut ?? hint().keys}
       aria-keyshortcuts={props.shortcut === undefined ? undefined : ariaKeyShortcuts(props.shortcut)}
       aria-label={props.ariaLabel}
+      aria-expanded={props.expanded === undefined ? undefined : props.expanded}
+      aria-controls={props.controls}
       onClick={(event) => props.onClick?.(event)}
     >
       {props.children}

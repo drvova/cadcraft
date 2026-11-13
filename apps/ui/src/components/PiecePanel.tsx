@@ -30,9 +30,10 @@
  */
 
 import { createEffect, createMemo, createSignal, For, Index, Match, onCleanup, Show, Switch, untrack, type Accessor, type JSX } from "solid-js";
-import { pieceGroups, pieceHeading, pieceSummary, PIECE_KINDS, rowShownName, rowUnit, type PieceChoices, type PieceRow, type PieceState } from "../piece";
+import { passingLine, pieceGroups, pieceHeading, pieceSummary, PIECE_KINDS, rowShownName, rowUnit, type PieceChoices, type PieceRow, type PieceState } from "../piece";
 import { createPieceSection, createRowEdit, type Refused } from "../piece-edit";
 import { sizeExample } from "../jewelry-dialog";
+import { ToolIcon } from "../icons";
 import { Button } from "../ui/Button";
 import { Checkbox } from "../ui/Checkbox";
 import { Field } from "../ui/Field";
@@ -94,6 +95,8 @@ export function PiecePanel(props: PiecePanelProps): JSX.Element {
   const groups = createMemo(() => pieceGroups(rows(), piece()?.params.kind ?? ""));
   const failing = createMemo(() => (piece()?.checks ?? []).filter((c) => !c.ok));
   const passing = createMemo(() => (piece()?.checks ?? []).filter((c) => c.ok));
+  /** The passing checks fold to one line ("6 checks pass"); the failing ones always show. */
+  const [showPassing, setShowPassing] = createSignal(false);
   const others = createMemo(() => facts().filter((f) => f.label === "Also"));
 
   // The rows change under a list whose own box does not (another kind, the halo's rows, a check
@@ -103,6 +106,7 @@ export function PiecePanel(props: PiecePanelProps): JSX.Element {
     props.state;
     system();
     open();
+    showPassing();
     queueMicrotask(() => markEnds?.());
   });
 
@@ -197,7 +201,9 @@ export function PiecePanel(props: PiecePanelProps): JSX.Element {
                               {fact.label}
                             </span>
                             <span class="prop-value">
-                              <span class="prop-readonly">{fact.value}</span>
+                              <span class="prop-readonly" title={fact.value}>
+                                {fact.value}
+                              </span>
                             </span>
                           </div>
                         )}
@@ -208,7 +214,15 @@ export function PiecePanel(props: PiecePanelProps): JSX.Element {
               )}
             </Index>
             <Show when={passing().length > 0}>
-              <div class="piece-list piece-checks" role="list" aria-label={failed() === 0 ? "Checks, all pass" : "Checks that pass"}>
+              <div class="piece-passing">
+                <Button variant="quiet" size="sm" expanded={showPassing()} controls="piece-passing-list" onClick={() => setShowPassing(!showPassing())}>
+                  <span class="piece-passing-chevron" aria-hidden="true" data-open={showPassing() ? "" : undefined}>
+                    <ToolIcon id="chevron-right" />
+                  </span>
+                  {passingLine(passing().length, failed())}
+                </Button>
+              </div>
+              <div class="piece-list piece-checks" id="piece-passing-list" hidden={!showPassing()} role="list" aria-label={failed() === 0 ? "Checks, all pass" : "Checks that pass"}>
                 <For each={passing()}>
                   {(check) => (
                     <div class="piece-check" role="listitem">

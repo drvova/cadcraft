@@ -377,11 +377,14 @@
 /* ---- Piece ---- */
 
 /* The piece is the rail's first section and its longest reading (a solitaire with a halo is
-   fifteen rows before the results): under half the rail at most, then it scrolls, so that in a
+   fifteen rows before the results): half the rail at most, then it scrolls, so that in a
    window 800 tall the layers, the properties and the bench sheet under it keep their rows. */
 .piece {
-  max-height: 44%;
-  max-height: round(down, 44%, 1px);
+  max-height: 50%;
+  max-height: round(down, 50%, 1px);
+  /* Flex shrinks a box by its own height times this: the piece, the tallest, would give way the
+     most. It gives way a quarter as much, so the shorter sections under it yield first. */
+  flex-shrink: 0.25;
   border-top: none;
 }
 
@@ -417,6 +420,15 @@
 
 /* A result's value is whole and may be long (the size in four other systems): the label takes
    the room it needs and the value wraps in the rest, as the bench sheet's lines do. */
+/* The size in the other systems is one line: what does not fit ends in an ellipsis and the whole
+   is the row's title. */
+.piece-also .prop-readonly {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .piece-results .prop-row {
   grid-template-columns: auto minmax(0, 1fr);
 }
@@ -431,6 +443,50 @@
   column-gap: var(--gap-8);
   min-height: var(--control-h-row);
   padding: var(--gap-2) calc(var(--gap-8) + var(--prop-arrow-slot)) var(--gap-2) var(--rail-text, var(--gap-8));
+}
+
+/* The passing checks fold to a line under the parameters: a quiet disclosure on the rail's text
+   column (its label inside the button's own inset), with a chevron that turns when open. */
+.piece-passing {
+  flex: 0 0 auto;
+  display: flex;
+  margin-top: var(--gap-4);
+  padding: var(--gap-2) var(--gap-8) 0 calc(var(--rail-text, var(--gap-8)) - var(--gap-6));
+  border-top: var(--hairline) solid var(--border-soft);
+}
+
+.piece-passing-chevron {
+  display: inline-flex;
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+  margin-inline-end: var(--gap-4);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.piece-passing-chevron .tool-icon {
+  width: 100%;
+  height: 100%;
+}
+
+.piece-passing-chevron[data-open] {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .piece-passing-chevron {
+    transition: none;
+  }
+}
+
+/* Folded, the list is out of the page and the Tab order. */
+.piece-checks[hidden] {
+  display: none;
+}
+
+/* Under the disclosure the list needs no rule of its own. */
+.piece-passing + .piece-checks {
+  margin-top: 0;
+  border-top: none;
 }
 
 .piece-check-text {
@@ -456,16 +512,17 @@
   color: var(--warn);
 }
 
-/* The summary a jeweller scans before any parameter: the size, the metal's weight and the
-   stones' weight as three figures side by side (the figure in the text ink, its name above it
-   and what qualifies it under it, both quiet), then the centre stone in words. On the rail's
-   text column, ending on the values' edge. */
+/* The summary a jeweller scans before any parameter, in two lines at most: the size, the metal's
+   weight and the stones' weight as three figures on one line (each figure in the text ink at 600
+   over what qualifies it in the quiet ink; the figure's name is for a screen reader, since
+   "3.53 g" and "1.19 ct" say what they are), then the centre stone in words. On the rail's text
+   column, ending on the values' edge. */
 .piece-summary {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--gap-3);
-  padding: var(--gap-4) calc(var(--gap-8) + var(--prop-arrow-slot)) var(--gap-6) var(--rail-text, var(--gap-8));
+  gap: var(--gap-2);
+  padding: var(--gap-4) calc(var(--gap-8) + var(--prop-arrow-slot)) var(--gap-4) var(--rail-text, var(--gap-8));
 }
 
 .piece-tiles {
@@ -481,10 +538,14 @@
   flex-direction: column;
 }
 
+/* The figure's name, read and not shown. */
 .piece-tile-label {
-  color: var(--text-faint);
-  font-size: var(--font-chip);
-  line-height: var(--leading-ui);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .piece-tile-value {
@@ -737,4 +798,15 @@
   .objects-row {
     height: var(--control-h-input);
   }
+}
+
+/* ---- The rail while a piece is open ---- */
+
+/* While a piece is open the jeweller reads its parameters more than the layers (a piece's
+   drawing has the same eight layers every time): the layers pane caps lower and scrolls, so in a
+   window 800 tall the piece keeps its summary and most of its rows. Fold the piece and the
+   layers have their own share back. */
+.sidebar:has(.piece:not(.is-folded) .piece-summary) .layers:not(.is-folded) {
+  max-height: 20%;
+  max-height: round(down, 20%, 1px);
 }

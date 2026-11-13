@@ -476,6 +476,14 @@ export function pieceSummary(piece: Piece, system: string): PieceSummary {
   return { tiles, centre };
 }
 
+/** The folded line of the passing checks: "All 6 checks pass" when none fails, else "5 checks
+ *  pass" (the failing ones stand above, under the summary). */
+export function passingLine(passing: number, failing: number): string {
+  const noun = passing === 1 ? "check passes" : "checks pass";
+  if (failing === 0) return passing === 1 ? "The check passes" : `All ${passing.toLocaleString("en-US")} ${noun}`;
+  return `${passing.toLocaleString("en-US")} ${noun}`;
+}
+
 /** A group of the parameters, under its name. */
 export interface PieceGroup {
   name: "Ring" | "Band" | "Stones" | "Head";

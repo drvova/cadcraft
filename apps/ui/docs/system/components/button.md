@@ -12,7 +12,7 @@ Not applicable: hand-rolled — the recipe is the app's own `src/ui/ui.css`, mea
 ## Examples
 `<Button variant="primary">Save</Button>` — the one action of a dialog or a pane.
 
-Real uses, 47 call sites (`rg -c "<Button" src` → `src/components/AssistantPane.tsx:9`, `src/components/DraftingSettings.tsx:4`, `src/components/InlineAsk.tsx:1`, `src/components/JewelryDialog.tsx:2`, `src/components/LayerManager.tsx:7`, `src/components/RecoveryBar.tsx:6`, `src/components/TopBar.tsx:1`, `src/components/ProposalCards.tsx:3`):
+Real uses, 48 call sites (`rg -c "<Button" src` → `src/components/AssistantPane.tsx:9`, `src/components/DraftingSettings.tsx:4`, `src/components/InlineAsk.tsx:1`, `src/components/JewelryDialog.tsx:2`, `src/components/LayerManager.tsx:7`, `src/components/RecoveryBar.tsx:6`, `src/components/TopBar.tsx:1`, `src/components/ProposalCards.tsx:3`):
 - `src/components/ProposalCards.tsx:188` — a proposal card's decision: Reject (`variant="ghost" size="sm"`) and Accept (`variant="primary" size="sm"`, the card's one action, disabled with "Wait for this turn to end" while the assistant's turn runs), and one Reject all (`variant="ghost" size="sm"`) over the variants of one `propose`. Added 2026-11-13.
 - `src/components/JewelryDialog.tsx` — the Ring and Gem dialogs' footer: Cancel (the default) and OK (`variant="primary" type="submit"`). Added 2026-11-12.
 - `src/components/InlineAsk.tsx` — the offer over a selection on the drawing ("Ask about 18 selected objects", `variant="quiet" size="sm"`, `shortcut` the key that opens the same line): it stands in a small box of the elevated surface that the surface draws, and opens the inline ask. Added 2026-11-12.
@@ -84,6 +84,7 @@ Real uses, 47 call sites (`rg -c "<Button" src` → `src/components/AssistantPan
 - `title`: the hint, shown in the layer's hint box and tied to the button as its accessible description (`aria-describedby`). It is what the label leaves out, or why the button is disabled; it is never the name, and no native `title` attribute is rendered. A `title` equal to the label draws no hint and adds no description.
 - `shortcut`: the shortcut that runs the same action, as the user reads it (`Ctrl+Shift+P`): a key cap after the hint's text, and `aria-keyshortcuts` on the button. A `title` that ends in the shortcut in brackets still draws the cap, without the attribute.
 - `ariaLabel`: the accessible name, only for a button whose visible label is a value rather than its action.
+- `expanded`, `controls`: a disclosure. The button shows and hides a region (the piece's passing checks, `src/components/PiecePanel.tsx`) and says whether it is showing now (`aria-expanded`) and which region it is (`aria-controls`, the region's `id`). Its label says what is folded ("All 4 checks pass"), never "Show".
 - `onClick`: runs on click; a disabled button never fires it.
 
 ## Usage

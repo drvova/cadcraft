@@ -903,3 +903,24 @@ notice first. Local styles only; no token, component or wording changed.
   figures line up down the sheet (`BenchLine.part` and `.cells`, read by `parseBench`). The
   cost's total closes the money under a hairline, at the body size. Pressing a line still
   selects what it counts.
+
+## The jeweller's third pass (2026-11-13)
+
+- **The Piece summary is two lines and the parameters get the room.** In a window 800 tall the
+  summary pushed the parameters down to four rows. The figures' names (Size, Metal, Stones) are no
+  longer drawn: "US 6", "3.53 g" and "1.19 ct" say what they are, and each name is still the
+  figure's `dt` for a screen reader (clipped, not `display: none`). The centre stone keeps its line
+  (it says the cut, the stone and the prongs, which no figure does). The section's cap is half the
+  rail (it was 44%) and it gives way a quarter as fast as the sections under it (`flex-shrink:
+  0.25`): a flex box shrinks by its own height, so the tallest section, the piece, was the one
+  losing rows. While a piece is open the layers pane caps at a fifth of the rail and scrolls (a
+  piece's drawing has the same eight layers); folding the piece gives them their share back.
+  The "Also" row (the size in the other systems) is one line ending in an ellipsis, the whole in
+  its title, where it wrapped to two. At 1280x800 the piece shows eight parameter rows under the
+  summary (four before) and the bench keeps its rows. The failing check still stands under the
+  summary.
+- **The passing checks fold to one line.** "All 4 checks pass" ("3 checks pass" when one fails;
+  `passingLine`) is a quiet `Button` disclosure with a chevron that turns (no turn under reduced
+  motion); `Button` gained `expanded` and `controls` for it (`aria-expanded`, `aria-controls`).
+  Folded by default; the list is `hidden` when folded, so it leaves the Tab order. Failing checks
+  are never folded. Wording added: the line itself.

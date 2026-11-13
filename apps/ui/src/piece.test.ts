@@ -23,6 +23,7 @@ import {
   pieceGroups,
   pieceRows,
   pieceSummary,
+  passingLine,
   rowShownName,
   rowUnit,
   readPieceChoices,
@@ -453,6 +454,13 @@ describe("the section's layout", () => {
       { label: "Stones", value: "1.03 ct", detail: "1 pc" },
     ]);
     expect(s.centre).toMatch(/^6\.5 mm round diamond/);
+  });
+
+  test("the passing checks fold to a line that counts them", () => {
+    expect(passingLine(4, 0)).toBe("All 4 checks pass");
+    expect(passingLine(1, 0)).toBe("The check passes");
+    expect(passingLine(3, 1)).toBe("3 checks pass");
+    expect(passingLine(1, 2)).toBe("1 check passes");
   });
 
   test("a band has no stones tile and no centre stone", () => {
