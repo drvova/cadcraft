@@ -330,8 +330,22 @@ describe("the grid's keys, shared by both dialogs", () => {
     expect(decide("a", at(2, 1), { ctrlKey: true }).action).toEqual({ kind: "all" });
     expect(decide("A", at(2, 1), { metaKey: true }).action).toEqual({ kind: "all" });
     expect(decide("s", at(2, 1), { ctrlKey: true }).action).toEqual({ kind: "pass" });
-    expect(decide(" ", at(2, 1), { ctrlKey: true }).action).toEqual({ kind: "pass" });
     expect(decide("ArrowDown", at(2, 1), { altKey: true }).action).toEqual({ kind: "pass" });
+  });
+
+  test("Ctrl+Space adds the keyboard's row to the selection or takes it out, on any of its cells", () => {
+    // It was left to the shell (a chord returned before Space was read), so rows could not be picked apart.
+    expect(decide(" ", at(2, 1), { ctrlKey: true }).action).toEqual({ kind: "select", name: "Doors", toggle: true, range: false });
+    expect(decide(" ", at(2, 1), { metaKey: true }).action).toEqual({ kind: "select", name: "Doors", toggle: true, range: false });
+    // On a flag the key is the row's with Ctrl, the flag's without.
+    expect(decide(" ", at(2, 3), { ctrlKey: true }).action).toEqual({ kind: "select", name: "Doors", toggle: true, range: false });
+    expect(decide(" ", at(2, 3)).action).toEqual({ kind: "flag", name: "Doors", patch: { frozen: false } });
+    expect(decide(" ", at(3, 1), { ctrlKey: true, shiftKey: true }).action).toEqual({ kind: "select", name: "Windows", toggle: true, range: true });
+    // A heading has no row to take, and a held key acts once; plain Space still selects the row alone.
+    expect(decide(" ", at(-1, 1), { ctrlKey: true }).action).toEqual({ kind: "used" });
+    expect(decide(" ", at(2, 1), { ctrlKey: true, repeat: true }).action).toEqual({ kind: "used" });
+    expect(decide(" ", at(2, 1)).action).toEqual({ kind: "select", name: "Doors", toggle: false, range: false });
+    expect(decide("Enter", at(2, 1), { ctrlKey: true }).action).toEqual({ kind: "pass" });
   });
 
   test("Enter or Space on a heading sorts by its column; F2 there does nothing", () => {

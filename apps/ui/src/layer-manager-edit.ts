@@ -211,7 +211,7 @@ export interface GridKeyState {
  * or Cmd the table's ends) and the page keys move the active cell, and a move to another row takes
  * the selection with it (Shift ranges from the anchor; Ctrl moves the keyboard alone); Ctrl+A
  * takes every row; Enter or Space on a heading sorts; on a flag they turn it; on a choice Enter,
- * Space and F2 open its values; Space selects the row (Ctrl toggles, Shift ranges); Enter and F2
+ * Space and F2 open its values; Space selects the row (Shift ranges), and Ctrl+Space adds it to the selection or takes it out; Enter and F2
  * type a name or a description; Enter on the status makes the layer current; Delete deletes the
  * selection; a letter on a name jumps to the next layer that starts with the letters typed.
  * Alt, and a chord the grid has no use for, are left alone.
@@ -235,16 +235,23 @@ export function gridKeyAction(event: Omit<GridKeyEvent, "preventDefault">, state
     const select = next.row !== cell.row && name !== undefined && !mod ? { name, range: event.shiftKey } : null;
     return { action: { kind: "move", to: next, select }, typed };
   }
+  const space = event.key === " ";
+  // Ctrl+Space (Cmd+Space) adds the row the keyboard is on to the selection, or takes it out: it
+  // is how rows are picked apart after Ctrl with an arrow moved the keyboard alone. On any cell
+  // of the row, a flag's included: with Ctrl the key is the row's, not the cell's.
+  if (mod && space) {
+    if (event.repeat || row === undefined) return { action: { kind: "used" }, typed };
+    return { action: { kind: "select", name: row.name, toggle: true, range: event.shiftKey }, typed };
+  }
   if (mod) return pass;
   const enter = event.key === "Enter";
-  const space = event.key === " ";
   if (enter || space || event.key === "F2") {
     if (event.repeat) return { action: { kind: "used" }, typed };
     if (row === undefined) return { action: cell.row === -1 && (enter || space) ? { kind: "sort", key: column.key } : { kind: "used" }, typed };
     const flag = column.key as FlagKey;
     if (column.kind === "flag" && (enter || space)) return { action: { kind: "flag", name: row.name, patch: { [flag]: !row[flag] } }, typed };
     if (column.kind === "choice") return { action: { kind: "choice", cell }, typed };
-    // Ctrl and Cmd never reach here (a chord is left alone above), so Space selects the row alone.
+    // Ctrl+Space was taken above, so Space here selects the row alone.
     if (space) return { action: { kind: "select", name: row.name, toggle: false, range: event.shiftKey }, typed };
     if (column.kind === "name") return { action: { kind: "edit", name: row.name, key: "name" }, typed };
     if (column.kind === "text") return { action: { kind: "edit", name: row.name, key: "description" }, typed };
