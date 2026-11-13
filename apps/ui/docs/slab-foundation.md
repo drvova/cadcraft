@@ -226,8 +226,13 @@ few more chunks than before.
 
 Every region of the shell has a Slab part now. What is still SolidJS, and why:
 
-1. **Menus, the command palette, the tech sheet**: not attempted; a menu must open over other
-   regions, which a surface's overlay cannot.
+1. **The command palette**: built in Slab and measured against the SolidJS one in the same shell
+   (485 commands), and not shipped. It opened in 41 ms against 24 (median, shortcut to painted)
+   and showed results 20 ms after a key against 14: every key adds a kernel tick of 5 to 10 ms and
+   every list change a second, settling frame. Behaviour, keys and the screen reader's tree were
+   the same (the options had to be mirrored in the page: `aria-activedescendant` cannot name a
+   node in a shadow tree). The experiment is kept outside the repository as a patch.
+   **The tech sheet**: not attempted.
 2. **Text**: every free-text field, the assistant's conversation and editor. These wait on the
    kernel: word selection, a placeholder, copy that follows paragraphs, links, variable-height
    virtual rows (`setItemExtent` on the web element).
