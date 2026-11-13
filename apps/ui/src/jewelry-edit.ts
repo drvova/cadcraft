@@ -1,8 +1,7 @@
 /**
  * The Ring and Gem dialogs' state, apart from any view: the choices the engine lists, the form as
  * typed, the refusals standing on it, what the engine says of it while it is typed, and what OK
- * does. The SolidJS dialogs (`./components/JewelryDialog.tsx`) and the ones whose body Slab draws
- * (`./slab/SlabJewelry.tsx`) both run on it, so neither forks the other's behaviour. The rules
+ * does. The dialogs (`./components/JewelryDialog.tsx`) run on it and only draw. The rules
  * themselves are `./jewelry-dialog`'s.
  */
 

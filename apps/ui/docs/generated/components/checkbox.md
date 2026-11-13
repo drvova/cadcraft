@@ -16,7 +16,7 @@ Not applicable: hand-rolled — a native `<input type="checkbox">` drawn from th
 Real uses, 4 call sites (`rg -c "<Checkbox" src/components` → `src/components/DraftingSettings.tsx:2`, `src/components/PropertiesPanel.tsx:1`):
 - `src/components/DraftingSettings.tsx:108` — the Drafting Settings dialog's switches (Snap on, Grid on, Polar tracking on, and the rest), each with its label as children and a refusal tied by `describedBy`.
 - `src/components/DraftingSettings.tsx:222` — the dialog's box per object snap: the label is the snap's marker and its name.
-- `src/components/PropertiesPanel.tsx:192` — the palette's yes-or-no rows: named by the row's label, `mixed` when the picked objects disagree.
+- `src/components/PropertiesPanel.tsx:191` — the palette's yes-or-no rows: named by the row's label, `mixed` when the picked objects disagree.
 
 ### Example files
 | File | Covers | Caption |
@@ -167,7 +167,7 @@ export default function Disabled() {
   - Do: `<Checkbox checked={snap()} onChange={setSnap}>Snap</Checkbox>`
 
 ### Content
-- `rule/checkbox-label-positive`: When a checkbox's label is written, name what is true when the box is ticked, in 1 to 4 words in the positive form (Show the grid), because a ticked box beside a negative label has to be read twice. Evidence: single use `src/components/PropertiesPanel.tsx:193`, the palette's yes-or-no rows, labelled by the property's name. Check: review `src/components/PropertiesPanel.tsx`.
+- `rule/checkbox-label-positive`: When a checkbox's label is written, name what is true when the box is ticked, in 1 to 4 words in the positive form (Show the grid), because a ticked box beside a negative label has to be read twice. Evidence: single use `src/components/PropertiesPanel.tsx:192`, the palette's yes-or-no rows, labelled by the property's name. Check: review `src/components/PropertiesPanel.tsx`.
   - Don't: `<Checkbox checked={!grid()} onChange={(off) => setGrid(!off)}>Do not show the grid</Checkbox>`
   - Do: `<Checkbox checked={grid()} onChange={setGrid}>Show the grid</Checkbox>`
 

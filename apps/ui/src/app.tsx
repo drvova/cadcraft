@@ -10,7 +10,7 @@
  * local signals; anything else classified "none" does nothing.
  */
 
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, untrack, type Component, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, untrack, type JSX } from "solid-js";
 import { AppFacade, type CommandInfo, type DrawingState, type Grip, type GripOption, type LayerInfo, type SampleName, type ScriptReport, type SettingsState } from "./facade";
 import type { DisplayList } from "./display";
 import { padView, regionCovers, regionOf, VIEW_PAD, viewScale, type DisplayRegion } from "./display-cache";
@@ -26,7 +26,6 @@ import { TopBar } from "./components/TopBar";
 import { MenuBar } from "./components/MenuBar";
 import { ToolStrip } from "./components/ToolStrip";
 import { LayoutTabs, STATUS_TOGGLES, StatusBar } from "./components/StatusBar";
-import type { LayoutTabsProps, StatusBarProps } from "./components/StatusBar";
 import { CommandPalette } from "./components/CommandPalette";
 import { DraftingSettings } from "./components/DraftingSettings";
 import { draftingTabFor, opensDraftingSettings, type DraftingTab } from "./drafting";
@@ -36,36 +35,28 @@ import { createAssistantSession, type AssistantSession } from "./assistant-sessi
 import { createProposals, createStillCache, patchTitle } from "./proposals";
 import { assistantStartsOpen } from "./assistant";
 import { CanvasView } from "./components/CanvasView";
-import { LayersPanel, type LayersPanelProps } from "./components/LayersPanel";
+import { LayersPanel } from "./components/LayersPanel";
 import { PropertiesPanel } from "./components/PropertiesPanel";
 import { SourcePanel } from "./components/SourcePanel";
 import { Viewport3D } from "./components/Viewport3D";
 import { TechSheet } from "./components/TechSheet";
-import { BenchPanel, type BenchPanelProps } from "./components/BenchPanel";
+import { BenchPanel } from "./components/BenchPanel";
 import { ObjectsPanel } from "./components/ObjectsPanel";
 import { OBJECTS_LIMIT, parseObjects, type ObjectList } from "./objects";
 import { PiecePanel } from "./components/PiecePanel";
 import { NO_CHOICES, NO_PIECE, parsePieceReply, readPieceChoices, type PieceChoices, type PieceState } from "./piece";
 import { InlineAsk } from "./components/InlineAsk";
 import { parseBench, type BenchSheet } from "./bench";
-import { CommandLine, type CommandLineProps } from "./components/CommandLine";
+import { CommandLine } from "./components/CommandLine";
 import { createRecovery, RecoveryBar } from "./components/RecoveryBar";
 import { GemDialog, RingDialog } from "./components/JewelryDialog";
 import { PriceBookDialog } from "./components/PriceBookDialog";
 import { LayerManager } from "./components/LayerManager";
 import { TemplateGallery } from "./components/TemplateGallery";
 import { opensLayerManager } from "./layer-manager";
-import type { RibbonProps, SlabParts, TitleBarProps } from "./slab/parts";
 
 export interface AppProps {
   facade: AppFacade;
-  /**
-   * The Slab shell's parts (the default; `?shell=standard` leaves them out: `./slab/parts`), loaded by main.tsx. Absent, the
-   * shell is the standard one below and nothing of Slab is in the page.
-   */
-  slab?: SlabParts;
-  /** Said once beside the command field: why the shell that was asked for is not the one shown. */
-  shellNotice?: string;
 }
 
 type ThemeChoice = "dark" | "light" | "system";
@@ -194,7 +185,7 @@ export function App(props: AppProps): JSX.Element {
   const [layers, setLayers] = createSignal<LayerInfo[]>([]);
   const [display, setDisplay] = createSignal<DisplayList>({ revision: 0, bounds: UNIT_RECT, verts: [], prims: [] });
   const [view, setView] = createSignal<Rect>(UNIT_RECT);
-  const [notice, putNotice] = createSignal<string | null>(props.shellNotice ?? null);
+  const [notice, putNotice] = createSignal<string | null>(null);
   const [commands, setCommands] = createSignal<CommandInfo[]>([]);
   const [settings, setSettings] = createSignal<SettingsState>({
     grid: false,
@@ -1361,15 +1352,10 @@ export function App(props: AppProps): JSX.Element {
 
   const currentLayer = createMemo(() => drawing()?.currentLayer ?? layers().find((l) => l.current)?.name ?? "0");
 
-  /**
-   * The shell's regions, composed once and placed by whichever shell is on: the standard one
-   * below (a grid of bars and a flex workspace, `styles.css`), or the Slab shell, which hands
-   * each region to a hole of `slab/shell.slab` (`./slab/SlabShell`). Neither forks a component.
-   */
-  const topBar = (Bar: Component<TitleBarProps> = TopBar): JSX.Element => (
-    <Bar
+  /** The shell's regions, placed below in a grid of bars and a flex workspace (`styles.css`). */
+  const topBar = (): JSX.Element => (
+    <TopBar
       drawing={drawing}
-      menus={showMenubar() ? { commands: commands(), onInvoke } : null}
       menu={
         <Show when={showMenubar()}>
           <MenuBar commands={commands()} onInvoke={onInvoke} />
@@ -1385,48 +1371,37 @@ export function App(props: AppProps): JSX.Element {
       onToggleAssistant={() => setShowAssistant((v) => !v)}
     />
   );
-  /** The ribbon, drawn by `Strip`: the SolidJS one, or the one ported to Slab. */
-  const ribbon = (Strip: Component<RibbonProps> = ToolStrip): JSX.Element => (
+  const ribbon = (): JSX.Element => (
     <Show when={showToolbar()}>
-      <Strip onInvoke={onInvoke} commands={commands()} running={prompt().running} />
+      <ToolStrip onInvoke={onInvoke} commands={commands()} />
     </Show>
   );
   /** The sidebar is on screen: its switch is on and it has a section to show. */
   const sidebarShown = (): boolean => showSidebar() && (showPiece() || showLayers() || showObjects() || showProperties() || showBench());
-  /** The Layers section's panel: the SolidJS one, or the one ported to Slab when its document loaded. */
-  const Layers: Component<LayersPanelProps> = props.slab?.Layers ?? LayersPanel;
-  /** The Piece section: the SolidJS one, or the one ported to Slab when the Slab shell has it. */
-  const PieceSection = props.slab?.Piece ?? PiecePanel;
-  /** The Objects section: the SolidJS one, or the one ported to Slab when its document loaded. */
-  const Objects = props.slab?.Objects ?? ObjectsPanel;
-  /** The Properties section: the SolidJS one, or the one ported to Slab when its document loaded. */
-  const Properties = props.slab?.Properties ?? PropertiesPanel;
   const railSections = (): JSX.Element => (
     <>
       <Show when={showPiece()}>
-        <PieceSection state={piece()} choices={pieceChoices()} onRun={onPieceRun} onNotice={onPropertyNotice} onTemplates={() => setShowTemplates(true)} />
+        <PiecePanel state={piece()} choices={pieceChoices()} onRun={onPieceRun} onNotice={onPropertyNotice} onTemplates={() => setShowTemplates(true)} />
       </Show>
       <Show when={showLayers()}>
-        <Layers layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} onMenu={(name, at) => openContext({ kind: "layer", name }, at)} />
+        <LayersPanel layers={layers} currentLayer={currentLayer} onToggle={onLayerToggle} onMakeCurrent={onLayerCurrent} onMenu={(name, at) => openContext({ kind: "layer", name }, at)} />
       </Show>
       <Show when={showObjects()}>
-        <Objects list={objects()} available={objectsAvailable()} selection={selection()} onSelect={onBenchSelect} />
+        <ObjectsPanel list={objects()} available={objectsAvailable()} selection={selection()} onSelect={onBenchSelect} />
       </Show>
       <Show when={showProperties()}>
-        <Properties properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={onPropertyNotice} />
+        <PropertiesPanel properties={properties()} selectionCount={selection().length} layers={layers().map((l) => l.name)} onSet={onSetProperties} onNotice={onPropertyNotice} />
       </Show>
     </>
   );
-  /** The Bench section, drawn by `Panel`: the SolidJS one, or the one ported to Slab. */
-  const benchSection = (Panel: Component<BenchPanelProps>): JSX.Element => (
+  const benchSection = (): JSX.Element => (
     <Show when={showBench()}>
-      <Panel sheet={bench()} selection={selection()} onSelect={onBenchSelect} canPrice={canPrice()} onEditPrices={() => setPricebookOpen(true)} />
+      <BenchPanel sheet={bench()} selection={selection()} onSelect={onBenchSelect} canPrice={canPrice()} onEditPrices={() => setPricebookOpen(true)} />
     </Show>
   );
   const recoveryBar = (): JSX.Element => <RecoveryBar {...recovery.bar} />;
-  /** The tabs over the drawing, drawn by `Tabs`: the SolidJS strip, or the one ported to Slab. */
-  const layoutTabs = (Tabs: Component<LayoutTabsProps> = LayoutTabs): JSX.Element => (
-    <Tabs
+  const layoutTabs = (): JSX.Element => (
+    <LayoutTabs
       layouts={layouts()}
       space={space()}
       onLayout={(name) => {
@@ -1492,18 +1467,15 @@ export function App(props: AppProps): JSX.Element {
     />
     </div>
   );
-  /** The command line, drawn by `Line`: the SolidJS one, or the one ported to Slab. */
-  const commandLine = (Line: Component<CommandLineProps> = CommandLine): JSX.Element => (
+  const commandLine = (): JSX.Element => (
     <Show when={showCmdline()}>
-      <Line prompt={prompt} notice={notice} onSubmit={onCommand} />
+      <CommandLine prompt={prompt} notice={notice} onSubmit={onCommand} />
     </Show>
   );
-  /** The assistant panel: the SolidJS one, or the one whose frame Slab draws when its document loaded. */
-  const Assistant = props.slab?.Assistant ?? AssistantPane;
   const assistantPane = (): JSX.Element => (
     <Show when={showAssistant() ? assistant() : undefined} keyed>
       {(chat) => (
-        <Assistant
+        <AssistantPane
           session={chat}
           selection={selection}
           layers={layers().map((l) => l.name)}
@@ -1522,10 +1494,9 @@ export function App(props: AppProps): JSX.Element {
       )}
     </Show>
   );
-  /** The status bar, drawn by `Bar`: the SolidJS one, or the one ported to Slab. */
-  const statusBar = (Bar: Component<StatusBarProps> = StatusBar): JSX.Element => (
+  const statusBar = (): JSX.Element => (
     <Show when={showStatusbar()}>
-      <Bar
+      <StatusBar
         settings={settings()}
         mode={props.facade.mode}
         currentLayer={currentLayer()}
@@ -1539,19 +1510,12 @@ export function App(props: AppProps): JSX.Element {
       />
     </Show>
   );
-  /** The Ring, Gem and Price Book dialogs: the SolidJS ones, or those whose body Slab draws when their documents loaded. */
-  const Ring = props.slab?.Ring ?? RingDialog;
-  const Gem = props.slab?.Gem ?? GemDialog;
-  const PriceBook = props.slab?.PriceBook ?? PriceBookDialog;
-  const Drafting = props.slab?.Drafting ?? DraftingSettings;
-  const Templates = props.slab?.Templates ?? TemplateGallery;
-  const Manager = props.slab?.LayerManager ?? LayerManager;
   const overlays = (): JSX.Element => (
     <>
-      <Manager facade={props.facade} open={layerManager()} onClose={() => setLayerManager(false)} onChanged={refresh} />
-      <Ring facade={props.facade} open={jewelry() === "ring"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
-      <Gem facade={props.facade} open={jewelry() === "gem"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
-      <PriceBook
+      <LayerManager facade={props.facade} open={layerManager()} onClose={() => setLayerManager(false)} onChanged={refresh} />
+      <RingDialog facade={props.facade} open={jewelry() === "ring"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
+      <GemDialog facade={props.facade} open={jewelry() === "gem"} onClose={() => setJewelry(null)} onPlaced={onJewelryPlaced} />
+      <PriceBookDialog
         facade={props.facade}
         open={pricebookOpen()}
         sheet={bench()}
@@ -1561,9 +1525,9 @@ export function App(props: AppProps): JSX.Element {
           readBench(drawing());
         }}
       />
-      <Templates open={showTemplates()} onClose={() => setShowTemplates(false)} execute={(command, params) => props.facade.execute(command, params)} onChoose={onTemplateChoose} />
+      <TemplateGallery open={showTemplates()} onClose={() => setShowTemplates(false)} execute={(command, params) => props.facade.execute(command, params)} onChoose={onTemplateChoose} />
       <TechSheet open={showTechSheet()} execute={(command, params) => props.facade.execute(command, params)} revision={drawing()?.revision ?? 0} onClose={() => setShowTechSheet(false)} />
-      <Drafting
+      <DraftingSettings
         facade={props.facade}
         open={drafting().open}
         tab={drafting().tab}
@@ -1575,41 +1539,6 @@ export function App(props: AppProps): JSX.Element {
     </>
   );
 
-  const slab = props.slab;
-  if (slab !== undefined) {
-    return (
-      <div class="app" data-shell="slab">
-        <slab.Shell
-          regions={{
-            topbar: () => topBar(slab.TopBar),
-            ribbon: () => ribbon(slab.Ribbon),
-            rail: () => (
-              <Show when={sidebarShown()}>
-                <aside class="sidebar" aria-label="Drawing">
-                  {railSections()}
-                  {slab.Bench === undefined ? benchSection(BenchPanel) : null}
-                </aside>
-              </Show>
-            ),
-            bench: () => <Show when={sidebarShown() && slab.Bench}>{(Bench) => benchSection(Bench())}</Show>,
-            recovery: recoveryBar,
-            tabs: () => layoutTabs(slab.Tabs),
-            stage: editorRow,
-            cmdline: () => commandLine(slab.CommandLine),
-            assistant: assistantPane,
-            status: () => statusBar(slab.StatusBar),
-          }}
-          sidebar={sidebarShown}
-          assistant={showAssistant}
-          toolbar={showToolbar}
-          cmdline={showCmdline}
-          statusbar={showStatusbar}
-        />
-        {overlays()}
-      </div>
-    );
-  }
-
   return (
     <div class="app">
       {topBar()}
@@ -1618,7 +1547,7 @@ export function App(props: AppProps): JSX.Element {
         <Show when={sidebarShown()}>
           <aside class="sidebar" aria-label="Drawing">
             {railSections()}
-            {benchSection(BenchPanel)}
+            {benchSection()}
           </aside>
         </Show>
         <div class="editor">

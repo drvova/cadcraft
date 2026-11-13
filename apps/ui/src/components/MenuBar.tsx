@@ -53,7 +53,7 @@ const COMPACT = -1;
 export const COMPACT_QUERY = "(max-width: 900px)";
 export const STACKED_QUERY = "(max-width: 700px), (max-width: 900px) and (max-height: 520px)";
 
-/** What a key pressed on a title of the bar asks for; the bar drawn by Slab (`../slab/SlabTopBar`) asks here too. */
+/** What a key pressed on a title of the bar asks for. */
 export type TitleKeyAction = { kind: "close" } | { kind: "open"; last: boolean } | { kind: "move"; to: number };
 
 /**

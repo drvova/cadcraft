@@ -1,10 +1,9 @@
 /**
- * The state of the Layer Properties Manager, for whichever shell draws it
- * (`./components/LayerManager`, `./slab/SlabLayerManager`): the rows read from the engine, the
+ * The state of the Layer Properties Manager (`./components/LayerManager`): the rows read from the engine, the
  * order and the filter they are shown in, the selection, the active cell of the grid, the cell
  * being typed in, the refusals, and what the last action came to. The rules are
- * `./layer-manager`'s; this file holds the signals and the order things are done in, so the two
- * dialogs cannot drift apart.
+ * `./layer-manager`'s; this file holds the signals and the order things are done in, and the
+ * dialog only draws.
  *
  * What only a view can do is asked of it (`LayerManagerView`): put the keyboard on the active
  * cell, open a cell's list of values, bring a cell into view, and say how many rows a page is.
@@ -207,7 +206,7 @@ export interface GridKeyState {
 }
 
 /**
- * The SolidJS grid's keys, as one decision, for both dialogs: the arrows, Home and End (with Ctrl
+ * The grid's keys, as one decision: the arrows, Home and End (with Ctrl
  * or Cmd the table's ends) and the page keys move the active cell, and a move to another row takes
  * the selection with it (Shift ranges from the anchor; Ctrl moves the keyboard alone); Ctrl+A
  * takes every row; Enter or Space on a heading sorts; on a flag they turn it; on a choice Enter,

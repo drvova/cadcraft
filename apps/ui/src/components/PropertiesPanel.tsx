@@ -19,8 +19,7 @@
  * so needs none.
  *
  * No engine call lives here: the shell owns the facade, shows a notice for a refused set, and
- * refreshes the reply. What becomes of a row's value is decided in `../props-edit`, which the
- * panel drawn by Slab shares.
+ * refreshes the reply. What becomes of a row's value is decided in `../props-edit`.
  */
 
 import { createEffect, createMemo, createSignal, Index, Match, onCleanup, Show, Switch, untrack, type Accessor, type JSX } from "solid-js";

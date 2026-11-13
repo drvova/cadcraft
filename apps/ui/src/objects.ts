@@ -675,8 +675,7 @@ export function treeKey(event: TypedKey, rows: readonly VisibleNode[], active: s
 
 // ---- What the panel says ----
 //
-// The words and the small decisions every drawing of the tree shares (the SolidJS panel and the
-// one drawn by Slab, `slab/SlabObjects.tsx`): a view draws them and decides nothing.
+// The words and the small decisions of the tree: the panel draws them and decides nothing.
 
 const count = (n: number): string => n.toLocaleString("en-US");
 

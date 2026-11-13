@@ -3,8 +3,7 @@
  * rows describe, and what becomes of one row's value (a pick or a tick is sent unless it is the
  * one already there; typed text is committed on Enter and on the way out, a refusal is said once
  * and stays marked while the field has the focus, Escape cancels the edit).
- * `components/PropertiesPanel.tsx` (SolidJS) and `slab/SlabProperties.tsx` (Slab) both go through
- * this, so the two panels cannot drift: the view holds a row's draft, whether it was typed into
+ * `components/PropertiesPanel.tsx` goes through this: the view holds a row's draft, whether it was typed into
  * and the refusal standing on it (`PropEditHost`), and this decides what becomes of them.
  *
  * Nothing here touches the DOM and no property is named: `judgeDraft` (`./props`) says what typed

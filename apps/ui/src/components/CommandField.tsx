@@ -1,8 +1,6 @@
 /**
- * The command line's typed line: the one field every command is typed into, the same in every
- * drawing of the panel (`./CommandLine`, and the one Slab draws around it,
- * `../slab/SlabCommandLine`). In a file of its own so that the Slab panel takes the field, its
- * keys and its history without taking the SolidJS panel.
+ * The command line's typed line: the one field every command is typed into (`./CommandLine`),
+ * with its keys and its history, in a file of its own.
  *
  * The typed line is the system's `Field`, bare: the strip around it (`.cmd-field`) draws the
  * edge, the fill and the focus, and sets the mono face the field takes; the prompt mark is the

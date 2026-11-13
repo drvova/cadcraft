@@ -13,8 +13,7 @@
  * field is an alert. A long error wraps to two lines and is then cut; it takes the focus (Tab, a
  * click) and shows its whole text while it has it; one cut by its width is the system's hint too.
  *
- * The typed line, its keys and its history are `./CommandField`, which the panel Slab draws
- * (`../slab/SlabCommandLine`) shows too.
+ * The typed line, its keys and its history are `./CommandField`.
  *
  * The props accept the value or the accessor form (Solid passes an attribute expression through
  * as written, so a parent may hand either); the component reads both.

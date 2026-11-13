@@ -175,5 +175,5 @@ export function LayersPanel(props: LayersPanelProps): JSX.Element {
   );
 }
 
-/** The name's hint, for the same panel drawn by Slab (`../slab/layers-params`): one wording, said once. */
+/** The name's hint: one wording, said once. */
 export { layerHint };

@@ -6,8 +6,8 @@
  *
  * `../piece` holds the logic: the reply's narrowing, the rows of a kind, what typed text becomes
  * (`judgePieceDraft`) and the row a refusal belongs on (`refusalRow`); `../piece-edit` holds how a
- * row is edited (when a draft is sent, kept or cancelled) and the section's state, both shared
- * with the Slab panel (`../slab/SlabPiece`). No jewelry number is worked out here or there: every
+ * row is edited (when a draft is sent, kept or cancelled) and the section's state. No jewelry number is worked out
+ * here: every
  * figure is the engine's.
  *
  * A row is the properties palette's row (`.prop-row`, `../interaction.css`) and holds what that
@@ -81,8 +81,7 @@ function scrollEnds(list: HTMLElement): () => void {
 export function PiecePanel(props: PiecePanelProps): JSX.Element {
   /** The section folds to its heading, as the rail's other sections do. */
   const [open, setOpen] = createSignal(true);
-  // The piece, the size system shown, its rows and the refusal standing on one: `../piece-edit`'s,
-  // shared with the Slab panel.
+  // The piece, the size system shown, its rows and the refusal standing on one: `../piece-edit`'s.
   const { piece, system, setPicked, rows, facts, failed, refused, setRefused, run } = createPieceSection(props);
 
   // The rows change under a list whose own box does not (another kind, the halo's rows, a check
@@ -202,7 +201,7 @@ function PieceRowView(props: PieceRowViewProps): JSX.Element {
     const held = props.refused();
     return held !== null && held.key === props.row().key ? held.message : null;
   };
-  // What becomes of the draft is `../piece-edit`'s, shared with the Slab panel.
+  // What becomes of the draft is `../piece-edit`'s.
   const edit = createRowEdit({
     row: () => props.row(),
     system: () => props.system(),

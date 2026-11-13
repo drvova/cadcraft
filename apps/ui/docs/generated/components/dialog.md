@@ -19,7 +19,7 @@ Not applicable: hand-rolled — a native `<dialog>` opened with `showModal()` (`
 ## Examples
 `<Dialog open={open()} title="Rename Layout" size="sm" onClose={() => setOpen(false)} footer={…}>…</Dialog>` — one field and its two actions (`docs/system/examples/dialog/default.tsx`).
 
-Real uses, 12 call sites (`rg -c "<Dialog" src` → `src/components/DraftingSettings.tsx:1`, `src/components/JewelryDialog.tsx:2`, `src/components/LayerManager.tsx:1`):
+Real uses, 6 call sites (`rg -c "<Dialog" src` → `src/components/DraftingSettings.tsx:1`, `src/components/JewelryDialog.tsx:2`, `src/components/LayerManager.tsx:1`):
 - `src/components/JewelryDialog.tsx` — the Ring and Gem dialogs (Draw ▸ Ring, Draw ▸ Gem and the tool strip's keys): a form of the piece's numbers, a read-out of what the engine says about them, Cancel and OK in the footer; a refusal from the engine stays in the dialog beside the field it names. Added 2026-11-12.
 - `src/components/DraftingSettings.tsx:237` — Drafting Settings (`size="md"`): three pages on `TabPanels`, Cancel and OK in the footer, `dismissOnBackdrop` true only while the form is untouched, `describedBy` naming the line that says what OK did when the engine refused a value. The component is exported and not mounted yet: the shell's lines are in the coordinator's hands.
 - The command palette (`src/components/CommandPalette.tsx`) stays a native `<dialog>` of its own: it has no title bar, no dimmed page and no footer, it hangs from the title bar instead of standing in the middle, and it keeps the keyboard in one field (`docs/system/decisions.md`, "A task over the page").
@@ -353,7 +353,7 @@ Not applicable: no motion — the dialog arrives and leaves at once (`docs/syste
 - `rule/dialog-backdrop-work`: When closing would throw away what was typed, pass `dismissOnBackdrop` as false, or as a value that is false once the form is touched, because 1 press outside the box is a slip of the hand as often as a decision, and Escape and Cancel remain for the decision. Evidence: single use `src/components/DraftingSettings.tsx:242`. Check: test `src/ui/Dialog.test.tsx`.
   - Don't: `<Dialog open title="Drafting Settings" onClose={close}>` around a form with typed values.
   - Do: `<Dialog open title="Drafting Settings" dismissOnBackdrop={untouched()} onClose={close}>`
-- `rule/dialog-refusal-beside-field`: When an action cannot take a value, keep the dialog open, mark the field `invalid`, tie 1 line of words to it with `describedBy` and move the focus to it, because a dialog that closes on a refused value reports nothing and one that only colours the field tells a screen reader nothing. Evidence: single use `src/drafting-edit.ts:90`. Check: review `src/drafting-edit.ts`.
+- `rule/dialog-refusal-beside-field`: When an action cannot take a value, keep the dialog open, mark the field `invalid`, tie 1 line of words to it with `describedBy` and move the focus to it, because a dialog that closes on a refused value reports nothing and one that only colours the field tells a screen reader nothing. Evidence: single use `src/drafting-edit.ts:89`. Check: review `src/drafting-edit.ts`.
   - Don't: `onClick={() => { facade.execute("setvar", { name: "POLARANG", value }); close(); }}`
   - Do: `onClick={() => { const refused = runCalls(facade, plan.calls); if (Object.keys(refused).length === 0) close(); else mark(refused); }}`
 

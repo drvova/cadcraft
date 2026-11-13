@@ -1,8 +1,7 @@
 /**
- * The state of the Drafting Settings dialog, for whichever shell draws it
- * (`./components/DraftingSettings`, `./slab/SlabDrafting`): what the engine held when it opened,
+ * The state of the Drafting Settings dialog (`./components/DraftingSettings`): what the engine held when it opened,
  * the form, the refusals, the page in front, and OK. The rules are `./drafting`'s; this file
- * holds the signals and the order things are done in, so the two dialogs cannot drift apart.
+ * holds the signals and the order things are done in, so the dialog only draws.
  *
  * Every opening starts from the engine. OK sends only what the form changed; a form with a value
  * the engine would refuse sends nothing; a refusal marks its field, brings its page to the front
@@ -12,7 +11,7 @@
 import { createEffect, createMemo, createSignal, on, type Accessor } from "solid-js";
 import { formOf, planCalls, readEngine, readState, runCalls, tabOf, unapplied, type DraftingEngine, type DraftingErrors, type DraftingField, type DraftingForm, type DraftingState, type DraftingTab, type DraftingVar } from "./drafting";
 
-/** What the dialog is given by the shell (the props both views take). */
+/** What the dialog is given by the shell. */
 export interface DraftingEditProps {
   facade: DraftingEngine;
   open: boolean;

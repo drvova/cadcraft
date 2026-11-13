@@ -1,14 +1,12 @@
 /**
- * The Tech Sheet's state, for whichever shell draws it (`./components/TechSheet`,
- * `./slab/SlabTechSheet`): the sheet read from the engine when the view opens and when the drawing
- * changes under it, the display mode and the background, and the four stills drawn one at a time
- * with each tile's phase. Both views run this one module, so they cannot drift apart: the sheet
- * model is `./techsheet`'s, the stills are `./render3d`'s, and this file holds the signals and the
- * order things are done in (it was the SolidJS component's body).
+ * The Tech Sheet's state (`./components/TechSheet`): the sheet read from the engine when the view
+ * opens and when the drawing changes under it, the display mode and the background, and the four
+ * stills drawn one at a time with each tile's phase. The sheet model is `./techsheet`'s, the stills
+ * are `./render3d`'s, and this file holds the signals and the order things are done in (it was the
+ * component's body).
  *
- * Each drawn still is held as an object URL (an `<img>`'s source; revoked when it is replaced) and,
- * when the view asks for them (`keepBytes`), as its PNG bytes (what a Slab surface registers as a
- * runtime image). A render that cannot run (no WebGL) leaves its tile `failed` with the words.
+ * Each drawn still is held as an object URL (an `<img>`'s source; revoked when it is replaced). A
+ * render that cannot run (no WebGL) leaves its tile `failed` with the words.
  */
 
 import { createEffect, createSignal, on, onCleanup, type Accessor } from "solid-js";
@@ -17,7 +15,7 @@ import { renderPieceStill, type StillOptions } from "./render3d";
 import { assembleSheet, failedCount, freshTiles, meshRequest, nextPending, setTile, wantsInk, type SheetBackground, type SheetModel, type Tile } from "./techsheet";
 import { isDisplayMode, type DisplayMode, type PieceMesh, type StandardView, type Vec3 } from "./view3d";
 
-/** What the sheet is given by the shell (the props both views take). */
+/** What the sheet is given by the shell. */
 export interface TechSheetStateProps {
   open: boolean;
   execute: (command: string, params: unknown) => Envelope | Promise<Envelope>;
@@ -35,14 +33,11 @@ export type SheetStillDrawer = (mesh: PieceMesh, options: StillOptions) => Promi
 export interface TechSheetOptions {
   /** The element whose tokens colour a still (`--paper`, `--paper-ink`); absent before it mounts. */
   colors: () => Element | undefined;
-  /** Keep each still's PNG bytes as well as its object URL (a Slab surface registers the bytes). */
-  keepBytes?: boolean;
   draw?: SheetStillDrawer;
 }
 
 /** The drawn stills, by the view they are of. */
 export type StillUrls = Partial<Record<StandardView, string>>;
-export type StillBytes = Partial<Record<StandardView, Uint8Array>>;
 
 export interface TechSheetState {
   model: Accessor<SheetModel | null>;
@@ -51,10 +46,6 @@ export interface TechSheetState {
   background: Accessor<SheetBackground>;
   tiles: Accessor<Tile[]>;
   urls: Accessor<StillUrls>;
-  /** Empty unless `keepBytes`. */
-  bytes: Accessor<StillBytes>;
-  /** The newest render run: a view keys its registered stills by it. */
-  run: Accessor<number>;
   chooseMode: (value: string) => void;
   chooseBackground: (value: string) => void;
   /** The checks heading's words: "All pass", "1 of 4 fail", or "" with no piece. */
@@ -100,8 +91,6 @@ export function createTechSheet(props: TechSheetStateProps, options: TechSheetOp
   const [tiles, setTiles] = createSignal(freshTiles());
   /** The PNG of each drawn view, by the view it is of; revoked when it is replaced. */
   const [urls, setUrls] = createSignal<StillUrls>({});
-  const [bytes, setBytes] = createSignal<StillBytes>({});
-  const [run, setRun] = createSignal(0);
 
   /** The newest read: a reply to an older one is dropped (the drawing may have changed under it). */
   let read = 0;
@@ -134,9 +123,7 @@ export function createTechSheet(props: TechSheetStateProps, options: TechSheetOp
     const mine = (generation += 1);
     revokeAll();
     setUrls({});
-    setBytes({});
     setTiles(freshTiles());
-    setRun(mine);
     const host = options.colors();
     const background: Vec3 | null = surface === "surface" && host !== undefined ? (tokenColor(host, "--paper", probeOf()) ?? [0.98, 0.98, 0.98]) : null;
     const edgeInk: Vec3 | null = wantsInk(chosen, surface) && host !== undefined ? tokenColor(host, "--paper-ink", probeOf()) : null;
@@ -147,11 +134,9 @@ export function createTechSheet(props: TechSheetStateProps, options: TechSheetOp
       setTiles((current) => setTile(current, view, "rendering"));
       try {
         const blob = await draw(mesh, { view, mode: chosen, width: RENDER_PX, height: RENDER_PX, background, edgeInk });
-        const png = options.keepBytes === true ? new Uint8Array(await blob.arrayBuffer()) : null;
         if (mine !== generation || disposed) return;
         const url = URL.createObjectURL(blob);
         setUrls((current) => ({ ...current, [view]: url }));
-        if (png !== null) setBytes((current) => ({ ...current, [view]: png }));
         setTiles((current) => setTile(current, view, "done"));
       } catch (error) {
         if (mine !== generation || disposed) return;
@@ -198,8 +183,6 @@ export function createTechSheet(props: TechSheetStateProps, options: TechSheetOp
     background,
     tiles,
     urls,
-    bytes,
-    run,
     chooseMode: (value) => {
       if (isDisplayMode(value)) setMode(value);
     },

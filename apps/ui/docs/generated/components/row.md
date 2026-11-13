@@ -13,7 +13,7 @@ Not applicable: hand-rolled — the 22px row, the 4px inset and the .14 selected
 ## Examples
 `<Row onClick={pick}>Layer 1</Row>` — one layer in the layers list.
 
-Real uses, 13 call sites (`rg -c "<Row" src` → `src/components/AssistantPane.tsx:4`, `src/components/BenchPanel.tsx:1`, `src/components/CommandPalette.tsx:1`, `src/components/DynamicInput.tsx:1`, `src/components/LayersPanel.tsx:1`, `src/components/Menu.tsx:1`):
+Real uses, 12 call sites (`rg -c "<Row" src` → `src/components/AssistantPane.tsx:4`, `src/components/BenchPanel.tsx:1`, `src/components/CommandPalette.tsx:1`, `src/components/DynamicInput.tsx:1`, `src/components/LayersPanel.tsx:1`, `src/components/Menu.tsx:1`):
 - `src/components/AssistantPane.tsx` — the `@` list's options (`option`, in a `role="listbox"` the composer drives): the selection, the bench sheet's lines and the layers a draft's `@word` matches. Added 2026-11-12.
 - `src/components/BenchPanel.tsx` — each line of the bench sheet that names its objects (a cut and size, or a band, with its count and weight trailing): a press selects those objects on the drawing, a second press lets them go, and `selected` marks the line whose objects are all selected. Added 2026-11-12.
 - `src/components/AssistantPane.tsx` — the empty state's example rows (a glyph, the prompt and a chevron; a press puts the prompt in the composer), the setup sheet's provider rows and the composer's slash list (the commands a `/word` draft matches; `selected` marks the one the arrow keys are on); the chat tabs in the header moved onto `Tab`; the transcript's tool rows and the composer's toolbar row stay bespoke (the toolbar is a container, and the tool row carries a disclosure arrow and a note).
@@ -21,7 +21,7 @@ Real uses, 13 call sites (`rg -c "<Row" src` → `src/components/AssistantPane.t
 - `src/components/LayersPanel.tsx:53` — each layer's name band (`is-current` marks the current one); the toggle cluster beside it stays native buttons.
 - `src/components/CommandPalette.tsx` and the assistant's slash list in `src/components/AssistantPane.tsx` — their rows are `<Row option>` inside a `role="listbox"`: out of the Tab order, lit by the list's one highlight.
 - `src/components/Menu.tsx:355` — every row of every menu in the shell (the menu bar's dropdowns and their submenus, the narrow window's Main menu, the tool strip's overflow menu) is `<Row menuitem>`: `disabled` on a command that cannot run now, `popup="menu"` and `expanded` on a row that opens a submenu, `describedBy` naming the typed command, and the menu's own walk on `onKeyDown` and `onPointerEnter`. Until 2026-11-11 each was a raw `<button class="menu-row">` with its recipe in `src/chrome.css`; the recipe moved into the layer value for value. The menu bar's titles (`src/components/MenuBar.tsx`) are not rows and stay the bar's own.
-- (planned) `src/components/PropertiesPanel.tsx:182` — `.prop-row` (1 use) moves onto `<Row>` when the palette's rows become clickable; today they are display rows with an inline editor.
+- (planned) `src/components/PropertiesPanel.tsx:181` — `.prop-row` (1 use) moves onto `<Row>` when the palette's rows become clickable; today they are display rows with an inline editor.
 - `.layer-row` (LayersPanel) stays bespoke because its row nests a toggle cluster, and a button cannot nest buttons.
 
 ### Example files

@@ -64,7 +64,7 @@ export function PriceBookDialog(props: PriceBookDialogProps): JSX.Element {
   const errorId = (field: string): string => `price-${field.replace(":", "-")}-error`;
   const inputId = (field: string): string => `price-${field.replace(":", "-")}`;
 
-  // The state and what Save does are shared with the Slab-drawn dialog (`../pricebook-edit`).
+  // The state and what Save does are `../pricebook-edit`'s.
   const { asks, form, errors, summary, untouched, firstField, setCurrency, setMetal, setStone, setLaborMode, setLaborAmount, save } = createPriceBookEdit(props, (field) =>
     body?.querySelector<HTMLElement>(`#${CSS.escape(inputId(field))}`)?.focus(),
   );

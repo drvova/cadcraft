@@ -30,35 +30,6 @@ cargo run --release -p cadcraft       # shows the build embedded from apps/ui/di
 
 Without `dist/` the desktop binary still builds, and its window says how to make the build.
 
-## The Slab shell (the default where it is built; `?shell=standard` for the SolidJS shell)
-
-The outer layout and every region of it are drawn by [Slab](https://github.com/stencil-hq/slab)
-(MIT, pre-alpha) when its artifacts are built here, with the SolidJS shell behind `?shell=standard`. Nothing of Slab is a dependency and nothing of it
-is committed: `scripts/build-slab.mjs` builds it from source at the commit
-`third_party/slab/SLAB.lock` pins, under the patch series beside that file (the same pin and
-series the Rust side's surfaces build on: `third_party/slab/README.md`). It is built **without
-Slab's bundled fonts**: no font is in the kernel, the compiler or the runtime, and the build
-fails if one is found. The page measures its own font and registers the metrics.
-
-```sh
-bun run build:slab    # fetch the pinned commit, apply the series, build, compile slab/*.slab (~4 min cold, ~1.6 GB scratch)
-bun run slab:docs     # recompile slab/*.slab and the tokens only (no Rust; after editing a .slab or tokens.css)
-bun run slab:verify   # compare src/slab-vendor/ with the record in slab.lock.json, and the record with the pin
-```
-
-- Sources (committed): `slab/*.slab`, `slab.lock.json` (the record of the last reviewed build),
-  `src/slab/` (the one boundary); the pin and the patches are in `third_party/slab/`.
-- Generated (git-ignored): `src/slab-vendor/` (runtime, kernel wasm, compiler wasm, the `slab`
-  command line, the compiled documents, Slab's MIT licence) and `slab/gen/tokens.slab` (made
-  from `src/tokens.css`).
-- Without the artifacts the interface builds and runs as always, in the standard shell;
-  `?shell=slab` then says why in one line beside the command field.
-- It needs git, cargo with rustup (upstream pins its own nightly) and bun. A wasm-bindgen of the
-  version upstream locks is installed into the scratch directory, never over the one on PATH.
-- To move the pin, follow `third_party/slab/README.md` (it is shared), then
-  `bun run build:slab -- --update-lock`, run the tests and look at the shell. Findings and
-  limits: `docs/slab-foundation.md`.
-
 ## The gates
 
 | Command | What it checks |

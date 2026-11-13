@@ -1,7 +1,5 @@
 /**
- * The search over the objects tree: one field, the same in every drawing of the panel
- * (`./ObjectsPanel`, and the one Slab draws around it, `../slab/SlabObjects`). In a file of its
- * own so that the Slab panel takes the field without taking the SolidJS panel and its sheet.
+ * The search over the objects tree (`./ObjectsPanel`): one field, in a file of its own.
  */
 
 import type { JSX } from "solid-js";

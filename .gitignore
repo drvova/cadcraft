@@ -13,10 +13,6 @@
 node_modules/
 /apps/ui/dist/
 /apps/ui/src/wasm/
-# The Slab toolchain built by scripts/build-slab.mjs at the commit apps/ui/slab.lock.json pins, and
-# what it generates from apps/ui/slab/*.slab. Third-party artifacts: never committed.
-/apps/ui/src/slab-vendor/
-/apps/ui/slab/gen/
 # Slab's source, fetched at the commit third_party/slab/SLAB.lock pins and patched by
 # `cargo xtask slab`, with the Cargo override and the stamp it writes. Third-party source: never
 # committed (third_party/slab/README.md). Only the patches, the lock and the README are.

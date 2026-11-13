@@ -3,8 +3,7 @@
  * shows the template's name, a one-line blurb and a 3D thumbnail; choosing one builds that ring.
  *
  * The list and all the logic are `../templates` (the const table, the thumbnail state machine, the
- * refusal words) and `../template-gallery-edit` (the renders, the choice, shared with the gallery
- * the Slab shell draws). This component only draws it: a thumbnail is the engine's
+ * refusal words) and `../template-gallery-edit` (the renders, the choice). This component only draws it: a thumbnail is the engine's
  * own solid (`piecemesh`, read-only — it changes nothing in the drawing) drawn to a small PNG with
  * the 3D stage's own shaders (`renderPieceStill`). Thumbnails are drawn lazily and one at a time
  * (the renderer keeps a single off-screen context), cached once drawn, and a template whose preview

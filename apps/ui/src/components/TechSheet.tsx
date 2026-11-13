@@ -8,9 +8,8 @@
  * `../techsheet` (`piece {query:true}`, `piecemesh` and `techsheet`); the four views are one
  * offscreen render each of the engine's mesh (`../render3d`'s `renderPieceStill`, which queues the
  * stills one at a time and releases every context). The reads, the renders (the object URLs, the
- * per-tile state) and the choices are `../techsheet-state`'s, which the Slab view runs too; this
- * file draws them and owns the print. The page itself is `TechSheetPage`, which the Slab view also
- * prints with. A render that cannot run (no WebGL) shows a worded tile, never a crash.
+ * per-tile state) and the choices are `../techsheet-state`'s; this file draws them and
+ * owns the print. A render that cannot run (no WebGL) shows a worded tile, never a crash.
  */
 
 import { createEffect, For, on, Show, type JSX } from "solid-js";
@@ -118,7 +117,7 @@ export function TechSheet(props: TechSheetProps): JSX.Element {
   );
 }
 
-/** The paper page: what the SolidJS view shows, and what either view prints. */
+/** The paper page: what the view shows and prints. */
 export function TechSheetPage(props: { sheet: TechSheetState }): JSX.Element {
   const model = (): ReturnType<TechSheetState["model"]> => props.sheet.model();
   const loading = (): boolean => props.sheet.loading();

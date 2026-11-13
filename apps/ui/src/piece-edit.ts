@@ -1,8 +1,7 @@
 /**
  * How one row of the Piece section is edited, apart from what draws it: what a pick or a tick
  * sends, when typed text is committed, what a refusal leaves in the field, what Escape cancels.
- * `components/PiecePanel.tsx` (SolidJS) and `slab/SlabPiece.tsx` (Slab) both edit their rows
- * through this, so the two panels cannot drift: the view holds the row's draft, whether it was
+ * `components/PiecePanel.tsx` edits its rows through this: the view holds the row's draft, whether it was
  * typed into and the fault said on it (`RowEditHost`), and this decides what becomes of them.
  *
  * Nothing here touches the DOM, and no jewelry number is worked out: `judgePieceDraft` (`./piece`)

@@ -1,9 +1,7 @@
 /**
  * The Price Book editor's state, apart from any view: what it asks about, the form as typed, the
- * refusals standing on it and what Save does. The SolidJS dialog
- * (`./components/PriceBookDialog.tsx`) and the one whose body Slab draws
- * (`./slab/SlabPriceBook.tsx`) both run on it, so neither forks the other's behaviour. The rules
- * themselves (what a price is, what the engine is sent) are `./bench`'s.
+ * refusals standing on it and what Save does. The dialog (`./components/PriceBookDialog.tsx`)
+ * runs on it and only draws. The rules themselves (what a price is, what the engine is sent) are `./bench`'s.
  */
 
 import { createEffect, createMemo, createSignal, on, type Accessor } from "solid-js";

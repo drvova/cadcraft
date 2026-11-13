@@ -108,7 +108,7 @@ export function RingDialog(props: JewelryDialogProps): JSX.Element {
   const id = (field: RingField): string => `ring-${field}`;
   const errorId = (field: RingField): string => `ring-${field}-error`;
 
-  // The state and what OK does are shared with the Slab-drawn dialog (`../jewelry-edit`).
+  // The state and what OK does are `../jewelry-edit`'s.
   const { choices, form, errors, summary, facts, sizeError, untouched, edit, apply } = createRingEdit(props, (field) => body?.querySelector<HTMLElement>(`#${id(field)}`)?.focus());
 
   const number = (field: "wall" | "width" | "x" | "y", label: string): JSX.Element => (

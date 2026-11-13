@@ -13,10 +13,10 @@ Not applicable: hand-rolled — a native `<select>` under a drawn face in Field'
 ## Examples
 `<Select value={layer} options={layers} ariaLabel="Layer" onChange={setLayer} />` — the layer an object is on, picked from the drawing's layers.
 
-Real uses, 22 call sites (`rg -c "<Select" src` → `src/components/DraftingSettings.tsx:1`, `src/components/JewelryDialog.tsx:4`, `src/components/LayerManager.tsx:4`, `src/components/PropertiesPanel.tsx:1`):
+Real uses, 16 call sites (`rg -c "<Select" src` → `src/components/DraftingSettings.tsx:1`, `src/components/JewelryDialog.tsx:4`, `src/components/LayerManager.tsx:4`, `src/components/PropertiesPanel.tsx:1`):
 - `src/components/JewelryDialog.tsx` — the Ring dialog's size system and metal, the Gem dialog's cut and stone: each list is the engine's own, named by its row's `<label for>`. Added 2026-11-12.
 - `src/components/DraftingSettings.tsx:153` — the Drafting Settings dialog's increment angle (`variant="field"`, `size="md"`): the usual angles and Custom, named by a visible `<label for>` through `id`.
-- `src/components/PropertiesPanel.tsx:201` — the palette's choice rows (layer, linetype, colour): `variant="inline" size="sm" align="end"`, `mixed` with the `*VARIES*` placeholder when the picked objects disagree.
+- `src/components/PropertiesPanel.tsx:200` — the palette's choice rows (layer, linetype, colour): `variant="inline" size="sm" align="end"`, `mixed` with the `*VARIES*` placeholder when the picked objects disagree.
 
 ### Example files
 | File | Covers | Caption |
@@ -372,7 +372,7 @@ export default function Invalid() {
   - Do: `<div class="prop-row"><span>Layer</span><Select variant="inline" size="sm" align="end" value={layer} options={options} ariaLabel="Layer" /></div>`
 
 ### Content
-- `rule/select-option-label-noun`: When an option's label is written, use the value's own name as the drawing or the setting spells it (Walls, Continuous, ByLayer), with 0 leading verbs, because the closed control shows the label alone as the current value. Evidence: single use `src/components/PropertiesPanel.tsx:188`, the palette's choices: layer and linetype names. Check: review `src/components/PropertiesPanel.tsx`.
+- `rule/select-option-label-noun`: When an option's label is written, use the value's own name as the drawing or the setting spells it (Walls, Continuous, ByLayer), with 0 leading verbs, because the closed control shows the label alone as the current value. Evidence: single use `src/components/PropertiesPanel.tsx:187`, the palette's choices: layer and linetype names. Check: review `src/components/PropertiesPanel.tsx`.
   - Don't: `{ value: "walls", label: "Move to Walls" }`
   - Do: `{ value: "walls", label: "Walls" }`
 

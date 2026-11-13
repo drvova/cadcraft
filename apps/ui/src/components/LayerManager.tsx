@@ -129,7 +129,7 @@ export function LayerManager(props: LayerManagerProps): JSX.Element {
   /** How many rows a page key moves: the rows in view, less one to keep the place. */
   const pageRows = (): number => Math.max(1, Math.floor(viewHeight() / rowHeight()) - 1);
 
-  // The state, the engine calls and the keys are shared with the dialog Slab draws (`../layer-manager-edit`).
+  // The state, the engine calls and the keys are `../layer-manager-edit`'s.
   const edit = createLayerManagerEdit(props, {
     focusActive,
     openChoice,
