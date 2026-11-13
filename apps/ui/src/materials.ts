@@ -486,7 +486,7 @@ export const DEEP_POWER = 0.9;
  * polished gold's highlight in a photograph stays a rich yellow, its light having bounced off gold
  * more than once. The white metals are left as they are.
  */
-export const STRIP_DEEP = 0.6;
+export const STRIP_DEEP = 0.9;
 
 /** The exposure the realistic shader multiplies by before the tone curve. */
 export const EXPOSURE = 0.85;
