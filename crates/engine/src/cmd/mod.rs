@@ -33,6 +33,9 @@ mod mtext_opts;
 mod overkill;
 mod pline_opts;
 pub mod plotters;
+pub mod proposal;
+#[cfg(test)]
+mod proposal_tests;
 mod props;
 pub use draw2::breakline::BreaklineOptions;
 pub use props::MatchProps;
@@ -204,6 +207,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(props::specs());
         v.extend(inquiry::specs());
         v.extend(jewelry::specs());
+        v.extend(proposal::specs());
         v.extend(settings::specs());
         v.extend(options::specs());
         v.extend(utility::specs());

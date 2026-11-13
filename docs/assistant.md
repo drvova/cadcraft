@@ -192,6 +192,38 @@ Pictures come back as image content blocks in MCP. The interface's panel has no 
 The brief tells the model to quote the numbers the tools returned and to name anything that came
 out different from what was asked: a drawing report is a report of measurements.
 
+## Proposals: a change shown before it is made
+
+`propose` runs a list of commands, reads what they come to, and puts the drawing back exactly as
+it was (the drawing, its undo and redo, the selection, the revision). What it returns is the
+difference, and the proposal waits until `accept` makes the change as one undo step or `reject`
+forgets it. It is how a change is reviewed rather than merely undone.
+
+```text
+propose {"steps": [{"command": "piece", "params": {"width": 2.8}}], "title": "Wider band"}
+propose {"variants": [{"title": "Slim", "steps": […]}, {"title": "Halo", "steps": […]}]}
+accept {"id": 3}        reject {"id": 3}        reject {}        proposals {}
+proposals {"id": 3, "of": "after", "run": {"command": "techsheet"}}
+```
+
+- **The reply**, per proposal: `id`, `group`, `title`, `steps`, the figures `before` and `after`
+  (the piece as `piece {query}` replies it, the stones, the grams, the cost), `changes` (one row a
+  figure that differs: `key`, `label`, `before`, `after`, a `delta` for numbers, a `unit`),
+  `checks` (`fixed`, `broken`, `failing`), `objects` (`added`, `removed`, `modified`) and a
+  one-line `message`.
+- **Accepting** swaps in the drawing that was read, so what is accepted is exactly what was
+  shown; a property test holds it equal to running the steps. The other variants of the same
+  `propose` are dropped. A proposal is for the drawing it was made on: once that changes,
+  `accept` refuses and says to propose again (`proposals` marks it `stale`).
+- **Steps** are commands that record undo, at most 64, in at most 8 variants; a step that fails
+  fails the proposal and is named. A command that records no undo (`pricebook`, a setting) cannot
+  be a step, because putting the drawing back would not undo it.
+- **Reading a side**: `proposals {id, of, run}` runs `piece` (as a question), `techsheet`,
+  `gemlist`, `objects` or `ringsizes` on the drawing as it was or as it would be. The solid of a
+  side is `piecemesh` of that side's `piece.params`.
+- Nothing draws a proposal yet: the commands are the engine's (`crates/engine/src/cmd/proposal.rs`),
+  reachable from the command line, the tool and MCP like any other.
+
 ## The same tool over MCP
 
 `cadcraft-cli mcp` serves the identical tool, one entry in `tools/list` with the same schema, on
@@ -258,6 +290,7 @@ a provider's output, the queue and the changes row.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-13 | minor | Proposals: `propose` reads a change (the piece's parameters, weight, stones, cost, checks, objects) and puts the drawing back; `accept` makes it as one undo step, `reject` forgets it, `proposals` lists them and reads either side. Engine commands only; nothing draws a proposal yet |
 | 2026-11-12 | minor | `@` context in the composer: the selection, bench lines and layers as chips that ride with one message |
 | 2026-11-12 | patch | The panel starts open on a wide window and remembers how it was left; a selection on the drawing offers the inline ask; the empty panel's suggestions are short enough to read whole at the panel's first width |
 | 2026-11-12 | minor | Ctrl+K opens a line over the drawing that shares the composer's draft and sends to the chat in front. The system prompt names the jewelry commands (`ringsizes`, `ring`, `gem`, `gemlist`, `setting`, `pave`, `gemfit`, `techsheet`) and asks for answers in finger sizes, millimetres, carats and grams, in the interface and in `crates/ai`. The empty panel's suggestions are jewelry requests |
