@@ -157,7 +157,9 @@
   flex-direction: column;
   gap: var(--gap-4);
   margin-top: var(--gap-4);
-  padding: var(--gap-8) var(--rail-text, var(--gap-8)) var(--gap-6);
+  /* The money ends on the sheet's numeric edge: the lines' own end inset, not the text column's
+     width (they were equal only by chance). */
+  padding: var(--gap-8) calc(var(--gap-8) + var(--prop-arrow-slot)) var(--gap-6) var(--rail-text, var(--gap-8));
   border-top: var(--hairline) solid var(--border-soft);
 }
 .bench-cost-head {
@@ -166,17 +168,24 @@
   justify-content: space-between;
   gap: var(--gap-8);
 }
+
+/* "Edit prices" is a quiet button: its label, not its inset, ends on the numeric edge. */
+.bench-cost-head .ui-button {
+  margin-inline-end: calc(-1 * var(--gap-6));
+}
 .bench-cost-rows {
   display: flex;
   flex-direction: column;
   gap: var(--gap-2);
   margin: 0;
 }
+/* A line of money is read in the sheet's type: the body size, so its figures are the same
+   tabular digits as the carats and grams above and line up on their right edge. */
 .bench-cost-row {
   display: flex;
   justify-content: space-between;
   gap: var(--gap-8);
-  font-size: var(--font-label);
+  font-size: var(--font-body);
   line-height: var(--leading-ui);
   color: var(--text-dim);
 }

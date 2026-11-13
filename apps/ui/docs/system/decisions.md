@@ -923,3 +923,11 @@ notice first. Local styles only; no token, component or wording changed.
   motion); `Button` gained `expanded` and `controls` for it (`aria-expanded`, `aria-controls`).
   Folded by default; the list is `hidden` when folded, so it leaves the Tab order. Failing checks
   are never folded. Wording added: the line itself.
+- **The bench's money is in the sheet's type, on the sheet's edge.** The cost lines were 12px
+  against the sheet's 13px, so their digits were not the carats' and grams' tabular digits, and
+  their right edge was the text column's width, equal to the lines' end inset only by chance. They
+  are now the body size, end on the lines' own inset (`--gap-8` + `--prop-arrow-slot`), and "Edit
+  prices" ends its label (not its button's inset) on that edge. The amounts keep the secondary ink
+  so the total still leads. Labels: at the rail's default width "Round 6.5 mm" fits beside both
+  columns (measured at 1280 and 1440); a longer label ends in an ellipsis as before. Not changed:
+  the columns' widths, which hold "36 pc" and "2.54 ct" exactly.
