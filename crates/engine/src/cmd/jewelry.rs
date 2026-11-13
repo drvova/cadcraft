@@ -38,6 +38,9 @@ mod setting;
 mod sizes;
 mod solid;
 #[cfg(test)]
+#[path = "jewelry/solid_tests.rs"]
+mod solid_tests;
+#[cfg(test)]
 #[path = "jewelry/tests.rs"]
 mod tests;
 

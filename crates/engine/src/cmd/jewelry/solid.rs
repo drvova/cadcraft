@@ -179,7 +179,8 @@ impl Envelope {
     fn bounds(&self) -> (Vec3, Vec3) {
         let (lo, hi) = self.outline.extent();
         let c = self.clearance;
-        let (bottom, top) = if self.cab { (-c, self.crown + c) } else { (-self.girdle / 2.0 - self.pavilion - c, self.girdle / 2.0 + self.crown + c) };
+        let (bottom, top) =
+            if self.cab { (-c, self.crown + c) } else { (-self.girdle / 2.0 - self.pavilion - c, self.girdle / 2.0 + self.crown + c) };
         let top = self.bore.map_or(top, |b| top.max(b));
         self.axes.bounds(Vec3::new(lo.x - c, lo.y - c, bottom), Vec3::new(hi.x + c, hi.y + c, top))
     }
@@ -191,12 +192,31 @@ pub(super) enum Prim {
     /// A section `(r, z)` revolved about Z.
     Revolve(Vec<Vec2>),
     /// A round wire of radius `r` along a path, open (round ends) or closed.
-    Wire { pts: Vec<Vec3>, r: f64, closed: bool },
-    Sphere { c: Vec3, r: f64 },
+    Wire {
+        pts: Vec<Vec3>,
+        r: f64,
+        closed: bool,
+    },
+    Sphere {
+        c: Vec3,
+        r: f64,
+    },
     /// A cylinder of radius `r` along `axes.w` from `lo` to `hi`.
-    Cylinder { axes: Axes, r: f64, lo: f64, hi: f64 },
+    Cylinder {
+        axes: Axes,
+        r: f64,
+        lo: f64,
+        hi: f64,
+    },
     /// The band between two offsets of an outline, from `lo` to `hi` along `axes.w`.
-    Plate { axes: Axes, outline: Outline, inner: f64, outer: f64, lo: f64, hi: f64 },
+    Plate {
+        axes: Axes,
+        outline: Outline,
+        inner: f64,
+        outer: f64,
+        lo: f64,
+        hi: f64,
+    },
     Seat(Envelope),
 }
 
@@ -281,6 +301,7 @@ pub(super) struct Csg {
 
 impl Csg {
     /// The field at `p`, every primitive considered.
+    #[cfg(test)]
     pub(super) fn eval(&self, p: Vec3) -> f64 {
         let add = self.add.iter().map(|q| q.eval(p)).fold(f64::INFINITY, f64::min);
         let cut = self.cut.iter().map(|q| q.eval(p)).fold(f64::INFINITY, f64::min);

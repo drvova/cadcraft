@@ -79,7 +79,7 @@ use serde_json::{Value, json};
 use super::super::*;
 use super::piece_params::{self as shared, Head, MAX_PIECE_STONES, MIN_CAST_WALL, PieceKind, PieceParams, Profile, Row, Section, proportions};
 use super::sizes::RingSize;
-use super::solid::{Axes, Csg, Envelope, Outline, Prim};
+use super::solid::{Axes, Csg, Envelope, Outline, Prim, Solid, solidify};
 use super::*;
 
 /// The most triangles a reply holds.
@@ -1050,7 +1050,12 @@ fn build_head(s: &Sane, d: &Detail, out: &mut Parts, stone: Standing) -> Stood {
         if !cab {
             let at = Axes { o: frame.at(centre.x, centre.y, 0.0), ..envelope.axes };
             let culet = -girdle / 2.0 - pavilion;
-            out.csg.cut.push(Prim::Cylinder { axes: at, r: CULET_HOLE * reach, lo: culet - head.clear - CULET_POCKET, hi: -girdle / 2.0 - 0.5 * pavilion });
+            out.csg.cut.push(Prim::Cylinder {
+                axes: at,
+                r: CULET_HOLE * reach,
+                lo: culet - head.clear - CULET_POCKET,
+                hi: -girdle / 2.0 - 0.5 * pavilion,
+            });
         }
         out.csg.cut.push(Prim::Seat(envelope));
         out.seats += 1;
@@ -1438,6 +1443,26 @@ pub(super) fn stl_triangles(mesh: &PieceMesh, stones: bool) -> (Vec<[Vec3; 4]>, 
     (out, dropped)
 }
 
+/// The stones' triangles alone, for an STL beside the merged solid.
+fn stone_triangles(mesh: &PieceMesh) -> Vec<[Vec3; 4]> {
+    let stones = PieceMesh {
+        meshes: mesh
+            .meshes
+            .iter()
+            .filter(|m| m.part == "stone")
+            .map(|m| PartMesh { positions: m.positions.clone(), indices: m.indices.clone(), ..*m })
+            .collect(),
+        notes: Vec::new(),
+        stones: 0,
+        fits: None,
+        level: 0,
+        over: false,
+        csg: Csg::default(),
+        seats: 0,
+    };
+    stl_triangles(&stones, true).0
+}
+
 /// A binary STL: an 80-byte header, the triangle count, then each triangle's normal and three
 /// vertices as little-endian `f32` and a zero attribute word — 84 + 50·n bytes.
 pub(super) fn stl_binary(tris: &[[Vec3; 4]], title: &str) -> Vec<u8> {
@@ -1567,26 +1592,85 @@ fn run_piecemesh(_s: &mut Session, p: &Value) -> Result<Value> {
     Ok(reply)
 }
 
+/// The merged solid's grid step at each quality, mm.
+const SOLID_STEP_FINE: f64 = 0.1;
+const SOLID_STEP_DRAFT: f64 = 0.2;
+/// The most triangles the merged solid of a binary STL holds (about 50 MB).
+pub(super) const MAX_SOLID_TRIANGLES: usize = 1_000_000;
+/// How far the merged solid's volume may stand from the analytic band's, as a fraction, before the
+/// reply says so: the sampling error at the steps above is a few tenths of a per cent.
+pub(super) const SOLID_AGREEMENT: f64 = 0.01;
+
+/// The metal as one closed shell (seats cut) at `quality`'s grid step, coarser when it must be to
+/// stay under `max_tris`: its triangles (normal first), the solid, and notes.
+pub(super) fn solid_stl(mesh: &PieceMesh, quality: Quality, max_tris: usize) -> std::result::Result<(Vec<[Vec3; 4]>, Solid, Vec<String>), String> {
+    let step = match quality {
+        Quality::Fine => SOLID_STEP_FINE,
+        Quality::Draft => SOLID_STEP_DRAFT,
+    };
+    let (solid, coarsened) = solidify(&mesh.csg, step, max_tris)?;
+    let mut notes = Vec::new();
+    if coarsened {
+        notes.push(format!(
+            "The merged solid is sampled at {} mm, coarser than {} quality's {step} mm, to stay under {max_tris} triangles.",
+            fmt_mm(solid.step),
+            quality.name()
+        ));
+    }
+    let mut tris = Vec::with_capacity(solid.triangles());
+    for t in solid.indices.chunks_exact(3) {
+        let at = |k: usize| t.get(k).and_then(|i| solid.positions.get(*i as usize)).copied();
+        let (Some(a), Some(b), Some(c)) = (at(0), at(1), at(2)) else { continue };
+        let n = (b - a).cross(c - a);
+        let len = n.len();
+        let n = if len.is_finite() && len > 0.0 { n * (1.0 / len) } else { Vec3::Z };
+        tris.push([n, a, b, c]);
+    }
+    Ok((tris, solid, notes))
+}
+
 fn run_stlout(_s: &mut Session, p: &Value) -> Result<Value> {
     let cmd = "stlout";
     let piece = piece_of(cmd, p)?;
     let quality = Quality::parse(cmd, p, Quality::Fine)?;
     let stones = bool_or(p, "stones", false);
     let binary = bool_or(p, "binary", true);
-    let budget = Budget { triangles: if binary { MAX_TRIANGLES } else { MAX_ASCII_TRIANGLES }, json: None, stones };
+    let cap = if binary { MAX_SOLID_TRIANGLES } else { MAX_ASCII_TRIANGLES };
+    // The tessellated piece gives the stones (and the notes); the metal is the merged solid.
+    let budget = Budget { triangles: if binary { MAX_TRIANGLES } else { MAX_ASCII_TRIANGLES / 2 }, json: None, stones };
     let mesh = piece_mesh_within(&piece, quality, budget);
-    if mesh.over {
-        return Err(bad(cmd, format!("this piece is more than {} triangles, too many for an ASCII STL; ask for the binary one", budget.triangles)));
+    if stones && mesh.over {
+        return Err(bad(
+            cmd,
+            format!("this piece's stones are more than {} triangles, too many for an ASCII STL; ask for the binary one", budget.triangles),
+        ));
     }
-    let (tris, dropped) = stl_triangles(&mesh, stones);
+    let stone_tris = if stones { stone_triangles(&mesh) } else { Vec::new() };
+    let room = cap.saturating_sub(stone_tris.len()).max(1);
+    let (mut tris, solid, mut extra) = solid_stl(&mesh, quality, room).map_err(|e| bad(cmd, e))?;
+    if stones {
+        tris.extend(stone_tris);
+    }
     let mut notes = mesh.notes;
-    if dropped > 0 {
-        notes.push(format!("{dropped} triangles with no area were left out."));
-    }
+    notes.append(&mut extra);
     if piece.wall < MIN_CAST_WALL {
         notes.push(format!("A {} mm wall is thinner than a bench casts ({MIN_CAST_WALL} mm).", size_json(piece.wall)));
     }
-    notes.push(if stones { "The stones are included as shells of their own." } else { "The metal only: the stones are left out." }.to_string());
+    notes.push(
+        if stones {
+            "The metal is one closed shell with a seat cut for every stone; the stones are included as shells of their own."
+        } else {
+            "The metal only, as one closed shell with a seat cut for every stone: the stones are left out."
+        }
+        .to_string(),
+    );
+    let volume = solid.volume();
+    let band = piece.band_volume();
+    if piece.kind == PieceKind::Band && band > 0.0 && ((volume - band) / band).abs() > SOLID_AGREEMENT {
+        notes.push(format!(
+            "The solid's volume ({volume:.1} mm³) is more than 1% from the band's exact volume ({band:.1} mm³): it is too thin for its sampling step."
+        ));
+    }
     let title = format!("{}-us{}-{}", piece.kind.name(), fmt_mm(piece.size.us), piece.metal);
     let name = format!("{title}.stl");
     let mut reply = json!({
@@ -1594,6 +1678,15 @@ fn run_stlout(_s: &mut Session, p: &Value) -> Result<Value> {
         "name": name,
         "quality": quality.name(),
         "units": "mm",
+        "step": r3(solid.step),
+        "seats": mesh.seats,
+        "metal": {
+            "name": piece.metal,
+            "density": piece.density,
+            "volumeMm3": r3(volume),
+            "grams": r3(volume / 1000.0 * piece.density),
+            "band": { "volumeMm3": r3(band), "grams": r3(piece.band_grams()) },
+        },
         "notes": notes,
     });
     if binary {
