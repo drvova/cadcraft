@@ -2,7 +2,7 @@
 
 [Slab](https://github.com/stencil-hq/slab) is the layout technology CADCraft's designed surfaces
 are written in: the Slab shell of the web interface (`apps/ui/slab`, behind `?shell=slab`) and the
-piece card, bench sheet and terminal dashboard of the command-line tool (`crates/surface`). It is
+piece card, bench sheet and terminal dashboard of the command-line tool (`surfaces/surface`). It is
 pre-alpha, not on crates.io, and its npm packages lag its repository, so both sides build it from
 source.
 
@@ -16,7 +16,7 @@ patch series. Nothing of Slab is committed here — no source, no binary, no fon
 | `README.md` | This file |
 
 Git-ignored, made by `cargo xtask slab`: `src/` (upstream at the pin with the series applied),
-`src.stamp`, `cargo-config.toml`.
+`src.stamp`.
 
 - Upstream: <https://github.com/stencil-hq/slab>
 - Base commit: `65747371a18da9a54a94955473d0ec7f7fd07d5f` (2026-08-22)
@@ -53,11 +53,11 @@ Not in the series, because they are not one-screen fixes (known issues at the ba
   never less than the hole (`clients/web/element.ts`, `#measureHoleContent`). The interface
   measures its bars and sets params instead.
 - The generated Rust `Doc::set_env` hard-codes the GPU client (code 1). Fixing it changes the
-  template and upstream's checked-in generated modules; `crates/surface` calls the kernel's
+  template and upstream's checked-in generated modules; `surfaces/surface` calls the kernel's
   `inst_set_env` itself.
 - A weight or family that reaches a node through a token bundle gets no font table
   (`slab-compile/src/emit.rs`, `collect_font_attrs` matches literals only); a child added by a
-  `when` is placed after its parent's other children. `crates/surface/slab` works around both.
+  `when` is placed after its parent's other children. `surfaces/surface/slab` works around both.
 - The rest of what the web side found is in `apps/ui/docs/slab-foundation.md`.
 
 ## Who reads this
@@ -79,33 +79,29 @@ Not in the series, because they are not one-screen fixes (known issues at the ba
   cargo xtask surfaces run -- tui --sample
   ```
 
-  `cargo xtask surfaces` passes Cargo a `paths` override (`cargo-config.toml`, written by
-  `cargo xtask slab`) that substitutes the patched tree for the git dependency. `Cargo.lock` is
-  not touched. `cargo xtask ci` lints and tests the surfaces when the tree has been fetched, and
-  says it skipped them when it has not.
+  The designed surfaces are a workspace of their own, `surfaces/` (the surface crate and the
+  command-line tool built with it), which names the patched tree by path. The main workspace's
+  `Cargo.toml` and `Cargo.lock` name nothing of Slab: a fresh clone resolves, builds, tests and
+  releases without fetching it, and the release's check that every git dependency comes from the
+  suite's own organisation sees none of it. `cargo xtask surfaces` runs Cargo on that workspace,
+  into the main `target` directory; `cargo xtask ci` checks its formatting, lints and tests it
+  when the tree has been fetched, and says it skipped them when it has not.
 
-  Three things to know. Cargo resolves an optional git dependency like any other: the first
-  Cargo command on a fresh clone fetches `github.com/stencil-hq/slab` into Cargo's own cache (as
-  it does `storytold/craft-libs`), though a default build compiles none of it; if that
-  repository were ever gone, the workspace would not resolve until the six lines pointed
-  elsewhere. A bare `cargo build -p cadcraft-cli --features surfaces` compiles
-  **unpatched** upstream and fails in `slab-compile` (`couldn't read …/slab-runtime.js`): use
-  `cargo xtask surfaces`. And Cargo warns that the override "has altered the original list of
-  dependencies" of Slab's crates (the series changes how they depend on each other); `cargo xtask
-  surfaces` counts that warning and says it once. All three go away with the fork.
+  `surfaces/Cargo.lock` is committed. It was `surfaces/cli` that the MCP server's card test moved
+  to (`tests/mcp_card.rs`): the server itself no longer links the surface crate, its host installs
+  the renderer.
 
 ## When the fork exists
 
 The series is what a fork would carry. Once it is pushed to a repository (the base commit plus
 these four commits, at some hash `H`):
 
-1. In the root `Cargo.toml`, change the six `slab-*` lines from
-   `git = "https://github.com/stencil-hq/slab", rev = "6574737…"` to `git = "<fork URL>", rev = "H"`.
-   That is the whole change for the Rust side: the features become ordinary optional features,
-   `cargo build -p cadcraft-cli --features surfaces` works, and the override warning is gone.
-2. Delete the fetch step: `xtask/src/slab.rs`'s `fetch` and `paths` override (keep
-   `surfaces` as a shorthand, or drop it), the `third_party/slab/src` entries in `.gitignore`
-   and the workspace `exclude`.
+1. In `surfaces/Cargo.toml`, change the six `slab-*` lines from
+   `path = "../third_party/slab/src/crates/…"` to `git = "<fork URL>", rev = "H"`.
+   A fork under the suite's own organisation could then also be named by the main workspace, and
+   the surfaces folded back into it as an optional feature; one elsewhere keeps them apart.
+2. Delete the fetch step for the Rust side (`xtask/src/slab.rs`'s `fetch`; keep `surfaces` as a
+   shorthand), the `third_party/slab/src` entries in `.gitignore` and the workspace `exclude`.
 3. Point `SLAB.lock` at the fork (`repo <fork URL>`, `commit H`, no `patch` lines): the web
    build then clones the fork and applies nothing. Keep `patches/` only if the fork is not the
    place the series is reviewed.
@@ -120,8 +116,8 @@ these four commits, at some hash `H`):
 4. Export: `git format-patch --no-signature --zero-commit -o <this directory>/patches <new>..HEAD`
    (delete the old files first), then rewrite `SLAB.lock`: the new `commit`, and a
    `patch <sha256> <file>` line per patch, in order.
-5. Change the commit in the root `Cargo.toml`'s six `slab-*` lines and `SLAB_COMMIT` in
-   `crates/surface/src/document.rs` (an xtask test fails while they differ from the lock).
+5. Change `SLAB_COMMIT` in `surfaces/surface/src/document.rs` (an xtask test fails while it
+   differs from the lock).
 6. `cargo xtask slab && cargo xtask surfaces test`; `bun run build:slab -- --update-lock` in
    `apps/ui`, look at `?shell=slab`, and commit the new record.
 

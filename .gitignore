@@ -22,7 +22,6 @@ node_modules/
 # committed (third_party/slab/README.md). Only the patches, the lock and the README are.
 /third_party/slab/src/
 /third_party/slab/src.stamp
-/third_party/slab/cargo-config.toml
 /.claude/worktrees/
 
 # Unlazy orchestration state (gates, leases, logs): local only.

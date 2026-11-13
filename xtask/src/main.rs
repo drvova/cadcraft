@@ -31,9 +31,9 @@ commands:
   slab [--verify] fetch Slab at the commit third_party/slab/SLAB.lock pins into the git-ignored
                   third_party/slab/src and apply the patch series (needs git and the network;
                   --verify only checks the patches against the lock)
-  surfaces <test|check|clippy|build|run> [args]
-                  build what is built on Slab (crates/surface, the command-line tool's and the MCP
-                  server's `surfaces` feature) against the patched tree; fetches it when absent.
+  surfaces <test|check|clippy|fmt|build|run> [args]
+                  the surfaces workspace (surfaces/: the surface crate and the command-line tool
+                  built with it), on the patched Slab; fetches it when absent.
                   `surfaces run -- tui --sample`, `surfaces build --release`
   corpus [--download]
                   show where test corpora live; --download fetches PngSuite into corpus/pngsuite
@@ -272,6 +272,7 @@ fn cmd_surfaces() -> Result<(), String> {
         );
         return Ok(());
     }
+    slab::surfaces(&root, &["fmt"])?;
     slab::surfaces(&root, &["clippy"])?;
     slab::surfaces(&root, &["test"])
 }

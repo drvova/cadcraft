@@ -2,28 +2,26 @@
 //! on it.
 //!
 //! Slab (<https://github.com/stencil-hq/slab>, MIT) lays out CADCraft's designed surfaces
-//! (`crates/surface`). Upstream at the pinned commit does not build from a clean checkout and
+//! (`surfaces/surface`). Upstream at the pinned commit does not build from a clean checkout and
 //! compiles fonts into everything that links it, so CADCraft builds it through a small patch
 //! series: `third_party/slab/patches`, pinned with its base commit in `third_party/slab/SLAB.lock`.
-//! No Slab source is committed. Until the series lives in a fork that Cargo can name directly:
+//! No Slab source is committed, and the main workspace names nothing of Slab: the surfaces are a
+//! workspace of their own (`surfaces/Cargo.toml`) that names the patched tree by path.
 //!
-//! - `slab` clones upstream at the pinned commit into the git-ignored `third_party/slab/src`,
-//!   applies the series (each patch checked against the lock), and writes
-//!   `third_party/slab/cargo-config.toml`: a Cargo `paths` override that substitutes the patched
-//!   tree for the git dependency the manifests name, without touching `Cargo.lock`.
-//! - `surfaces <test|clippy|build|run>` runs Cargo with that override and the `surfaces` features
-//!   on. A bare `cargo build --features surfaces` would compile *unpatched* Slab, which fails.
+//! - `slab` clones upstream at the pinned commit into the git-ignored `third_party/slab/src` and
+//!   applies the series (each patch checked against the lock).
+//! - `surfaces <test|check|clippy|build|run>` runs Cargo on the surfaces workspace, into the main
+//!   workspace's `target` directory.
 //!
-//! Everything else in the workspace builds without any of this: the features are off by default.
+//! Everything in the main workspace builds, tests and releases without any of this.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// The Slab crates the workspace links, each a directory under `crates/` of the fetched tree.
+/// The Slab crates the surfaces workspace links, each a directory under `crates/` of the fetched tree.
 const CRATES: &[&str] = &["slab-compile", "slab-fonts", "slab-kernel", "slab-slir", "slab-syntax", "slab-tui"];
-/// The packages built on Slab, and the one feature that turns it on in all of them.
-const PACKAGES: &[&str] = &["cadcraft-surface", "cadcraft-mcp", "cadcraft-cli"];
-const FEATURES: &str = "cadcraft-cli/surfaces";
+/// The surfaces workspace's manifest, from the repository's root.
+const MANIFEST: &str = "surfaces/Cargo.toml";
 
 /// What `SLAB.lock` pins.
 #[derive(Debug, PartialEq, Eq)]
@@ -176,24 +174,14 @@ fn in_src(src: &Path, args: &[&str], what: &str) -> Result<(), String> {
     if status.success() { Ok(()) } else { Err(format!("{what}: git exited with {status}")) }
 }
 
-/// A path as a TOML basic string.
-fn toml_string(path: &Path) -> String {
-    format!("\"{}\"", path.display().to_string().replace('\\', "\\\\").replace('"', "\\\""))
-}
-
-fn config_path(root: &Path) -> PathBuf {
-    dir(root).join("cargo-config.toml")
-}
-
 /// Whether the fetched tree is the one the lock and the patches describe.
 fn ready(root: &Path, lock: &Lock) -> bool {
     let src = dir(root).join("src");
     std::fs::read_to_string(dir(root).join("src.stamp")).is_ok_and(|s| s == stamp(lock))
-        && config_path(root).is_file()
         && CRATES.iter().all(|c| src.join("crates").join(c).join("Cargo.toml").is_file())
 }
 
-/// `cargo xtask slab [--verify]`: fetch the pinned commit, apply the series, write the override.
+/// `cargo xtask slab [--verify]`: fetch the pinned commit and apply the series.
 pub fn fetch(root: &Path, verify_only: bool) -> Result<(), String> {
     let lock = read_lock(root)?;
     let patches = checked_patches(root, &lock)?;
@@ -229,15 +217,6 @@ pub fn fetch(root: &Path, verify_only: bool) -> Result<(), String> {
     for patch in &patches {
         in_src(&src, &["apply", "--whitespace=nowarn", &patch.display().to_string()], "applying the patch series")?;
     }
-    let paths: Vec<String> = CRATES.iter().map(|c| toml_string(&src.join("crates").join(c))).collect();
-    let config = format!(
-        "# Written by `cargo xtask slab`; not committed. Passed to Cargo by `cargo xtask surfaces …`\n\
-         # (`--config`): the patched Slab in third_party/slab/src stands in for the git dependency the\n\
-         # manifests name, and Cargo.lock is left as it is.\n\
-         paths = [\n    {},\n]\n",
-        paths.join(",\n    ")
-    );
-    std::fs::write(config_path(root), config).map_err(|e| format!("{}: {e}", config_path(root).display()))?;
     std::fs::write(&stamp_path, stamp(&lock)).map_err(|e| format!("{}: {e}", stamp_path.display()))?;
     println!("slab: {} at {} with {} patches is in third_party/slab/src", lock.repo, lock.commit, patches.len());
     println!("slab: build on it with `cargo xtask surfaces test|clippy|build|run`");
@@ -249,41 +228,52 @@ pub fn fetched(root: &Path) -> bool {
     read_lock(root).is_ok_and(|lock| checked_patches(root, &lock).is_ok() && ready(root, &lock))
 }
 
-/// The Cargo command line for one `surfaces` verb, after `cargo`.
-pub fn cargo_args(verb: &str, config: &str, rest: &[&str]) -> Result<Vec<String>, String> {
+/// The Cargo command line for one `surfaces` verb, after `cargo`. `manifest` is the surfaces
+/// workspace's manifest and `target` the directory it builds into.
+pub fn cargo_args(verb: &str, manifest: &str, target: &str, rest: &[&str]) -> Result<Vec<String>, String> {
     let mut args: Vec<String> = Vec::new();
     let mut push = |items: &[&str]| args.extend(items.iter().map(|s| (*s).to_string()));
-    let packages: Vec<&str> = PACKAGES.iter().flat_map(|p| ["-p", *p]).collect();
+    let place = ["--manifest-path", manifest, "--target-dir", target];
     match verb {
         "test" | "check" => {
-            push(&[verb, "--config", config]);
-            push(&packages);
-            push(&["--features", FEATURES]);
+            push(&[verb]);
+            push(&place);
+            push(&["--workspace"]);
             push(rest);
         }
         "clippy" => {
-            push(&["clippy", "--config", config]);
-            push(&packages);
-            push(&["--features", FEATURES, "--all-targets"]);
+            push(&["clippy"]);
+            push(&place);
+            push(&["--workspace", "--all-targets"]);
             push(rest);
             push(&["--", "-D", "warnings"]);
         }
+        // Only the surface crate: the tool's source file is the main workspace's, formatted there,
+        // and `--all` would walk into the fetched Slab.
+        "fmt" => {
+            push(&["fmt", "--manifest-path", manifest, "-p", "cadcraft-surface", "--", "--check"]);
+            push(rest);
+        }
         "build" => {
-            push(&["build", "--config", config, "-p", "cadcraft-cli", "--features", "surfaces"]);
+            push(&["build"]);
+            push(&place);
+            push(&["-p", "cadcraft-cli"]);
             push(rest);
         }
         "run" => {
-            push(&["run", "--config", config, "-p", "cadcraft-cli", "--features", "surfaces", "--"]);
+            push(&["run"]);
+            push(&place);
+            push(&["-p", "cadcraft-cli", "--"]);
             // `cargo xtask surfaces run -- run …` is how the documents write it: one `--` only.
             push(rest.strip_prefix(&["--"]).unwrap_or(rest));
         }
-        other => return Err(format!("surfaces: unknown verb `{other}` (test, check, clippy, build, run)")),
+        other => return Err(format!("surfaces: unknown verb `{other}` (test, check, clippy, fmt, build, run)")),
     }
     Ok(args)
 }
 
-/// `cargo xtask surfaces <test|check|clippy|build|run> [args…]`: the crates built on Slab, with
-/// the patched tree substituted. Fetches it first when it is absent or stale.
+/// `cargo xtask surfaces <test|check|clippy|build|run> [args…]`: the surfaces workspace, built on
+/// the patched Slab. Fetches it first when it is absent or stale.
 pub fn surfaces(root: &Path, rest: &[&str]) -> Result<(), String> {
     let Some((verb, rest)) = rest.split_first() else {
         return Err("surfaces: give a verb (test, check, clippy, build, run)".into());
@@ -294,67 +284,13 @@ pub fn surfaces(root: &Path, rest: &[&str]) -> Result<(), String> {
         eprintln!("surfaces: the patched Slab is absent or stale; fetching it (cargo xtask slab)");
         fetch(root, false)?;
     }
-    let args = cargo_args(verb, &config_path(root).display().to_string(), rest)?;
+    // The main workspace's target directory: one place for the binaries, and what the two
+    // workspaces share is compiled once.
+    let target = std::env::var_os("CARGO_TARGET_DIR").map_or_else(|| root.join("target"), PathBuf::from);
+    let args = cargo_args(verb, &root.join(MANIFEST).display().to_string(), &target.display().to_string(), rest)?;
     eprintln!("$ cargo {}", args.join(" "));
-    let status = run_quietly(crate::cargo().args(&args))?;
+    let status = crate::cargo().args(&args).status().map_err(|e| format!("cargo: {e}"))?;
     if status.success() { Ok(()) } else { Err(format!("cargo {verb} (surfaces): exited with {status}")) }
-}
-
-/// The first line of the warning Cargo prints, per crate and per resolve, for a `paths` override
-/// whose dependencies differ from the package it stands in for.
-const OVERRIDE_WARNING: &str = "warning: path override for crate `slab-";
-/// The last line of that warning.
-const OVERRIDE_WARNING_END: &str = "https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html";
-
-/// Whether a line of Cargo's output belongs to the override warning, given whether the line
-/// before it did (`inside`). Returns `(drop this line, inside after it)`.
-pub fn override_warning_line(line: &str, inside: bool) -> (bool, bool) {
-    if inside {
-        return (true, !line.trim_start().starts_with(OVERRIDE_WARNING_END));
-    }
-    if line.contains(OVERRIDE_WARNING) { (true, true) } else { (false, false) }
-}
-
-/// Run Cargo with the override, passing its output through except for one warning it repeats
-/// (fourteen lines a crate, several times a build): that the patched Slab crates' dependencies
-/// differ from upstream's. They do, by design (the series adds a `bundled-fonts` feature and
-/// turns default features off between Slab's own crates), and the warning goes when the series
-/// lives in a fork the manifests can name. It is counted and said once instead of hidden.
-fn run_quietly(cargo: &mut Command) -> Result<std::process::ExitStatus, String> {
-    use std::io::{BufRead as _, IsTerminal as _, Write as _};
-    if std::io::stderr().is_terminal() && std::env::var_os("CARGO_TERM_COLOR").is_none() {
-        cargo.env("CARGO_TERM_COLOR", "always");
-    }
-    let mut child = cargo.stderr(std::process::Stdio::piped()).spawn().map_err(|e| format!("cargo: {e}"))?;
-    let mut hidden = 0usize;
-    if let Some(stderr) = child.stderr.take() {
-        let (mut inside, mut swallow_blank) = (false, false);
-        let mut out = std::io::stderr();
-        for line in std::io::BufReader::new(stderr).split(b'\n').map_while(Result::ok) {
-            let text = String::from_utf8_lossy(&line);
-            if swallow_blank && text.trim().is_empty() {
-                swallow_blank = false;
-                continue;
-            }
-            let (drop, next) = override_warning_line(&text, inside);
-            if drop && !inside {
-                hidden += 1;
-            }
-            swallow_blank = inside && !next;
-            inside = next;
-            if !drop {
-                let _ = out.write_all(&line).and_then(|()| out.write_all(b"\n"));
-            }
-        }
-    }
-    let status = child.wait().map_err(|e| format!("cargo: {e}"))?;
-    if hidden > 0 {
-        eprintln!(
-            "note: Cargo warned {hidden} time(s) that the `paths` override changes the dependencies of Slab's crates; \
-             they are patched (third_party/slab), and the warning goes when the fork exists"
-        );
-    }
-    Ok(status)
 }
 
 #[cfg(test)]
@@ -404,50 +340,57 @@ mod tests {
         let lock = read_lock(&root).unwrap();
         assert!(!lock.patches.is_empty());
         checked_patches(&root, &lock).unwrap();
-        // The manifests name the same base commit.
-        let manifest = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
-        for krate in CRATES {
-            let line =
-                manifest.lines().find(|l| l.starts_with(&format!("{krate} = "))).unwrap_or_else(|| panic!("{krate} is not a workspace dependency"));
-            assert!(line.contains(&lock.commit), "{krate} is not at the commit SLAB.lock pins: {line}");
+        // The crate that is written against it names the same commit.
+        let document = std::fs::read_to_string(root.join("surfaces/surface/src/document.rs")).unwrap();
+        assert!(document.contains(&format!("SLAB_COMMIT: &str = \"{}\"", lock.commit)), "surfaces/surface's SLAB_COMMIT is not the pinned commit");
+    }
+
+    /// The main workspace names nothing of Slab: its manifest and its lock file are what a release
+    /// checks (git dependencies come from the suite's own organisation), and a fresh clone must
+    /// resolve without the fetched tree. The surfaces workspace names it by path only.
+    #[test]
+    fn the_main_workspace_names_nothing_of_slab() {
+        let root = crate::root();
+        for file in ["Cargo.toml", "Cargo.lock"] {
+            let text = std::fs::read_to_string(root.join(file)).unwrap();
+            for line in text.lines().filter(|l| !l.trim_start().starts_with('#')) {
+                assert!(!line.contains("stencil-hq") && !line.contains("slab-"), "{file} names Slab: {line}");
+            }
         }
-        // And so does the crate that is written against it.
-        let document = std::fs::read_to_string(root.join("crates/surface/src/document.rs")).unwrap();
-        assert!(document.contains(&format!("SLAB_COMMIT: &str = \"{}\"", lock.commit)), "crates/surface's SLAB_COMMIT is not the pinned commit");
+        let surfaces = std::fs::read_to_string(root.join(MANIFEST)).unwrap();
+        for krate in CRATES {
+            let line = surfaces
+                .lines()
+                .find(|l| l.starts_with(&format!("{krate} = ")))
+                .unwrap_or_else(|| panic!("{krate} is not a dependency of the surfaces workspace"));
+            assert!(line.contains(&format!("path = \"../third_party/slab/src/crates/{krate}\"")) && !line.contains("git"), "{line}");
+        }
+        // The two workspaces lint alike: the surfaces' table is a copy.
+        let main = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
+        let lints = |text: &str| -> Vec<String> {
+            let from = text.find("[workspace.lints.rust]").unwrap();
+            let rest = &text[from..];
+            let to = rest.find("[profile").unwrap();
+            rest[..to].lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(String::from).collect()
+        };
+        assert_eq!(lints(&main), lints(&surfaces));
     }
 
     #[test]
-    fn surfaces_builds_with_the_override_and_the_feature() {
-        let args = cargo_args("test", "cfg.toml", &["--no-run"]).unwrap();
-        assert_eq!(args[..3], ["test", "--config", "cfg.toml"]);
-        assert!(args.windows(2).any(|w| w == ["--features", "cadcraft-cli/surfaces"]) && args.ends_with(&["--no-run".to_string()]));
-        let clippy = cargo_args("clippy", "cfg.toml", &[]).unwrap();
+    fn surfaces_builds_the_surfaces_workspace() {
+        let args = cargo_args("test", "s/Cargo.toml", "t", &["--no-run"]).unwrap();
+        assert_eq!(args[..5], ["test", "--manifest-path", "s/Cargo.toml", "--target-dir", "t"]);
+        assert!(args.ends_with(&["--no-run".to_string()]));
+        let clippy = cargo_args("clippy", "s/Cargo.toml", "t", &[]).unwrap();
         assert!(clippy.ends_with(&["--".to_string(), "-D".to_string(), "warnings".to_string()]));
-        let run = cargo_args("run", "cfg.toml", &["tui", "--sample"]).unwrap();
+        let run = cargo_args("run", "s/Cargo.toml", "t", &["tui", "--sample"]).unwrap();
         assert!(run.ends_with(&["--".to_string(), "tui".to_string(), "--sample".to_string()]));
-        let dashed = cargo_args("run", "cfg.toml", &["--", "run", "--sample"]).unwrap();
+        let dashed = cargo_args("run", "s/Cargo.toml", "t", &["--", "run", "--sample"]).unwrap();
         assert_eq!(dashed.iter().filter(|a| *a == "--").count(), 1);
-        assert!(cargo_args("publish", "cfg.toml", &[]).is_err());
-        // The one warning that is counted instead of printed, and nothing else.
-        let lines = [
-            "   Compiling a v1",
-            "warning: path override for crate `slab-kernel` has altered the original list of",
-            "dependencies; the dependency on `slab-fonts` was either added or",
-            "https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html",
-            "warning: unused variable: `x`",
-            "warning: path override for crate `other` has altered the original list of",
-        ];
-        let mut inside = false;
-        let kept: Vec<&str> = lines
-            .iter()
-            .filter(|line| {
-                let (drop, next) = override_warning_line(line, inside);
-                inside = next;
-                !drop
-            })
-            .copied()
-            .collect();
-        assert_eq!(kept, vec![lines[0], lines[4], lines[5]]);
-        assert_eq!(toml_string(Path::new("C:\\a \"b\"")), "\"C:\\\\a \\\"b\\\"\"");
+        assert_eq!(
+            cargo_args("fmt", "s/Cargo.toml", "t", &[]).unwrap(),
+            ["fmt", "--manifest-path", "s/Cargo.toml", "-p", "cadcraft-surface", "--", "--check"]
+        );
+        assert!(cargo_args("publish", "s/Cargo.toml", "t", &[]).is_err());
     }
 }

@@ -1,0 +1,69 @@
+# The designed surfaces (a piece card, the bench sheet as a page, the terminal dashboard:
+# docs/surfaces.md) are a workspace of their own, outside the main one.
+#
+# They are laid out by Slab (MIT, https://github.com/stencil-hq/slab), which is not in this
+# repository and not a dependency of the main workspace: `cargo xtask slab` fetches it at the
+# commit `third_party/slab/SLAB.lock` pins and applies the patch series there, and this workspace
+# names the patched tree by path. So the main `Cargo.toml` and `Cargo.lock` name nothing of Slab,
+# and a fresh clone builds, tests and releases without it.
+#
+#   cargo xtask slab                  fetch and patch Slab into third_party/slab/src
+#   cargo xtask surfaces test|check|clippy|build|run
+#
+# CADCraft's own crates are path dependencies into the main workspace and keep its settings.
+[workspace]
+resolver = "3"
+members = ["surface", "cli"]
+
+[workspace.package]
+version = "0.13.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.95"
+repository = "https://github.com/storytold/cadcraft"
+
+[workspace.dependencies]
+cadcraft-fonts = { path = "../crates/fonts" }
+cadcraft-io = { path = "../crates/io" }
+cadcraft-render = { path = "../crates/render" }
+cadcraft-engine = { path = "../crates/engine" }
+cadcraft-mcp = { path = "../crates/mcp" }
+cadcraft-surface = { path = "surface" }
+thiserror = "2"
+serde_json = { version = "1", features = ["float_roundtrip"] }
+tiny-skia = { version = "0.12", default-features = false, features = ["std", "simd", "png-format"] }
+# Slab, patched, by path. `default-features = false` is what leaves its bundled fonts out.
+slab-compile = { path = "../third_party/slab/src/crates/slab-compile", default-features = false }
+slab-fonts = { path = "../third_party/slab/src/crates/slab-fonts", default-features = false }
+slab-kernel = { path = "../third_party/slab/src/crates/slab-kernel", default-features = false }
+slab-slir = { path = "../third_party/slab/src/crates/slab-slir", default-features = false }
+slab-syntax = { path = "../third_party/slab/src/crates/slab-syntax" }
+slab-tui = { path = "../third_party/slab/src/crates/slab-tui", default-features = false }
+
+# The same as the main workspace's (an xtask test holds them equal).
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+too_many_arguments = "allow"
+type_complexity = "allow"
+
+[profile.dev.package."*"]
+opt-level = 2
+debug = false
+
+[profile.dev]
+opt-level = 1
+debug = "line-tables-only"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 16
+debug = 0
+
+# The main workspace's patch that this graph uses: a path dependency's patches are its root's.
+[patch.crates-io]
+krilla = { version = "=0.8.2", git = "https://github.com/storytold/craft-libs", rev = "a0916808f7d78bed8c7b90cdf937176015454a7f" }

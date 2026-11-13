@@ -1,13 +1,13 @@
 # Designed surfaces (Rust side)
 
 A *surface* is a picture of the drawing's **data** — as opposed to a picture of the drawing. Three
-exist outside the web interface, all in `crates/surface` (`cadcraft-surface`, layer L5):
+exist outside the web interface, all in `surfaces/surface` (`cadcraft-surface`, layer L5):
 
 | Surface | Document | Reached by | Output |
 |---|---|---|---|
-| Piece card | `crates/surface/slab/piece-card.slab` | the assistant's `(card [path] [width] [theme])` inside `run` (MCP returns it as an image block); `cadcraft-cli run … --card OUT.svg\|png` | SVG, PNG (1280 px wide by default) |
-| Bench sheet | `crates/surface/slab/tech-sheet.slab` | `cadcraft-cli run … --sheet OUT.svg\|png` | SVG page (794 units wide), PNG |
-| Terminal dashboard | `crates/surface/slab/dashboard.slab` | `cadcraft-cli tui [FILE\|--sample\|--metric]` | interactive terminal; text when stdout is not a terminal or with `--print` |
+| Piece card | `surfaces/surface/slab/piece-card.slab` | the assistant's `(card [path] [width] [theme])` inside `run` (MCP returns it as an image block); `cadcraft-cli run … --card OUT.svg\|png` | SVG, PNG (1280 px wide by default) |
+| Bench sheet | `surfaces/surface/slab/tech-sheet.slab` | `cadcraft-cli run … --sheet OUT.svg\|png` | SVG page (794 units wide), PNG |
+| Terminal dashboard | `surfaces/surface/slab/dashboard.slab` | `cadcraft-cli tui [FILE\|--sample\|--metric]` | interactive terminal; text when stdout is not a terminal or with `--print` |
 
 `--theme dark|light` picks the palette (`slab/tokens.slab`, the interface's own tokens). The card
 is dark by default and the sheet light.
@@ -22,7 +22,7 @@ cargo xtask slab                        # once: fetch Slab at the pin, apply the
 cargo xtask surfaces build --release    # cadcraft-cli with the surfaces
 cargo xtask surfaces run -- run --sample --card card.svg --sheet sheet.svg
 cargo xtask surfaces run -- tui --sample
-cargo xtask surfaces test               # the tests of crates/surface, the CLI and the MCP server
+cargo xtask surfaces test               # the tests of surfaces/surface and of the tool built with it
 ```
 
 **An SVG needs no font; a PNG needs one of the machine's.** No font is shipped (see Fonts below).
@@ -32,7 +32,7 @@ cargo xtask surfaces test               # the tests of crates/surface, the CLI a
 Two commands are asked and nothing is changed: `piece {query: true}` and `techsheet {}`. The
 surfaces print their replies — size, weight, stone count and carats, each check's `ok` as PASS or
 FAIL with the engine's sentence, the cost lines when the drawing has a price book. Nothing is
-measured, summed or priced in `crates/surface` (`src/data.rs`). A drawing with no parametric
+measured, summed or priced in `surfaces/surface` (`src/data.rs`). A drawing with no parametric
 piece shows its bands and stones and says there are no checks; no drawing at all shows that.
 
 The sheet's views are the engine's own PNG of the drawing (`cadcraft_io::png_framed`), handed to
@@ -65,42 +65,24 @@ exporters for PNG, SVG and terminal cells. It is pre-alpha and not on crates.io.
   CADCraft turns off. The web interface's Slab shell builds on the same pin and series
   (`scripts/build-slab.mjs`). No Slab source is in the repository; `vendor/slab-compile`, the
   copy an earlier revision carried, is gone.
-- **How it is linked.** The root `Cargo.toml` names `slab-compile`, `slab-fonts`, `slab-kernel`,
-  `slab-slir`, `slab-syntax` and `slab-tui` as git dependencies on upstream at the pin, with
-  `default-features = false`, and every use is optional. So a fresh clone builds, tests and
-  passes `cargo xtask ci` with no extra step and compiles none of it. `cargo xtask slab` clones
-  the pin into the git-ignored `third_party/slab/src`, applies the series (each patch checked
-  against the lock's sha256) and writes a Cargo `paths` override; `cargo xtask surfaces
-  test|check|clippy|build|run` runs Cargo with it and the features on. `Cargo.lock` is the same
-  either way.
-- **What to know.** Cargo fetches an optional git dependency like any other, so the first Cargo
-  command on a fresh clone downloads upstream's repository into Cargo's cache (and compiles none
-  of it). `cargo build -p cadcraft-cli --features surfaces` without the override
-  compiles unpatched upstream and fails in `slab-compile`: use `cargo xtask surfaces`. Cargo
-  warns that the override alters the dependencies of Slab's crates; the xtask counts the warning
-  and says it once. All of this ends when the series lives in a fork: then the six `git`/`rev` lines
-  name the fork, and the fetch step is deleted (`third_party/slab/README.md`).
-- **Typed modules.** `crates/surface/build.rs` runs Slab's `gen rust` as a library over each
-  document and writes a module into `OUT_DIR`: a setter per param, a struct and a setter per
-  list, the compiled document as bytes. A param renamed in a `.slab` file stops the crate
-  compiling. Nothing is fetched and no tool is run at build time.
-- **Check.** `cadcraft_surface::check` is `slab check` as a library call; the tests require
-  every document to compile with no diagnostic at all.
-- **Never crash.** Every call into Slab runs under `catch_unwind` and becomes a `SurfaceError`;
-  strings from a drawing are stripped of control characters and cut, lists are capped
-  (24 stone lines, 12 checks, 24 cost lines…), sizes are clamped, and a PNG is refused above
-  16 million pixels or 3 MiB. A font file found on the machine is size-capped and parsed under
-  the same guard before it is used.
-- **Layering.** `cadcraft-surface` links no windowing, GPU or terminal library. The terminal
-  driver (`slab-tui`, on crossterm) is a dependency of the command-line tool only. The browser
-  build and the desktop window do not link Slab's Rust crates.
+- **How it is linked.** The surfaces are a workspace of their own, `surfaces/`: the surface crate
+  (`surfaces/surface`) and the command-line tool built with it (`surfaces/cli`, the same source
+  file as `apps/cadcraft-cli` with its `surfaces` feature on). Its manifest names `slab-compile`,
+  `slab-fonts`, `slab-kernel`, `slab-slir`, `slab-syntax` and `slab-tui` by path into the
+  git-ignored `third_party/slab/src`, with `default-features = false`. `cargo xtask slab` clones
+  the pin there and applies the series (each patch checked against the lock's sha256);
+  `cargo xtask surfaces test|check|clippy|fmt|build|run` runs Cargo on that workspace.
+- **What that buys.** The main workspace's `Cargo.toml` and `Cargo.lock` name nothing of Slab,
+  so a fresh clone builds, tests, passes `cargo xtask ci` and releases without it, and nothing is
+  fetched from upstream unless the surfaces are asked for. `surfaces/Cargo.lock` is committed.
+  The MCP server does not link the surface crate: its host installs the renderer, which the
+  command-line tool of the surfaces workspace does before it serves.
 
 ### Updating the pin
 
 `third_party/slab/README.md` has the steps (rebase the series, verify it in both feature
-configurations, export it, rewrite `SLAB.lock`). On this side: change the commit in the six
-`slab-*` lines of the root `Cargo.toml` and `SLAB_COMMIT` in `crates/surface/src/document.rs`
-(an xtask test fails while either differs from the lock), then `cargo xtask slab` and
+configurations, export it, rewrite `SLAB.lock`). On this side: change `SLAB_COMMIT` in `surfaces/surface/src/document.rs`
+(an xtask test fails while it differs from the lock), then `cargo xtask slab` and
 `cargo xtask surfaces test`. The tests write every surface to a directory when
 `CADCRAFT_SURFACE_SAMPLES` names one: look at them.
 
@@ -130,7 +112,7 @@ binary), a test asserts it (`slab_is_linked_without_its_bundled_faces`), and the
   derived from no font: `slab-fonts`, `default_metrics`). The SVG writes every run with the width
   it was given (`textLength`) and names a generic family (`Helvetica, Arial, sans-serif`), so a
   viewer's own sans-serif fits the layout. The same drawing gives the same bytes everywhere.
-- **A PNG needs glyph outlines, so it needs a face of the machine's.** `crates/surface/src/fonts.rs`
+- **A PNG needs glyph outlines, so it needs a face of the machine's.** `surfaces/surface/src/fonts.rs`
   looks, when the picture is drawn, for: the file `CADCRAFT_SURFACE_FONT` names (with
   `CADCRAFT_SURFACE_FONT_BOLD` for the heavy weights); then the first installed family of Inter,
   Segoe UI, Helvetica Neue, Arial, Liberation Sans, DejaVu Sans, Noto Sans, Carlito, FreeSans

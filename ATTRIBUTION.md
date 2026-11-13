@@ -14,14 +14,14 @@ exception is the ArtCraft brand in `docs/brand/`: ArtCraft trademarks, not open 
 `docs/brand/LICENSE-brand.txt`.
 
 Linked, not in this repository: [Slab](https://github.com/stencil-hq/slab) (MIT, © Stencil), the
-layout technology of the designed surfaces (`crates/surface`, optional) and of the interface's Slab
+layout technology of the designed surfaces (`surfaces/`, a workspace of its own) and of the interface's Slab
 shell (`apps/ui/slab`, behind `?shell=slab`). Its source is fetched at the commit
 `third_party/slab/SLAB.lock` pins and built under the patch series beside that file (the patches
 are CADCraft's, MIT); none of its source, binaries or fonts is committed. It is built **without**
 its bundled fonts (Inter, JetBrains Mono), so no font of Slab's is in a CADCraft binary or web
 build and there is no font to attribute: the build checks its artifacts for those faces' name
 records (`scripts/build-slab.mjs`), and a test asserts the linked kernel has none
-(`crates/surface`, `slab_is_linked_without_its_bundled_faces`).
+(`surfaces/surface`, `slab_is_linked_without_its_bundled_faces`).
 
 Generated-in-code assets are original and have no file to list:
 - the UI icon set (`apps/ui/src/icons.ts`);

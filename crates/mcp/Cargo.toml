@@ -8,17 +8,11 @@ license.workspace = true
 [lints]
 workspace = true
 
-[features]
-# A headless server installs the surface renderer, so a run's `(card)` comes back as a picture
-# of the piece (docs/surfaces.md). Off by default: see the command-line tool's `surfaces`.
-surfaces = ["dep:cadcraft-surface", "cadcraft-surface/slab"]
-
 [dependencies]
 cadcraft-engine = { workspace = true }
 cadcraft-ai = { workspace = true }
 cadcraft-render = { workspace = true }
 cadcraft-io = { workspace = true }
-cadcraft-surface = { workspace = true, optional = true }
 serde_json = { workspace = true }
 log = { workspace = true }
 # Secure randomness for the per-session control token (MIT OR Apache-2.0).

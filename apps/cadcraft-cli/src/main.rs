@@ -610,7 +610,7 @@ fn run(args: &[String]) -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Designed surfaces (crates/surface): the piece card, the bench sheet, the terminal dashboard
+// Designed surfaces (surfaces/surface): the piece card, the bench sheet, the terminal dashboard
 // ---------------------------------------------------------------------------------------------
 //
 // They are the `surfaces` feature, off by default: Slab, which lays them out, is fetched and

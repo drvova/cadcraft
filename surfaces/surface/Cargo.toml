@@ -10,9 +10,8 @@ build = "build.rs"
 workspace = true
 
 [features]
-# Everything in this crate. Without it the crate is empty and links nothing of Slab, which is
-# how the workspace builds on a fresh clone: Slab is fetched and patched by `cargo xtask slab`
-# and built through `cargo xtask surfaces …` (third_party/slab/README.md, docs/surfaces.md).
+# Everything in this crate, and on: this workspace exists to build it (surfaces/Cargo.toml).
+default = ["slab"]
 slab = ["dep:slab-compile", "dep:slab-fonts", "dep:slab-kernel", "dep:slab-slir", "dep:slab-syntax"]
 
 [dependencies]
@@ -34,7 +33,7 @@ slab-syntax = { workspace = true, optional = true }
 
 [build-dependencies]
 # The build script compiles `slab/*.slab` into typed Rust modules (`slab gen rust`, as a library).
-# No network and no tool on PATH: the compiler is this workspace's own dependency.
+# No network and no tool on PATH: the compiler is the fetched, patched Slab's own crate.
 slab-compile = { workspace = true, optional = true }
 
 [dev-dependencies]

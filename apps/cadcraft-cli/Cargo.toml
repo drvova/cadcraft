@@ -11,10 +11,11 @@ workspace = true
 
 [features]
 # The designed surfaces: `run --card`, `run --sheet`, the `tui` dashboard, and `(card)` in the
-# MCP server (docs/surfaces.md). Off by default, because they are built on Slab, which is fetched
-# and patched by `cargo xtask slab`: build them with `cargo xtask surfaces build`, never with a
-# bare `--features surfaces` (that compiles unpatched Slab, which does not build).
-surfaces = ["dep:cadcraft-surface", "cadcraft-surface/slab", "cadcraft-mcp/surfaces", "dep:slab-tui"]
+# MCP server (docs/surfaces.md). They are built on Slab, which the main workspace does not name,
+# so this feature is only ever on in the surfaces workspace, whose `surfaces/cli` builds this same
+# source file with the crates it needs (`cargo xtask surfaces build`). Turning it on here does not
+# build: there is nothing behind it in this manifest.
+surfaces = []
 
 [dependencies]
 cadcraft-engine = { workspace = true }
@@ -22,7 +23,3 @@ cadcraft-io = { workspace = true }
 cadcraft-mcp = { workspace = true }
 cadcraft-render = { workspace = true }
 serde_json = { workspace = true }
-cadcraft-surface = { workspace = true, optional = true }
-# Slab's terminal driver (MIT; crossterm underneath): raw mode, keys to kernel events, and the
-# cell painter for `cadcraft-cli tui`. The terminal lives here, in the app, not in a library crate.
-slab-tui = { workspace = true, optional = true }
