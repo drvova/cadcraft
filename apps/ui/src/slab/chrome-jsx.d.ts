@@ -10,6 +10,7 @@ declare module "solid-js" {
     interface IntrinsicElements {
       "cadcraft-statusbar": HTMLAttributes<HTMLElement>;
       "cadcraft-tabs": HTMLAttributes<HTMLElement>;
+      "cadcraft-ribbon": HTMLAttributes<HTMLElement>;
     }
   }
 }

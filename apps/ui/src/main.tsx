@@ -104,5 +104,15 @@ async function withDialogs(boot: SlabBoot): Promise<SlabBoot> {
   return notice === undefined ? { parts } : { parts, notice };
 }
 
-const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts).then(withDialogs) : Promise.resolve<SlabBoot>({})]);
+/** The ribbon, added to the parts when its document loads; the SolidJS strip shows when it does not. */
+async function withRibbon(boot: SlabBoot): Promise<SlabBoot> {
+  if (boot.parts === undefined) return boot;
+  const { loadSlab } = await import("./slab/loader");
+  const ribbon = await loadSlab("ribbon");
+  if (!ribbon.ok) return { ...boot, notice: boot.notice ?? slabPartNotice("ribbon", ribbon.reason) };
+  const { SlabRibbon } = await import("./slab/SlabRibbon");
+  return { ...boot, parts: { ...boot.parts, Ribbon: SlabRibbon } };
+}
+
+const [facade, slab] = await Promise.all([createFacade(), shellChoice(window.location.search) === "slab" ? loadSlabParts().then(withLayers).then(withPiece).then(withObjects).then(withProperties).then(withChromeParts).then(withDialogs).then(withRibbon) : Promise.resolve<SlabBoot>({})]);
 render(() => <App facade={facade} slab={slab.parts} shellNotice={slab.notice} />, root);

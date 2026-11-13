@@ -195,6 +195,9 @@ and the notice names the part. Logic is shared with the SolidJS component, not f
 | Objects | `objects.slab` | a `virtual` list (about twenty rows laid out whatever the drawing holds); the search field is the SolidJS `ObjectsSearch` in a hole: the kernel's field has no word selection, no search role, and draws IME text over its placeholder |
 | Status bar | `statusbar.slab` | toggles are switches (no `aria-pressed`); a pointer move over the drawing costs about 2 ms more script than the SolidJS bar (the driver re-syncs the whole accessibility layer each frame) |
 | View tabs | `tabs.slab` | finger pan and edge fades are the host's |
+| Properties | `properties.slab` | choices open a host-drawn listbox anchored to the row (`src/slab/popup.tsx`: a Slab overlay cannot leave its surface's box), which Piece uses too; the row logic is `src/props-edit.ts`, shared |
+| Dialog bodies | `pricebook.slab`, `jewelry-dialog.slab` | the host's `Dialog` stays the frame; `src/slab/modal.tsx` owns Tab between the kernel's controls, the controls in holes and the frame; selects and free text are SolidJS controls in holes |
+| Ribbon | `ribbon.slab` | the fold is the SolidJS strip's `toolsFit` fed with the document's measures; the glyph block is generated from `ICON_PATHS` (`ribbon-icons.ts`, `RIBBON_ICONS=write bun test src/slab/ribbon.test.ts`); round stroke caps come from a sheet the host adds to the shadow root; no `pointer-move` binder and no `transition`, each of which solves per step |
 
 Known to be worse than SolidJS in all of them: one tab stop with arrows per surface; a pointer
 press can show the focus ring; no kerning; a screen reader sees switches where SolidJS has pressed
@@ -203,12 +206,14 @@ few more chunks than before.
 
 ## Next (agent-hours)
 
-1. **Properties** (12 to 16): fields, selects and checkboxes per row. The Piece port shows the
-   kernel's field is usable for numbers with host workarounds; a select needs an anchored overlay
-   the host must dismiss and focus-manage (§6.10).
-2. **Ribbon** (12 to 16): overflow folding, a menu, tooltips on every key.
-3. **Dialogs** (16 to 24 for the layer, then 4 to 8 each): no modal primitive; focus trapping and
-   restoration are the host's.
+1. **Further dialogs** (3 to 6 each when they are fields, selects and text; Drafting Settings and
+   the Layer Manager need kernel buttons, ticks and tabs in a body, not yet tried under `modal.tsx`).
+2. **The title bar and menus, the command line, the assistant**: still SolidJS in holes.
+3. The status bar and the view tabs still bind `pointer-move`, which the ribbon showed costs a
+   solve per move.
+
+The driver clips every hole and paints it under the later ones, so `SlabShell` lets the bars'
+holes out and raises them (`OPEN_PAST_EDGE`): before that the menu bar's menus opened unseen.
 
 Before these, settle tooltips and a keyboard convention for surfaces (one stop with arrows, or
 let Tab through per control with a kernel change).

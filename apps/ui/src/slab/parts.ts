@@ -11,9 +11,19 @@ import type { PiecePanelProps } from "../components/PiecePanel";
 import type { ObjectsPanelProps } from "../components/ObjectsPanel";
 import type { PropertiesPanelProps } from "../components/PropertiesPanel";
 import type { LayoutTabsProps, StatusBarProps } from "../components/StatusBar";
+import type { ToolStripProps } from "../components/ToolStrip";
 import type { SlabShellProps } from "./SlabShell";
 import type { JewelryDialogProps } from "../components/JewelryDialog";
 import type { PriceBookDialogProps } from "../components/PriceBookDialog";
+
+/**
+ * What the ribbon is given: the SolidJS strip's props, and the id of the command that is running
+ * (when one is), which only the ribbon drawn by Slab marks. The SolidJS strip takes these props
+ * and reads its own.
+ */
+export interface RibbonProps extends ToolStripProps {
+  running?: string | null;
+}
 
 export interface SlabParts {
   Shell: Component<SlabShellProps>;
@@ -36,4 +46,6 @@ export interface SlabParts {
   /** The Ring and Gem dialogs (one document); absent when it did not load, and the SolidJS ones are shown. */
   Ring?: Component<JewelryDialogProps>;
   Gem?: Component<JewelryDialogProps>;
+  /** The ribbon; absent when its document did not load, and the SolidJS strip is shown. */
+  Ribbon?: Component<RibbonProps>;
 }

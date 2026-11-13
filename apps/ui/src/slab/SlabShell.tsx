@@ -51,6 +51,14 @@ const BARS: readonly { slot: keyof ShellRegions; param: string }[] = [
   { slot: "bench", param: "bench_h" },
 ];
 
+/** The bars whose menus and lists open past their own edge, and how far each is raised over the rest. */
+const OPEN_PAST_EDGE: readonly (readonly [keyof ShellRegions, number])[] = [
+  ["topbar", 4],
+  ["ribbon", 3],
+  ["cmdline", 2],
+  ["status", 2],
+];
+
 /** The panes' keys in the document, and the slots each pane holds. */
 const WORK = "#shell/#work";
 const PANES: readonly { name: keyof PaneSizes; key: string; slots: readonly (keyof ShellRegions)[] }[] = [
@@ -126,7 +134,24 @@ export function SlabShell(props: SlabShellProps): JSX.Element {
       saveWidths(widths);
     });
 
+    /**
+     * The driver clips every hole (`overflow: hidden`), and a hole is painted under the ones after
+     * it. A bar's menus and lists open past its edge, so the bars' holes are let out and raised:
+     * without this the menu bar's menus are open and cannot be seen.
+     */
+    const released = new Set<HTMLElement>();
+    const releaseBars = (): void => {
+      for (const [name, lift] of OPEN_PAST_EDGE) {
+        const hole = slots.get(name)?.assignedSlot?.parentElement;
+        if (hole === null || hole === undefined || released.has(hole)) continue;
+        hole.style.overflow = "visible";
+        hole.style.zIndex = String(lift);
+        released.add(hole);
+      }
+    };
+
     const onFrame = (): void => {
+      releaseBars();
       const solved = solvedPanes();
       if (solved === null) return;
       if (widths === null) {

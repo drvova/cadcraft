@@ -54,7 +54,7 @@ import { PriceBookDialog } from "./components/PriceBookDialog";
 import { LayerManager } from "./components/LayerManager";
 import { TemplateGallery } from "./components/TemplateGallery";
 import { opensLayerManager } from "./layer-manager";
-import type { SlabParts } from "./slab/parts";
+import type { RibbonProps, SlabParts } from "./slab/parts";
 
 export interface AppProps {
   facade: AppFacade;
@@ -1336,9 +1336,10 @@ export function App(props: AppProps): JSX.Element {
       onToggleAssistant={() => setShowAssistant((v) => !v)}
     />
   );
-  const ribbon = (): JSX.Element => (
+  /** The ribbon, drawn by `Strip`: the SolidJS one, or the one ported to Slab. */
+  const ribbon = (Strip: Component<RibbonProps> = ToolStrip): JSX.Element => (
     <Show when={showToolbar()}>
-      <ToolStrip onInvoke={onInvoke} commands={commands()} />
+      <Strip onInvoke={onInvoke} commands={commands()} running={prompt().running} />
     </Show>
   );
   /** The sidebar is on screen: its switch is on and it has a section to show. */
@@ -1524,7 +1525,7 @@ export function App(props: AppProps): JSX.Element {
         <slab.Shell
           regions={{
             topbar: topBar,
-            ribbon,
+            ribbon: () => ribbon(slab.Ribbon),
             rail: () => (
               <Show when={sidebarShown()}>
                 <aside class="sidebar" aria-label="Drawing">
