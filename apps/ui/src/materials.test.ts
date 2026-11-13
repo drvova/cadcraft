@@ -9,6 +9,7 @@ import {
   boxSpread,
   channelIors,
   contactShadow,
+  deepTint,
   f0OfIor,
   fresnelSchlick,
   linearToSrgb,
@@ -18,6 +19,7 @@ import {
   REAL_FLOATS,
   realBatch,
   SHADOW_FLOATS,
+  toneKeepHue,
   srgbToLinear,
   stoneOf,
   STONES,
@@ -181,5 +183,46 @@ describe("the picture", () => {
     }
     expect(contactShadow({ min: [NaN, 0, 0], max: [1, 1, 1] })).toBeNull();
     expect(contactShadow({ min: [1, 1, 1], max: [0, 0, 0] })).toBeNull();
+  });
+});
+
+describe("warm gold", () => {
+  const metal = (id: string) => {
+    const m = METALS.find((x) => x.id === id);
+    if (!m) throw new Error(id);
+    return m;
+  };
+  const sat = (c: readonly number[]) => (Math.max(...c) - Math.min(...c)) / Math.max(...c);
+
+  test("the golds keep their reflectances, deeper and more saturated toward fine gold", () => {
+    expect(metal("gold18").f0).toEqual([0.98, 0.72, 0.33]);
+    expect(sat(metal("gold24").f0)).toBeGreaterThan(sat(metal("gold18").f0));
+    expect(sat(metal("gold18").f0)).toBeGreaterThan(sat(metal("gold14").f0));
+    expect(sat(metal("platinum").f0)).toBeLessThan(0.1);
+  });
+
+  test("the hue-keeping curve keeps a bright gold's hue where ACES per channel pales it", () => {
+    const g: [number, number, number] = [4 * 0.98, 4 * 0.72, 4 * 0.33];
+    const kept = toneKeepHue(g);
+    const aces = g.map(acesFilm);
+    expect(sat(kept)).toBeGreaterThan(sat(aces) + 0.2);
+    expect(Math.max(...kept)).toBeCloseTo(Math.max(...aces), 2);
+    // A grey stays grey, and the curve is bounded and NaN-safe.
+    const grey = toneKeepHue([2, 2, 2]);
+    expect(grey[0]).toBeCloseTo(grey[2], 6);
+    expect(toneKeepHue([NaN, 1e9, -3]).every((x) => x >= 0 && x <= 1)).toBe(true);
+    expect(toneKeepHue([0, 0, 0])).toEqual([0, 0, 0]);
+  });
+
+  test("the deep tint warms gold's shadows and leaves the white metals alone", () => {
+    const g = deepTint(metal("gold18").f0);
+    expect(g[0]).toBeCloseTo(0.98, 6);
+    expect(sat(g)).toBeGreaterThan(sat(metal("gold18").f0) + 0.1);
+    for (const id of ["platinum", "silver"]) {
+      const f = metal(id).f0;
+      deepTint(f).forEach((x, i) => expect(x).toBeCloseTo(f[i] ?? 0, 6));
+    }
+    expect(deepTint([0, 0, 0])).toEqual([0, 0, 0]);
+    expect(deepTint([NaN, 1, 1])).toEqual([0, 0, 0]);
   });
 });

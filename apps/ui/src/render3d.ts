@@ -30,7 +30,7 @@ import {
   type StandardView,
   type Vec3,
 } from "./view3d";
-import { contactShadow, EXPOSURE, realBatch, REAL_FLOATS, SHADOW_FLOATS, STUDIO, supersampledSize, SWEEP } from "./materials";
+import { contactShadow, DEEP_POWER, EXPOSURE, HUE_KEEP, realBatch, REAL_FLOATS, SHADOW_FLOATS, STUDIO, supersampledSize, SWEEP } from "./materials";
 
 // ---- the shaders ----
 
@@ -168,6 +168,8 @@ uniform vec3 uBoxDir[4];
 uniform vec3 uBoxAcross[4];
 uniform vec4 uBoxShape[4];
 uniform vec4 uSweep;
+uniform float uHueWhite;
+uniform float uDeepPower;
 uniform vec3 uRight;
 uniform vec3 uUp;
 uniform vec3 uBack;
@@ -198,9 +200,20 @@ float boxes(vec3 d, float r) {
 }
 float studio(vec3 d, float r) { return sweep(d, r) + boxes(d, r); }
 vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
-vec4 finish(vec3 c) {
-  vec3 m = aces(max(c, vec3(0.0)) * uExposure);
+vec4 finish(vec3 c, float keepHue) {
+  vec3 x = max(c, vec3(0.0)) * uExposure;
+  vec3 m = aces(x);
+  float peak = max(x.r, max(x.g, x.b));
+  vec3 hue = peak > 1e-6 ? x * (aces(vec3(peak)).r / peak) : vec3(0.0);
+  m = mix(m, clamp(hue * (1.0 - uHueWhite) + m * uHueWhite, 0.0, 1.0), keepHue);
   return vec4(pow(m, vec3(1.0 / 2.2)), 1.0);
+}
+vec3 deepTint(vec3 f0) {
+  float hi = max(f0.r, max(f0.g, f0.b));
+  float lo = min(f0.r, min(f0.g, f0.b));
+  if (hi <= 0.0) return vec3(0.0);
+  float p = 1.0 + uDeepPower * smoothstep(0.2, 0.55, (hi - lo) / hi);
+  return hi * pow(max(f0, vec3(0.0)) / hi, vec3(p));
 }
 `;
 
@@ -283,7 +296,9 @@ void main() {
   float nv = clamp(dot(n, v), 1e-3, 1.0);
   vec3 r = reflect(-v, n);
   vec3 color;
+  float keepHue = 0.0;
   if (uStone < 0.5) {
+    keepHue = vMaterial.w >= 0.0 ? 1.0 : 0.0;
     float rough = abs(vMaterial.w);
 #ifdef DERIVATIVES
     vec3 dn = fwidth(n);
@@ -291,7 +306,9 @@ void main() {
 #endif
     vec2 ab = envBrdf(rough, nv);
     if (vMaterial.w >= 0.0) {
-      color = studio(toEye(r), rough) * (vMaterial.rgb * ab.x + ab.y);
+      // The boxes mirror in the alloy's colour; the dim sweep in its deeper tint (see deepTint).
+      vec3 re = toEye(r);
+      color = boxes(re, rough) * (vMaterial.rgb * ab.x + ab.y) + sweep(re, rough) * (deepTint(vMaterial.rgb) * ab.x + ab.y);
     } else {
       color = vMaterial.rgb * studio(toEye(n), 1.0) * 0.9 + studio(toEye(r), rough) * (0.04 * ab.x + ab.y);
     }
@@ -314,7 +331,7 @@ void main() {
       color = mirror * fresnel + back * body * (1.0 - fresnel);
     }
   }
-  gl_FragColor = finish(color);
+  gl_FragColor = finish(color, keepHue);
 }`;
 
 /** A triangle over the whole view for the backdrop. */
@@ -495,6 +512,8 @@ export function createRenderer(gl: WebGLRenderingContext): Renderer | string {
     boxAcross: gl.getUniformLocation(program, "uBoxAcross"),
     boxShape: gl.getUniformLocation(program, "uBoxShape"),
     sweep: gl.getUniformLocation(program, "uSweep"),
+    hueWhite: gl.getUniformLocation(program, "uHueWhite"),
+    deepPower: gl.getUniformLocation(program, "uDeepPower"),
     right: gl.getUniformLocation(program, "uRight"),
     up: gl.getUniformLocation(program, "uUp"),
     back: gl.getUniformLocation(program, "uBack"),
@@ -579,6 +598,8 @@ export function createRenderer(gl: WebGLRenderingContext): Renderer | string {
     gl.uniform3fv(u.boxAcross, boxAcross);
     gl.uniform4fv(u.boxShape, boxShape);
     gl.uniform4f(u.sweep, SWEEP.floor, SWEEP.horizon, SWEEP.top, SWEEP.eye);
+    gl.uniform1f(u.hueWhite, HUE_KEEP.white);
+    gl.uniform1f(u.deepPower, DEEP_POWER);
     gl.uniform3f(u.right, frame.right[0], frame.right[1], frame.right[2]);
     gl.uniform3f(u.up, frame.up[0], frame.up[1], frame.up[2]);
     gl.uniform3f(u.back, frame.back[0], frame.back[1], frame.back[2]);

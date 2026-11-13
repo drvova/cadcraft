@@ -341,6 +341,43 @@ export function acesFilm(x: number): number {
   return Math.min(1, Math.max(0, mapped));
 }
 
+/**
+ * How much of a colour's own hue a bright highlight keeps. Run per channel, ACES drives a bright
+ * gold toward a pale cream (its red and green both saturate while its blue climbs): the khaki,
+ * washed-out gold. The hue-keeping curve maps the brightest channel through ACES and scales the
+ * others with it, so gold stays gold up to its brightest highlight; `HUE_KEEP.white` of the
+ * per-channel curve is mixed back so the hottest glints still burn toward white. Metal only: the
+ * stones keep the per-channel curve and their look.
+ */
+export const HUE_KEEP = { white: 0.22 } as const;
+
+/** The hue-keeping tone curve (the shader's `finish()` for metal), linear light in, 0…1 out. */
+export function toneKeepHue(c: Vec3, white: number = HUE_KEEP.white): Vec3 {
+  const v: Vec3 = [0, 1, 2].map((i) => (Number.isFinite(c[i]) ? Math.max(0, c[i] ?? 0) : 0)) as unknown as Vec3;
+  const peak = Math.max(v[0], v[1], v[2]);
+  const k = peak > 1e-6 ? acesFilm(peak) / peak : 0;
+  const w = Number.isFinite(white) ? Math.min(1, Math.max(0, white)) : 0;
+  return v.map((x) => Math.min(1, Math.max(0, x * k * (1 - w) + acesFilm(x) * w))) as unknown as Vec3;
+}
+
+/**
+ * The deeper colour a coloured metal shows where it mirrors the dim sweep rather than a box: in a
+ * jeweller's tent the dark around a gold piece is lit by the gold itself and by warm cards, so its
+ * shadows are a deep amber, not a grey-brown. The reflectance is raised to a power that grows with
+ * how coloured the alloy is (its saturation), so the white metals are left as they are. The shader
+ * does the same per pixel.
+ */
+export function deepTint(f0: Vec3): Vec3 {
+  const hi = Math.max(f0[0], f0[1], f0[2]);
+  const lo = Math.min(f0[0], f0[1], f0[2]);
+  if (!(hi > 0) || !Number.isFinite(hi) || !Number.isFinite(lo)) return [0, 0, 0];
+  const p = 1 + DEEP_POWER * smoothstep(0.2, 0.55, (hi - lo) / hi);
+  return f0.map((x) => hi * Math.pow(Math.max(0, x) / hi, p)) as unknown as Vec3;
+}
+
+/** How much deeper a fully coloured alloy's shadows are (the extra power `deepTint` raises it to). */
+export const DEEP_POWER = 0.9;
+
 /** The exposure the realistic shader multiplies by before the tone curve. */
 export const EXPOSURE = 0.85;
 

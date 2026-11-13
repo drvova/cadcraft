@@ -304,6 +304,15 @@ commands on this page, so its bench sheet reads back: 32 stones, 1.35 ct, a 3.86
     project's own rounded approximations of commonly quoted optical constants. The engine has no
     rose gold. The renderer knows the metal and the stone only by the colour the engine gives
     the part, matched against the engine's palette.
+  - *Warm gold*: a polished metal mostly shows what it mirrors, and through a grey sweep and a
+    per-channel tone curve gold read pale and khaki (its lit areas paled to cream, its mid-tones to
+    an olive brown). Two display-only corrections fix it. Metal is tone-mapped by its brightest
+    channel with the others scaled alongside (`toneKeepHue`; a fifth of the per-channel curve is
+    mixed back so the hottest glints still go white), so a highlight stays gold. And where a
+    coloured alloy mirrors the dim sweep rather than a box it shows its deeper tint (`deepTint`:
+    the reflectance raised to a power that grows with the alloy's saturation, as gold's shadows
+    are lit by the gold and by warm cards in a jeweller's tent). The white metals, whose
+    reflectance is nearly grey, are left as they were; the stones keep the per-channel curve.
   - *The studio* that lights it is drawn by formula, not loaded: four soft rectangular boxes and
     a sweep that is bright at the horizon and dark at the floor, with the eye's own direction
     held dark (the photographer a polished piece mirrors). It hangs in the eye's frame, so the
@@ -322,7 +331,7 @@ commands on this page, so its bench sheet reads back: 32 stones, 1.35 ct, a 3.86
     bodies of their colour.
   - *Grounding*: a seamless backdrop over the theme's canvas colour, a soft contact shadow under
     the piece (a quad on its lowest plane, two soft falloffs; no shadow map and no ambient
-    occlusion on the piece itself), ACES tone mapping and gamma. The ground grid is not drawn in
+    occlusion on the piece itself), ACES tone mapping (hue-keeping for metal) and gamma. The ground grid is not drawn in
     Realistic; the other modes keep it.
   - *Anti-aliasing*: the stage asks for MSAA; stills are drawn at twice their size (held to the
     still ceiling) and scaled down. With `OES_standard_derivatives` the metal's roughness grows
@@ -386,6 +395,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-13 | patch | Realistic gold reads warm: metal keeps its hue through the tone curve, and a coloured alloy's dim reflections take its deeper tint; platinum, silver and the stones unchanged |
 | 2026-11-13 | minor | A Realistic display mode, the 3D tab's default and the stills': physically based metal under a procedural studio, faceted stones with Fresnel, a faked internal return and fire, a backdrop and a contact shadow, tone mapping, supersampled stills |
 | 2026-11-13 | minor | The piece card, the bench sheet page, the terminal dashboard and `(card)` removed with Slab |
 | 2026-11-12 | minor | The piece card, the bench sheet as a page and a terminal dashboard (`cadcraft-cli run --card/--sheet`, `tui`, `(card)`): an optional build of the command-line tool, laid out by Slab without its fonts |
