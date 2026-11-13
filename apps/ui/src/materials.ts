@@ -330,6 +330,25 @@ export const RINGS: readonly Ring[] = [
  */
 export const LIGHT_PEAK = 1.9;
 
+/**
+ * How strongly a transparent stone sees the rings (against 1 for metal): a crown mirrors the
+ * whole tent through its many facets, and at full strength the rings wash a sapphire to lavender
+ * and a ruby to pink.
+ */
+export const STONE_RINGS = 0.15;
+
+/**
+ * The power a transparent stone's body colour is raised to for the light it returns: light that
+ * comes back out has crossed the stone more than once, so a sapphire's return is a deeper, more
+ * saturated blue than its catalogue colour. A colourless stone (all channels near 1) is untouched.
+ */
+export const BODY_POWER = 2.0;
+
+/** A transparent stone's return colour: its body colour raised to `BODY_POWER` (the shader does the same). */
+export function returnTint(body: Vec3, power: number = BODY_POWER): Vec3 {
+  return body.map((x) => Math.pow(Number.isFinite(x) ? Math.min(1, Math.max(0, x)) : 0, power)) as unknown as Vec3;
+}
+
 /** The soft ceiling of `LIGHT_PEAK`. */
 export function softPeak(light: number, peak: number = LIGHT_PEAK): number {
   const l = Number.isFinite(light) ? Math.max(0, light) : 0;

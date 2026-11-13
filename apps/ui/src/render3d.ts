@@ -30,7 +30,7 @@ import {
   type StandardView,
   type Vec3,
 } from "./view3d";
-import { contactShadow, DEEP_POWER, EXPOSURE, HUE_KEEP, CARDS, LIGHT_PEAK, realBatch, RINGS, STRIP_DEEP, REAL_FLOATS, SHADOW_FLOATS, STUDIO, STUDIO_BOXES, supersampledSize, SWEEP } from "./materials";
+import { BODY_POWER, contactShadow, DEEP_POWER, EXPOSURE, HUE_KEEP, CARDS, LIGHT_PEAK, realBatch, RINGS, STONE_RINGS, STRIP_DEEP, REAL_FLOATS, SHADOW_FLOATS, STUDIO, STUDIO_BOXES, supersampledSize, SWEEP } from "./materials";
 
 /** A number as a GLSL float literal. */
 const glsl = (x: number): string => (Number.isInteger(x) ? `${x}.0` : `${x}`);
@@ -217,6 +217,8 @@ ${RINGS.map((g) => `  { float e = ${glsl(g.edge)} + grow; float off = abs(theta 
   return light;
 }
 float lights(vec3 d, float r) { return boxes(d, r) + rings(d, r); }
+// A stone mirrors the rings dimmed (their many lines would wash a crown and the colour of its body); its return from inside sees only the boxes, which keeps it cheap.
+float gemLights(vec3 d, float r) { return boxes(d, r) + ${glsl(STONE_RINGS)} * rings(d, r); }
 float softPeak(float l) { return ${glsl(LIGHT_PEAK)} * (1.0 - exp(-l / ${glsl(LIGHT_PEAK)})); }
 float studio(vec3 d, float r) { return sweep(d, r) + softPeak(lights(d, r)); }
 vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
@@ -307,7 +309,7 @@ float inside(vec3 t, float ior) {
   // and a scatter of small lamps (a lattice of points on the sphere) is the sparkle.
   vec3 q = a * 11.0;
   float lamps = pow(max(sin(q.x) * sin(q.y) * sin(q.z), 0.0), 8.0) * smoothstep(0.35, 0.7, el);
-  return 0.45 * lights(a, 0.03) + 0.25 * lights(b, 0.05) + 4.0 * lamps + 0.015;
+  return 0.45 * boxes(a, 0.03) + 0.25 * boxes(b, 0.05) + 4.0 * lamps + 0.015;
 }
 void main() {
   vec3 n = normalize(vNormal);
@@ -337,7 +339,7 @@ void main() {
     float f0 = (ior - 1.0) / (ior + 1.0);
     f0 *= f0;
     float fresnel = f0 + (1.0 - f0) * pow(1.0 - nv, 5.0);
-    vec3 mirror = vec3(lights(toEye(r), 0.02) + 0.5 * sweep(toEye(r), 0.02));
+    vec3 mirror = vec3(gemLights(toEye(r), 0.02) + 0.5 * sweep(toEye(r), 0.02));
     if (vMaterial.w < 0.0) {
       color = vMaterial.rgb * studio(toEye(n), 1.0) * 0.85 + vec3(studio(toEye(r), 0.12)) * fresnel;
     } else {
@@ -347,7 +349,7 @@ void main() {
       vec3 back = vec3(inside(te, ior - h), inside(te, ior), inside(te, ior + h));
       // Fire is a fringe, not a facet's whole colour: half of each channel is the stone's mean.
       back = mix(vec3(dot(back, vec3(0.3333))), back, 0.45);
-      vec3 body = pow(max(vMaterial.rgb, vec3(0.0)), vec3(1.4));
+      vec3 body = pow(max(vMaterial.rgb, vec3(0.0)), vec3(${glsl(BODY_POWER)}));
       color = mirror * fresnel + back * body * (1.0 - fresnel);
     }
   }

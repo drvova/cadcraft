@@ -307,36 +307,47 @@ commands on this page, so its bench sheet reads back: 32 stones, 1.35 ct, a 3.86
   - *Warm gold*: a polished metal mostly shows what it mirrors, and through a grey sweep and a
     per-channel tone curve gold read pale and khaki (its lit areas paled to cream, its mid-tones to
     an olive brown). Two display-only corrections fix it. Metal is tone-mapped by its brightest
-    channel with the others scaled alongside (`toneKeepHue`; a fifth of the per-channel curve is
+    channel with the others scaled alongside (`toneKeepHue`; an eighth of the per-channel curve is
     mixed back so the hottest glints still go white), so a highlight stays gold. And where a
     coloured alloy mirrors the dim sweep rather than a box it shows its deeper tint (`deepTint`:
     the reflectance raised to a power that grows with the alloy's saturation, as gold's shadows
     are lit by the gold and by warm cards in a jeweller's tent). The white metals, whose
     reflectance is nearly grey, are left as they were; the stones keep the per-channel curve.
-  - *The studio* that lights it is drawn by formula, not loaded: nine soft rectangular boxes and
-    a sweep that is bright at the horizon and dark at the floor, with only a small spot round the
-    eye's own direction held dark (the lens a polished piece mirrors). As in ring photography,
-    most boxes are *gradient strips*, brightest along their middle line and fading to their long
-    edges: a wide strip just above the lens and a dimmer one below it (so a face turned to the
-    camera shows a bright line, the dark of the lens and a fainter line), tall strips on either
-    side behind the piece, a low card in front and a low card on the left (which the broad side
-    of a band mirrors at the 3/4 view), with the overhead box, the key, the fill and the kicker.
-    A broad polished face therefore carries a bright, soft band with a crisp dark beside it
-    rather than an even brown. It hangs in the eye's frame, so the piece is lit the same from
-    every side, and the bands slide across the faces as the piece turns. Instead of a prefiltered environment map, a rough
-    surface sees each box with a wider, dimmer edge (analytic, so there is nothing to prefilter
+  - *The studio* that lights it is drawn by formula, not loaded: six soft rectangular boxes
+    (overhead, a key strip high on the left, a narrow fill on the right, a low kicker behind and
+    tall strips behind on either side), a set of *concentric gradient rings* round the lens, and
+    a sweep that is bright at the horizon and dark at the floor, with a small spot round the eye's
+    own direction held dark (the lens a polished piece mirrors). It hangs in the eye's frame, so
+    what a face shows depends only on how it is turned to the camera, and the bands slide across
+    the faces as the piece turns. A flat face mirrors only a patch some 10–15° across (the spread
+    of the view over it), so in front of the piece the rings stand one every 22°, strong and faint
+    in turn: whatever way a flat face is turned — front, top, side, anywhere through an orbit — its
+    patch holds part of a ring and part of a gap, and it carries a soft band beside a dark one.
+    Behind the piece two broad soft rings take over, so a band seen edge on (the side view, whose
+    outside sweeps every angle) shows a few calm bands rather than a ladder of stripes. Below the
+    lens the rings show only where a card stands on the table, low left and low right, so straight
+    down stays dark. The light of the boxes and rings is eased toward a ceiling
+    (`LIGHT_PEAK`, `peak · (1 − e^(−L/peak))`), so silver and platinum no longer burn to paper white
+    in a band, and a strip mirrors a coloured alloy a shade deeper (`STRIP_DEEP`), so gold's lit
+    band stays yellow rather than cream. Instead of a prefiltered environment map, a rough surface
+    sees each box and ring with a wider, dimmer edge (analytic, so there is nothing to prefilter
     and no float texture is needed).
   - *Stones* are the engine's faceted cuts (a round brilliant has table, star, kite, upper and
     lower girdle, pavilion and culet facets), each facet shaded flat: what it mirrors by the
     stone's own Fresnel (diamond 2.42, coloured stones their own index), over a fake of the light
     returned from inside: the facet's tilt from the line of sight, multiplied and scattered,
     picks a direction in the studio's boxes and a lattice of small lamps, tinted by the body
-    colour. Red, green and blue each take their own index (the dispersion, widened so it shows
+    colour raised to a power (`BODY_POWER`, light that comes back out has crossed the stone more
+    than once), so a sapphire's or ruby's pavilion is a deep, saturated blue or red while a
+    diamond stays white. A stone mirrors the rings at a sixth of their strength (`STONE_RINGS`),
+    so their lines do not wash its crown pale. Red, green and blue each take their own index (the dispersion, widened so it shows
     on screen), which is the fire. There is no refraction through the stone and no light path
     is traced: a facet shows one value, so a large table cannot show the pavilion's arrows.
     Opaque stones (opal, pearl, onyx, turquoise, lapis, jade, moonstone, coral) are polished
     bodies of their colour.
-  - *Grounding*: a seamless backdrop over the theme's canvas colour, a soft contact shadow under
+  - *Grounding*: a seamless backdrop over the canvas colour (`--canvas`, dark in both interface
+    themes on purpose: the drawing area keeps its own colours whichever theme the chrome takes, see
+    `apps/ui/docs/system/colors.md`, so the metals are tuned against one dark stage), a soft contact shadow under
     the piece (a quad on its lowest plane, two soft falloffs; no shadow map and no ambient
     occlusion on the piece itself), ACES tone mapping (hue-keeping for metal) and gamma. The ground grid is not drawn in
     Realistic; the other modes keep it.
@@ -402,6 +413,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-13 | patch | Realistic studio: concentric gradient rings round the lens replace the front strips and low cards, so flat faces carry a band from the front, top, side and through an orbit and the side view is calm; the lights are eased toward a ceiling and strips mirror coloured alloys a shade deeper (gold18 lit-pixel median saturation 0.53 → 0.59, silver near-white pixels 19% → 0%); coloured stones return a deeper body colour and mirror the rings dimmed; the derivatives variant of the shader compiles again; the stage stays dark in the light theme by design |
 | 2026-11-13 | patch | Realistic studio: gradient strips round the lens, tall side strips and low cards, a smaller dark lens spot, so broad polished faces carry a bright highlight band beside a dark one instead of reading as flat bronze |
 | 2026-11-13 | patch | Realistic gold reads warm: metal keeps its hue through the tone curve, and a coloured alloy's dim reflections take its deeper tint; platinum, silver and the stones unchanged |
 | 2026-11-13 | minor | A Realistic display mode, the 3D tab's default and the stills': physically based metal under a procedural studio, faceted stones with Fresnel, a faked internal return and fire, a backdrop and a contact shadow, tone mapping, supersampled stills |

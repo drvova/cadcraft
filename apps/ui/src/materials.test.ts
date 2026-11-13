@@ -8,6 +8,7 @@ import {
   acesFilm,
   boxRadiance,
   boxSpread,
+  returnTint,
   cardMask,
   LIGHT_PEAK,
   ringRadiance,
@@ -211,6 +212,18 @@ describe("the studio", () => {
         expect(v).toBeGreaterThanOrEqual(0);
       }
     }
+  });
+});
+
+describe("the stones' return", () => {
+  test("a coloured stone returns a deeper, more saturated colour; a diamond stays white", () => {
+    const sapphire = stoneOf(rgb(22, 62, 160)).body;
+    const deep = returnTint(sapphire);
+    const sat = (c: Vec3): number => 1 - Math.min(...c) / Math.max(...c);
+    expect(sat(deep)).toBeGreaterThan(sat(sapphire));
+    const diamond = returnTint(stoneOf(rgb(226, 238, 250)).body);
+    for (const x of diamond) expect(x).toBeGreaterThan(0.9);
+    expect(returnTint([NaN, -1, 2]).every((x) => x >= 0 && x <= 1)).toBe(true);
   });
 });
 
