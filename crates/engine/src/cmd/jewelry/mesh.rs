@@ -79,6 +79,7 @@ use serde_json::{Value, json};
 use super::super::*;
 use super::piece_params::{self as shared, Head, MAX_PIECE_STONES, MIN_CAST_WALL, PieceKind, PieceParams, Profile, Row, Section, proportions};
 use super::sizes::RingSize;
+use super::solid::{Axes, Csg, Envelope, Outline, Prim};
 use super::*;
 
 /// The most triangles a reply holds.
@@ -87,6 +88,25 @@ pub(super) const MAX_TRIANGLES: usize = 150_000;
 const MAX_JSON_ESTIMATE: usize = 3_600_000;
 /// The most triangles an ASCII STL holds (about 200 bytes each).
 const MAX_ASCII_TRIANGLES: usize = 30_000;
+
+// Seats. These are this project's approximation of a bench's usual figures, as its authors
+// understand them — not taken from a cited standard.
+
+/// The gap left all round a stone in its seat (and in the bearing cut into its prongs), mm.
+const SEAT_CLEARANCE: f64 = 0.05;
+/// A centre stone's clearance hole under its culet: its radius as a fraction of the girdle's
+/// inradius.
+const CULET_HOLE: f64 = 0.3;
+/// How far past the culet's clearance over the band the culet hole reaches, mm (into the band when
+/// the head stands low).
+const CULET_POCKET: f64 = 0.25;
+/// A set melee's (halo, eternity) through-hole for light and cleaning: its radius as a fraction of
+/// the girdle's radius (a hole about half the stone's diameter).
+const PAVE_HOLE: f64 = 0.5;
+/// How far a melee's bore (the girdle-sized opening it is set through) reaches past the metal, mm.
+const BORE_OVER: f64 = 1.0;
+/// How far under a halo seat's plate a melee's through-hole reaches, mm.
+const HOLE_OVER: f64 = 0.5;
 
 /// How far a star facet reaches from the table's edge to the girdle.
 const STAR_LENGTH: f64 = 0.5;
@@ -196,6 +216,10 @@ pub(super) struct PieceMesh {
     pub level: usize,
     /// Even the coarsest level is over the budget (never so for `PIECEMESH`).
     pub over: bool,
+    /// The metal as a construction of analytic parts, seats cut, for the merged solid.
+    pub csg: Csg,
+    /// How many stone seats `csg` cuts.
+    pub seats: u32,
 }
 
 impl PieceMesh {
@@ -561,7 +585,12 @@ fn band_section(s: &Sane, d: &Detail) -> Vec<(f64, f64)> {
     polygon.iter().map(|q| (s.ri + q.y, q.x)).collect()
 }
 
-fn build_band(buf: &mut Buf, s: &Sane, d: &Detail) {
+/// The band's section for the merged solid: finer than any tessellation level.
+const SOLID_SECTION: usize = 128;
+
+fn build_band(buf: &mut Buf, csg: &mut Csg, s: &Sane, d: &Detail) {
+    let fine = Detail { dome: SOLID_SECTION, ..*d };
+    csg.add.push(Prim::Revolve(band_section(s, &fine).iter().map(|(r, z)| Vec2::new(*r, *z)).collect()));
     let section = band_section(s, d);
     let n = (d.band.clamp(8, 1024) / 4) * 4;
     let mut first: Option<Ring> = None;
@@ -828,6 +857,22 @@ fn vertex_normals(poly: &[Vec2], centre: Vec2) -> Vec<Vec2> {
 // The pieces
 // ---------------------------------------------------------------------------------------------
 
+fn axes_of(f: &Frame) -> Axes {
+    Axes { o: f.o, u: f.u, v: f.v, w: f.w }
+}
+
+/// The room a stone takes in its seat: its girdle, crown and pavilion (a cabochon's dome) grown by
+/// [`SEAT_CLEARANCE`], and a bore of `bore` over the girdle when it is set from above.
+fn seat_envelope(shape: &StoneShape, frame: &Frame, girdle: f64, crown: f64, pavilion: f64, bore: Option<f64>) -> Envelope {
+    let (outline, reach) = if shape.round {
+        (Outline::Circle(shape.width / 2.0), shape.width / 2.0)
+    } else {
+        let r = -super::solid::poly_dist(&shape.poly, shape.centre);
+        (Outline::Poly(shape.poly.clone()), if r.is_finite() { r.max(0.0) } else { 0.0 })
+    };
+    Envelope { axes: axes_of(frame), outline, reach, girdle, crown, pavilion, table: shape.table, cab: shape.cab, clearance: SEAT_CLEARANCE, bore }
+}
+
 /// The parts being built, by name.
 #[derive(Default)]
 struct Parts {
@@ -842,6 +887,8 @@ struct Parts {
     notes: Vec<String>,
     stones: u32,
     fits: Option<u32>,
+    csg: Csg,
+    seats: u32,
 }
 
 impl Parts {
@@ -979,7 +1026,9 @@ fn build_head(s: &Sane, d: &Detail, out: &mut Parts, stone: Standing) -> Stood {
         }
         path.push(frame.at(site.x, site.y, 0.0));
         path.push(frame.at(tip.x, tip.y, tip_h));
-        capsule(&mut out.prongs, &smooth_path(&path, d.sub), rp, d.radial, d.cap);
+        let wire = smooth_path(&path, d.sub);
+        capsule(&mut out.prongs, &wire, rp, d.radial, d.cap);
+        out.csg.add.push(Prim::Wire { pts: wire, r: rp, closed: false });
     }
     if !cab {
         let rail: Vec<Vec3> = poly
@@ -991,6 +1040,20 @@ fn build_head(s: &Sane, d: &Detail, out: &mut Parts, stone: Standing) -> Stood {
             })
             .collect();
         loop_wire(&mut out.head, &rail, frame.w, rail_r, d.radial);
+        out.csg.add.push(Prim::Wire { pts: rail, r: rail_r, closed: true });
+    }
+    // The seat: the stone's own room in the prongs and the rail (the bearing), and a clearance
+    // hole under the culet.
+    let (girdle, crown, pavilion) = if cab { (0.0, head.depth, 0.0) } else { proportions(head.depth) };
+    let envelope = seat_envelope(&shape, &frame, girdle, crown, pavilion, None);
+    if let Some(reach) = (envelope.reach > 1e-6).then_some(envelope.reach) {
+        if !cab {
+            let at = Axes { o: frame.at(centre.x, centre.y, 0.0), ..envelope.axes };
+            let culet = -girdle / 2.0 - pavilion;
+            out.csg.cut.push(Prim::Cylinder { axes: at, r: CULET_HOLE * reach, lo: culet - head.clear - CULET_POCKET, hi: -girdle / 2.0 - 0.5 * pavilion });
+        }
+        out.csg.cut.push(Prim::Seat(envelope));
+        out.seats += 1;
     }
     if !shape.round && !cab {
         out.note(format!(
@@ -1069,10 +1132,28 @@ fn build_solitaire(s: &Sane, d: &Detail, out: &mut Parts) {
                 size_json(p.gap)
             )),
             Some(centres) => {
+                let (mg, mc, mp) = proportions(seat.depth);
                 for c in &centres {
                     let f = Frame { o: frame.at(c.x, c.y, 0.0), ..frame };
                     round_brilliant(&mut out.melee, &f, seat.melee / 2.0, seat.depth, shared::table_ratio(round_cut), d.melee);
                     out.stones += 1;
+                    // Its seat in the plate: a cone at the pavilion's angle, a bore to set it
+                    // through and a hole through the plate.
+                    let r = seat.melee / 2.0;
+                    out.csg.cut.push(Prim::Seat(Envelope {
+                        axes: axes_of(&f),
+                        outline: Outline::Circle(r),
+                        reach: r,
+                        girdle: mg,
+                        crown: mc,
+                        pavilion: mp,
+                        table: shared::table_ratio(round_cut),
+                        cab: false,
+                        clearance: SEAT_CLEARANCE,
+                        bore: Some(mg / 2.0 + mc + BORE_OVER),
+                    }));
+                    out.csg.cut.push(Prim::Cylinder { axes: axes_of(&f), r: PAVE_HOLE * r, lo: -seat.under - HOLE_OVER, hi: 0.0 });
+                    out.seats += 1;
                 }
                 // The seat: a flat ring under the halo, from just outside the centre stone to
                 // just outside the melee.
@@ -1098,6 +1179,15 @@ fn build_solitaire(s: &Sane, d: &Detail, out: &mut Parts) {
                 if let (Some(a), Some(b)) = (prev, first) {
                     out.seat.bridge(a, b);
                 }
+                let outline = if shape.round { Outline::Circle(shape.width / 2.0) } else { Outline::Poly(poly.clone()) };
+                out.csg.add.push(Prim::Plate {
+                    axes: axes_of(&frame),
+                    outline,
+                    inner: (near - 0.1).max(0.02),
+                    outer: near + seat.melee + 0.2,
+                    lo: -seat.under,
+                    hi: top,
+                });
                 if cut.name == "heart" {
                     out.notes.push("Around a heart the halo follows the lobes and the point; in the cleft its seat is approximate.".to_string());
                 }
@@ -1123,10 +1213,18 @@ fn build_eternity(s: &Sane, d: &Detail, out: &mut Parts) {
     // A cabochon's frame is its base; a faceted stone's is its girdle.
     let seat_r = if shape.cab { row.top - depth } else { row.radius };
     let radial = |v: Vec2| Vec3::new(v.x, v.y, 0.0);
+    let (girdle, crown, pavilion) = if shape.cab { (0.0, depth, 0.0) } else { proportions(depth) };
+    // A bore up through the band's outside, and a hole down through it to the finger.
+    let bore = (s.ri + p.wall + BORE_OVER - seat_r).max(girdle / 2.0 + crown + SEAT_CLEARANCE);
+    let through = seat_r - s.ri + BORE_OVER;
     for k in 0..n {
         let w = radial(Row::out(k, n));
         let f = Frame { o: w * seat_r, u: Vec3::new(-w.y, w.x, 0.0), v: Vec3::Z, w };
         shape.build(&mut out.melee, &f, d.melee, 2);
+        let envelope = seat_envelope(&shape, &f, girdle, crown, pavilion, Some(bore));
+        out.csg.cut.push(Prim::Cylinder { axes: axes_of(&f), r: PAVE_HOLE * envelope.reach, lo: -through, hi: 0.0 });
+        out.csg.cut.push(Prim::Seat(envelope));
+        out.seats += 1;
     }
     out.stones += n;
 
@@ -1145,6 +1243,7 @@ fn build_eternity(s: &Sane, d: &Detail, out: &mut Parts) {
                 let z = sign * z0;
                 let r = (s.outside_at(z) - 0.2 * rb).max(s.ri + rb + 0.02);
                 bead(&mut out.beads, w * r + Vec3::Z * z, w, rb, d.bead_radial, d.bead_lat);
+                out.csg.add.push(Prim::Sphere { c: w * r + Vec3::Z * z, r: rb });
             }
         }
     } else if n >= 2 {
@@ -1260,7 +1359,7 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
     });
     let s = Sane::of(p);
     let mut parts = Parts::default();
-    build_band(&mut parts.band, &s, &d);
+    build_band(&mut parts.band, &mut parts.csg, &s, &d);
     match s.p.kind {
         PieceKind::Band => {}
         PieceKind::Solitaire | PieceKind::ThreeStone => build_solitaire(&s, &d, &mut parts),
@@ -1283,7 +1382,7 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
     .into_iter()
     .flatten()
     .collect();
-    PieceMesh { meshes, notes: parts.notes, stones: parts.stones, fits: parts.fits, level, over: false }
+    PieceMesh { meshes, notes: parts.notes, stones: parts.stones, fits: parts.fits, level, over: false, csg: parts.csg, seats: parts.seats }
 }
 
 fn piece_mesh_within(p: &PieceParams, quality: Quality, budget: Budget) -> PieceMesh {

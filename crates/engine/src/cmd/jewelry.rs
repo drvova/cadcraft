@@ -36,6 +36,7 @@ mod pricing;
 mod property_tests;
 mod setting;
 mod sizes;
+mod solid;
 #[cfg(test)]
 #[path = "jewelry/tests.rs"]
 mod tests;
