@@ -67,6 +67,8 @@ describe("the template list", () => {
     for (const id of ["solitaire-round", "halo-solitaire", "plain-band", "comfort-band", "eternity-band", "signet-band"]) {
       expect(ids.has(id)).toBe(true);
     }
+    // The shank shapes: a rail band, a split shank, a cathedral solitaire and a cable band.
+    for (const id of ["oval-rail-band", "split-shank-solitaire", "cathedral-solitaire", "cable-band"]) expect(ids.has(id)).toBe(true);
     // At least a couple name a feature a newer engine adds.
     expect(TEMPLATES.filter((t) => t.requires !== undefined).length).toBeGreaterThanOrEqual(2);
   });

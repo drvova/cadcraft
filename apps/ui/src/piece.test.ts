@@ -27,6 +27,7 @@ import {
   passingLine,
   profileChoices,
   profileUpdate,
+  railUpdate,
   rowShownName,
   rowUnit,
   readPieceChoices,
@@ -597,5 +598,72 @@ describe("pavé on the band", () => {
     expect(refusalRow("invalid parameters for `piece`: `pave.melee` must be a number of millimetres from 0.8 to 3", rows)).toBe("paveMelee");
     expect(refusalRow("`pave.rows` must be 1, 2 or 3", rows)).toBe("paveRows");
     expect(refusalRow("`pave.graduated.from` must be a stone size", rows)).toBe("pave");
+  });
+});
+
+describe("shank shapes", () => {
+  const plain = { rail: null, shank: null, pattern: null };
+  const find = (rows: readonly PieceRow[], key: string): PieceRow => {
+    const found = rows.find((r) => r.key === key);
+    if (found === undefined) throw new Error(`no ${key} row`);
+    return found;
+  };
+
+  test("an engine without shank shapes shows no shank rows", () => {
+    expect(keys(pieceRows(piece("solitaire"), CHOICES, "us"))).not.toContain("split");
+    expect(keys(pieceRows(piece("band"), CHOICES, "us"))).not.toContain("twist");
+  });
+
+  test("a solitaire offers a split and cathedral arches in the Shank group", () => {
+    const rows = pieceRows(piece("solitaire", plain), CHOICES, "us");
+    expect(find(rows, "split").value).toBe("1");
+    expect(find(rows, "cathedral").value).toBe("false");
+    expect(keys(rows)).not.toContain("shankGap");
+    const groups = pieceGroups(rows, "solitaire").map((g) => g.name);
+    expect(groups).toContain("Shank");
+    const shaped = pieceRows(piece("solitaire", { shank: { split: 2, gap: 1.2, from: 50, cathedral: true, height: 2 } }), CHOICES, "us");
+    expect(keys(shaped)).toEqual(expect.arrayContaining(["split", "shankGap", "cathedral", "archHeight", "shankFrom"]));
+    expect(find(shaped, "archHeight").value).toBe("2");
+    // No pavé on a shaped shank.
+    expect(keys(shaped)).not.toContain("pave");
+  });
+
+  test("the shank rows send the shank's own keys", () => {
+    const rows = pieceRows(piece("solitaire", { shank: { split: 2, gap: 1.2, from: 50, cathedral: true, height: 2 } }), CHOICES, "us");
+    expect(judgePieceDraft(find(rows, "split"), "3")).toEqual({ kind: "send", patch: { shank: { split: 3 } } });
+    expect(judgePieceDraft(find(rows, "shankGap"), "1.5")).toEqual({ kind: "send", patch: { shank: { gap: 1.5 } } });
+    expect(judgePieceDraft(find(rows, "cathedral"), "false")).toEqual({ kind: "send", patch: { shank: { cathedral: false } } });
+    expect(judgePieceDraft(find(rows, "archHeight"), "2.5")).toEqual({ kind: "send", patch: { shank: { height: 2.5 } } });
+    expect(judgePieceDraft(find(rows, "shankFrom"), "40")).toEqual({ kind: "send", patch: { shank: { from: 40 } } });
+  });
+
+  test("a band offers a twisted cable; its strands, wire and twists send the pattern", () => {
+    const rows = pieceRows(piece("band", plain), CHOICES, "us");
+    expect(judgePieceDraft(find(rows, "twist"), "true")).toEqual({ kind: "send", patch: { pattern: { twist: true } } });
+    const cable = pieceRows(piece("band", { pattern: { twist: { strands: 3, turns: null, wire: 1 } } }), CHOICES, "us");
+    expect(find(cable, "turns").value).toBe(AUTO);
+    expect(judgePieceDraft(find(cable, "strands"), "2")).toEqual({ kind: "send", patch: { pattern: { twist: { strands: 2 } } } });
+    expect(judgePieceDraft(find(cable, "wire"), "1.2")).toEqual({ kind: "send", patch: { pattern: { twist: { wire: 1.2 } } } });
+    expect(judgePieceDraft(find(cable, "turns"), "20")).toEqual({ kind: "send", patch: { pattern: { twist: { turns: 20 } } } });
+    expect(judgePieceDraft(find(cable, "turns"), "2.5")).toEqual({ kind: "refuse", message: "Twists takes a whole number, or auto" });
+    expect(judgePieceDraft(find(cable, "twist"), "false")).toEqual({ kind: "send", patch: { pattern: null } });
+  });
+
+  test("a rail band shows its rail read-only, and Update rail from curve re-reads the handle", () => {
+    const railed = piece("band", { rail: { curve: "2f", points: [[0, 0], [1, 0], [0, 1]] } });
+    const rows = pieceRows(railed, CHOICES, "us");
+    expect(find(rows, "rail").kind).toBe("readonly");
+    expect(keys(rows)).not.toContain("twist");
+    expect(railUpdate(railed)).toEqual({ rail: { curve: "2F" } });
+    expect(railUpdate(piece("band", plain))).toBeNull();
+    expect(railUpdate(piece("band", { rail: { curve: "not!" } }))).toBeNull();
+  });
+
+  test("hostile shank keys never throw", () => {
+    for (const bad of [7, "x", [], { split: "q", gap: -1 }, { twist: 3 }, null]) {
+      const p = piece("solitaire", { shank: bad, pattern: bad, rail: bad });
+      expect(p.params.shank.split).toBeGreaterThanOrEqual(1);
+      pieceRows(p, CHOICES, "us");
+    }
   });
 });

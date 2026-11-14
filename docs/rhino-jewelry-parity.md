@@ -19,14 +19,14 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 |---|---|---|
 | Band from a circle and a profile; dome, comfort, court, knife, bevel, concave sections | `piece {kind:"band", profile}`, the Piece panel | done |
 | Band from a profile curve you draw | `piece {profile:{curve}}`, "Update from curve" | done |
-| Profile swept along a rail (oval, shaped shank); two-rail sweep | rail on `piece` | planned (J8) |
+| Profile swept along a rail (oval, shaped shank); two-rail sweep | `piece {rail:{curve}}` (any profile, drawn or named, swept square to a drawn closed rail scaled to the finger), "Update rail from curve", template Oval Band | done for one rail; two-rail sweep planned (J9) |
 | Dome ring, tapered shank | `kind:"dome"` | done |
 | Signet (flat face for engraving) | `kind:"signet"` | done; flush stone in the face partial |
 | Solitaire, three-stone, halo | `kind:"solitaire"`, `"threestone"`, `halo` | done |
 | Bezel head | `head:"bezel"` | done |
 | Eternity, half eternity | `kind:"eternity"`, `"halfeternity"` | done |
-| Split shank, double shank, bypass, cathedral shoulders | shank options on `piece` | planned |
-| Twisted cable, braided bands | band pattern on `piece` | planned |
+| Split shank, double shank, bypass, cathedral shoulders | `piece {shank:{split:2\|3, gap, from, cathedral, height}}`, the Piece panel's Shank group, templates | split and cathedral done (solitaire); double shank and bypass planned (J10) |
+| Twisted cable, braided bands | `piece {kind:"band", pattern:{twist:{strands, turns, wire}}}`, template Cable Band | twisted cable done (2–3 strands); braids planned (J11) |
 | Text and names on a band; hallmark | engraving/text on `piece` | planned |
 | Earrings, pendants, chains, links | other piece kinds | planned |
 
@@ -75,4 +75,5 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | Shank shapes: a drawn rail, a split shank, cathedral shoulders and a twisted cable band are done; two-rail sweep, double shank/bypass and braids are rows J9–J11 |
 | 2026-11-14 | new | The feature list against Rhino's jewelry workflow, and the no-code rule |

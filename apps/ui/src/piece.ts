@@ -145,6 +145,24 @@ export interface PieceParams {
   face: string;
   faceLength: number | null;
   faceWidth: number | null;
+  /** The shank's shape: a drawn rail, a split, cathedral arches, a twisted cable. */
+  shank: ShankPart;
+}
+
+/** The shank shapes a piece holds (`rail`, `shank`, `pattern.twist` in the engine's JSON). */
+export interface ShankPart {
+  /** Whether the engine offers shank shapes at all (its JSON carries the keys). */
+  offered: boolean;
+  /** A drawn rail: null for none, its curve's handle, or "" when the engine named none. */
+  rail: string | null;
+  /** Arms under the head (1 = not split). */
+  split: number;
+  gap: number | null;
+  from: number | null;
+  cathedral: boolean;
+  height: number | null;
+  /** A twisted cable band: null for none. */
+  twist: { strands: number | null; turns: number | null; wire: number | null } | null;
 }
 
 /** The finger in every system, each as it is shown; null where the engine gave none. */
@@ -263,7 +281,94 @@ function parseParams(value: unknown): PieceParams | null {
     face: nameOf(value["face"]) || "oval",
     faceLength: sizeOf(value["faceLength"]),
     faceWidth: sizeOf(value["faceWidth"]),
+    shank: shankOf(value),
   };
+}
+
+function shankOf(value: Record<string, unknown>): ShankPart {
+  const rail = value["rail"];
+  const railCurve = isRecord(rail) ? asString(rail["curve"]) : null;
+  const shank = isRecord(value["shank"]) ? value["shank"] : {};
+  const pattern = isRecord(value["pattern"]) ? value["pattern"] : {};
+  const twist = isRecord(pattern["twist"]) ? pattern["twist"] : null;
+  const split = wholeOf(shank["split"]);
+  return {
+    offered: "shank" in value || "pattern" in value || "rail" in value,
+    rail: isRecord(rail) ? (railCurve !== null && HANDLE_RE.test(railCurve) ? railCurve.toUpperCase() : "") : null,
+    split: split === 2 || split === 3 ? split : 1,
+    gap: sizeOf(shank["gap"]),
+    from: sizeOf(shank["from"]),
+    cathedral: asBool(shank["cathedral"]) === true,
+    height: sizeOf(shank["height"]),
+    twist: twist === null ? null : { strands: wholeOf(twist["strands"]), turns: wholeOf(twist["turns"]), wire: sizeOf(twist["wire"]) },
+  };
+}
+
+/** The split choices: none, two arms, three arms. */
+export const SHANK_SPLITS: readonly Choice[] = [
+  { value: "1", label: "None" },
+  { value: "2", label: "Two arms" },
+  { value: "3", label: "Three arms" },
+];
+
+/** The shank's rows: a solitaire's split and cathedral arches; a band's rail and its twist. */
+function shankRows(p: PieceParams): PieceRow[] {
+  const sh = p.shank;
+  const rows: PieceRow[] = [];
+  if (!sh.offered) return rows;
+  if (p.kind === "solitaire") {
+    rows.push({ key: "split", label: "Split", value: String(sh.split), kind: "choice", choices: SHANK_SPLITS });
+    if (sh.split > 1) rows.push({ key: "shankGap", label: "Arm gap, mm", value: num(sh.gap), kind: "number" });
+    rows.push({ key: "cathedral", label: "Cathedral", value: sh.cathedral ? "true" : "false", kind: "tick" });
+    if (sh.cathedral) rows.push({ key: "archHeight", label: "Arch height, mm", value: num(sh.height), kind: "number" });
+    if (sh.split > 1 || sh.cathedral) rows.push({ key: "shankFrom", label: "From 12 o'clock, °", value: num(sh.from), kind: "number" });
+  }
+  if (p.kind === "band") {
+    if (sh.rail !== null) {
+      rows.push({ key: "rail", label: "Rail", value: "Drawn curve", kind: "readonly" });
+    } else {
+      rows.push({ key: "twist", label: "Twisted cable", value: sh.twist === null ? "false" : "true", kind: "tick" });
+      if (sh.twist !== null) {
+        rows.push({ key: "strands", label: "Strands", value: num(sh.twist.strands), kind: "whole" });
+        rows.push({ key: "wire", label: "Wire, mm", value: num(sh.twist.wire), kind: "number" });
+        rows.push({ key: "turns", label: "Twists", value: sh.twist.turns === null ? AUTO : numberText(sh.twist.turns), kind: "count" });
+      }
+    }
+  }
+  return rows;
+}
+
+/** The patch a shank row sends; null for a row that is not the shank's. */
+function shankPatch(key: string, value: unknown): Record<string, unknown> | null {
+  switch (key) {
+    case "split":
+      return { shank: { split: Number(value) } };
+    case "shankGap":
+      return { shank: { gap: value } };
+    case "shankFrom":
+      return { shank: { from: value } };
+    case "cathedral":
+      return { shank: { cathedral: value } };
+    case "archHeight":
+      return { shank: { height: value } };
+    case "twist":
+      return { pattern: value === true ? { twist: true } : null };
+    case "strands":
+    case "wire":
+    case "turns":
+      return { pattern: { twist: { [key]: value } } };
+    default:
+      return null;
+  }
+}
+
+/**
+ * "Update rail from curve": the patch that reads a rail's curve again (`piece {rail: {curve}}`),
+ * or null when the piece has no rail or its curve is not known.
+ */
+export function railUpdate(piece: Piece): { rail: { curve: string } } | null {
+  const rail = piece.params.shank.rail;
+  return rail !== null && rail !== "" ? { rail: { curve: rail } } : null;
 }
 
 function paveOf(value: unknown): PavePart | false | null {
@@ -489,7 +594,8 @@ export function pieceRows(piece: Piece, choices: PieceChoices, system: string): 
     { key: "profile", label: "Profile", value: p.profile, kind: "choice", choices: profileChoices(p.profile) },
     { key: "metal", label: "Metal", value: p.metal, kind: "choice", choices: withHeld(choices.metals, p.metal, metalLabel) },
   ];
-  if (p.kind === "band") return [...rows, ...paveRows(p)];
+  rows.push(...shankRows(p));
+  if (p.kind === "band") return p.shank.rail !== null || p.shank.twist !== null ? rows : [...rows, ...paveRows(p)];
   if (p.kind === "dome" || p.kind === "signet") {
     // The top of a tapered shank: empty reads as the engine's own share of the bottom.
     rows.push({ key: "topWidth", label: "Top width, mm", value: num(p.topWidth), kind: "number" });
@@ -532,7 +638,7 @@ export function pieceRows(piece: Piece, choices: PieceChoices, system: string): 
       rows.push({ key: "haloWidth", label: "Halo stones, mm", value: num(p.halo), kind: "number" });
       rows.push({ key: "gap", label: "Gap, mm", value: num(p.gap), kind: "number" });
     }
-    rows.push(...paveRows(p));
+    if (!p.shank.cathedral && p.shank.split === 1) rows.push(...paveRows(p));
     return rows;
   }
   rows.push({ key: "melee", label: "Stones, mm", value: num(p.melee), kind: "number" });
@@ -641,7 +747,7 @@ export function passingLine(passing: number, failing: number): string {
 
 /** A group of the parameters, under its name. */
 export interface PieceGroup {
-  name: "Ring" | "Band" | "Stones" | "Head" | "Pavé";
+  name: "Ring" | "Band" | "Shank" | "Stones" | "Head" | "Pavé";
   rows: PieceRow[];
 }
 
@@ -674,6 +780,17 @@ function groupOf(row: PieceRow, kind: string): PieceGroup["name"] {
       return "Head";
     case "gap":
       return kind === "eternity" || kind === "halfeternity" ? "Stones" : "Head";
+    case "split":
+    case "shankGap":
+    case "shankFrom":
+    case "cathedral":
+    case "archHeight":
+    case "rail":
+    case "twist":
+    case "strands":
+    case "wire":
+    case "turns":
+      return "Shank";
     case "pave":
     case "paveLayout":
     case "paveRows":
@@ -686,7 +803,7 @@ function groupOf(row: PieceRow, kind: string): PieceGroup["name"] {
   }
 }
 
-const GROUP_ORDER: readonly PieceGroup["name"][] = ["Ring", "Band", "Stones", "Head", "Pavé"];
+const GROUP_ORDER: readonly PieceGroup["name"][] = ["Ring", "Band", "Shank", "Stones", "Head", "Pavé"];
 
 /**
  * The rows in the groups a bench reads them in: the ring (what it is and the finger), the band,
@@ -765,21 +882,24 @@ export function judgePieceDraft(row: PieceRow, draft: string, system = "us"): Dr
       return judgeSize(row, draft, system);
     case "tick":
       if (draft !== "true" && draft !== "false") return { kind: "keep" };
+      if (row.key === "cathedral" || row.key === "twist") return { kind: "send", patch: shankPatch(row.key, draft === "true") ?? {} };
       return { kind: "send", patch: { [row.key === "pave" ? "pave" : "halo"]: draft === "true" } };
     case "choice": {
       if (row.key === "system" || draft.trim() === "") return { kind: "keep" };
+      if (row.key === "split") return { kind: "send", patch: shankPatch("split", draft) ?? {} };
       const field = PAVE_FIELDS[row.key];
       if (field !== undefined) return draft === PAVE_CUSTOM ? { kind: "keep" } : { kind: "send", patch: { pave: { [field]: draft } } };
       return { kind: "send", patch: { [row.key]: draft } };
     }
     case "count": {
       const text = draft.trim().toLowerCase();
-      if (text === "" || text === AUTO) return row.value === AUTO ? { kind: "keep" } : { kind: "send", patch: { count: null } };
+      const patch = (v: number | null): Record<string, unknown> => (row.key === "turns" ? (shankPatch("turns", v) ?? {}) : { count: v });
+      if (text === "" || text === AUTO) return row.value === AUTO ? { kind: "keep" } : { kind: "send", patch: patch(null) };
       const read = readNumber(text);
       if (!read.ok || !Number.isInteger(read.value)) return { kind: "refuse", message: `${rowName(row)} takes a whole number, or ${AUTO}` };
       const held = readNumber(row.value);
       if (held.ok && held.value === read.value) return { kind: "keep" };
-      return { kind: "send", patch: { count: read.value } };
+      return { kind: "send", patch: patch(read.value) };
     }
     case "whole":
     case "number": {
@@ -793,6 +913,8 @@ export function judgePieceDraft(row: PieceRow, draft: string, system = "us"): Dr
       const held = readNumber(row.value);
       if (held.ok && held.value === read.value) return { kind: "keep" };
       if (row.key === "haloWidth") return { kind: "send", patch: { halo: read.value } };
+      const shank = shankPatch(row.key, read.value);
+      if (shank !== null) return { kind: "send", patch: shank };
       const field = PAVE_FIELDS[row.key];
       if (field !== undefined) return { kind: "send", patch: { pave: { [field]: read.value } } };
       if (row.both === true) return { kind: "send", patch: { stoneWidth: read.value, stoneLength: read.value } };
