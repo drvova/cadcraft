@@ -46,6 +46,10 @@ mod pricing;
 mod profile;
 #[cfg(test)]
 mod profile_tests;
+mod prongs;
+#[cfg(test)]
+#[path = "jewelry/prongs_tests.rs"]
+mod prongs_tests;
 #[cfg(test)]
 #[path = "jewelry/property_tests.rs"]
 mod property_tests;

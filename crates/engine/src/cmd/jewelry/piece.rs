@@ -211,6 +211,7 @@ fn draw_head(
     head: &shared::Head,
     sites: &[Vec2],
     at: &Standing,
+    prong: &super::prongs::ProngSpec,
 ) -> f64 {
     if let Some(b) = head.bezel {
         return piece_kinds::draw_bezel(shapes, plan, stone, head, &b, at);
@@ -229,8 +230,18 @@ fn draw_head(
         reach = line.iter().fold(reach, |far, q| far.max(q.x.abs()));
         shapes.push((On::Settings, Shape::Poly { v: line.into_iter().map(|q| (q, 0.0)).collect(), closed: false }));
     }
-    for site in sites {
-        plan.push((On::Settings, Shape::Circle { c: at.plan_at + *site, r: head.prong / 2.0 }));
+    // The plan: each prong as its style shows from above ([`super::prongs::plan_marks`]).
+    let styled = super::prongs::styled_sites(stone.cut, stone.length, stone.width, sites, prong.style, head.prong);
+    for site in &styled {
+        for mark in super::prongs::plan_marks(prong.style, site, head.prong, prong.cover(head.prong)) {
+            plan.push((
+                On::Settings,
+                match mark {
+                    super::prongs::PlanMark::Circle { c, r } => Shape::Circle { c: at.plan_at + c, r },
+                    super::prongs::PlanMark::Poly(v) => Shape::Poly { v: v.into_iter().map(|q| (at.plan_at + q, 0.0)).collect(), closed: true },
+                },
+            ));
+        }
     }
     reach
 }
@@ -368,7 +379,7 @@ fn design(p: &PieceParams) -> Result<Design> {
             // Front view: the stone's side profile over the band, and the two prongs the view shows.
             // Plan: the stone itself, its prongs on the girdle, and the halo around it.
             let upright = Standing { top, ro, up: Vec2::new(0.0, 1.0), across: Vec2::new(1.0, 0.0), plan_at: Vec2::ZERO };
-            front_reach = front_reach.max(draw_head(&mut shapes, &mut plan, &stone, &head, &p.prong_sites()?, &upright));
+            front_reach = front_reach.max(draw_head(&mut shapes, &mut plan, &stone, &head, &p.prong_sites()?, &upright, &p.prong));
             plan_stones.push(Placed { melee: false, at: Vec2::ZERO });
             let mut reach = stone.length.max(stone.width) / 2.0 + prong / 2.0;
             carat = carat_of(&stone);
@@ -453,7 +464,7 @@ fn design(p: &PieceParams) -> Result<Design> {
                         let out = sides.out(side);
                         let plan_at = Vec2::new(out.x * (top + sides.head.girdle_height()), 0.0);
                         let standing = Standing { top, ro, up: out, across: sides.across(side), plan_at };
-                        front_reach = front_reach.max(draw_head(&mut shapes, &mut plan, &small, &sides.head, &sites, &standing));
+                        front_reach = front_reach.max(draw_head(&mut shapes, &mut plan, &small, &sides.head, &sites, &standing, &p.prong));
                         plan_stones.push(Placed { melee: true, at: plan_at });
                     }
                     reach = reach.max(small.length.max(small.width) / 2.0 + sides.head.prong / 2.0);
@@ -636,6 +647,8 @@ fn design(p: &PieceParams) -> Result<Design> {
     if p.bezeled() {
         checks.extend(piece_kinds::bezel_checks(p));
     }
+    p.prong_refusal()?;
+    checks.extend(p.prong_checks().into_iter().map(|(id, ok, words)| check(id, ok, words)));
     checks.push(size_check(p));
     // Pavé on the band: its own check, and its stones in the front view, the plan and the layout.
     let pave = pave_band::fit(p);

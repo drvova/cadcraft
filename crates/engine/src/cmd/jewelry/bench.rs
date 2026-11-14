@@ -242,6 +242,8 @@ fn parse_band(block: &str, desc: &str) -> Option<Value> {
         "wall": number("wall").map(size_json),
         "piece": field("piece"),
         "head": field("head"),
+        "prongs": field("prongs"),
+        "prongGrams": number("prongGrams"),
     }))
 }
 

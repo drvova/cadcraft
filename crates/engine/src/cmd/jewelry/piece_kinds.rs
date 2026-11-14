@@ -48,6 +48,9 @@ pub(super) fn record_extra(p: &PieceParams) -> String {
     if p.bezeled() {
         out.push_str(&format!(", head=bezel, bezelGrams={:.2}", p.bezel_grams()));
     }
+    if p.pronged() {
+        out.push_str(&format!(", prongs={}, prongGrams={:.2}", p.prong.style.name(), p.prong_grams()));
+    }
     if p.tapered() {
         let t = p.taper();
         out.push_str(&format!(", top={}x{}", fmt_mm(t.top_width), fmt_mm(t.top_wall)));
@@ -66,6 +69,11 @@ pub(super) fn metal_json(p: &PieceParams, grams: f64) -> Value {
         && let Some(o) = metal.as_object_mut()
     {
         o.insert("bezelGrams".into(), serde_json::json!((p.bezel_grams() * 1000.0).round() / 1000.0));
+    }
+    if p.pronged()
+        && let Some(o) = metal.as_object_mut()
+    {
+        o.insert("prongGrams".into(), serde_json::json!((p.prong_grams() * 1000.0).round() / 1000.0));
     }
     metal
 }

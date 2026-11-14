@@ -294,6 +294,8 @@ pub(super) enum Prim {
         face: Face,
         outline: Vec<Vec2>,
     },
+    /// A styled prong's top: a claw's cone, a tab's or V's bars ([`super::prongs::ProngSolid`]).
+    Prong(super::prongs::ProngSolid),
 }
 
 /// Edges of a section taken together for [`Section::dist`].
@@ -405,6 +407,7 @@ impl Prim {
             Prim::Taper { taper, section, ri } => taper.distance_by(*ri, p, |q| section.dist(q)),
             Prim::Bezel(b) => b.distance(p),
             Prim::Face { face, outline } => face.distance(p, outline),
+            Prim::Prong(prong) => prong.distance(p),
         };
         if v.is_nan() { f64::INFINITY } else { v }
     }
@@ -462,6 +465,7 @@ impl Prim {
                 }
                 bx
             }
+            Prim::Prong(prong) => prong.bounds(),
         }
     }
 }

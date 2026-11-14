@@ -78,6 +78,8 @@ use serde_json::{Value, json};
 
 #[path = "mesh_kinds.rs"]
 mod mesh_kinds;
+#[path = "prongs_mesh.rs"]
+mod prongs_mesh;
 
 use super::super::*;
 use super::heads::BezelBound;
@@ -1059,7 +1061,14 @@ fn build_head(s: &Sane, d: &Detail, out: &mut Parts, stone: Standing) -> Stood {
     let rail_at = |q: Vec2, outward: Vec2| q.lerp(culet.under(q), 0.5) + outward * (1.2 * rail_r);
     // The wire's axis ends its own radius under the tips' height.
     let tip_h = head.prong_height() - head.girdle_height() - rp;
-    for site in sites.iter().filter(|q| q.is_finite()) {
+    // The style's sites (a double's pairs, a V's corners) and the top every non-round prong ends in.
+    let style = p.prong.style;
+    let styled = super::prongs::styled_sites(cut, stone.length, stone.width, &sites, style, head.prong);
+    let top = p.top_spec(&head, stone.length.min(stone.width), cut);
+    let plane = super::prongs::Plane { o: frame.o, u: frame.u, v: frame.v, w: frame.w };
+    for styled_site in &styled {
+        let site = &styled_site.at;
+        let round = super::prongs::is_round(style, styled_site);
         let dir = (*site - centre).normalized();
         if dir.len() < 0.5 {
             continue;
@@ -1072,14 +1081,21 @@ fn build_head(s: &Sane, d: &Detail, out: &mut Parts, stone: Standing) -> Stood {
         let x = (site.x * shared::PRONG_FOOT).clamp(-0.5 * rc, 0.5 * rc);
         let y = (rc * rc - x * x).max(0.0).sqrt();
         let foot = frame.u * x + frame.w * y + Vec3::new(0.0, 0.0, z);
-        let tip = *site - dir * (0.85 * rp);
+        let tip = *site - dir * (top.cover - rp);
         let mut path = vec![foot];
         if !cab {
             let q = rail_at(*site, dir);
             path.push(frame.at(q.x, q.y, rail_h));
         }
         path.push(frame.at(site.x, site.y, 0.0));
-        path.push(frame.at(tip.x, tip.y, tip_h));
+        if round {
+            path.push(frame.at(tip.x, tip.y, tip_h));
+        } else {
+            // The leg runs to the girdle; the style's own top stands on it.
+            let parts = super::prongs::top_parts(&plane, styled_site, &top);
+            prongs_mesh::build_parts(&mut out.prongs, &parts, d.radial, d.cap);
+            out.csg.add.push(Prim::Prong(super::prongs::ProngSolid { parts }));
+        }
         let wire = smooth_path(&path, d.sub);
         capsule(&mut out.prongs, &wire, rp, d.radial, d.cap);
         out.csg.add.push(Prim::Wire { pts: wire, r: rp, closed: false });
@@ -1708,6 +1724,7 @@ fn run_piecemesh(_s: &mut Session, p: &Value) -> Result<Value> {
             "volumeMm3": r3(band),
             "grams": r3(piece.band_grams()),
             "bezelGrams": if piece.bezeled() { json!(r3(piece.bezel_grams())) } else { Value::Null },
+            "prongGrams": if piece.pronged() { json!(r3(piece.prong_grams())) } else { Value::Null },
             "shells": { "volumeMm3": r3(shells), "grams": r3(shells / 1000.0 * piece.density) },
         },
         "notes": mesh.notes,

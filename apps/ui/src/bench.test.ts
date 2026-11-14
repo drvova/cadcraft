@@ -41,6 +41,15 @@ describe("the bench sheet", () => {
     expect(sizeless?.lines[0]?.cells).toEqual(["", "2 g"]);
   });
 
+  test("weighs a prong head's prongs and rail on a line of their own, into the metal", () => {
+    const sheet = parseBench({ stones: { count: 0, carat: 0, groups: [] }, bands: [{ grams: 2, metal: "gold18", size: "US 6", prongs: "claw", prongGrams: 0.25 }] });
+    expect(sheet?.lines.map((l) => l.label)).toEqual(["18k gold band", "Claw prongs and rail"]);
+    expect(sheet?.lines[1]?.cells).toEqual(["", "0.25 g"]);
+    expect(sheet?.grams).toBeCloseTo(2.25, 9);
+    const hostile = parseBench({ stones: { count: 0, carat: 0, groups: [] }, bands: [{ grams: 2, metal: "gold18", prongs: { x: 1 }, prongGrams: -3 }] });
+    expect(hostile?.lines.length).toBe(1);
+  });
+
   test("names a fancy cut by both sides, a material by its gravity, and melee off the calibrated list", () => {
     const sheet = parseBench({
       stones: {

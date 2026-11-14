@@ -179,6 +179,18 @@ function bandLine(band: unknown): { line: BenchLine; grams: number } | null {
   return { line: { label: `${capital(metal)} band`, value: `${size}${weight}`, part: "metal", cells: [named, weight], note: null, handles: handlesOf([band["handle"]]) }, grams };
 }
 
+/** A prong head's metal on its own line ("Claw prongs · 0.21 g"): the prongs and gallery rail the
+ *  band's record weighs apart (`prongGrams`); null for a band without prongs. */
+export function prongLine(band: unknown): { line: BenchLine; grams: number } | null {
+  if (!isRecord(band)) return null;
+  const grams = finite(band["prongGrams"]);
+  if (grams === null || grams <= 0) return null;
+  const style = typeof band["prongs"] === "string" ? band["prongs"].trim().toLowerCase().slice(0, 12) : "";
+  const named = style === "v" ? "V prongs" : style === "" || style === "round" ? "Prongs" : `${capital(style)} prongs`;
+  const weight = `${trim(grams, 2)} g`;
+  return { line: { label: `${named} and rail`, value: weight, part: "metal", cells: ["", weight], note: null, handles: handlesOf([band["handle"]]) }, grams };
+}
+
 /** A line of the `cost` object, narrowed; null when it cannot be read. */
 function costLine(value: unknown, currency: string): BenchCostLine | null {
   if (!isRecord(value)) return null;
@@ -249,6 +261,11 @@ export function parseBench(result: unknown): BenchSheet | null {
     if (read === null) continue;
     grams += read.grams;
     put(read.line);
+    const head = prongLine(band);
+    if (head !== null) {
+      grams += head.grams;
+      put(head.line);
+    }
     if (isRecord(band) && typeof band["metal"] === "string") {
       const alloy = band["metal"].trim().toLowerCase().slice(0, 24);
       if (alloy !== "" && alloy !== "?" && !alloys.includes(alloy)) alloys.push(alloy);

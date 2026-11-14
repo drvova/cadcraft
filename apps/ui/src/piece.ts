@@ -45,6 +45,15 @@ export const PIECE_HEADS: readonly Choice[] = [
   { value: "bezel", label: "Bezel" },
 ];
 
+/** How a prong head's prongs end over the stone (`prongStyle` in `prongs.rs`). */
+export const PIECE_PRONG_STYLES: readonly Choice[] = [
+  { value: "round", label: "Round" },
+  { value: "claw", label: "Claw" },
+  { value: "tab", label: "Tab" },
+  { value: "v", label: "V (corners)" },
+  { value: "double", label: "Double" },
+];
+
 /** A signet's face (`face` in `kinds.rs`). */
 export const PIECE_FACES: readonly Choice[] = [
   { value: "oval", label: "Oval" },
@@ -138,6 +147,11 @@ export interface PieceParams {
   head: string;
   bezelWall: number | null;
   bezelHeight: number | null;
+  /** A prong head's style (null when the engine does not offer it), and its height, tip and wire (null: the engine's). */
+  prongStyle: string | null;
+  prongHeight: number | null;
+  prongTip: number | null;
+  prongWire: number | null;
   /** A dome ring's or a signet's top (null: the engine's share of the bottom). */
   topWidth: number | null;
   topWall: number | null;
@@ -258,6 +272,10 @@ function parseParams(value: unknown): PieceParams | null {
     head: nameOf(value["head"]) || "prong",
     bezelWall: sizeOf(value["bezelWall"]),
     bezelHeight: sizeOf(value["bezelHeight"]),
+    prongStyle: nameOf(value["prongStyle"]) || null,
+    prongHeight: sizeOf(value["prongHeight"]),
+    prongTip: sizeOf(value["prongTip"]),
+    prongWire: sizeOf(value["prongWire"]),
     topWidth: sizeOf(value["topWidth"]),
     topWall: sizeOf(value["topWall"]),
     face: nameOf(value["face"]) || "oval",
@@ -519,6 +537,13 @@ export function pieceRows(piece: Piece, choices: PieceChoices, system: string): 
       rows.push({ key: "bezelHeight", label: "Bezel height, mm", value: num(p.bezelHeight), kind: "number" });
     } else {
       rows.push({ key: "prongs", label: "Prongs", value: num(p.prongs), kind: "whole" });
+      if (p.prongStyle !== null) {
+        // The Setting group: the prongs' shape, height over the girdle, cover over the crown and wire.
+        rows.push({ key: "prongStyle", label: "Prong style", value: p.prongStyle, kind: "choice", choices: withHeld(PIECE_PRONG_STYLES, p.prongStyle, capital) });
+        rows.push({ key: "prongHeight", label: "Prong height, mm", value: num(p.prongHeight), kind: "number" });
+        rows.push({ key: "prongTip", label: "Prong tip, mm", value: num(p.prongTip), kind: "number" });
+        rows.push({ key: "prongWire", label: "Prong wire, mm", value: num(p.prongWire), kind: "number" });
+      }
     }
     if (p.kind === "threestone") {
       // The side stones: empty reads as the engine's own share of the centre stone.
@@ -626,7 +651,8 @@ export function pieceSummary(piece: Piece, system: string): PieceSummary {
   if ((p.kind === "solitaire" || p.kind === "threestone") && p.stoneWidth !== null) {
     const long = p.stoneLength !== null && Math.abs(p.stoneLength - p.stoneWidth) > 1e-6 ? `${trim(p.stoneLength, 2)}×` : "";
     const words = [`${long}${trim(p.stoneWidth, 2)} mm`, p.cut, p.stone].filter((w) => w !== "").join(" ");
-    centre = p.head === "bezel" ? `${words}, bezel` : p.prongs === null ? words : `${words}, ${numberText(p.prongs)} prongs`;
+    const style = p.prongStyle === null || p.prongStyle === "round" ? "" : `${p.prongStyle === "v" ? "V" : p.prongStyle} `;
+    centre = p.head === "bezel" ? `${words}, bezel` : p.prongs === null ? words : `${words}, ${numberText(p.prongs)} ${style}prongs`;
   }
   return { tiles, centre };
 }
@@ -641,7 +667,7 @@ export function passingLine(passing: number, failing: number): string {
 
 /** A group of the parameters, under its name. */
 export interface PieceGroup {
-  name: "Ring" | "Band" | "Stones" | "Head" | "Pavé";
+  name: "Ring" | "Band" | "Stones" | "Head" | "Setting" | "Pavé";
   rows: PieceRow[];
 }
 
@@ -672,6 +698,11 @@ function groupOf(row: PieceRow, kind: string): PieceGroup["name"] {
     case "halo":
     case "haloWidth":
       return "Head";
+    case "prongStyle":
+    case "prongHeight":
+    case "prongTip":
+    case "prongWire":
+      return "Setting";
     case "gap":
       return kind === "eternity" || kind === "halfeternity" ? "Stones" : "Head";
     case "pave":
@@ -686,7 +717,7 @@ function groupOf(row: PieceRow, kind: string): PieceGroup["name"] {
   }
 }
 
-const GROUP_ORDER: readonly PieceGroup["name"][] = ["Ring", "Band", "Stones", "Head", "Pavé"];
+const GROUP_ORDER: readonly PieceGroup["name"][] = ["Ring", "Band", "Stones", "Head", "Setting", "Pavé"];
 
 /**
  * The rows in the groups a bench reads them in: the ring (what it is and the finger), the band,
@@ -825,6 +856,7 @@ export function refusalRow(error: unknown, rows: readonly PieceRow[]): string | 
   if (/is not a metal\b/i.test(text)) return first("metal");
   if (/is not a cut\b/i.test(text)) return first("cut");
   if (/is not a stone\b/i.test(text)) return first("stone");
+  if (/^V prongs\b/.test(text)) return first("prongStyle", "cut");
   // Pavé's own keys: `pave.melee` is the pavé stones' row.
   const pave = /`pave\.([a-z]{1,12})/.exec(text);
   if (pave !== null) {

@@ -64,6 +64,27 @@ export const TEMPLATES: readonly Template[] = [
     requires: "the three-stone setting",
   },
   {
+    id: "claw-solitaire",
+    name: "Claw Solitaire",
+    blurb: "A round brilliant in six pointed claw prongs.",
+    params: { kind: "solitaire", cut: "round", stone: "diamond", stoneWidth: 6.5, stoneLength: 6.5, prongs: 6, prongStyle: "claw", wall: 1.8, width: 2.2, profile: "flat", metal: "gold18" },
+    requires: "prong styles",
+  },
+  {
+    id: "v-prong-pear",
+    name: "Pear in V Prongs",
+    blurb: "A pear with a V prong guarding its point.",
+    params: { kind: "solitaire", cut: "pear", stone: "diamond", stoneWidth: 6, stoneLength: 9, prongs: 5, prongStyle: "v", wall: 1.8, width: 2.4, profile: "flat", metal: "platinum" },
+    requires: "prong styles",
+  },
+  {
+    id: "double-prong-cushion",
+    name: "Double-Prong Cushion",
+    blurb: "A cushion held by four pairs of prongs.",
+    params: { kind: "solitaire", cut: "cushion", stone: "diamond", stoneWidth: 7, stoneLength: 7, prongs: 4, prongStyle: "double", wall: 1.8, width: 2.4, profile: "flat", metal: "gold18" },
+    requires: "prong styles",
+  },
+  {
     id: "bezel-solitaire",
     name: "Bezel Solitaire",
     blurb: "A round stone in a smooth metal collar: nothing to snag.",
