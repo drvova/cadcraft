@@ -547,6 +547,27 @@ commands on this page, so its bench sheet reads back: 32 stones, 1.35 ct, a 3.86
   - *Fallbacks*: without the derivatives extension the program is built without that term;
     where the realistic programs cannot be built at all, a Realistic pass is drawn Shaded; where
     WebGL is missing the stage and the stills say so in words, as before.
+- **Save Render** (the 3D tab's "Save render…", the palette and View ▸ Render: `ui.render.image`,
+  `ui.render.turntable`, `ui.render.sheet`; `apps/ui/src/render-export.ts` holds the plans and the
+  APNG writer, tested; `render-export-run.ts` draws) saves client media in Realistic mode, off
+  screen in one context taken from the stills' queue and given back after:
+  - *Image*: a PNG 1080, 2048 or 4096 px on its long side, square or 16:9, from the Perspective
+    camera as left or a standard view, on the studio backdrop, a light seamless one, or
+    transparent with alpha. Drawn at 2× and scaled down where the GPU allows; the store is held
+    to the least of `MAX_TEXTURE_SIZE`, `MAX_RENDERBUFFER_SIZE` and `MAX_VIEWPORT_DIMS`, with less
+    supersampling (then a smaller picture) said in a sentence. Not tiled: the backdrop is a
+    sweep across the whole view and tiles would each carry one.
+  - *Turntable*: one whole turn (no doubled first and last frame), 2–20 s at 24, 30 or 60 frames a
+    second, 480/720/1080 px, a tilt of 0–60°. A WebM (VP9 or VP8) through `captureStream(0)` and
+    `MediaRecorder`: the frames are drawn first, deterministically, then played into the recorder
+    at their own rate, so the timing is exact whatever the GPU (held frames capped at 640 MB).
+    An animated PNG (our own writer: `acTL`/`fcTL`/`fdAT`, deflate by `CompressionStream`) where
+    the browser records no WebM, for a transparent background, or when chosen: full RGBA, where
+    a GIF's 256 colours band polished metal; much larger than the WebM. Chrome's WebM carries no
+    duration in its header (players find it on seeking). Progress and Stop; it yields between frames.
+  - *Contact sheet*: the four views 2 × 2 with their labels and the Tech Sheet's facts under them
+    (kind, size, sizes, grams, carats), one PNG.
+  - Files go out as Download STL's do (`downloadBytes`), in the browser and the desktop webview.
 - **The Objects section** lists the piece and its parts, the stones by cut and size, the bands
   and everything else by layer and kind, with a search; a press on a row selects it on the
   drawing and a selection on the drawing marks its row.
@@ -603,6 +624,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | Save Render in the 3D tab: a still PNG (to 4096 px, square or 16:9, studio, light or transparent, held to the GPU's limits), a turntable (WebM via MediaRecorder, or an animated PNG of our own writing) and a contact sheet with the Tech Sheet's facts |
 | 2026-11-14 | minor | `STLOUT`'s merged solid takes the drawn profile, the bezel collar with its stone's seat, the dome's and signet's tapered shank, the signet's face, and seats and beads for half eternity and pavé stones |
 | 2026-11-13 | minor | The 3D tab's four-view workspace (Top, Front, Right orthographic and flat-shaded at one scale; Perspective in its mode; maximise by double-click, M or the bar; remembered; single view under 560 px) on one scissored context, and drag handles on the piece (centre stone, halo melee, eternity stones, wall, width) that preview at draft quality, show the value and the checks it would break, and commit one `piece` change or, with Alt, a proposal; keyboard sliders |
 | 2026-11-13 | minor | `PIECE {profile: {curve: handle}}`: a band profile drawn as a closed curve of the drawing (polyline with bulges, spline, circle, ellipse, region), kept by value with its frame (box bottom on the finger, centred across), width and wall read from it, weight by Pappus, the wall check at its thinnest, the solid revolved from it; the Piece panel names it "Custom (from drawing)" with Update from curve. Rails are not built yet (J8) |

@@ -203,7 +203,7 @@ export function RenderExportDialog(props: RenderExportDialogProps): JSX.Element 
       onClose={() => cancel()}
       footer={
         <>
-          <Button onClick={cancel}>{busy() ? "Stop" : "Close"}</Button>
+          <Button onClick={cancel}>{busy() ? "Stop" : "Done"}</Button>
           <Button variant="primary" type="submit" disabled={busy()} title={busy() ? "A render is being drawn" : undefined} onClick={() => void save()}>
             Save
           </Button>

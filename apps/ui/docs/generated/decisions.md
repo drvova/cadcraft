@@ -1000,3 +1000,17 @@ notice first. Local styles only; no token, component or wording changed.
   to the other side near the stage's right or bottom edge, and is a polite status: the value, what
   it was, and the checks it would break in `--error`, or "Checks pass" in `--text-faint`. The gizmo
   hides while a handle is held, so the words are never under it.
+
+## Save Render (2026-11-14)
+
+- **One button, one dialog.** The 3D bar holds one "Save render…" (the bar is already near its
+  button limit); the kind (image, turntable, contact sheet) is the dialog's first list, and the
+  three `ui.render.*` commands open it on their kind. Every choice is a list, so nothing typed is
+  refused; the dialog's footer is Done/Stop and Save.
+- **No tiling; a cap said in words.** The realistic backdrop is a screen-space sweep, so tiles
+  would each carry one. The store is held to the GPU's least limit and the dialog says when a
+  picture was smoothed less or made smaller.
+- **APNG over GIF** for the animated fallback: 8-bit RGBA keeps the metal's gradients and a cut-out's
+  soft edges; a GIF's palette bands them. Paid for in size.
+- **A WebM is drawn, then played.** Frames are rendered first and played into the recorder on a
+  timer, so a slow GPU does not stretch the video's timing.

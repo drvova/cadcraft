@@ -59,7 +59,7 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 | One closed mesh for printing (ShrinkWrap) | STL export writes one merged metal solid | done; surface stepped at the default cap |
 | Sprue, supports, shrinkage allowance | | planned |
 | 2D blueprint with dimensions and sections | the drawing, layouts, Tech Sheet | done |
-| Photoreal render, turntable | Realistic 3D view; stills | partial (no turntable or image export) |
+| Photoreal render, turntable | Realistic 3D view; Save Render: stills to 4096 px (studio, light, transparent), turntables as WebM or APNG, a contact sheet | partial (rasterised studio, not ray traced: no caustics, no depth of field, no HDRI) |
 
 ## Working
 
@@ -110,4 +110,5 @@ own tests — never from Rhino's binaries, code, interface or artwork.
 | 2026-11-14 | minor | Roadmap to a Rhino replacement for jewellers |
 | 2026-11-14 | minor | Behaviours to match, from the public command reference |
 | 2026-11-14 | minor | Interoperability row for `.3dm` (ADR 0003) |
+| 2026-11-14 | minor | The render row: image, turntable and contact sheet export |
 | 2026-11-14 | new | The feature list against Rhino's jewelry workflow, and the no-code rule |

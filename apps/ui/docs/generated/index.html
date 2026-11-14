@@ -2652,6 +2652,15 @@ export default function InStatusBar() {
 <p>  piece at a projected point, in the drawing's own grip inks (<code>--canvas-focus-ring</code> at rest,   <code>--canvas-grip-hover</code>, <code>--canvas-grip-hot</code> while held), with a touch-sized hit area round a   12 px dot. It carries its name, range and value in millimetres; the arrows nudge, Enter commits,   Escape puts it back. Only one placing of each handle takes the Tab stop (the Perspective pane's   when it is shown); the same handle on another pane is <code>aria-hidden</code>.</p>
 <ul><li><strong>The number in hand</strong> stands beside the pointer on the elevated surface (<code>.view3d-drag</code>), flips</li></ul>
 <p>  to the other side near the stage's right or bottom edge, and is a polite status: the value, what   it was, and the checks it would break in <code>--error</code>, or &quot;Checks pass&quot; in <code>--text-faint</code>. The gizmo   hides while a handle is held, so the words are never under it.</p>
+<h3 id="decisions-save-render-2026-11-14">Save Render (2026-11-14)</h3>
+<ul><li><strong>One button, one dialog.</strong> The 3D bar holds one &quot;Save render…&quot; (the bar is already near its</li></ul>
+<p>  button limit); the kind (image, turntable, contact sheet) is the dialog's first list, and the   three <code>ui.render.*</code> commands open it on their kind. Every choice is a list, so nothing typed is   refused; the dialog's footer is Done/Stop and Save.</p>
+<ul><li><strong>No tiling; a cap said in words.</strong> The realistic backdrop is a screen-space sweep, so tiles</li></ul>
+<p>  would each carry one. The store is held to the GPU's least limit and the dialog says when a   picture was smoothed less or made smaller.</p>
+<ul><li><strong>APNG over GIF</strong> for the animated fallback: 8-bit RGBA keeps the metal's gradients and a cut-out's</li></ul>
+<p>  soft edges; a GIF's palette bands them. Paid for in size.</p>
+<ul><li><strong>A WebM is drawn, then played.</strong> Frames are rendered first and played into the recorder on a</li></ul>
+<p>  timer, so a slow GPU does not stretch the video's timing.</p>
 </section>
 </body>
 </html>
