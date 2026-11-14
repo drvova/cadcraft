@@ -68,6 +68,7 @@ describe("pieces not worn on a finger", () => {
     expect(stud.pieces).toBe(2);
     expect(pieceHeading({ kind: "piece", piece: stud })).toBe("Stud earrings · pair");
     expect(pieceSummary(stud, "us").tiles.some((t) => t.value === "Pair")).toBe(true);
+    expect(pieceSummary(stud, "us").tiles.some((t) => t.label === "Size")).toBe(false);
     const keys = pieceRows(stud, CHOICES, "us").map((r) => r.key);
     expect(keys).toEqual(expect.arrayContaining(["postDiameter", "postLength", "back"]));
     const drop = parsePiece(reply("drop", { top: "stud" }));

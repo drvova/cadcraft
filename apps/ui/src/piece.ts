@@ -398,6 +398,8 @@ export function parsePiece(value: unknown): Piece | null {
   const params = parseParams(value["params"]);
   if (params === null) return null;
   const size = isRecord(value["size"]) ? value["size"] : {};
+  // A pendant or earrings have no ring size: nothing of the stored size is shown.
+  if (isWorn(params.kind)) params.sizeText = null;
   const metal = isRecord(value["metal"]) ? value["metal"] : {};
   const stones = isRecord(value["stones"]) ? value["stones"] : {};
   return {
