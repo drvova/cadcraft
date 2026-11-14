@@ -839,6 +839,8 @@ struct Parts {
     centre: Buf,
     sides: Buf,
     melee: Buf,
+    /// Pavé on the band ([`super::pave_band`]).
+    pave: Buf,
     notes: Vec<String>,
     stones: u32,
     fits: Option<u32>,
@@ -1195,6 +1197,36 @@ fn build_eternity(s: &Sane, d: &Detail, out: &mut Parts) {
     );
 }
 
+/// Pavé on the band: each stone a round brilliant on its frame from [`super::pave_band::fit`]
+/// (the sheet's own placement), and bead prongs between neighbours as the eternity row has them.
+fn build_pave(s: &Sane, d: &Detail, out: &mut Parts) {
+    use super::pave_band;
+    let Some(fit) = pave_band::fit(&s.p) else {
+        out.notes.extend(pave_band::unused(&s.p));
+        return;
+    };
+    let table = gem::CUTS.first().map_or(0.57, shared::table_ratio);
+    for st in &fit.stones {
+        // u × v = w: the girdle's plane, its table along the normal.
+        let (w, u) = (st.normal, -st.around);
+        let f = Frame { o: st.girdle, u, v: w.cross(u), w };
+        round_brilliant(&mut out.pave, &f, st.diameter / 2.0, st.depth, table, d.melee);
+    }
+    out.stones = out.stones.saturating_add(u32::try_from(fit.stones.len()).unwrap_or(u32::MAX));
+    if let Some(surf) = pave_band::Surface::of(&s.p) {
+        for (c, up, rb) in pave_band::beads(&fit, &surf) {
+            bead(&mut out.beads, c, up, rb, d.bead_radial, d.bead_lat);
+        }
+    }
+    if !fit.ok() {
+        out.notes.push(format!("Pavé: {}", fit.message()));
+    }
+    if fit.spec.layout == pave_band::Layout::Scallop {
+        out.notes.push("The pavé's scallops are drawn on the sheet; the solid does not cut them.".to_string());
+    }
+    out.notes.push("Pavé stones sit on the band's outside, tables level with it; no seat is cut for them and the beads pass through the band.".to_string());
+}
+
 /// The alloy's colour.
 pub(super) fn metal_color(name: &str) -> [u8; 3] {
     match name.trim().to_ascii_lowercase().as_str() {
@@ -1266,6 +1298,7 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
         PieceKind::Solitaire | PieceKind::ThreeStone => build_solitaire(&s, &d, &mut parts),
         PieceKind::Eternity => build_eternity(&s, &d, &mut parts),
     }
+    build_pave(&s, &d, &mut parts);
     let metal = metal_color(&p.metal);
     let stone = stone_color(&p.stone);
     // A halo's melee are diamonds whatever the centre stone is; an eternity band's are the piece's stone.
@@ -1279,6 +1312,7 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
         parts.centre.part("stone", "centre stone", stone),
         parts.sides.part("stone", "side stones", stone),
         parts.melee.part("stone", "melee", small),
+        parts.pave.part("stone", "pave", stone_color("diamond")),
     ]
     .into_iter()
     .flatten()

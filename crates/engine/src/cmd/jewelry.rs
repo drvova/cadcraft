@@ -19,6 +19,10 @@ mod mesh;
 #[path = "jewelry/mesh_tests.rs"]
 mod mesh_tests;
 mod pave;
+mod pave_band;
+#[cfg(test)]
+#[path = "jewelry/pave_band_tests.rs"]
+mod pave_band_tests;
 mod piece;
 #[cfg(test)]
 #[path = "jewelry/piece_agree_tests.rs"]

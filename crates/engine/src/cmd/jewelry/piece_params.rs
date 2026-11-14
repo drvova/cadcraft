@@ -255,6 +255,8 @@ pub(super) struct PieceParams {
     pub count: Option<u32>,
     /// Eternity and halo: the least metal between two stones.
     pub gap: f64,
+    /// Band, solitaire, three-stone: pavé on the band's outside ([`super::pave_band`]), or none.
+    pub pave: Option<super::pave_band::PaveSpec>,
 }
 
 /// The most stones an eternity band may be asked for.
@@ -387,6 +389,7 @@ impl PieceParams {
             melee: mm_in(cmd, p, "melee", 1.8, 0.8, 6.0)?,
             count,
             gap: mm_in(cmd, p, "gap", 0.2, 0.0, 5.0)?,
+            pave: super::pave_band::PaveSpec::parse(cmd, p)?,
         })
     }
 
@@ -432,6 +435,7 @@ impl PieceParams {
             "melee": self.melee,
             "count": self.count,
             "gap": self.gap,
+            "pave": self.pave.as_ref().map_or(Value::Bool(false), super::pave_band::PaveSpec::json),
         })
     }
 }

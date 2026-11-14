@@ -75,6 +75,7 @@ use serde_json::{Map, Value, json};
 
 use super::super::*;
 use super::piece_params::{self as shared, MIN_CAST_WALL, PieceKind, PieceParams, Row, Section, carat_of, least_spacing};
+use super::pave_band;
 use super::sizes::RingSize;
 use super::*;
 use crate::{Accept, Input, Interactive, Prompt, Step};
@@ -100,7 +101,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("piece", "Piece", run_piece)
             .menu(&["Draw", "Piece"])
             .alias(&["ringpiece"])
-            .params("One parametric ring per drawing, drawn as a sheet (front view, section, plan; an eternity band also its stone layout) in millimetres through INSUNITS, and rebuilt when a number changes. {query: true} → {piece: null | P}, changes nothing. {remove: true} → {piece: null, removed: n objects}. Anything else builds or rebuilds in one undo step: the keys given are merged over the stored piece (or over the defaults, and then `kind` is required): {kind: band|solitaire|threestone|eternity (threestone = a solitaire with one side stone each side of the centre, around the band, each in its own prong head), at?: [x,y] (the front view's centre; default 0,0 for a new piece, where the band is now for a rebuild), system?: us|uk|eu|jp|cn (default us), size?: number|string in that system (default US 6), wall?: mm 0.3–10 (default 1.8, radial thickness), width?: mm 0.5–30 (default 2.2, along the finger), profile?: flat|dome|comfort|court|knife|bevel|concave (default flat; dome = half-round, comfort = dome outside with the finger side eased, court = a lens curved outside and inside, knife = two faces meeting at a ridge, bevel = flat with 45° chamfered edges, concave = the outside hollowed between two raised edges), comfort?: mm or null (comfort and court: how far the eased inside stands off the finger at the edges; null = a sixth of the wall; 0.05 to the lesser of 40 % of the wall and half the width), ridge?: mm or null (knife: the peak's height; null = 60 % of the wall; 0.05 to 90 % of the wall), bevel?: mm or null (bevel: the chamfer; null = the lesser of a fifth of the width and half the wall; 0.05 to the lesser of 40 % of the width and 80 % of the wall), hollow?: mm or null (concave: the hollow's depth; null = a quarter of the wall; 0.05 to the lesser of 60 % of the wall and 35 % of the width), metal?: gold24|22|18|14|10|9|platinum|palladium|silver|steel|titanium|brass|copper|wax (default gold18), cut?: a GEMLIST cut (default round; the solitaire's centre stone, or every eternity stone), stone?: a GEMLIST stone (default diamond), stoneWidth?: mm 0.5–30 (default 6.5), stoneLength?: mm (default stoneWidth; along the finger), prongs?: 3–8 (default 6), halo?: false|true (1.3)|melee mm 0.8–3 (solitaire: round diamonds around the centre stone; a three-stone ring has none), sideWidth?: mm 0.5–30 or null (threestone: a side stone's width, around the band; null = 60 % of stoneWidth), sideLength?: mm 0.5–30 or null (along the finger; null = the centre stone's proportion of sideWidth), sideCut?: a GEMLIST cut or null (null = `cut`), sideProngs?: 3–8 (default 4; the side stones are the piece's `stone`, and stand at the least angle from the top, at most 60°, that keeps `gap` and half of each prong wire between their side profile and the centre stone's), melee?: mm 0.8–6 (default 1.8, the eternity stones' diameter), count?: 1–400 or null (eternity; null = as many as fit at `gap`), gap?: mm 0–5 (default 0.2, least metal between two stones)} → {piece: P, message}, P = {params: {kind, system: \"us\", size, sizeText, sizeSystem, wall, width, profile, comfort, ridge, bevel, hollow, metal, cut, stoneLength, stoneWidth, stone, prongs, halo, sideWidth, sideLength, sideCut, sideProngs, melee, count, gap}, handles: [every object of the piece, at most 5000], size: {mm, diameter, circumference, us, usText, uk, eu, jp, cn}, metal: {name, density, grams (the band alone: prongs, head and stone seats are not weighed)}, stones: {count, carat, fits? (eternity: the most that fit at `gap`)}, checks: [{id: wall|stone-seat|spacing|calibrated|size, ok, message}], at: [x,y]}. The finger's size is measured where the inside is narrowest (the middle of the width) and the weight is the profile's exact section swept around the finger. `wall` judges the band where it is thinnest (a knife or bevelled band's edges, the middle of a concave one). A stone stands on the outside in the middle of the width; an eternity row on a band that falls away under the stones' girdles (dome, comfort, court, knife) fails `stone-seat`. A failed check is information; a bad parameter, or an eternity `count` that cannot fit at `gap`, or side stones that do not clear the centre stone within 60° of the top, is refused and nothing changes. For a three-stone ring stones.count is 3, `stone-seat` covers all three heads and `spacing` is the metal between the centre stone's setting and a side stone's")
+            .params("One parametric ring per drawing, drawn as a sheet (front view, section, plan; an eternity band also its stone layout) in millimetres through INSUNITS, and rebuilt when a number changes. {query: true} → {piece: null | P}, changes nothing. {remove: true} → {piece: null, removed: n objects}. Anything else builds or rebuilds in one undo step: the keys given are merged over the stored piece (or over the defaults, and then `kind` is required): {kind: band|solitaire|threestone|eternity (threestone = a solitaire with one side stone each side of the centre, around the band, each in its own prong head), at?: [x,y] (the front view's centre; default 0,0 for a new piece, where the band is now for a rebuild), system?: us|uk|eu|jp|cn (default us), size?: number|string in that system (default US 6), wall?: mm 0.3–10 (default 1.8, radial thickness), width?: mm 0.5–30 (default 2.2, along the finger), profile?: flat|dome|comfort|court|knife|bevel|concave (default flat; dome = half-round, comfort = dome outside with the finger side eased, court = a lens curved outside and inside, knife = two faces meeting at a ridge, bevel = flat with 45° chamfered edges, concave = the outside hollowed between two raised edges), comfort?: mm or null (comfort and court: how far the eased inside stands off the finger at the edges; null = a sixth of the wall; 0.05 to the lesser of 40 % of the wall and half the width), ridge?: mm or null (knife: the peak's height; null = 60 % of the wall; 0.05 to 90 % of the wall), bevel?: mm or null (bevel: the chamfer; null = the lesser of a fifth of the width and half the wall; 0.05 to the lesser of 40 % of the width and 80 % of the wall), hollow?: mm or null (concave: the hollow's depth; null = a quarter of the wall; 0.05 to the lesser of 60 % of the wall and 35 % of the width), metal?: gold24|22|18|14|10|9|platinum|palladium|silver|steel|titanium|brass|copper|wax (default gold18), cut?: a GEMLIST cut (default round; the solitaire's centre stone, or every eternity stone), stone?: a GEMLIST stone (default diamond), stoneWidth?: mm 0.5–30 (default 6.5), stoneLength?: mm (default stoneWidth; along the finger), prongs?: 3–8 (default 6), halo?: false|true (1.3)|melee mm 0.8–3 (solitaire: round diamonds around the centre stone; a three-stone ring has none), sideWidth?: mm 0.5–30 or null (threestone: a side stone's width, around the band; null = 60 % of stoneWidth), sideLength?: mm 0.5–30 or null (along the finger; null = the centre stone's proportion of sideWidth), sideCut?: a GEMLIST cut or null (null = `cut`), sideProngs?: 3–8 (default 4; the side stones are the piece's `stone`, and stand at the least angle from the top, at most 60°, that keeps `gap` and half of each prong wire between their side profile and the centre stone's), melee?: mm 0.8–6 (default 1.8, the eternity stones' diameter), count?: 1–400 or null (eternity; null = as many as fit at `gap`), gap?: mm 0–5 (default 0.2, least metal between two stones), pave?: false|true|{layout?: row|rows|honeycomb|scallop (default row; rows = rows side by side, honeycomb = every other row offset half a stone, scallop = one row, each stone in a scallop cut into the band's side), rows?: 1–3 (rows and honeycomb; default 2), melee?: mm 0.8–3 (default 1.3; round diamonds), gap?: mm 0–2 (default 0.2, least metal between two pavé stones), span?: shoulders|top-half|full (60°, 90° or 180° each side of 12 o'clock; default shoulders) or from?/to?: degrees clockwise from 12 o'clock −360–360 (giving them drops `span`), symmetric?: bool (default true: mirrored the other side of 12 o'clock), graduated?: {from: mm, to: mm} or null (sizes from the end nearest 12 o'clock to the far end, to 0.1 mm)} (band, solitaire, threestone: melee on the band's outside, tables square to the surface and level with it, never nearer than 0.3 mm to the band's edge nor overlapping each other or the head; auto-fit: as many as keep `gap` in the span, the rest shared equally between the gaps; an object merges over the stored pavé key by key; true = one row of 1.3 mm on the shoulders)} → {piece: P, message}, P = {params: {kind, system: \"us\", size, sizeText, sizeSystem, wall, width, profile, comfort, ridge, bevel, hollow, metal, cut, stoneLength, stoneWidth, stone, prongs, halo, sideWidth, sideLength, sideCut, sideProngs, melee, count, gap, pave}, handles: [every object of the piece, at most 5000], size: {mm, diameter, circumference, us, usText, uk, eu, jp, cn}, metal: {name, density, grams (the band alone: prongs, head and stone seats are not weighed)}, stones: {count, carat, fits? (eternity: the most that fit at `gap`), pave? {count, carat, layout, rows, gap (the least metal between two pavé stones), asked, rim, head (degrees from 12 o'clock the pavé starts at), arcs, sizes: [{mm, count}], capped}}, checks: [{id: wall|stone-seat|spacing|calibrated|size|pave (when pavé is asked for: rim, spacing and fit), ok, message}], at: [x,y]}. The finger's size is measured where the inside is narrowest (the middle of the width) and the weight is the profile's exact section swept around the finger. `wall` judges the band where it is thinnest (a knife or bevelled band's edges, the middle of a concave one). A stone stands on the outside in the middle of the width; an eternity row on a band that falls away under the stones' girdles (dome, comfort, court, knife) fails `stone-seat`. A failed check is information; a bad parameter, or an eternity `count` that cannot fit at `gap`, or side stones that do not clear the centre stone within 60° of the top, is refused and nothing changes. For a three-stone ring stones.count is 3, `stone-seat` covers all three heads and `spacing` is the metal between the centre stone's setting and a side stone's")
             .interactive(|_| Ok(Box::new(PieceM::default()))),
     ]
 }
@@ -169,6 +170,9 @@ struct Design {
     checks: Vec<Value>,
     /// What the piece did not use of what it was given, said in the reply's message.
     notes: Vec<String>,
+    /// Pavé on the band, when asked for, and its stones placed in the layout.
+    pave: Option<pave_band::PaveFit>,
+    pave_stones: Vec<(Vec2, gem::Stone)>,
 }
 
 /// A closed outline of straight edges.
@@ -606,6 +610,19 @@ fn design(p: &PieceParams) -> Result<Design> {
         }
     }
     checks.push(size_check(p));
+    // Pavé on the band: its own check, and its stones in the front view, the plan and the layout.
+    let pave = pave_band::fit(p);
+    let pave_sheet = pave.as_ref().zip(pave_band::Surface::of(p)).map(|(f, surf)| pave_band::sheet(f, &surf));
+    notes.extend(pave_band::unused(p));
+    if let Some(f) = &pave {
+        checks.push(check("pave", f.ok(), f.message()));
+        carat += f.stones.iter().map(|s| pave_band::stone_carat(s.diameter)).sum::<f64>();
+    }
+    if let Some(sh) = &pave_sheet {
+        shapes.extend(sh.front.iter().map(|v| (On::Stones, Shape::Poly { v: v.clone(), closed: true })));
+        shapes.extend(sh.scallops.iter().map(|v| (On::Metal, Shape::Poly { v: v.clone(), closed: false })));
+        plan.extend(sh.plan.iter().map(|(c, r, ratio)| (On::Stones, Shape::Ellipse { c: *c, major: Vec2::new(0.0, *r), ratio: ratio.clamp(0.05, 1.0) })));
+    }
 
     // The section, to the right of the front view, its base (the finger side) down.
     let section_at = Vec2::new(front_reach + VIEW_GAP + p.width / 2.0, -p.wall / 2.0);
@@ -613,6 +630,9 @@ fn design(p: &PieceParams) -> Result<Design> {
     if let Some(side) = &seated {
         let seat = section_at + Vec2::new(0.0, section.height_at(0.0) - p.eternity_row().depth);
         shapes.push((On::Stones, place_profile(side, seat, Vec2::new(1.0, 0.0), Vec2::new(0.0, 1.0))));
+    }
+    if let Some(sh) = &pave_sheet {
+        shapes.extend(sh.section.iter().map(|v| (On::Stones, Shape::Poly { v: v.iter().map(|(q, b)| (section_at + *q, *b)).collect(), closed: true })));
     }
     // The plan, under the front view.
     let plan_at = Vec2::new(0.0, -(ro + VIEW_GAP + plan_reach));
@@ -626,10 +646,21 @@ fn design(p: &PieceParams) -> Result<Design> {
         shapes.push((On::Metal, rect(layout_at, length, p.width)));
         placed.extend(row.into_iter().map(|d| Placed { melee: true, at: layout_at + Vec2::new(d - length / 2.0, 0.0) }));
     }
+    // The pavé's layout, under the plan (and under an eternity's layout, which never has pavé):
+    // the outside unrolled at the crown, every stone a `GEM` insert. The stones are counted here.
+    let mut pave_stones: Vec<(Vec2, gem::Stone)> = Vec::new();
+    if let Some(sh) = &pave_sheet {
+        let (length, height) = sh.layout;
+        let layout_at = plan_at + Vec2::new(0.0, -(plan_reach + VIEW_GAP + height / 2.0));
+        shapes.push((On::Metal, rect(layout_at, length, height)));
+        for (at, d) in &sh.inserts {
+            pave_stones.push((layout_at + *at, pave_band::melee_stone(CMD, *d)?));
+        }
+    }
     if !(grams.is_finite() && carat.is_finite()) {
         return Err(bad(CMD, "the piece has no weight"));
     }
-    Ok(Design { params: p.clone(), centre, melee, shapes, placed, grams, carat, fits, checks, notes })
+    Ok(Design { params: p.clone(), centre, melee, shapes, placed, grams, carat, fits, checks, notes, pave, pave_stones })
 }
 
 /// A shape moved by `by`.
@@ -665,9 +696,12 @@ impl Design {
     /// The piece as a reply: `P` of the command's contract.
     fn json(&self, handles: &[Handle], at: Vec2) -> Value {
         let p = &self.params;
-        let mut stones = json!({ "count": self.placed.len(), "carat": (self.carat * 1000.0).round() / 1000.0 });
+        let mut stones = json!({ "count": self.placed.len() + self.pave_stones.len(), "carat": (self.carat * 1000.0).round() / 1000.0 });
         if let (Some(fits), Some(o)) = (self.fits, stones.as_object_mut()) {
             o.insert("fits".into(), json!(fits));
+        }
+        if let (Some(f), Some(o)) = (&self.pave, stones.as_object_mut()) {
+            o.insert("pave".into(), f.json());
         }
         json!({
             "params": p.json(),
@@ -719,6 +753,17 @@ impl Design {
                     _ => "",
                 },
                 carat_of(m) * small as f64
+            ));
+        }
+        if let Some(f) = self.pave.as_ref().filter(|f| !f.stones.is_empty()) {
+            let carat: f64 = f.stones.iter().map(|s| pave_band::stone_carat(s.diameter)).sum();
+            out.push_str(&format!(
+                "; {} pavé ({}{}), {:.3} ct, {} mm between stones",
+                f.stones.len(),
+                f.spec.layout.name(),
+                if f.rows.len() > 1 { format!(", {} rows", f.rows.len()) } else { String::new() },
+                carat,
+                fmt_mm(f.gap.unwrap_or(f.spec.gap).max(0.0))
             ));
         }
         let failed: Vec<&str> = self.checks.iter().filter(|c| c["ok"] == json!(false)).filter_map(|c| c["message"].as_str()).collect();
@@ -881,7 +926,11 @@ fn run_build(s: &mut Session, p: &Value) -> Result<Value> {
     let (new_size, new_system) = (has("size"), has("system"));
     let mut merged = base.as_ref().map(PieceParams::json).and_then(|v| v.as_object().cloned()).unwrap_or_default();
     for (key, value) in &given {
-        if !matches!(key.as_str(), "query" | "remove" | "at") {
+        if key == "pave" {
+            // A pavé change merges over the stored pavé, key by key.
+            let next = pave_band::merge(merged.get("pave"), value);
+            merged.insert(key.clone(), next);
+        } else if !matches!(key.as_str(), "query" | "remove" | "at") {
             merged.insert(key.clone(), value.clone());
         }
     }
@@ -982,6 +1031,9 @@ fn draw(s: &mut Session, plan: &Design, at: Vec2) -> Result<Vec<Handle>> {
         let which = if stone.melee { &plan.melee } else { &plan.centre };
         let Some(which) = which else { continue };
         handles.push(gem::place_stone(s, which, pt(stone.at), 0.0, Some(On::Stones.layer()))?);
+    }
+    for (at, stone) in &plan.pave_stones {
+        handles.push(gem::place_stone(s, stone, pt(*at), 0.0, Some(On::Stones.layer()))?);
     }
     Ok(handles)
 }
