@@ -16,6 +16,10 @@ mod nurbs;
 pub mod region;
 mod spline;
 mod spline_fit;
+mod subd;
+mod subd_cage;
+pub mod subd_edit;
+mod subd_limit;
 mod vec;
 
 pub use bounds::Bounds2;
@@ -27,6 +31,9 @@ pub use intersect::{circle_circle, intersect_ext, intersect_segments, line_circl
 pub use mat::{Mat3, Mat4};
 pub use spline::{MAX_DEGREE as MAX_SPLINE_DEGREE, Spline};
 pub use spline_fit::{FitOptions, KnotParam};
+pub use subd::{MAX_SUBD_LEVELS, subdivide, subdivide_levels};
+pub use subd_cage::{MAX_CAGE_FACES, MAX_CAGE_VERTICES, MAX_FACE_SIDES, SHARP, SubdCage, SubdError, edge_key};
+pub use subd_limit::{BicubicPatch, LimitOptions, SubdMesh, limit_mesh, limit_positions, regular_patch, regular_patches};
 pub use vec::{Vec2, Vec3};
 
 /// Geometric tolerance for coincidence tests in drawing units.
@@ -78,5 +85,7 @@ pub fn arc_segments(radius: f64, sweep: f64, tol: f64) -> usize {
 
 #[cfg(test)]
 mod property_tests;
+#[cfg(test)]
+mod subd_tests;
 #[cfg(test)]
 mod tests;
