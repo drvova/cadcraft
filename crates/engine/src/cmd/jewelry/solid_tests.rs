@@ -380,56 +380,28 @@ fn timing() {
 #[test]
 #[ignore]
 fn diag() {
-    for v in [json!({"cut":"heart","kind":"threestone","melee":1.0,"profile":"flat","prongs":4,"size":2.0,"stoneWidth":4.0})] {
+    for v in [
+        json!({"count":9,"gap":0.32,"kind":"threestone","melee":1.53,"metal":"copper","profile":"dome","prongs":7,"size":4,"stone":"citrine","stoneLength":17.17,"stoneWidth":17.17,"system":"jp","wall":2.02,"width":24.168526213125524}),
+        json!({"cut":"cabochon","gap":0.38,"halo":true,"kind":"solitaire","melee":1.72,"profile":"dome","size":67,"stone":"aquamarine","stoneLength":1.16,"stoneWidth":5.12,"system":"eu","wall":2.52,"width":4.8}),
+    ] {
         let p = params(&v);
         let mesh = piece_mesh(&p, Quality::Draft);
-        for step in [0.2, 0.1] {
-            let s = solid_of(&mesh, step, "diag");
-            let mut parent: Vec<usize> = (0..s.positions.len()).collect();
-            fn find(p: &mut [usize], mut i: usize) -> usize {
-                while p[i] != i {
-                    p[i] = p[p[i]];
-                    i = p[i];
-                }
-                i
-            }
-            for t in s.indices.chunks_exact(3) {
-                let a = find(&mut parent, t[0] as usize);
-                for v in &t[1..] {
-                    let b = find(&mut parent, *v as usize);
-                    parent[b] = a;
-                }
-            }
-            let mut by: HashMap<usize, (usize, Vec3, f64)> = HashMap::new();
-            for t in s.indices.chunks_exact(3) {
-                let r = find(&mut parent, t[0] as usize);
-                let e = by.entry(r).or_insert((0, Vec3::ZERO, 0.0));
-                let [a, b, c] = tri(&s, t);
-                e.0 += 1;
-                e.1 = e.1 + a;
-                e.2 += a.dot(b.cross(c)) / 6.0;
-            }
-            for (_, (n, c, vol)) in by {
-                let at = c * (1.0 / n as f64);
-                eprintln!("{v} step {step}: {n} tris vol {vol:.4} at {at:?}");
-                if n < 10000 {
-                    for e in mesh.csg.cut.iter() {
-                        if let Prim::Seat(e) = e {
-                            let d = at - e.axes.o;
-                            let (x, y, h) = (d.dot(e.axes.u), d.dot(e.axes.v), d.dot(e.axes.w));
-                            if x.hypot(y) < 4.0 {
-                                eprintln!(
-                                    "   seat-local x {x:.3} y {y:.3} h {h:.3} outline {:?}",
-                                    match &e.outline {
-                                        Outline::Poly(p) => p.len(),
-                                        _ => 0,
-                                    }
-                                );
-                            }
-                        }
-                    }
-                }
-            }
+        let sizes: Vec<String> = mesh
+            .csg
+            .add
+            .iter()
+            .chain(&mesh.csg.cut)
+            .map(|q| match q {
+                Prim::Revolve(s) => format!("rev{}", s.pts.len()),
+                Prim::Wire { pts, .. } => format!("w{}", pts.len()),
+                _ => "o".into(),
+            })
+            .collect();
+        eprintln!("{} adds {} cuts: {}", mesh.csg.add.len(), mesh.csg.cut.len(), sizes.join(" "));
+        for (step, cap) in [(0.2, TEST_TRIS), (0.1, MAX_TRIANGLES)] {
+            let t = Instant::now();
+            let r = solidify(&mesh.csg, step, cap);
+            eprintln!("step {step} cap {cap}: {:?} {:?}", r.as_ref().map(|(s, c)| (s.triangles(), s.step, *c)).map_err(|e| e.clone()), t.elapsed());
         }
     }
 }

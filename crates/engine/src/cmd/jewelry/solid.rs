@@ -27,7 +27,7 @@ const MAX_BLOCKS: usize = 1_500_000;
 /// The most primitive-in-block registrations of the binned index.
 const MAX_BINNED: usize = 12_000_000;
 /// The most primitive evaluations one extraction makes.
-const MAX_EVALS: u64 = 400_000_000;
+const MAX_EVALS: u64 = 150_000_000;
 /// The most stone vertices a seat is fitted to.
 const MAX_FIT_POINTS: usize = 200_000;
 /// How far along a grid edge a surface vertex may lie from either end, as a fraction of the edge.
@@ -248,8 +248,8 @@ impl Envelope {
 /// One analytic part of the piece.
 #[derive(Clone, Debug)]
 pub(super) enum Prim {
-    /// A section `(r, z)` revolved about Z.
-    Revolve(Vec<Vec2>),
+    /// A section `(r, z)` revolved about Z (made by [`Prim::revolve`]).
+    Revolve(Section),
     /// A round wire of radius `r` along a path, open (round ends) or closed.
     Wire {
         pts: Vec<Vec3>,
@@ -279,6 +279,74 @@ pub(super) enum Prim {
     Seat(Envelope),
 }
 
+/// Edges of a section taken together for [`Section::dist`].
+const CHUNK: usize = 12;
+
+/// A closed polygon with its edges in runs, each with its box, so the distance to it skips the
+/// runs that cannot be nearer than one already found.
+#[derive(Clone, Debug)]
+pub(super) struct Section {
+    pub pts: Vec<Vec2>,
+    /// Each run's first edge, one past its last, and its box.
+    runs: Vec<(usize, usize, Vec2, Vec2)>,
+}
+
+impl Section {
+    pub(super) fn new(pts: Vec<Vec2>) -> Section {
+        let n = pts.len();
+        let mut runs = Vec::new();
+        let mut start = 0;
+        while start < n {
+            let end = (start + CHUNK).min(n);
+            let (mut lo, mut hi) = (Vec2::new(f64::INFINITY, f64::INFINITY), Vec2::new(f64::NEG_INFINITY, f64::NEG_INFINITY));
+            for i in start..=end {
+                if let Some(q) = pts.get(i % n) {
+                    lo = lo.min(*q);
+                    hi = hi.max(*q);
+                }
+            }
+            runs.push((start, end, lo, hi));
+            start = end;
+        }
+        Section { pts, runs }
+    }
+
+    /// The signed distance, negative inside: [`poly_dist`], faster.
+    fn dist(&self, p: Vec2) -> f64 {
+        let n = self.pts.len();
+        if n < 3 {
+            return f64::INFINITY;
+        }
+        let mut best = f64::INFINITY;
+        let mut inside = false;
+        for (start, end, lo, hi) in &self.runs {
+            let crossing = p.y >= lo.y && p.y <= hi.y && p.x <= hi.x;
+            let gap = Vec2::new((lo.x - p.x).max(p.x - hi.x).max(0.0), (lo.y - p.y).max(p.y - hi.y).max(0.0)).len();
+            if !crossing && gap >= best {
+                continue;
+            }
+            for i in *start..*end {
+                let (Some(a), Some(b)) = (self.pts.get(i), self.pts.get((i + 1) % n)) else { continue };
+                let (a, b) = (*a, *b);
+                if gap < best {
+                    let e = b - a;
+                    let w = p - a;
+                    let l2 = e.dot(e);
+                    let t = if l2 > 1e-300 { (w.dot(e) / l2).clamp(0.0, 1.0) } else { 0.0 };
+                    best = best.min((w - e * t).len());
+                }
+                if crossing && (a.y > p.y) != (b.y > p.y) {
+                    let x = a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x);
+                    if p.x < x {
+                        inside = !inside;
+                    }
+                }
+            }
+        }
+        if inside { -best } else { best }
+    }
+}
+
 fn segment_dist(p: Vec3, a: Vec3, b: Vec3) -> f64 {
     let e = b - a;
     let l2 = e.dot(e);
@@ -289,7 +357,7 @@ fn segment_dist(p: Vec3, a: Vec3, b: Vec3) -> f64 {
 impl Prim {
     pub(super) fn eval(&self, p: Vec3) -> f64 {
         let v = match self {
-            Prim::Revolve(section) => poly_dist(section, Vec2::new(p.x.hypot(p.y), p.z)),
+            Prim::Revolve(section) => section.dist(Vec2::new(p.x.hypot(p.y), p.z)),
             Prim::Wire { pts, r, closed } => {
                 let n = pts.len();
                 let mut best = f64::INFINITY;
@@ -325,7 +393,7 @@ impl Prim {
     fn bounds(&self) -> (Vec3, Vec3) {
         let empty = (Vec3::new(f64::INFINITY, f64::INFINITY, f64::INFINITY), Vec3::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY));
         match self {
-            Prim::Revolve(section) => {
+            Prim::Revolve(Section { pts: section, .. }) => {
                 let rmax = section.iter().map(|q| q.x.abs()).fold(0.0, f64::max);
                 let zlo = section.iter().map(|q| q.y).fold(f64::INFINITY, f64::min);
                 let zhi = section.iter().map(|q| q.y).fold(f64::NEG_INFINITY, f64::max);
@@ -551,6 +619,7 @@ pub(super) fn extract(csg: &Csg, step: f64, max_tris: usize) -> Result<Solid, Fa
     let mut positions: Vec<Vec3> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
     let mut keyed: HashMap<(u64, u64), u32> = HashMap::new();
+    let mut done = 0usize;
     for (b, [bx, by, bz]) in &surface {
         let cand = candidates(*b);
         let (i0, j0, k0) = (bx * BLOCK, by * BLOCK, bz * BLOCK);
@@ -622,8 +691,11 @@ pub(super) fn extract(csg: &Csg, step: f64, max_tris: usize) -> Result<Solid, Fa
                 }
             }
         }
+        done += 1;
         if indices.len() / 3 > max_tris {
-            return Err(Fail::Over((indices.len() / 3) as f64 / max_tris as f64 * 1.2));
+            // Over part-way through: how far over the whole would be, at this rate.
+            let whole = (indices.len() / 3) as f64 * surface.len() as f64 / done as f64;
+            return Err(Fail::Over((whole / max_tris as f64 * 1.1).max(1.1)));
         }
     }
     if indices.is_empty() {

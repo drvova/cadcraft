@@ -79,7 +79,7 @@ use serde_json::{Value, json};
 use super::super::*;
 use super::piece_params::{self as shared, Head, MAX_PIECE_STONES, MIN_CAST_WALL, PieceKind, PieceParams, Profile, Row, Section, proportions};
 use super::sizes::RingSize;
-use super::solid::{Axes, Csg, Envelope, Outline, Prim, Solid, solidify};
+use super::solid::{self as solid, Axes, Csg, Envelope, Outline, Prim, Solid, solidify};
 use super::*;
 
 /// The most triangles a reply holds.
@@ -590,7 +590,7 @@ const SOLID_SECTION: usize = 128;
 
 fn build_band(buf: &mut Buf, csg: &mut Csg, s: &Sane, d: &Detail) {
     let fine = Detail { dome: SOLID_SECTION, ..*d };
-    csg.add.push(Prim::Revolve(band_section(s, &fine).iter().map(|(r, z)| Vec2::new(*r, *z)).collect()));
+    csg.add.push(Prim::Revolve(solid::Section::new(band_section(s, &fine).iter().map(|(r, z)| Vec2::new(*r, *z)).collect())));
     let section = band_section(s, d);
     let n = (d.band.clamp(8, 1024) / 4) * 4;
     let mut first: Option<Ring> = None;
@@ -1564,8 +1564,13 @@ pub fn specs() -> Vec<CommandSpec> {
             .alias(&["stlexport"])
             .params(
                 "{kind: band|solitaire|threestone|eternity, …the piece's parameters as PIECE takes them, stones?: bool (default false: the metal only, which \
-                 is what is cast), quality?: draft|fine (default fine), binary?: bool (default true)} → {format: stl-binary|stl-ascii, \
-                 base64 | text, bytes, triangles, name, quality, notes}: the piece as an STL in millimetres; changes nothing",
+                 is what is cast), quality?: draft|fine (default fine: the metal sampled at 0.1 mm; draft 0.2 mm), binary?: bool (default true), \
+                 maxTriangles?: 1000–1000000 (default 150000; an ASCII STL at most 30000)} → {format: stl-binary|stl-ascii, base64 | text, bytes, \
+                 triangles, name, quality, step (the grid step the metal was sampled at, mm: coarser than asked when it must be to fit), seats, \
+                 bodies (1: the metal casts whole), metal: {name, density, volumeMm3, grams (the merged solid: what is cast), band: {volumeMm3, \
+                 grams} (the band alone, exactly: what PIECE and the bench sheet report)}, notes}: the piece as an STL in millimetres, the \
+                 metal one closed, manifold, outward-facing shell with a seat cut for every stone, the stones (when asked) shells of their \
+                 own; changes nothing",
             )
             .enabled(always)
             .noundo(),
@@ -1627,7 +1632,8 @@ fn run_piecemesh(_s: &mut Session, p: &Value) -> Result<Value> {
 /// The merged solid's grid step at each quality, mm.
 const SOLID_STEP_FINE: f64 = 0.1;
 const SOLID_STEP_DRAFT: f64 = 0.2;
-/// The most triangles the merged solid of a binary STL holds (about 50 MB).
+/// The most triangles a binary STL may be asked for with `maxTriangles` (about 50 MB); without it
+/// the file holds at most [`MAX_TRIANGLES`], what the interface downloads.
 pub(super) const MAX_SOLID_TRIANGLES: usize = 1_000_000;
 /// How far the merged solid's volume may stand from the analytic band's, as a fraction per
 /// millimetre of grid step (1% at fine quality's 0.1 mm, 2% at draft's 0.2 mm), before the reply
@@ -1670,9 +1676,18 @@ fn run_stlout(_s: &mut Session, p: &Value) -> Result<Value> {
     let quality = Quality::parse(cmd, p, Quality::Fine)?;
     let stones = bool_or(p, "stones", false);
     let binary = bool_or(p, "binary", true);
-    let cap = if binary { MAX_SOLID_TRIANGLES } else { MAX_ASCII_TRIANGLES };
+    let cap = match p.get("maxTriangles").filter(|v| !v.is_null()) {
+        None => MAX_TRIANGLES,
+        Some(v) => match v.as_f64() {
+            Some(n) if n.is_finite() && (1000.0..=MAX_SOLID_TRIANGLES as f64).contains(&n) => n as usize,
+            _ => return Err(bad(cmd, format!("`maxTriangles` is a number from 1000 to {MAX_SOLID_TRIANGLES}"))),
+        },
+    };
+    let cap = if binary { cap } else { cap.min(MAX_ASCII_TRIANGLES) };
     // The tessellated piece gives the stones (and the notes); the metal is the merged solid.
-    let budget = Budget { triangles: if binary { MAX_TRIANGLES } else { MAX_ASCII_TRIANGLES / 2 }, json: None, stones };
+    // At most half the file for the tessellated piece (the stones are what is kept of it), so the
+    // merged metal always has the other half.
+    let budget = Budget { triangles: cap / 2, json: None, stones };
     let mesh = piece_mesh_within(&piece, quality, budget);
     if stones && mesh.over {
         return Err(bad(

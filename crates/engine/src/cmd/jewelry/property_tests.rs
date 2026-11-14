@@ -1828,7 +1828,7 @@ fn keys_of(cmd: &str) -> Vec<&'static str> {
         "techsheet" => vec!["handles", "metal", "section", "size", "radius", "system", "table", "at", "layer"],
         "piece" => PIECE.to_vec(),
         "piecemesh" => PIECE.iter().copied().chain(["quality"]).collect(),
-        "stlout" => PIECE.iter().copied().chain(["quality", "stones", "binary"]).collect(),
+        "stlout" => PIECE.iter().copied().chain(["quality", "stones", "binary", "maxTriangles"]).collect(),
         _ => vec!["limit", "space"],
     }
 }
