@@ -104,7 +104,16 @@ then `TCODE_ENDOFTABLE`. The openNURBS version matters: object attributes (below
 "version 5" layout when the archive version ≥ 5 **and** this number ≥ 200712190. Numbers in the
 old form are `((yyyy·100 + mm)·100 + dd)·10 + major`.
 
-**Settings** (`TCODE_SETTINGS_TABLE`): records for units, tolerances, views…; skipped.
+**Settings** (`TCODE_SETTINGS_TABLE`): records for units, tolerances, views…, ended by
+`TCODE_ENDOFTABLE`. CADCraft reads one: `TCODE_SETTINGS_UNITSANDTOLS` (`0x20008031`, a CRC
+chunk), the **model units** [`opennurbs_3dm_settings.cpp`]: `i32` layout version (100–199),
+`i32` unit system, `f64` absolute tolerance, `f64` angle tolerance (radians), `f64` relative
+tolerance; version ≥ 101: `i32` distance display mode, `i32` display precision; ≥ 102: `f64`
+metres per unit, wide string custom unit name (only for custom units). Unit system codes
+[`opennurbs_defines.h`]: 0 none, 1 microns, 2 millimetres, 3 centimetres, 4 metres, 5
+kilometres, 6 micro-inches, 7 mils, 8 inches, 9 feet, 10 miles, 11 custom (use the metres per
+unit), 13 nanometres, 14 decimetres; others are rarer metric and imperial units, for which the
+metres-per-unit field is used.
 
 **Layer table**: each record is a `TCODE_LAYER_RECORD` chunk holding one openNURBS object
 (§4.1) of class layer. Layer data [`opennurbs_layer.cpp`], after its chunk version (1.x):
@@ -153,6 +162,9 @@ structure — the reader stops here), 6 = colour, 7 = plot colour, 8 = `f64` plo
 decoration, 10 = `i32` wire density, 11 = bool visible, 12 = `u8` mode, 13 = `u8` colour source, …
 A reader that only needs the name and layer stops at the first item it does not take; the chunk
 boundary covers the rest.
+
+The two layouts differ in their chunk version's major number (2 or 1), so CADCraft's reader
+picks the layout from that byte rather than from the toolkit number.
 
 Older layout (major 1): uuid, `i32` layer, `i32` material, colour, `i16`, `i16`, `f64`, `f64`,
 `i32` wire density, 4 × `u8` (mode, colour/linetype/material sources), wide string name, wide
