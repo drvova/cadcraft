@@ -203,11 +203,13 @@ and MCP all reach them, and DESCRIBE reads jewelry out of any drawing.
 | J6 | A halo around a sharp tip (a long pear) can put two stones slightly nearer than the gap: the halo is spaced by length along its path, not by straight distance | 2–3 |
 | J7 | Outside a size system's own chart (under 12.84 mm, over 22.5 mm) a finger is named by that chart's last size (a 25 mm finger reads UK Z); it should have no size in that system, which changes the shape of every size row | 2–4 |
 | J8 | A rail for `PIECE`: a closed curve (an oval, a shaped shank seen from the front) giving the band's path, scaled so its inside matches the finger, with the drawn profile swept along it kept perpendicular; the sheet's front view, the weight (numerically) and `PIECEMESH` would follow it. Today a custom profile is always revolved round a circular finger | 3–5 |
+| J9 | Generative patterns beyond the plain band: patterns on a solitaire's or a dome's shank and on a drawn profile, image-driven patterns (a picture's tones as cell size or relief depth), and engraving fitted between a pattern's ribs. Today `PIECE {pattern}` lays Voronoi, honeycomb, wave and Truchet on a plain band, pierced or in relief, and refuses the rest in a sentence | 3–5 |
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | Jewelry: generative patterns on the band (PIECE `pattern`: Voronoi, honeycomb, wave, Truchet; pierced or relief; weight, check, sheet, cast solid, PIECEMESH, the Pattern group with Shuffle); the rest is the new row J9 |
 | 2026-11-14 | patch | Jewelry: the merged solid for casting takes bezels, tapered shanks, the signet's face, drawn profiles and pavé and half eternity seats; J2 narrowed |
 | 2026-11-13 | minor | Jewelry: PIECE takes a band profile drawn as a closed curve; a rail for it is the new row J8 |
 | 2026-11-13 | minor | Jewelry: pavé on a parametric piece's band (PIECE `pave`: row, rows, honeycomb, scallop, auto-fit to a span, graduated sizes, a `pave` check), drawn, counted on the bench sheet and built by PIECEMESH. No row closes: the solid still cuts no seat (J2) |

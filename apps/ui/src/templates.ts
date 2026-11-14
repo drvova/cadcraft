@@ -83,6 +83,20 @@ export const TEMPLATES: readonly Template[] = [
     params: { kind: "band", wall: 1.5, width: 2, profile: "flat", metal: "gold18" },
   },
   {
+    id: "voronoi-band",
+    name: "Voronoi Band",
+    blurb: "A wide band pierced into organic cells, seeded so Shuffle lays it anew.",
+    params: { kind: "band", wall: 1.6, width: 6, profile: "flat", metal: "gold18", pattern: { voronoi: { cells: 24, seed: 1, jitter: 0.8, wall: 0.8 } } },
+    requires: "pattern",
+  },
+  {
+    id: "honeycomb-band",
+    name: "Honeycomb Band",
+    blurb: "A wide band pierced into a lattice of hexagons.",
+    params: { kind: "band", wall: 1.6, width: 6, profile: "flat", metal: "gold18", pattern: { hex: { size: 2.4, wall: 0.7 } } },
+    requires: "pattern",
+  },
+  {
     id: "comfort-band",
     name: "Comfort-Fit Band",
     blurb: "A domed wedding band, rounded for everyday wear.",

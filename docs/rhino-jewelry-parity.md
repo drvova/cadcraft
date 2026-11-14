@@ -69,10 +69,11 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 | Gumball, live editing | drag handles that change parameters | done |
 | History (edit and it rebuilds) | the parametric piece | done |
 | Grasshopper sliders, the Player's input panel | the Piece panel; proposals; the assistant | done |
-| Generative patterns (Voronoi, lattice, Truchet, image-driven) | pattern options on the band | planned |
+| Generative patterns (Voronoi, lattice, Truchet, image-driven) | `pattern` on the band: Voronoi, honeycomb, wave pierced or in relief, Truchet relief; seed and Shuffle | partial (no image-driven patterns; plain bands only) |
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | Generative patterns: Voronoi, honeycomb, wave and Truchet on the band, pierced or relief |
 | 2026-11-14 | new | The feature list against Rhino's jewelry workflow, and the no-code rule |

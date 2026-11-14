@@ -507,7 +507,7 @@ impl PieceParams {
             "count": self.count,
             "gap": self.gap,
             "pave": self.pave.as_ref().map_or(Value::Bool(false), super::pave_band::PaveSpec::json),
-            "pattern": self.pattern.as_ref().map(super::pattern::PatternSpec::json),
+            "pattern": self.pattern.as_ref().map_or(Value::Bool(false), super::pattern::PatternSpec::json),
             "head": self.head.name(),
             "bezelWall": self.bezel_wall,
             "bezelHeight": self.bezel_height,

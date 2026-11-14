@@ -9,7 +9,7 @@
  */
 
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js";
-import { failedChecks, judgePieceDraft, pieceFacts, pieceRows, refusalRow, refusalWords, type Piece, type PieceChoices, type PieceFact, type PieceRow, type PieceState } from "./piece";
+import { failedChecks, judgePieceDraft, pieceFacts, pieceRows, refusalRow, refusalWords, type Piece, type PieceChoices, type PieceFact, type PatternPart, type PieceRow, type PieceState } from "./piece";
 
 /** The refusal standing on a row: which row, and the words for it. */
 export interface Refused {
@@ -110,6 +110,8 @@ export interface RowEditHost {
   run(patch: Record<string, unknown>): boolean;
   /** Say a refusal made before the engine was asked. */
   notice(message: string): void;
+  /** The band's pattern, for the pattern's rows (a patch names its motif). */
+  pattern?(): PatternPart | false | null;
 }
 
 export interface RowEdit {
@@ -153,7 +155,7 @@ export function createRowEdit(host: RowEditHost): RowEdit {
       host.pick(value);
       return;
     }
-    const verdict = judgePieceDraft(host.row(), value, host.system());
+    const verdict = judgePieceDraft(host.row(), value, host.system(), host.pattern?.() ?? null);
     if (verdict.kind !== "send") return;
     // Refused, the control shows the engine's value again (the refusal is on its row).
     if (!host.run(verdict.patch)) host.setDraft(host.row().value);
@@ -174,7 +176,7 @@ export function createRowEdit(host: RowEditHost): RowEdit {
       if (leaving) settle();
       return;
     }
-    const verdict = judgePieceDraft(host.row(), value, host.system());
+    const verdict = judgePieceDraft(host.row(), value, host.system(), host.pattern?.() ?? null);
     if (verdict.kind === "keep") {
       settle();
       return;
