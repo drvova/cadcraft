@@ -1278,7 +1278,7 @@ const PLAIN_KEYS: [&str; 11] = ["wall", "width", "profile", "metal", "cut", "sto
 /// A whole piece: its kind, and any of its other parameters, each in its range. Awkward
 /// proportions are meant: a 30 mm stone on a half-millimetre band, a wall thicker than the band
 /// is wide, four hundred stones.
-fn piece_json(tc: &TestCase) -> Map<String, Value> {
+pub(super) fn piece_json(tc: &TestCase) -> Map<String, Value> {
     let mut p = Map::new();
     p.insert("kind".into(), piece_value(tc, "kind"));
     if tc.draw(gs::weighted_booleans(0.8)) {
@@ -1828,7 +1828,7 @@ fn keys_of(cmd: &str) -> Vec<&'static str> {
         "techsheet" => vec!["handles", "metal", "section", "size", "radius", "system", "table", "at", "layer"],
         "piece" => PIECE.to_vec(),
         "piecemesh" => PIECE.iter().copied().chain(["quality"]).collect(),
-        "stlout" => PIECE.iter().copied().chain(["quality", "stones", "binary"]).collect(),
+        "stlout" => PIECE.iter().copied().chain(["quality", "stones", "binary", "maxTriangles"]).collect(),
         _ => vec!["limit", "space"],
     }
 }

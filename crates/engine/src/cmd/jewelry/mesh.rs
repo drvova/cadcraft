@@ -79,6 +79,7 @@ use serde_json::{Value, json};
 use super::super::*;
 use super::piece_params::{self as shared, Head, MAX_PIECE_STONES, MIN_CAST_WALL, PieceKind, PieceParams, Profile, Row, Section, proportions};
 use super::sizes::RingSize;
+use super::solid::{self as solid, Axes, Csg, Envelope, Outline, Prim, Solid, solidify};
 use super::*;
 
 /// The most triangles a reply holds.
@@ -87,6 +88,25 @@ pub(super) const MAX_TRIANGLES: usize = 150_000;
 const MAX_JSON_ESTIMATE: usize = 3_600_000;
 /// The most triangles an ASCII STL holds (about 200 bytes each).
 const MAX_ASCII_TRIANGLES: usize = 30_000;
+
+// Seats. These are this project's approximation of a bench's usual figures, as its authors
+// understand them — not taken from a cited standard.
+
+/// The gap left all round a stone in its seat (and in the bearing cut into its prongs), mm.
+const SEAT_CLEARANCE: f64 = 0.05;
+/// A centre stone's clearance hole under its culet: its radius as a fraction of the girdle's
+/// inradius.
+const CULET_HOLE: f64 = 0.3;
+/// How far past the culet's clearance over the band the culet hole reaches, mm (into the band when
+/// the head stands low).
+const CULET_POCKET: f64 = 0.25;
+/// A set melee's (halo, eternity) through-hole for light and cleaning: its radius as a fraction of
+/// the girdle's radius (a hole about half the stone's diameter).
+const PAVE_HOLE: f64 = 0.5;
+/// How far a melee's bore (the girdle-sized opening it is set through) reaches past the metal, mm.
+const BORE_OVER: f64 = 1.0;
+/// How far under a halo seat's plate a melee's through-hole reaches, mm.
+const HOLE_OVER: f64 = 0.5;
 
 /// How far a star facet reaches from the table's edge to the girdle.
 const STAR_LENGTH: f64 = 0.5;
@@ -196,6 +216,10 @@ pub(super) struct PieceMesh {
     pub level: usize,
     /// Even the coarsest level is over the budget (never so for `PIECEMESH`).
     pub over: bool,
+    /// The metal as a construction of analytic parts, seats cut, for the merged solid.
+    pub csg: Csg,
+    /// How many stone seats `csg` cuts.
+    pub seats: u32,
 }
 
 impl PieceMesh {
@@ -561,7 +585,12 @@ fn band_section(s: &Sane, d: &Detail) -> Vec<(f64, f64)> {
     polygon.iter().map(|q| (s.ri + q.y, q.x)).collect()
 }
 
-fn build_band(buf: &mut Buf, s: &Sane, d: &Detail) {
+/// The band's section for the merged solid: finer than any tessellation level.
+const SOLID_SECTION: usize = 128;
+
+fn build_band(buf: &mut Buf, csg: &mut Csg, s: &Sane, d: &Detail) {
+    let fine = Detail { dome: SOLID_SECTION, ..*d };
+    csg.add.push(Prim::Revolve(solid::Section::new(band_section(s, &fine).iter().map(|(r, z)| Vec2::new(*r, *z)).collect())));
     let section = band_section(s, d);
     let n = (d.band.clamp(8, 1024) / 4) * 4;
     let mut first: Option<Ring> = None;
@@ -828,6 +857,46 @@ fn vertex_normals(poly: &[Vec2], centre: Vec2) -> Vec<Vec2> {
 // The pieces
 // ---------------------------------------------------------------------------------------------
 
+fn axes_of(f: &Frame) -> Axes {
+    Axes { o: f.o, u: f.u, v: f.v, w: f.w }
+}
+
+/// The room a stone takes in its seat: its girdle, crown and pavilion (a cabochon's dome) grown by
+/// [`SEAT_CLEARANCE`], and a bore of `bore` over the girdle when it is set from above.
+fn seat_envelope(shape: &StoneShape, frame: &Frame, girdle: f64, crown: f64, pavilion: f64, bore: Option<f64>) -> Envelope {
+    let (outline, reach) = if shape.round {
+        (Outline::Circle(shape.width / 2.0), shape.width / 2.0)
+    } else {
+        let r = -super::solid::poly_dist(&shape.poly, shape.centre);
+        (Outline::Poly(shape.poly.clone()), if r.is_finite() { r.max(0.0) } else { 0.0 })
+    };
+    Envelope {
+        axes: axes_of(frame),
+        outline,
+        reach,
+        girdle,
+        crown,
+        pavilion,
+        table: shape.table,
+        cab: shape.cab,
+        clearance: SEAT_CLEARANCE,
+        bore,
+        profile: Vec::new(),
+        span: (0.0, 0.0),
+    }
+}
+
+/// Fits a seat to its stone as built at this level and at the finest one (`make` builds the stone
+/// at a level's detail into a buffer), so the room holds the stone however it is tessellated.
+fn fit_seat(envelope: &mut Envelope, d: &Detail, make: &dyn Fn(&mut Buf, &Detail)) {
+    let mut buf = Buf::default();
+    make(&mut buf, d);
+    if let Some(fine) = DETAILS.first() {
+        make(&mut buf, fine);
+    }
+    envelope.fit(&buf.pos);
+}
+
 /// The parts being built, by name.
 #[derive(Default)]
 struct Parts {
@@ -842,6 +911,8 @@ struct Parts {
     notes: Vec<String>,
     stones: u32,
     fits: Option<u32>,
+    csg: Csg,
+    seats: u32,
 }
 
 impl Parts {
@@ -979,7 +1050,9 @@ fn build_head(s: &Sane, d: &Detail, out: &mut Parts, stone: Standing) -> Stood {
         }
         path.push(frame.at(site.x, site.y, 0.0));
         path.push(frame.at(tip.x, tip.y, tip_h));
-        capsule(&mut out.prongs, &smooth_path(&path, d.sub), rp, d.radial, d.cap);
+        let wire = smooth_path(&path, d.sub);
+        capsule(&mut out.prongs, &wire, rp, d.radial, d.cap);
+        out.csg.add.push(Prim::Wire { pts: wire, r: rp, closed: false });
     }
     if !cab {
         let rail: Vec<Vec3> = poly
@@ -991,6 +1064,28 @@ fn build_head(s: &Sane, d: &Detail, out: &mut Parts, stone: Standing) -> Stood {
             })
             .collect();
         loop_wire(&mut out.head, &rail, frame.w, rail_r, d.radial);
+        out.csg.add.push(Prim::Wire { pts: rail, r: rail_r, closed: true });
+    }
+    // The seat: the stone's own room in the prongs and the rail (the bearing), and a clearance
+    // hole under the culet.
+    let (girdle, crown, pavilion) = if cab { (0.0, head.depth, 0.0) } else { proportions(head.depth) };
+    let mut envelope = seat_envelope(&shape, &frame, girdle, crown, pavilion, None);
+    fit_seat(&mut envelope, d, &|b, dd| {
+        StoneShape::of(cut, stone.length, stone.width, head.depth, dd.outline).build(b, &frame, dd.centre, dd.dome / 2)
+    });
+    if let Some(reach) = (envelope.reach > 1e-6).then_some(envelope.reach) {
+        if !cab {
+            let at = Axes { o: frame.at(centre.x, centre.y, 0.0), ..envelope.axes };
+            let culet = -girdle / 2.0 - pavilion;
+            out.csg.cut.push(Prim::Cylinder {
+                axes: at,
+                r: CULET_HOLE * reach,
+                lo: culet - head.clear - CULET_POCKET,
+                hi: -girdle / 2.0 - 0.5 * pavilion,
+            });
+        }
+        out.csg.cut.push(Prim::Seat(envelope));
+        out.seats += 1;
     }
     if !shape.round && !cab {
         out.note(format!(
@@ -1069,10 +1164,32 @@ fn build_solitaire(s: &Sane, d: &Detail, out: &mut Parts) {
                 size_json(p.gap)
             )),
             Some(centres) => {
+                let (mg, mc, mp) = proportions(seat.depth);
                 for c in &centres {
                     let f = Frame { o: frame.at(c.x, c.y, 0.0), ..frame };
                     round_brilliant(&mut out.melee, &f, seat.melee / 2.0, seat.depth, shared::table_ratio(round_cut), d.melee);
                     out.stones += 1;
+                    // Its seat in the plate: a cone at the pavilion's angle, a bore to set it
+                    // through and a hole through the plate.
+                    let r = seat.melee / 2.0;
+                    let mut envelope = Envelope {
+                        axes: axes_of(&f),
+                        outline: Outline::Circle(r),
+                        reach: r,
+                        girdle: mg,
+                        crown: mc,
+                        pavilion: mp,
+                        table: shared::table_ratio(round_cut),
+                        cab: false,
+                        clearance: SEAT_CLEARANCE,
+                        bore: Some(mg / 2.0 + mc + BORE_OVER),
+                        profile: Vec::new(),
+                        span: (0.0, 0.0),
+                    };
+                    fit_seat(&mut envelope, d, &|b, dd| round_brilliant(b, &f, r, seat.depth, shared::table_ratio(round_cut), dd.melee));
+                    out.csg.cut.push(Prim::Seat(envelope));
+                    out.csg.cut.push(Prim::Cylinder { axes: axes_of(&f), r: PAVE_HOLE * r, lo: -seat.under - HOLE_OVER, hi: 0.0 });
+                    out.seats += 1;
                 }
                 // The seat: a flat ring under the halo, from just outside the centre stone to
                 // just outside the melee.
@@ -1098,6 +1215,15 @@ fn build_solitaire(s: &Sane, d: &Detail, out: &mut Parts) {
                 if let (Some(a), Some(b)) = (prev, first) {
                     out.seat.bridge(a, b);
                 }
+                let outline = if shape.round { Outline::Circle(shape.width / 2.0) } else { Outline::Poly(poly.clone()) };
+                out.csg.add.push(Prim::Plate {
+                    axes: axes_of(&frame),
+                    outline,
+                    inner: (near - 0.1).max(0.02),
+                    outer: near + seat.melee + 0.2,
+                    lo: -seat.under,
+                    hi: top,
+                });
                 if cut.name == "heart" {
                     out.notes.push("Around a heart the halo follows the lobes and the point; in the cleft its seat is approximate.".to_string());
                 }
@@ -1123,10 +1249,19 @@ fn build_eternity(s: &Sane, d: &Detail, out: &mut Parts) {
     // A cabochon's frame is its base; a faceted stone's is its girdle.
     let seat_r = if shape.cab { row.top - depth } else { row.radius };
     let radial = |v: Vec2| Vec3::new(v.x, v.y, 0.0);
+    let (girdle, crown, pavilion) = if shape.cab { (0.0, depth, 0.0) } else { proportions(depth) };
+    // A bore up through the band's outside, and a hole down through it to the finger.
+    let bore = (s.ri + p.wall + BORE_OVER - seat_r).max(girdle / 2.0 + crown + SEAT_CLEARANCE);
+    let through = seat_r - s.ri + BORE_OVER;
     for k in 0..n {
         let w = radial(Row::out(k, n));
         let f = Frame { o: w * seat_r, u: Vec3::new(-w.y, w.x, 0.0), v: Vec3::Z, w };
         shape.build(&mut out.melee, &f, d.melee, 2);
+        let mut envelope = seat_envelope(&shape, &f, girdle, crown, pavilion, Some(bore));
+        fit_seat(&mut envelope, d, &|b, dd| StoneShape::of(cut, m, m, depth, 16 * dd.melee.clamp(1, 8)).build(b, &f, dd.melee, 2));
+        out.csg.cut.push(Prim::Cylinder { axes: axes_of(&f), r: PAVE_HOLE * envelope.reach, lo: -through, hi: 0.0 });
+        out.csg.cut.push(Prim::Seat(envelope));
+        out.seats += 1;
     }
     out.stones += n;
 
@@ -1145,6 +1280,7 @@ fn build_eternity(s: &Sane, d: &Detail, out: &mut Parts) {
                 let z = sign * z0;
                 let r = (s.outside_at(z) - 0.2 * rb).max(s.ri + rb + 0.02);
                 bead(&mut out.beads, w * r + Vec3::Z * z, w, rb, d.bead_radial, d.bead_lat);
+                out.csg.add.push(Prim::Sphere { c: w * r + Vec3::Z * z, r: rb });
             }
         }
     } else if n >= 2 {
@@ -1260,7 +1396,7 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
     });
     let s = Sane::of(p);
     let mut parts = Parts::default();
-    build_band(&mut parts.band, &s, &d);
+    build_band(&mut parts.band, &mut parts.csg, &s, &d);
     match s.p.kind {
         PieceKind::Band => {}
         PieceKind::Solitaire | PieceKind::ThreeStone => build_solitaire(&s, &d, &mut parts),
@@ -1283,7 +1419,7 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
     .into_iter()
     .flatten()
     .collect();
-    PieceMesh { meshes, notes: parts.notes, stones: parts.stones, fits: parts.fits, level, over: false }
+    PieceMesh { meshes, notes: parts.notes, stones: parts.stones, fits: parts.fits, level, over: false, csg: parts.csg, seats: parts.seats }
 }
 
 fn piece_mesh_within(p: &PieceParams, quality: Quality, budget: Budget) -> PieceMesh {
@@ -1337,6 +1473,26 @@ pub(super) fn stl_triangles(mesh: &PieceMesh, stones: bool) -> (Vec<[Vec3; 4]>, 
         }
     }
     (out, dropped)
+}
+
+/// The stones' triangles alone, for an STL beside the merged solid.
+fn stone_triangles(mesh: &PieceMesh) -> Vec<[Vec3; 4]> {
+    let stones = PieceMesh {
+        meshes: mesh
+            .meshes
+            .iter()
+            .filter(|m| m.part == "stone")
+            .map(|m| PartMesh { positions: m.positions.clone(), indices: m.indices.clone(), ..*m })
+            .collect(),
+        notes: Vec::new(),
+        stones: 0,
+        fits: None,
+        level: 0,
+        over: false,
+        csg: Csg::default(),
+        seats: 0,
+    };
+    stl_triangles(&stones, true).0
 }
 
 /// A binary STL: an 80-byte header, the triangle count, then each triangle's normal and three
@@ -1408,8 +1564,13 @@ pub fn specs() -> Vec<CommandSpec> {
             .alias(&["stlexport"])
             .params(
                 "{kind: band|solitaire|threestone|eternity, …the piece's parameters as PIECE takes them, stones?: bool (default false: the metal only, which \
-                 is what is cast), quality?: draft|fine (default fine), binary?: bool (default true)} → {format: stl-binary|stl-ascii, \
-                 base64 | text, bytes, triangles, name, quality, notes}: the piece as an STL in millimetres; changes nothing",
+                 is what is cast), quality?: draft|fine (default fine: the metal sampled at 0.1 mm; draft 0.2 mm), binary?: bool (default true), \
+                 maxTriangles?: 1000–1000000 (default 150000; an ASCII STL at most 30000)} → {format: stl-binary|stl-ascii, base64 | text, bytes, \
+                 triangles, name, quality, step (the grid step the metal was sampled at, mm: coarser than asked when it must be to fit), seats, \
+                 bodies (1: the metal casts whole), metal: {name, density, volumeMm3, grams (the merged solid: what is cast), band: {volumeMm3, \
+                 grams} (the band alone, exactly: what PIECE and the bench sheet report)}, notes}: the piece as an STL in millimetres, the \
+                 metal one closed, manifold, outward-facing shell with a seat cut for every stone, the stones (when asked) shells of their \
+                 own; changes nothing",
             )
             .enabled(always)
             .noundo(),
@@ -1468,26 +1629,107 @@ fn run_piecemesh(_s: &mut Session, p: &Value) -> Result<Value> {
     Ok(reply)
 }
 
+/// The merged solid's grid step at each quality, mm.
+const SOLID_STEP_FINE: f64 = 0.1;
+const SOLID_STEP_DRAFT: f64 = 0.2;
+/// The most triangles a binary STL may be asked for with `maxTriangles` (about 50 MB); without it
+/// the file holds at most [`MAX_TRIANGLES`], what the interface downloads.
+pub(super) const MAX_SOLID_TRIANGLES: usize = 1_000_000;
+/// How far the merged solid's volume may stand from the analytic band's, as a fraction per
+/// millimetre of grid step (1% at fine quality's 0.1 mm, 2% at draft's 0.2 mm), before the reply
+/// says so. The piecewise-linear surface cuts a convex section's corners, so the solid comes out a
+/// little light: about 0.1–0.3% at 0.1 mm on usual bands, up to about 1.3% at 0.2 mm on a small,
+/// thin one.
+pub(super) const SOLID_AGREEMENT_PER_MM: f64 = 0.1;
+
+/// The metal as one closed shell (seats cut) at `quality`'s grid step, coarser when it must be to
+/// stay under `max_tris`: its triangles (normal first), the solid, and notes.
+pub(super) fn solid_stl(mesh: &PieceMesh, quality: Quality, max_tris: usize) -> std::result::Result<(Vec<[Vec3; 4]>, Solid, Vec<String>), String> {
+    let step = match quality {
+        Quality::Fine => SOLID_STEP_FINE,
+        Quality::Draft => SOLID_STEP_DRAFT,
+    };
+    let (solid, coarsened) = solidify(&mesh.csg, step, max_tris)?;
+    let mut notes = Vec::new();
+    if coarsened {
+        notes.push(format!(
+            "The merged solid is sampled at {} mm, coarser than {} quality's {step} mm, to stay under {max_tris} triangles.",
+            fmt_mm(solid.step),
+            quality.name()
+        ));
+    }
+    let mut tris = Vec::with_capacity(solid.triangles());
+    for t in solid.indices.chunks_exact(3) {
+        let at = |k: usize| t.get(k).and_then(|i| solid.positions.get(*i as usize)).copied();
+        let (Some(a), Some(b), Some(c)) = (at(0), at(1), at(2)) else { continue };
+        let n = (b - a).cross(c - a);
+        let len = n.len();
+        let n = if len.is_finite() && len > 0.0 { n * (1.0 / len) } else { Vec3::Z };
+        tris.push([n, a, b, c]);
+    }
+    Ok((tris, solid, notes))
+}
+
 fn run_stlout(_s: &mut Session, p: &Value) -> Result<Value> {
     let cmd = "stlout";
     let piece = piece_of(cmd, p)?;
     let quality = Quality::parse(cmd, p, Quality::Fine)?;
     let stones = bool_or(p, "stones", false);
     let binary = bool_or(p, "binary", true);
-    let budget = Budget { triangles: if binary { MAX_TRIANGLES } else { MAX_ASCII_TRIANGLES }, json: None, stones };
+    let cap = match p.get("maxTriangles").filter(|v| !v.is_null()) {
+        None => MAX_TRIANGLES,
+        Some(v) => match v.as_f64() {
+            Some(n) if n.is_finite() && (1000.0..=MAX_SOLID_TRIANGLES as f64).contains(&n) => n as usize,
+            _ => return Err(bad(cmd, format!("`maxTriangles` is a number from 1000 to {MAX_SOLID_TRIANGLES}"))),
+        },
+    };
+    let cap = if binary { cap } else { cap.min(MAX_ASCII_TRIANGLES) };
+    // The tessellated piece gives the stones (and the notes); the metal is the merged solid.
+    // At most half the file for the tessellated piece (the stones are what is kept of it), so the
+    // merged metal always has the other half.
+    let budget = Budget { triangles: cap / 2, json: None, stones };
     let mesh = piece_mesh_within(&piece, quality, budget);
-    if mesh.over {
-        return Err(bad(cmd, format!("this piece is more than {} triangles, too many for an ASCII STL; ask for the binary one", budget.triangles)));
+    if stones && mesh.over {
+        return Err(bad(
+            cmd,
+            format!("this piece's stones are more than {} triangles, too many for an ASCII STL; ask for the binary one", budget.triangles),
+        ));
     }
-    let (tris, dropped) = stl_triangles(&mesh, stones);
+    let stone_tris = if stones { stone_triangles(&mesh) } else { Vec::new() };
+    let room = cap.saturating_sub(stone_tris.len()).max(1);
+    let (mut tris, solid, mut extra) = solid_stl(&mesh, quality, room).map_err(|e| bad(cmd, e))?;
+    if stones {
+        tris.extend(stone_tris);
+    }
     let mut notes = mesh.notes;
-    if dropped > 0 {
-        notes.push(format!("{dropped} triangles with no area were left out."));
-    }
+    notes.append(&mut extra);
     if piece.wall < MIN_CAST_WALL {
         notes.push(format!("A {} mm wall is thinner than a bench casts ({MIN_CAST_WALL} mm).", size_json(piece.wall)));
     }
-    notes.push(if stones { "The stones are included as shells of their own." } else { "The metal only: the stones are left out." }.to_string());
+    notes.push(
+        if stones {
+            "The metal is one closed shell with a seat cut for every stone; the stones are included as shells of their own."
+        } else {
+            "The metal only, as one closed shell with a seat cut for every stone: the stones are left out."
+        }
+        .to_string(),
+    );
+    let volume = solid.volume();
+    let band = piece.band_volume();
+    if solid.bodies > 1 {
+        notes.push(format!(
+            "The metal is in {} separate pieces, not one: a seat cuts a part clean through (stones crowding each other or a prong) — give the stones more room.",
+            solid.bodies
+        ));
+    }
+    let agreement = SOLID_AGREEMENT_PER_MM * solid.step;
+    if piece.kind == PieceKind::Band && band > 0.0 && ((volume - band) / band).abs() > agreement {
+        notes.push(format!(
+            "The solid's volume ({volume:.1} mm³) is more than {:.0}% from the band's exact volume ({band:.1} mm³): the band is thin for the {} mm sampling step.",
+            agreement * 100.0,
+            fmt_mm(solid.step)
+        ));
+    }
     let title = format!("{}-us{}-{}", piece.kind.name(), fmt_mm(piece.size.us), piece.metal);
     let name = format!("{title}.stl");
     let mut reply = json!({
@@ -1495,6 +1737,16 @@ fn run_stlout(_s: &mut Session, p: &Value) -> Result<Value> {
         "name": name,
         "quality": quality.name(),
         "units": "mm",
+        "step": r3(solid.step),
+        "seats": mesh.seats,
+        "bodies": solid.bodies,
+        "metal": {
+            "name": piece.metal,
+            "density": piece.density,
+            "volumeMm3": r3(volume),
+            "grams": r3(volume / 1000.0 * piece.density),
+            "band": { "volumeMm3": r3(band), "grams": r3(piece.band_grams()) },
+        },
         "notes": notes,
     });
     if binary {
