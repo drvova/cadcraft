@@ -141,6 +141,7 @@ our output in AutoCAD black-box.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | Rhino `.3dm` row (ADR 0003) |
 | 2026-10-25 | minor | Raster images attach, draw and trace: IMAGEATTACH (path or base64, sizing, rotation, clips, brightness/contrast/fade, IMAGEFRAME), the picture drawn in the app and in PNG exports, IMAGETRACE (Otsu threshold, marching squares, Douglas–Peucker simplification, sized to a measurement), and MCP `attach_image`/`trace_image`/`describe_drawing`; IMAGE row narrowed to TIFF/BMP |
 | 2026-10-22 | minor | DXF/DWG save: angular, diametric and radial dimensions get standard DIMASSOC objects (one centre reference to the circle for radial/diametric, the definition points for angular), so AutoCAD follows their geometry; the standard objects of those kinds are read back too, without CADCraft's xdata (#1651) |
 | 2026-10-19 | minor | DXF/DWG save: angular dimension block text honors DIMDSEP, including per-dimension overrides (#1646) |
