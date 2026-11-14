@@ -294,6 +294,33 @@ commands on this page, so its bench sheet reads back: 32 stones, 1.35 ct, a 3.86
   Download STL. The stills (the Templates thumbnails, the Tech Sheet's views, the proposal
   cards' before and after) are drawn the same way, Realistic unless the Tech Sheet is told
   otherwise.
+- **Four views** (`apps/ui/src/fourview.ts`, tested): on a wide stage the 3D tab opens tiled
+  2×2, Top, Perspective, Front and Right, each named in its corner. Top looks down on the head
+  (−Y), Front along the finger (−Z, the ring seen round), Right down −X (the ring edge-on). The
+  three orthographic panes are flat-shaded with their feature edges in one ink and the ground's
+  grid, not Realistic: a size is read off a sharp silhouette, and the studio's highlights move
+  and blur the edges. They are fitted at one shared scale (a millimetre is as long in all three);
+  after that each is panned (any drag, or the arrows) and zoomed (the wheel, a pinch, + and −)
+  on its own, and F fits all four again. Perspective keeps the display mode. A double-click on a
+  pane, M, or the bar's Maximise fills the stage with it and restores the four; the bar's
+  "4 views" toggles the single Perspective view, which is the default under 560 px (a phone).
+  The layout is remembered by the browser. All four are drawn on one WebGL context, each
+  scissored to its rectangle of a store kept between frames, so only the pane whose eye or
+  piece changed is drawn again: turning the Perspective pane draws that pane alone.
+- **Handles on the piece** (`apps/ui/src/handles.ts`, tested) stand where the parameter shows:
+  the centre stone's girdle (`stoneWidth`, the length keeping its proportion), the halo's outer
+  melee (`halo`), an eternity's stone at twelve o'clock (`melee`), the band's outside on the right
+  (`wall`; the inside is the finger's size and does not move) and the band's edge on the left
+  (`width`). A handle is offered on every pane where its direction is not foreshortened toward the
+  eye. Dragging follows the pointer along that direction, snapped (0.05 mm for wall and width,
+  0.1 mm for melee, the stock centre sizes: tenths under 3 mm, quarters to 10 mm, halves above;
+  Shift for hundredths) and held to the ranges `piece` takes; the piece is previewed at draft
+  quality (`piecemesh`, at most one in 50 ms) and the number, its unit and what it was stand by
+  the pointer, with the checks it would break (`propose`, read and dropped at once, after 220 ms
+  at rest) or the engine's refusal. The release makes one `piece` change (one undo step); with Alt
+  held it is a proposal, which the assistant shows as a card. To the keyboard each handle is a
+  slider with a name: the arrows nudge it a stop, Enter commits (Alt+Enter proposes), Escape or
+  leaving it puts it back. A refused value is said in a short line and nothing changes.
 - **Realistic** shows the piece as jewelry (`apps/ui/src/materials.ts` holds its numbers, tested;
   the shaders are in `render3d.ts`). It is an honest approximation drawn in WebGL 1, not a ray
   tracer:
@@ -413,6 +440,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-13 | minor | The 3D tab's four-view workspace (Top, Front, Right orthographic and flat-shaded at one scale; Perspective in its mode; maximise by double-click, M or the bar; remembered; single view under 560 px) on one scissored context, and drag handles on the piece (centre stone, halo melee, eternity stones, wall, width) that preview at draft quality, show the value and the checks it would break, and commit one `piece` change or, with Alt, a proposal; keyboard sliders |
 | 2026-11-13 | patch | Realistic studio: concentric gradient rings round the lens replace the front strips and low cards, so flat faces carry a band from the front, top, side and through an orbit and the side view is calm; the lights are eased toward a ceiling and strips mirror coloured alloys a shade deeper (gold18 lit-pixel median saturation 0.53 → 0.59, silver near-white pixels 19% → 0%); coloured stones return a deeper body colour and mirror the rings dimmed; the derivatives variant of the shader compiles again; the stage stays dark in the light theme by design |
 | 2026-11-13 | patch | Realistic studio: gradient strips round the lens, tall side strips and low cards, a smaller dark lens spot, so broad polished faces carry a bright highlight band beside a dark one instead of reading as flat bronze |
 | 2026-11-13 | patch | Realistic gold reads warm: metal keeps its hue through the tone curve, and a coloured alloy's dim reflections take its deeper tint; platinum, silver and the stones unchanged |
