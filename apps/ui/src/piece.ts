@@ -879,7 +879,6 @@ export function judgePieceDraft(row: PieceRow, draft: string, system = "us", hel
   }
   switch (row.kind) {
     case "readonly":
-    case "action":
       return { kind: "keep" };
     case "size":
       return judgeSize(row, draft, system);
