@@ -13,7 +13,7 @@ Not applicable: hand-rolled — the recipe is the app's own `src/ui/ui.css`, mea
 ## Examples
 `<Button variant="primary">Save</Button>` — the one action of a dialog or a pane.
 
-Real uses, 57 call sites (`rg -c "<Button" src` → `src/components/AssistantPane.tsx:9`, `src/components/DraftingSettings.tsx:4`, `src/components/InlineAsk.tsx:1`, `src/components/JewelryDialog.tsx:2`, `src/components/LayerManager.tsx:7`, `src/components/RecoveryBar.tsx:6`, `src/components/TopBar.tsx:1`, `src/components/ProposalCards.tsx:3`):
+Real uses, 59 call sites (`rg -c "<Button" src` → `src/components/AssistantPane.tsx:9`, `src/components/DraftingSettings.tsx:4`, `src/components/InlineAsk.tsx:1`, `src/components/JewelryDialog.tsx:2`, `src/components/LayerManager.tsx:7`, `src/components/RecoveryBar.tsx:6`, `src/components/TopBar.tsx:1`, `src/components/ProposalCards.tsx:3`):
 - `src/components/ProposalCards.tsx:187` — a proposal card's decision: Reject (`variant="ghost" size="sm"`) and Accept (`variant="primary" size="sm"`, the card's one action, disabled with "Wait for this turn to end" while the assistant's turn runs), and one Reject all (`variant="ghost" size="sm"`) over the variants of one `propose`. Added 2026-11-13.
 - `src/components/JewelryDialog.tsx` — the Ring and Gem dialogs' footer: Cancel (the default) and OK (`variant="primary" type="submit"`). Added 2026-11-12.
 - `src/components/InlineAsk.tsx` — the offer over a selection on the drawing ("Ask about 18 selected objects", `variant="quiet" size="sm"`, `shortcut` the key that opens the same line): it stands in a small box of the elevated surface that the surface draws, and opens the inline ask. Added 2026-11-12.
