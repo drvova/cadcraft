@@ -549,22 +549,22 @@ fn a_binary_stl_is_84_plus_50_bytes_a_triangle_and_reads_back() {
         assert!(r.get("text").is_none());
         let tris = read_stl(&bytes);
         assert_eq!(tris.len(), n);
-        // The same triangles the mesh has: the metal, and the stones only when asked.
+        // The metal is the merged solid; the stones, when asked, are the mesh's own shells.
         let pp = PieceParams::parse("test", &p).unwrap();
         let quality = if p["quality"] == "draft" { Quality::Draft } else { Quality::Fine };
         let mesh = piece_mesh(&pp, quality);
-        let want: usize = mesh.meshes.iter().filter(|m| stones || m.part == "metal").map(PartMesh::triangles).sum();
-        assert_eq!(n, want, "{p}");
+        let stone_tris: usize = mesh.meshes.iter().filter(|m| m.part == "stone").map(PartMesh::triangles).sum();
+        let metal = if stones { n - stone_tris } else { n };
+        assert!(metal > 0 && (!stones || n > stone_tris), "{p}");
         let mut six = 0.0f64;
-        for [normal, a, b, c] in &tris {
+        for [normal, a, b, c] in &tris[..metal] {
             let v = |q: &[f32; 3]| Vec3::new(f64::from(q[0]), f64::from(q[1]), f64::from(q[2]));
             let len = v(normal).len();
             assert!((len - 1.0).abs() < 1e-4, "a normal of length {len}");
             six += v(a).dot(v(b).cross(v(c)));
         }
-        if !stones {
-            assert!((six / 6.0 - mesh.shells_volume()).abs() / mesh.shells_volume() < 1e-4, "the STL encloses the metal shells' volume");
-        }
+        let said = r["metal"]["volumeMm3"].as_f64().unwrap();
+        assert!((six / 6.0 - said).abs() / said < 1e-4, "{p}: the STL's metal encloses {} mm³, the reply says {said}", six / 6.0);
         assert!(r["name"].as_str().unwrap().ends_with("-us6-gold18.stl"), "{}", r["name"]);
         assert_eq!(r["quality"], quality.name());
         assert!(has_note(&r["notes"], if stones { "stones are included" } else { "metal only" }));
@@ -699,8 +699,13 @@ fn hostile_input_is_refused_or_handled_and_never_nan() {
         let mut q = p.clone();
         q["stones"] = json!(true);
         q["quality"] = json!("draft");
-        let stl = s.execute("stlout", &q).unwrap();
-        assert_eq!(base64_decode(stl["base64"].as_str().unwrap()).unwrap().len(), 84 + 50 * stl["triangles"].as_u64().unwrap() as usize);
+        // The merged solid may have nothing left: seats that cut the whole band away.
+        match s.execute("stlout", &q) {
+            Ok(stl) => {
+                assert_eq!(base64_decode(stl["base64"].as_str().unwrap()).unwrap().len(), 84 + 50 * stl["triangles"].as_u64().unwrap() as usize)
+            }
+            Err(e) => assert!(e.to_string().contains("no metal"), "{q}: {e}"),
+        }
     }
     // Parameters that never went through the parser (NaN, infinities, nonsense counts) still
     // make a finite, closed solid.

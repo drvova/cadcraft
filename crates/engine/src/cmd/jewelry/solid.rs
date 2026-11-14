@@ -32,7 +32,9 @@ const MAX_EVALS: u64 = 400_000_000;
 const MAX_FIT_POINTS: usize = 200_000;
 /// How far along a grid edge a surface vertex may lie from either end, as a fraction of the edge.
 const EDGE_CLAMP: f64 = 0.01;
-/// The most attempts at successively coarser steps.
+/// The finest step a piece too thin for the asked one is sampled at, mm.
+const MIN_STEP: f64 = 0.02;
+/// The most attempts at successively coarser (or, for a thin piece, finer) steps.
 const MAX_ATTEMPTS: usize = 10;
 
 /// A plane's origin and three orthonormal axes: `u` and `v` in the plane, `w` square to it.
@@ -764,7 +766,11 @@ pub(super) fn solidify(csg: &Csg, step: f64, max_tris: usize) -> Result<(Solid, 
                 step *= by.sqrt().max(1.15) * 1.05;
                 coarsened = true;
             }
-            Err(Fail::Empty) => return Err("no metal was found to build: the piece is too small or too thin to sample".into()),
+            // Too thin to catch at this step: sample finer, unless it was coarsened to fit.
+            Err(Fail::Empty) if !coarsened && step / 2.0 >= MIN_STEP => step /= 2.0,
+            Err(Fail::Empty) => {
+                return Err("no metal is left to build: the piece is too thin to sample, or its stones' seats cut all of it away".into());
+            }
             Err(Fail::Broken(e)) => return Err(format!("the merged solid failed its own check ({e}); nothing was written")),
         }
     }
