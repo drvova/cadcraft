@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { fitOrthos, orthoFrame } from "./fourview";
-import { dragValue, formatHandleValue, handlePatch, handleReadout, nudgeValue, pieceHandles, screenHandle, settleValue, STONE_SIZES, type Handle } from "./handles";
+import { shortRefusal, REFUSAL_MAX, dragValue, formatHandleValue, handlePatch, handleReadout, nudgeValue, pieceHandles, screenHandle, settleValue, STONE_SIZES, type Handle } from "./handles";
 import { eyeFrame, sceneOf, standardCamera, type PartMesh, type PieceMesh, type Vec3 } from "./view3d";
 
 /** A part that is just the given points (one triangle per three). */
@@ -140,5 +140,15 @@ describe("what is sent and said", () => {
     expect(formatHandleValue(6.5)).toBe("6.50 mm");
     expect(handleReadout({ label: "Wall", value: 1.8 }, 2)).toBe("Wall 2.00 mm (was 1.80)");
     expect(handleReadout({ label: "Wall", value: 1.8 }, 1.8)).toBe("Wall 1.80 mm");
+  });
+});
+
+describe("a refusal said short", () => {
+  test("the proposal's wrapping goes, and it is clipped", () => {
+    expect(shortRefusal("step 1 (`piece`) failed: invalid parameters for `piece`: side stones do not fit")).toBe("side stones do not fit");
+    expect(shortRefusal("`wall` must be a number of millimetres from 0.3 to 10")).toBe("`wall` must be a number of millimetres from 0.3 to 10");
+    expect(shortRefusal("x".repeat(5000)).length).toBe(REFUSAL_MAX);
+    expect(shortRefusal(42)).toBe("the engine refused this value");
+    expect(shortRefusal("   ")).toBe("the engine refused this value");
   });
 });

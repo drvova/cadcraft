@@ -246,3 +246,22 @@ export function handleReadout(handle: Pick<Handle, "label" | "value">, value: nu
 export function handleTitle(handle: Pick<Handle, "label">, value: number): string {
   return `${handle.label} ${formatHandleValue(value)}`;
 }
+
+/** The most characters of a refusal said beside the cursor. */
+export const REFUSAL_MAX = 180;
+
+/**
+ * An engine refusal as it is said beside the cursor: without the wrapping a proposal's step puts
+ * round it ("step 1 (`piece`) failed: invalid parameters for `piece`: …"), on one line, clipped.
+ */
+export function shortRefusal(error: unknown): string {
+  if (typeof error !== "string") return "the engine refused this value";
+  const bare = error
+    .slice(0, REFUSAL_MAX * 4)
+    .replace(/^\s*step \d+ \(`[a-z]+`\) failed:\s*/i, "")
+    .replace(/^\s*invalid parameters for `[a-z]+`:\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (bare === "") return "the engine refused this value";
+  return bare.length > REFUSAL_MAX ? `${bare.slice(0, REFUSAL_MAX - 1)}…` : bare;
+}

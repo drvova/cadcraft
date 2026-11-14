@@ -68,7 +68,7 @@ import {
   type Pane,
   type Rect,
 } from "../fourview";
-import { dragValue, handlePatch, handleReadout, handleTitle, nudgeValue, pieceHandles, screenHandle, settleValue, type Handle } from "../handles";
+import { dragValue, shortRefusal, handlePatch, handleReadout, handleTitle, nudgeValue, pieceHandles, screenHandle, settleValue, type Handle } from "../handles";
 import { parseProposals, checkLines } from "../proposals";
 import type { Mat4 } from "../view3d";
 import {
@@ -948,7 +948,7 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
     const env = await props.execute("piecemesh", { ...pieceParams, ...patch, quality: "draft" });
     if (disposed || edit() === null) return;
     if (!env.ok) {
-      setEdit({ ...now, verdict: { kind: "refused", message: env.error } });
+      setEdit({ ...now, verdict: { kind: "refused", message: shortRefusal(env.error) } });
       return;
     }
     const reply = parseMeshReply(env.result);
@@ -972,7 +972,7 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
     const after = edit();
     if (disposed || after === null || after.value !== now.value) return;
     if (!env.ok) {
-      setEdit({ ...after, verdict: { kind: "refused", message: env.error } });
+      setEdit({ ...after, verdict: { kind: "refused", message: shortRefusal(env.error) } });
       return;
     }
     const first = made[0];
@@ -1030,7 +1030,7 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
     if (Math.abs(now.value - now.handle.value) < 1e-9) return;
     const error = props.onPieceEdit(handlePatch(now.handle, now.value, pieceParams), propose, handleTitle(now.handle, now.value));
     if (error !== null) {
-      setHandleSaid(`Not changed: ${error}`);
+      setHandleSaid(`Not changed: ${shortRefusal(error)}`);
       restore();
       return;
     }
