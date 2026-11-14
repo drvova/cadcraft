@@ -1392,6 +1392,7 @@ fn build_pave(s: &Sane, d: &Detail, out: &mut Parts) {
     if let Some(surf) = pave_band::Surface::of(&s.p) {
         for (c, up, rb) in pave_band::beads(&fit, &surf) {
             bead(&mut out.beads, c, up, rb, d.bead_radial, d.bead_lat);
+            out.csg.add.push(Prim::Sphere { c, r: rb });
         }
     }
     if !fit.ok() {

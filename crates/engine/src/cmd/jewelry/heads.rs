@@ -134,7 +134,6 @@ impl Bezel {
     }
     /// The signed distance from `(d, h)` to the section: negative inside, 1-Lipschitz (the least
     /// of two rectangles' distances).
-    #[allow(dead_code, reason = "the solid builder's signed-distance bound (`bezel_sdf`)")]
     pub(super) fn section_distance(&self, d: f64, h: f64) -> f64 {
         let wall = rect_distance(d, h, 0.0, self.wall, self.bottom, self.top());
         let ledge = rect_distance(d, h, -self.ledge, 0.0, self.bottom, self.seat());
@@ -191,7 +190,6 @@ pub(super) fn rect_distance(x: f64, y: f64, x0: f64, x1: f64, y0: f64, y1: f64) 
 }
 
 /// The signed distance from `q` to a closed polygon: exact, negative inside, whichever way it runs.
-#[allow(dead_code, reason = "the solid builder's signed-distance bounds")]
 pub(super) fn polygon_distance(q: Vec2, poly: &[Vec2]) -> f64 {
     let n = poly.len();
     if n < 3 || !q.is_finite() {
@@ -221,7 +219,6 @@ pub(super) fn perimeter(poly: &[Vec2]) -> f64 {
 /// stone, `v` along it, `w` out through the table), the girdle outline in that plane and the
 /// collar's section.
 #[derive(Clone, Debug)]
-#[allow(dead_code, reason = "the solid builder's signed-distance bound (`bezel_sdf`)")]
 pub(crate) struct BezelBound {
     pub o: Vec3,
     pub u: Vec3,
@@ -231,7 +228,6 @@ pub(crate) struct BezelBound {
     pub bezel: Bezel,
 }
 
-#[allow(dead_code, reason = "the solid builder's signed-distance bound (`bezel_sdf`)")]
 impl BezelBound {
     /// `bezel_sdf`: a signed-distance bound for the collar — negative inside, positive outside,
     /// never more than the true distance (1-Lipschitz): the section's distance at (the point's

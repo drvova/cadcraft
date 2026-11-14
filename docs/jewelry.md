@@ -291,7 +291,9 @@ dropped. `stones: true` appends the stones as shells of their own.
   bearing notch at girdle height — and a clearance hole under the culet (30 % of the girdle's
   inradius, reaching 0.25 mm past the culet's clearance). Halo and eternity melee get a cone seat
   from their own pavilion, a girdle-sized bore to set them through, and a through-hole of half the
-  stone's diameter. A seat is the concave hull of the stone's own vertices (at the shown and the
+  stone's diameter; a half eternity's stones and pavé stones get the same (the pavé's hole runs
+  along the surface's normal). A bezel's stone gets its own room cut from the collar's ledge and
+  anything under it. A seat is the concave hull of the stone's own vertices (at the shown and the
   finest tessellation) grown by a 0.05 mm clearance, so the stone never touches the metal. These
   figures are this project's approximation of usual bench practice, not a cited standard.
 - *Resolution.* Fine quality samples at 0.1 mm, draft at 0.2 mm. A file holds at most
@@ -372,9 +374,9 @@ interface the Piece section has a Pavé group: the tick, layout, rows, stone siz
 along the line joining their centres, projected into each girdle's plane: exact for one row on a
 level band (it is the eternity formula), an approximation of the least distance between two
 tilted girdle circles. The rim is arc length across the outside to the edge. The head's clearance
-is judged in the ring's plane at the crown. The solid cuts no seats and no scallops: the seat
-cutter reads each stone's frame from `pave_band::stone_frames` (girdle centre, normal, the
-direction round the band, girdle diameter, depth, scallop).
+is judged in the ring's plane at the crown. `STLOUT`'s merged solid cuts each pavé stone's seat
+(a cone seat, a bore to the surface and a hole along the normal) and unions the beads; it does not
+cut the scallops yet.
 
 `OBJECTS` (an inquiry command) lists what a space holds for the interface's Objects section: each
 object's handle, kind, layer, block, first words, one telling size and its groups, capped at
@@ -412,9 +414,10 @@ solitaire, bezel, eternity, half eternity, three-stone. The numbers live in
   outside it (column integration over the face). Check `face`: at least 1.2 mm thick (a 0.4 mm
   engraving over a 0.8 mm cast wall). A flush-set stone in the face (signet cocktail) is not built yet.
 
-The solid is a closed shell per part (`bezel`, `face`, the tapered `band`); each part also exposes
-a signed-distance bound for the single-solid builder (`BezelBound::distance`,
-`PieceParams::taper_distance`, `PieceParams::signet_face_distance`).
+`PIECEMESH` shows a closed shell per part (`bezel`, `face`, the tapered `band`); `STLOUT`'s merged
+solid takes each part's signed-distance bound (`BezelBound::distance`, `Taper::distance_by`,
+`Face::distance`), so a bezel, a dome's or a signet's shank and a signet's face cast as one body
+with the rest.
 
 ## In the interface
 
@@ -600,6 +603,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | `STLOUT`'s merged solid takes the drawn profile, the bezel collar with its stone's seat, the dome's and signet's tapered shank, the signet's face, and seats and beads for half eternity and pavé stones |
 | 2026-11-13 | minor | The 3D tab's four-view workspace (Top, Front, Right orthographic and flat-shaded at one scale; Perspective in its mode; maximise by double-click, M or the bar; remembered; single view under 560 px) on one scissored context, and drag handles on the piece (centre stone, halo melee, eternity stones, wall, width) that preview at draft quality, show the value and the checks it would break, and commit one `piece` change or, with Alt, a proposal; keyboard sliders |
 | 2026-11-13 | minor | `PIECE {profile: {curve: handle}}`: a band profile drawn as a closed curve of the drawing (polyline with bulges, spline, circle, ellipse, region), kept by value with its frame (box bottom on the finger, centred across), width and wall read from it, weight by Pappus, the wall check at its thinnest, the solid revolved from it; the Piece panel names it "Custom (from drawing)" with Update from curve. Rails are not built yet (J8) |
 | 2026-11-13 | minor | Pavé on the band: `PIECE {pave}` (row, rows, honeycomb, scallop; 1–3 rows; a named span or angles, mirrored; graduated sizes) placed on the outside of every profile with tables square to the surface, auto-fitted to the span with the residual shared, clear of the head and the rim; a `pave` check; the sheet, the bench sheet, `PIECEMESH`, `propose` and the Piece section's Pavé group read it |

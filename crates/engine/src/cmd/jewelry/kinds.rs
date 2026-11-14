@@ -310,7 +310,6 @@ impl Face {
     }
     /// `signet_face_sdf`: a signed-distance bound for the plate (negative inside, 1-Lipschitz):
     /// the larger of the distance to its outline in plan and to its two faces.
-    #[allow(dead_code, reason = "the solid builder's signed-distance bound (`signet_face_sdf`)")]
     pub(crate) fn distance(&self, p: Vec3, outline: &[Vec2]) -> f64 {
         let plan = polygon_distance(Vec2::new(p.x, p.z), outline);
         plan.max(self.bottom - p.y).max(p.y - self.top)

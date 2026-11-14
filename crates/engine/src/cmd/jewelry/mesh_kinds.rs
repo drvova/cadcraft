@@ -164,6 +164,7 @@ pub(super) fn build_half_eternity(s: &Sane, d: &Detail, out: &mut Parts) {
                 let z = sign * z0;
                 let r = (s.outside_at(z) - 0.2 * rb).max(s.ri + rb + 0.02);
                 bead(&mut out.beads, w * r + Vec3::Z * z, w, rb, d.bead_radial, d.bead_lat);
+                out.csg.add.push(Prim::Sphere { c: w * r + Vec3::Z * z, r: rb });
             }
         }
     }

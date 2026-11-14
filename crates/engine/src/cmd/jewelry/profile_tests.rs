@@ -421,3 +421,31 @@ fn hostile_point_lists_never_panic(tc: TestCase) {
     let r = s.execute("piece", &json!({"kind": "band", "profile": "custom", "profileCurve": {"points": pts}}));
     assert!(!matches!(r, Err(EngineError::Internal(..))), "{r:?}");
 }
+
+/// The caster's merged solid (`STLOUT`) revolves the drawn section too: one closed body whose
+/// volume is the Pappus volume the sheet weighs, and a solitaire on it is one body with its seat.
+#[test]
+fn the_merged_solid_revolves_the_drawn_profile() {
+    let mut s = mm_drawing();
+    let shapes = [
+        half_disc(&mut s, (0.0, 0.0), 1.6),
+        lw(&mut s, &[(0.0, 0.0, 0.0), (4.0, 0.0, 0.0), (4.0, 2.0, 0.0), (2.5, 2.0, 0.0), (2.0, 1.2, 0.0), (1.5, 2.0, 0.0), (0.0, 2.0, 0.0)], true),
+    ];
+    for h in shapes {
+        let p = piece(&mut s, json!({"kind": "band", "profile": custom(&h)}));
+        let params = params_of(&p);
+        let mesh = piece_mesh(&params, Quality::Draft);
+        let (solid, _) = super::solid::solidify(&mesh.csg, 0.1, 400_000).unwrap();
+        assert_eq!(solid.bodies, 1, "{h}");
+        let (v, want) = (solid.volume(), params.band_volume());
+        assert!((v - want).abs() / want < super::mesh::SOLID_AGREEMENT_PER_MM * 0.1, "{h}: solid {v} vs Pappus {want}");
+        let mut q = p["params"].clone();
+        q["quality"] = json!("draft");
+        let r = s.execute("stlout", &q).unwrap();
+        assert_eq!(r["bodies"], json!(1), "{h}: {r}");
+        let ring = piece(&mut s, json!({"kind": "solitaire", "profile": custom(&h)}));
+        let mesh = piece_mesh(&params_of(&ring), Quality::Draft);
+        let (solid, _) = super::solid::solidify(&mesh.csg, 0.2, 400_000).unwrap();
+        assert_eq!((solid.bodies, mesh.seats), (1, 1), "{h}: solitaire");
+    }
+}

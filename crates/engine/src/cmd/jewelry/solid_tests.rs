@@ -376,3 +376,47 @@ fn timing() {
         }
     }
 }
+
+/// The newer heads, kinds and pavé reach the merged solid: each is one castable body, its stones
+/// clear of the metal, a seat cut for every stone, and every metal part the display mesh shows
+/// (a bezel's collar, a signet's face, a dome's taller top) lies within the solid.
+#[test]
+fn the_newer_parts_are_in_the_merged_solid() {
+    let cases = [
+        json!({"kind": "solitaire", "head": "bezel"}),
+        json!({"kind": "solitaire", "head": "bezel", "cut": "oval", "stoneWidth": 6.0, "stoneLength": 8.0}),
+        json!({"kind": "threestone", "head": "bezel"}),
+        json!({"kind": "halfeternity"}),
+        json!({"kind": "dome"}),
+        json!({"kind": "signet"}),
+        json!({"kind": "band", "width": 6.0, "wall": 2.0, "pave": {"layout": "honeycomb", "rows": 2, "span": "top-half"}}),
+        json!({"kind": "solitaire", "pave": true}),
+    ];
+    for p in cases {
+        let what = p.to_string();
+        let piece = params(&p);
+        let mesh = piece_mesh(&piece, Quality::Draft);
+        let s = solid_of(&mesh, STEP, &what);
+        assert_castable(&s, &what);
+        assert_eq!(components(&s), 1, "{what}: one body");
+        assert_eq!(s.bodies, 1, "{what}");
+        let deepest = deepest_stone_vertex(&mesh);
+        assert!(deepest >= -STONE_TOL, "{what}: a stone reaches {deepest} mm into the metal");
+        assert_eq!(mesh.seats, mesh.stones, "{what}: a seat for every stone");
+        if mesh.seats > 0 {
+            let uncut = Csg { add: mesh.csg.add.clone(), cut: Vec::new() };
+            let whole = solidify(&uncut, STEP, TEST_TRIS).unwrap().0;
+            assert!(s.volume() < whole.volume(), "{what}: the seats take nothing away");
+        }
+        let uncut = Csg { add: mesh.csg.add.clone(), cut: Vec::new() };
+        for m in mesh.meshes.iter().filter(|m| m.part == "metal") {
+            let out = m.positions.iter().map(|q| uncut.eval(*q)).fold(f64::NEG_INFINITY, f64::max);
+            assert!(out < 0.05, "{what}: the {} stands {out} mm outside the solid", m.name);
+        }
+    }
+    // A dome's tapered top is in the solid: it weighs what the engine's tapered shank weighs.
+    let dome = params(&json!({"kind": "dome"}));
+    let s = solid_of(&piece_mesh(&dome, Quality::Draft), 0.1, "dome");
+    let (v, b) = (s.volume(), dome.band_volume());
+    assert!(((v - b) / b).abs() < 2.0 * SOLID_AGREEMENT_PER_MM * 0.1, "dome: solid {v} mm³ vs shank {b} mm³");
+}
