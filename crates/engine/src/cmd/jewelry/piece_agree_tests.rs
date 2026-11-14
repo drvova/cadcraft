@@ -683,6 +683,7 @@ fn every_profile_is_one_band_in_every_kind() {
                 agree(&b, &what);
                 match b.params.kind {
                     PieceKind::Band | PieceKind::HalfEternity | PieceKind::Dome | PieceKind::Signet => {}
+                    PieceKind::Pendant | PieceKind::Stud | PieceKind::Drop => {}
                     PieceKind::Solitaire => agree_solitaire(&b, &what),
                     PieceKind::ThreeStone => agree_threestone(&b, &what),
                     PieceKind::Eternity => {

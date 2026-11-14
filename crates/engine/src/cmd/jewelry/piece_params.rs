@@ -114,10 +114,16 @@ pub(super) enum PieceKind {
     Dome,
     /// A tapered shank under a flat face ([`super::kinds::Face`]).
     Signet,
+    /// A centre stone in a solitaire's head with a bail on top ([`super::findings`]).
+    Pendant,
+    /// A pair of stud earrings: a head with a post on its back.
+    Stud,
+    /// A pair of drop earrings: a hanging head on a jump ring under a hook or a stud top.
+    Drop,
 }
 
 /// The kinds, as a refusal lists them.
-pub(super) const KINDS: &str = "band, solitaire, threestone, eternity, halfeternity, dome or signet";
+pub(super) const KINDS: &str = "band, solitaire, threestone, eternity, halfeternity, dome, signet, pendant, stud or drop";
 
 impl PieceKind {
     pub(super) fn name(self) -> &'static str {
@@ -129,6 +135,9 @@ impl PieceKind {
             PieceKind::HalfEternity => "halfeternity",
             PieceKind::Dome => "dome",
             PieceKind::Signet => "signet",
+            PieceKind::Pendant => "pendant",
+            PieceKind::Stud => "stud",
+            PieceKind::Drop => "drop",
         }
     }
     fn parse(cmd: &str, s: &str) -> Result<Self> {
@@ -140,6 +149,9 @@ impl PieceKind {
             "halfeternity" | "half-eternity" | "half eternity" => Ok(PieceKind::HalfEternity),
             "dome" | "domed" => Ok(PieceKind::Dome),
             "signet" => Ok(PieceKind::Signet),
+            "pendant" => Ok(PieceKind::Pendant),
+            "stud" | "studs" => Ok(PieceKind::Stud),
+            "drop" | "drops" | "dangle" => Ok(PieceKind::Drop),
             _ => Err(bad(cmd, format!("`kind` must be {KINDS}"))),
         }
     }
@@ -293,6 +305,8 @@ pub(super) struct PieceParams {
     pub face: FaceShape,
     pub face_length: f64,
     pub face_width: f64,
+    /// A pendant's or earrings' findings: bail, post, jump ring, ear wire ([`super::findings`]).
+    pub worn: super::findings::Worn,
 }
 
 /// The most stones an eternity band may be asked for.
@@ -421,7 +435,11 @@ impl PieceParams {
         let face = FaceShape::parse(cmd, p.get("face"))?;
         let face_length = mm_in(cmd, p, "faceLength", 12.0, 4.0, 30.0)?;
         let face_width = mm_in(cmd, p, "faceWidth", 10.0, 4.0, 30.0)?;
+        let worn = super::findings::Worn::parse(cmd, p)?;
+        // A piece off the finger has no band to carry pavé.
+        let pave = if kind.worn() { None } else { super::pave_band::PaveSpec::parse(cmd, p)? };
         Ok(PieceParams {
+            worn,
             head,
             bezel_wall,
             bezel_height,
@@ -456,7 +474,7 @@ impl PieceParams {
             melee: mm_in(cmd, p, "melee", 1.8, 0.8, 6.0)?,
             count,
             gap: mm_in(cmd, p, "gap", 0.2, 0.0, 5.0)?,
-            pave: super::pave_band::PaveSpec::parse(cmd, p)?,
+            pave,
         })
     }
 
@@ -475,7 +493,7 @@ impl PieceParams {
     /// float noise its formula leaves (`5.999999999999997` reads `6`), and `sizeSystem` is the
     /// system the piece was given in.
     pub(super) fn json(&self) -> Value {
-        json!({
+        let mut out = json!({
             "kind": self.kind.name(),
             "system": "us",
             "size": round_us(self.size.us),
@@ -512,7 +530,11 @@ impl PieceParams {
             "face": self.face.name(),
             "faceLength": self.face_length,
             "faceWidth": self.face_width,
-        })
+        });
+        if let Some(o) = out.as_object_mut() {
+            self.worn.json(o);
+        }
+        out
     }
 }
 
@@ -913,6 +935,7 @@ impl PieceParams {
         let section = self.section();
         match self.kind {
             PieceKind::Dome | PieceKind::Signet => self.taper_volume(),
+            PieceKind::Pendant | PieceKind::Stud | PieceKind::Drop => super::findings::worn_volume(self),
             _ => TAU * (self.inner() / 2.0 + section.centroid()) * section.area(),
         }
     }
@@ -1350,7 +1373,7 @@ impl PieceParams {
     /// Whether the centre stone has a halo: a solitaire asked for one. (A three-stone ring has
     /// none: its side stones stand where a halo would be.)
     pub(super) fn haloed(&self) -> Option<f64> {
-        self.halo.filter(|_| self.kind == PieceKind::Solitaire)
+        self.halo.filter(|_| self.kind == PieceKind::Solitaire || self.kind.worn())
     }
 
     /// The centre stone's head (a solitaire's, a three-stone ring's).

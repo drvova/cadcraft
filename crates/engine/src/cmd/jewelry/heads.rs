@@ -246,7 +246,7 @@ impl BezelBound {
 impl PieceParams {
     /// Whether the piece's stones stand in bezels: a solitaire or three-stone ring asked for them.
     pub(super) fn bezeled(&self) -> bool {
-        self.head == HeadStyle::Bezel && matches!(self.kind, PieceKind::Solitaire | PieceKind::ThreeStone)
+        self.head == HeadStyle::Bezel && (matches!(self.kind, PieceKind::Solitaire | PieceKind::ThreeStone) || self.kind.worn())
     }
 
     /// The bezel a stone of this cut, size and depth stands in, or `None` for prongs. Its bottom
@@ -264,7 +264,8 @@ impl PieceParams {
         let top = self.crown();
         let reach = (width / 2.0 + wall).min(0.95 * top).max(0.0);
         let fall = top - (top * top - reach * reach).max(0.0).sqrt();
-        let sink = (fall + BEZEL_SINK).clamp(0.0, (top - self.inner() / 2.0 - 0.2).max(0.0));
+        // Off the finger there is no band to sink into: the collar stands on the base.
+        let sink = if self.kind.worn() { 0.0 } else { (fall + BEZEL_SINK).clamp(0.0, (top - self.inner() / 2.0 - 0.2).max(0.0)) };
         Some(Bezel { wall, lip, ledge: ledge(lesser), girdle_half: girdle / 2.0, crown, bottom: -(CULET_CLEAR + below) - sink })
     }
 

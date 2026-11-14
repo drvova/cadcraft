@@ -13,6 +13,10 @@
 //! and the bench sheet reads it back.
 
 mod bench;
+mod findings;
+#[cfg(test)]
+#[path = "jewelry/findings_tests.rs"]
+mod findings_tests;
 mod gem;
 mod heads;
 #[cfg(test)]
