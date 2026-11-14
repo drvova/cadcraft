@@ -41,6 +41,9 @@ mod mesh;
 #[cfg(test)]
 #[path = "jewelry/mesh_tests.rs"]
 mod mesh_tests;
+mod pattern;
+#[cfg(test)]
+mod pattern_tests;
 mod pave;
 mod pave_band;
 #[cfg(test)]
@@ -82,6 +85,7 @@ mod sweep;
 #[cfg(test)]
 #[path = "jewelry/tests.rs"]
 mod tests;
+mod voronoi;
 
 use cadcraft_doc::EntityKind;
 

@@ -102,8 +102,10 @@ const HOOK_LOOP: f64 = 1.2;
 pub(super) const PAIR_GAP: f64 = 6.0;
 
 /// The ring-only keys a piece not worn on a finger does not use.
-pub(super) const RING_ONLY: [&str; 14] =
-    ["size", "system", "wall", "width", "profile", "comfort", "ridge", "bevel", "hollow", "topWidth", "topWall", "pave", "count", "melee"];
+pub(super) const RING_ONLY: [&str; 19] = [
+    "size", "system", "wall", "width", "profile", "comfort", "ridge", "bevel", "hollow", "topWidth", "topWall", "pave", "count", "melee", "rail",
+    "shank", "pattern", "engrave", "hallmark",
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Bail {

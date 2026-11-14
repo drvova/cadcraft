@@ -292,6 +292,8 @@ pub(super) struct PieceParams {
     pub gap: f64,
     /// Band, solitaire, three-stone: pavé on the band's outside ([`super::pave_band`]), or none.
     pub pave: Option<super::pave_band::PaveSpec>,
+    /// A generative pattern on the band (pierced or relief), when asked for.
+    pub pattern: Option<super::pattern::PatternSpec>,
     /// Solitaire and three-stone: how every stone is held (`head`: prong or bezel).
     pub head: HeadStyle,
     /// Bezel: the collar's wall, or `None` for [`super::heads::BEZEL_WALL`].
@@ -448,9 +450,12 @@ impl PieceParams {
         let worn = super::findings::Worn::parse(cmd, p)?;
         // A piece off the finger has no band to carry pavé.
         let pave = if kind.worn() { None } else { super::pave_band::PaveSpec::parse(cmd, p)? };
+        // Nor a shank to shape, engrave or pattern: those keys are a ring's, not used off the
+        // finger (the reply says so, as for pavé: [`super::findings::ignored`]).
+        let ring = !kind.worn();
         let mut params = PieceParams {
             worn,
-            shape: super::shank::parse(cmd, p)?,
+            shape: if ring { super::shank::parse(cmd, p)? } else { super::shank::ShankShape::plain() },
             prong: super::prongs::ProngSpec::parse(cmd, p)?,
             channel: super::channel::ChannelSpec::parse(cmd, p)?,
             head,
@@ -488,8 +493,9 @@ impl PieceParams {
             count,
             gap: mm_in(cmd, p, "gap", 0.2, 0.0, 5.0)?,
             pave,
-            engrave: super::engrave::EngraveSpec::parse(cmd, p)?,
-            hallmark: super::hallmark::HallmarkSpec::parse(cmd, p)?,
+            pattern: if ring { super::pattern::PatternSpec::parse(cmd, p)? } else { None },
+            engrave: if ring { super::engrave::EngraveSpec::parse(cmd, p)? } else { None },
+            hallmark: if ring { super::hallmark::HallmarkSpec::parse(cmd, p)? } else { None },
         };
         super::shank::settle(cmd, &mut params)?;
         Ok(params)
@@ -539,6 +545,7 @@ impl PieceParams {
             "count": self.count,
             "gap": self.gap,
             "pave": self.pave.as_ref().map_or(Value::Bool(false), super::pave_band::PaveSpec::json),
+            "pattern": self.pattern.as_ref().map_or(Value::Bool(false), super::pattern::PatternSpec::json),
             "head": self.head.name(),
             "bezelWall": self.bezel_wall,
             "bezelHeight": self.bezel_height,
@@ -962,7 +969,7 @@ impl PieceParams {
         let band = match self.kind {
             PieceKind::Dome | PieceKind::Signet => self.taper_volume(),
             PieceKind::Pendant | PieceKind::Stud | PieceKind::Drop => super::findings::worn_volume(self),
-            _ => TAU * (self.inner() / 2.0 + section.centroid()) * section.area(),
+            _ => TAU * (self.inner() / 2.0 + section.centroid()) * section.area() - super::pattern::removed(self),
         };
         // Lettering cut in takes metal away; raised letters add it.
         band + super::engrave::volume_delta(self)

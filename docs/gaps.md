@@ -210,9 +210,9 @@ and MCP all reach them, and DESCRIBE reads jewelry out of any drawing.
 | J10 | Shank styles past split and cathedral: a double shank (two bands joined at the head), a bypass (the ends pass each other beside the head), split or cathedral shoulders on a three-stone ring, pavé on a split or cathedral shank, arms that split at their own width (each arm is a strip of the band's own section today) | 4–6 |
 | J11 | Braided bands and cables of more than three strands, a cable on a solitaire's shank, a cable whose strands are not round wire | 3–5 |
 | J12 | Prong heads: a basket or under-gallery (a wire ring linking the prongs below the girdle, beyond today's single gallery rail), a style per head (a three-stone ring's side stones take the centre's style), and claw tips shaped by the crown rather than a straight cone | 3–5 |
-
-| J9 | Pendants and earrings (`PIECE` pendant, stud, drop) landed. Left: **hoops** (a band profile swept round an open circle with a hinge or post, pavé along the front); chains and links; a bail of its own shape (a drawn profile, a hidden or pinch bail); a lever-back or omega clip; the stud's back is counted but not drawn; the head metal of a prong head is weighed as wires along their paths and reads 30–50 % over the merged solid (a bezel within 5 %) | 6–10 |
-| J10 | A drop's head and its top, and a drop pendant's head and bail, are separate cast bodies joined by a bought-in jump ring; nothing yet models a soldered (closed) jump ring or a cast-in-place link | 2–3 |
+| J13 | Pendants and earrings (`PIECE` pendant, stud, drop) landed. Left: **hoops** (a band profile swept round an open circle with a hinge or post, pavé along the front); chains and links; a bail of its own shape (a drawn profile, a hidden or pinch bail); a lever-back or omega clip; the stud's back is counted but not drawn; the head metal of a prong head is weighed as wires along their paths and reads 30–50 % over the merged solid (a bezel within 5 %) | 6–10 |
+| J14 | A drop's head and its top, and a drop pendant's head and bail, are separate cast bodies joined by a bought-in jump ring; nothing yet models a soldered (closed) jump ring or a cast-in-place link | 2–3 |
+| J15 | Generative patterns beyond the plain band: patterns on a solitaire's or a dome's shank and on a drawn profile, image-driven patterns (a picture's tones as cell size or relief depth), and engraving fitted between a pattern's ribs. Today `PIECE {pattern}` lays Voronoi, honeycomb, wave and Truchet on a plain band, pierced or in relief, and refuses the rest in a sentence | 3–5 |
 
 ## Revision history
 
@@ -221,10 +221,11 @@ and MCP all reach them, and DESCRIBE reads jewelry out of any drawing.
 | 2026-11-14 | patch | Jewelry: STLOUT's vertices projected onto the true surface (mean vertex error 3–7× smaller), scallops cut, `sprue` and `shrink`; J2 narrowed |
 | 2026-11-14 | minor | Jewelry: shank shapes for PIECE — a drawn rail (J8 narrowed), a split shank, cathedral shoulders and a twisted cable band; new rows J9–J11 |
 | 2026-11-14 | minor | Jewelry: prong styles (round, claw, tab, V, double) with height, tip and wire, and channel settings, as sheet, mesh and cast solid with their checks and weights; graduated pavé and channel rows; J1 and J2 narrowed, new row J9 |
+| 2026-11-14 | minor | Jewelry: generative patterns on the band (PIECE `pattern`: Voronoi, honeycomb, wave, Truchet; pierced or relief; weight, check, sheet, cast solid, PIECEMESH, the Pattern group with Shuffle); the rest is the new row J15 (renumbered at the integration) |
 | 2026-11-14 | patch | Jewelry: the merged solid for casting takes bezels, tapered shanks, the signet's face, drawn profiles and pavé and half eternity seats; J2 narrowed |
 | 2026-11-13 | minor | Jewelry: PIECE takes a band profile drawn as a closed curve; a rail for it is the new row J8 |
 | 2026-11-13 | minor | Jewelry: pavé on a parametric piece's band (PIECE `pave`: row, rows, honeycomb, scallop, auto-fit to a span, graduated sizes, a `pave` check), drawn, counted on the bench sheet and built by PIECEMESH. No row closes: the solid still cuts no seat (J2) |
-| 2026-11-14 | minor | Jewelry: pendants, stud pairs and drop earrings in PIECE; new rows J9 (hoops, chains, bail shapes, head weight estimate) and J10 (cast bodies joined by bought-in jump rings) |
+| 2026-11-14 | minor | Jewelry: pendants, stud pairs and drop earrings in PIECE; new rows J13 (hoops, chains, bail shapes, head weight estimate) and J14 (cast bodies joined by bought-in jump rings) (renumbered from J9 and J10 at the integration) |
 | 2026-11-12 | minor | Jewelry: band profiles and a three-stone ring in PIECE; property tests (Hegel) fixed six faults and left three as new rows J5–J7 |
 | 2026-11-12 | minor | Jewelry: PRICEBOOK and an estimated cost on the bench sheet; in the interface a rendered tech sheet, templates and the Cost group. No row closes |
 | 2026-11-12 | major | A parametric piece (PIECE) with a solid (PIECEMESH, STLOUT) and a 3D view in the interface; OBJECTS; in the interface a tabbed ribbon, Source, the Piece and Objects sections. J2 narrowed. New drawings in the interface are millimetres |

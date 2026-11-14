@@ -66,8 +66,19 @@ impl Twist {
             Some(Value::Object(o)) => o,
             Some(_) => return Err(bad(cmd, "`pattern` is {twist: {strands, turns, wire}} for a twisted cable band, or null")),
         };
+        // The key is shared with the generative patterns ([`super::pattern`]): without a twist
+        // the object is theirs to read, and a twist with a pattern beside it is refused.
+        if !v.contains_key("twist") {
+            return Ok(None);
+        }
         if let Some(k) = v.keys().find(|k| k.as_str() != "twist") {
-            return Err(bad(cmd, format!("`pattern` takes `twist`, not `{}`", k.chars().take(24).collect::<String>())));
+            return Err(bad(
+                cmd,
+                format!(
+                    "a cable band is its twisted strands: it cannot carry `{}` as well — take the twist or the pattern off",
+                    k.chars().take(24).collect::<String>()
+                ),
+            ));
         }
         let t = match v.get("twist") {
             None | Some(Value::Null) | Some(Value::Bool(false)) => return Ok(None),

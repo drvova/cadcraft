@@ -232,6 +232,7 @@ pub(super) fn design(p: &PieceParams) -> Result<Design> {
         checks,
         notes,
         pave: None,
+        pattern: None,
         pave_stones: extra,
     })
 }

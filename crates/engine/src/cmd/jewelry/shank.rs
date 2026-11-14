@@ -110,7 +110,11 @@ impl ShankShape {
             Value::Null
         };
         o.insert("shank".into(), shank);
-        o.insert("pattern".into(), self.twist.as_ref().map_or(Value::Null, Twist::json));
+        // `pattern` is shared with the generative patterns ([`super::pattern`]), which write it
+        // first (false for none): a cable's twist takes its place, and only then.
+        if let Some(t) = &self.twist {
+            o.insert("pattern".into(), t.json());
+        }
     }
 }
 

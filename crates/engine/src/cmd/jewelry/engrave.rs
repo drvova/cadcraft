@@ -475,13 +475,24 @@ pub(super) fn lettering(p: &PieceParams) -> std::result::Result<Option<Lettering
     if p.engrave.is_none() && p.hallmark.is_none() {
         return Ok(None);
     }
+    // A cable is strands, not a surface; a patterned band may have none to take the text.
+    if p.shape.twist.is_some() {
+        return Err("a cable band's twisted strands leave no surface to engrave: take the engraving or the twist off".into());
+    }
     let mut out = Lettering::default();
     if let Some(e) = &p.engrave {
+        if let Some(why) = super::pattern::engraving_conflict(p, e.place == Place::Inside) {
+            return Err(why.into());
+        }
         let mark = engraving_mark(p, e)?;
         out.checks.extend(engraving_checks(p, e, &mark));
         out.marks.push(mark);
     }
     if let Some(h) = &p.hallmark {
+        // The hallmark is punched inside the shank.
+        if let Some(why) = super::pattern::engraving_conflict(p, true) {
+            return Err(why.into());
+        }
         let inside = out.marks.iter().find(|m| m.place == Place::Inside).cloned();
         let (mark, checks) = super::hallmark::mark(p, h, inside.as_ref())?;
         out.checks.extend(checks);

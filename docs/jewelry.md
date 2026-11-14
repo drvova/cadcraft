@@ -588,6 +588,34 @@ rows; the heading reads "Stud earrings · pair" and the summary has a "Pair" til
 Gallery has Pendants (halo, bezel drop), Stud earrings (bezel, four-prong) and Drop earrings (pear
 on French wires, stud-top). The 3D tab offers only the stone's and the halo's handles.
 
+### Generative patterns on the band
+
+What a Rhino jeweller builds as a Grasshopper definition (a Voronoi ring, a honeycomb lattice, Truchet tiles, waves) is here a parameter of the band, a handful of numbers and a seed: `PIECE {kind: "band", pattern: {voronoi: {cells, seed, jitter?, wall?, rim?, depth?, relief?}}}`, or `{hex: {size}}`, `{wave: {count, amplitude?}}`, `{truchet: {tile, seed, depth}}`. Without `depth` the pattern is pierced through; with it, it is relief on the outside, the lines `raised` (the cells sunk) or `recessed` (the lines sunk as grooves). The code is `crates/engine/src/cmd/jewelry/pattern.rs` (the layout, the field, the check) and `voronoi.rs` (the diagram); tests `pattern_tests.rs`.
+
+| Key | Range (default) | Meaning |
+|---|---|---|
+| `voronoi.cells` | 3–600 (24) | cells round the band (laid on a grid of near-square cells, so the count is rounded to rows × columns) |
+| `voronoi.seed`, `truchet.seed` | 0–4294967295 (1) | the same seed is always the same pattern; Shuffle in the panel steps it |
+| `voronoi.jitter` | 0–1 (0.8) | how far each site moves from its grid cell's centre (0 a regular grid) |
+| `hex.size` | 1–12 mm (2.4) | across the flats, adjusted so a whole number goes round |
+| `wave.count`, `wave.amplitude` | 2–120 (10); 0.2–15 mm (0.9 of the strip's half-width) | lens openings between two crossing waves |
+| `truchet.tile` | 1–10 mm (2) | square tiles, each with two quarter arcs turned by the seed (relief only: the arcs close into rings that would fall out of a pierced band) |
+| `wall` | 0.3–3 mm (0.8; hex 0.7; truchet 0.5) | the rib (or line) width, measured on the inside, where it is least |
+| `rim` | 0.3–5 mm (the larger of `wall` and 0.6) | the plain rim each side |
+| `depth`, `relief` | 0.05–2 mm (none); raised or recessed | relief instead of piercing |
+
+**The developed surface.** The band is unrolled at the finger's circle: `(s, z) = (θ·rᵢ, z)`, `0 ≤ s < 2π·rᵢ`, wrapping round. Sites stand one to a grid cell, moved by at most a known slack (the seeded jitter, a honeycomb's half-cell row offset), so a point's nearest site and every bisector that can bound its cell lie in a small window of cells; the cell distance `min_b (|q−b|² − |q−a|²)/(2|b−a|)` is then exact, and each opening is an exact convex polygon by half-plane clipping (each edge moved `wall/2` in, clipped to the strip between the rims). A piercing runs along the radius, so ribs widen outward by `r/rᵢ`.
+
+**Weight.** The metal taken away is `∫∫ t(z) ds dz / rᵢ` over the openings (over the lines for recessed relief), `t(z) = ((rᵢ+h)² − (rᵢ+i)²)/2` across the wall for a piercing, the radial skin `depth·√(1+h′²)` for relief; each opening's integral runs over its chords (96 slices). For a flat band this is exactly `area × ((rᵢ+t)² − rᵢ²)/(2rᵢ)` (tested to 0.1 %). `metal.grams` and the bench sheet weigh the band less it; the cast solid agrees within 3 % at the 0.1 mm grid in the tests (Voronoi, honeycomb on a dome, wave, relief).
+
+**The solid.** The pattern is a cut of the cast solid (`Prim::Pattern`): the 2D field on the developed strip (positive in an opening), scaled by `(rᵢ − 0.3)/rᵢ` so it stays a 1-Lipschitz distance bound down to 0.3 mm inside the finger, intersected with the wall's radial span (pierced) or with the skin `depth` under the outside (relief). `PIECEMESH` shows the band as that solid's surface (at most 90 000 triangles at fine quality), so the 3D view shows the piercing as it casts.
+
+**The check `pattern`** (information, not refusal): ribs and rims at least 0.6 mm (a bench's least castable wire); cells whose opening is under 0.6 mm across (`4·area/perimeter`) are left closed and counted; the band holds its round (an approximation, stated) when at most 65 % of its developed outside is open and every rib's cross-section, `wall` × the thinnest radial wall, is at least 0.4 mm²; relief leaves at least 0.8 mm of wall under it. Refused, in a sentence: a pattern on anything but a plain band, with pavé, on a drawn profile, on a band too narrow for the rims, Truchet pierced, ribs too wide for the cells, unknown keys. `P.pattern` reports `{motif, finish, openings, closed, openFraction, leastOpening, rib, rim, removedMm3, developed}`. The sheet draws the developed band with every opening under the plan.
+
+**With the cable and with engraving.** The twisted cable's `{twist: …}` shares the `pattern` key (one key at a time); this module leaves `twist` to the cable's own. Engraving is refused on a pierced band (no whole surface to engrave), and on a relief band's outside (it carries the relief); a relief band's inside takes it (`pattern::engraving_conflict`).
+
+**In the interface.** The Piece panel's Pattern group on a band: the motif (none, Voronoi cells, honeycomb, wave lenses, Truchet), its number, the rib, the finish (pierced, relief with lines raised or sunk), the relief depth, and Shuffle (a new seed). Every change is the motif's own object, which the engine merges key by key. The Template Gallery has a Voronoi band and a honeycomb band. Three proposals with three seeds (`propose {variants}`) are three patterns to choose from.
+
 ## In the interface
 
 The interface opens on a jewelry drawing: a size 6 solitaire in 18k gold (Help ▸ Open Sample
@@ -798,6 +826,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 | 2026-11-14 | minor | Shank shapes: `PIECE {rail: {curve}}` (a drawn closed rail scaled to the finger's circumference, any profile swept square to it, kept by value, check `rail`), `shank: {split, gap, from, cathedral, height}` (a solitaire's split arms and cathedral arches, exact weights, checks `split` and `cathedral`) and `pattern: {twist: {strands, turns, wire}}` (a twisted cable band, weight by strand length, check `cable`); sheet, `PIECEMESH`, merged solid, proposals, templates and the Piece panel's Shank group |
 | 2026-11-14 | minor | Text on the band (`engrave`: inside, raised or cut outside) and the hallmark, with weight, checks, sheet, 3D view, solid and the Piece panel's Engraving group |
 | 2026-11-14 | minor | Prong styles (`prongStyle` round, claw, tab, V, double; `prongHeight`, `prongTip`, `prongWire`; checks `prong-tip`, `prong-wire`; `metal.prongGrams`) and channel settings (`pave.layout: "channel"`, `channelWall`, `channelLip`; checks `channel-lip`, `channel-wall`; `metal.channelGrams`), in the sheet, the mesh and the cast solid; the Piece panel's Setting group, Bench lines and four templates |
+| 2026-11-14 | minor | Generative patterns on the band: `PIECE {pattern: {voronoi|hex|wave|truchet}}`, pierced or relief, a periodic Voronoi on the developed band, exact weight from the opening polygons, the `pattern` check, the developed sheet, the cast solid's cut and `PIECEMESH`; the Piece panel's Pattern group with Shuffle, two templates |
 | 2026-11-14 | minor | `STLOUT`'s merged solid takes the drawn profile, the bezel collar with its stone's seat, the dome's and signet's tapered shank, the signet's face, and seats and beads for half eternity and pavé stones |
 | 2026-11-13 | minor | The 3D tab's four-view workspace (Top, Front, Right orthographic and flat-shaded at one scale; Perspective in its mode; maximise by double-click, M or the bar; remembered; single view under 560 px) on one scissored context, and drag handles on the piece (centre stone, halo melee, eternity stones, wall, width) that preview at draft quality, show the value and the checks it would break, and commit one `piece` change or, with Alt, a proposal; keyboard sliders |
 | 2026-11-13 | minor | `PIECE {profile: {curve: handle}}`: a band profile drawn as a closed curve of the drawing (polyline with bulges, spline, circle, ellipse, region), kept by value with its frame (box bottom on the finger, centred across), width and wall read from it, weight by Pappus, the wall check at its thinnest, the solid revolved from it; the Piece panel names it "Custom (from drawing)" with Update from curve. Rails are not built yet (J8) |

@@ -30,7 +30,7 @@
  */
 
 import { createEffect, createMemo, createSignal, For, Index, Match, onCleanup, Show, Switch, untrack, type Accessor, type JSX } from "solid-js";
-import { passingLine, pieceGroups, pieceHeading, pieceSummary, PIECE_KINDS, profileUpdate, railUpdate, rowShownName, rowUnit, type PieceChoices, type PieceRow, type PieceState } from "../piece";
+import { passingLine, pieceGroups, pieceHeading, pieceSummary, PIECE_KINDS, profileUpdate, railUpdate, rowShownName, rowUnit, type PatternPart, type PieceChoices, type PieceRow, type PieceState } from "../piece";
 import { createPieceSection, createRowEdit, type Refused } from "../piece-edit";
 import { sizeExample } from "../jewelry-dialog";
 import { ToolIcon } from "../icons";
@@ -192,7 +192,7 @@ export function PiecePanel(props: PiecePanelProps): JSX.Element {
                     {group().name}
                   </div>
                   <div class="piece-list" role="list" aria-label={`${group().name} parameters`}>
-                    <Index each={group().rows}>{(row) => <PieceRowView row={row} system={system} refused={refused} onRefused={setRefused} onPick={setPicked} onRun={run} onNotice={props.onNotice} />}</Index>
+                    <Index each={group().rows}>{(row) => <PieceRowView row={row} system={system} refused={refused} onRefused={setRefused} onPick={setPicked} onRun={run} onNotice={props.onNotice} pattern={() => (props.state.kind === "piece" ? props.state.piece.params.pattern : null)} />}</Index>
                     <Show when={group().name === "Ring" || group().name === "Piece"}>
                       <For each={others()}>
                         {(fact) => (
@@ -268,6 +268,8 @@ interface PieceRowViewProps {
   onPick: (system: string) => void;
   onRun: (params: Record<string, unknown>) => boolean;
   onNotice?: (message: string) => void;
+  /** The band's pattern, which the pattern's rows patch. */
+  pattern: Accessor<PatternPart | false | null>;
 }
 
 function PieceRowView(props: PieceRowViewProps): JSX.Element {
@@ -299,6 +301,7 @@ function PieceRowView(props: PieceRowViewProps): JSX.Element {
     pick: (system) => props.onPick(system),
     run: (patch) => props.onRun(patch),
     notice: (message) => props.onNotice?.(message),
+    pattern: () => props.pattern(),
   });
   // The row leaves the page: the blur a removed field fires must not send anything.
   onCleanup(edit.gone);
@@ -328,9 +331,9 @@ function PieceRowView(props: PieceRowViewProps): JSX.Element {
   };
 
   /** Which control the row gets; the control is kept across refreshes, so focus survives one. */
-  const mode = createMemo((): "choice" | "tick" | "text" | "readonly" => {
+  const mode = createMemo((): "choice" | "tick" | "text" | "readonly" | "action" => {
     const kind = props.row().kind;
-    return kind === "choice" || kind === "tick" || kind === "readonly" ? kind : "text";
+    return kind === "choice" || kind === "tick" || kind === "readonly" || kind === "action" ? kind : "text";
   });
   /** A length takes the decimal keyboard; a UK size and "auto" are letters. */
   const inputMode = (): "decimal" | "numeric" | undefined => {
@@ -353,6 +356,11 @@ function PieceRowView(props: PieceRowViewProps): JSX.Element {
               {props.row().value}
               {rowUnit(props.row()) === "" ? "" : ` ${rowUnit(props.row())}`}
             </span>
+          </Match>
+          <Match when={mode() === "action"}>
+            <Button size="sm" variant="secondary" ariaLabel="Shuffle the pattern: a new seed" title="A new seed: the same pattern, laid another way" onClick={() => edit.commit(props.row().value)}>
+              Shuffle
+            </Button>
           </Match>
           <Match when={mode() === "tick"}>
             <Checkbox

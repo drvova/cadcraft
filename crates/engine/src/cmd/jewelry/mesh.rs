@@ -1569,6 +1569,9 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
         PieceKind::Solitaire | PieceKind::ThreeStone => build_solitaire(&s, &d, &mut parts),
         PieceKind::Eternity => build_eternity(&s, &d, &mut parts),
     }
+    if let Some(l) = super::pattern::layout(&s.p) {
+        build_pattern(&mut parts, l, level);
+    }
     build_pave(&s, &d, &mut parts);
     build_lettering(&s, &d, &mut parts);
     let metal = metal_color(&p.metal);
@@ -1597,6 +1600,23 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
     .flatten()
     .collect();
     PieceMesh { meshes, notes: parts.notes, stones: parts.stones, fits: parts.fits, level, over: false, csg: parts.csg, seats: parts.seats }
+}
+
+/// The most triangles a patterned band's shell is, at each tessellation level.
+const PATTERN_TRIANGLES: [usize; 4] = [90_000, 60_000, 35_000, 20_000];
+
+/// A patterned band: the pattern cut from the band in the cast solid, and the band's shell the
+/// solid's own surface (the piercing shown as it casts), sampled within the level's budget.
+fn build_pattern(parts: &mut Parts, layout: super::pattern::Layout, level: usize) {
+    let Some(band) = parts.csg.add.first().cloned() else { return };
+    let cut = std::sync::Arc::new(layout).cut(band.clone());
+    parts.csg.cut.push(cut.clone());
+    let shell = Csg { add: vec![band], cut: vec![cut] };
+    let cap = PATTERN_TRIANGLES.get(level).or(PATTERN_TRIANGLES.last()).copied().unwrap_or(20_000);
+    match solidify(&shell, 0.1, cap) {
+        Ok((solid, _)) => parts.band = Buf { pos: solid.positions, idx: solid.indices },
+        Err(e) => parts.notes.push(format!("The pattern could not be shown in 3D ({e}); the band is drawn plain.")),
+    }
 }
 
 fn piece_mesh_within(p: &PieceParams, quality: Quality, budget: Budget) -> PieceMesh {

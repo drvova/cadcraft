@@ -304,6 +304,8 @@ pub(super) enum Prim {
     Prong(super::prongs::ProngSolid),
     /// A channel setting's rails, or the channel cut between them ([`super::channel::ChannelBound`]).
     Channel(super::channel::ChannelBound),
+    /// A band's generative pattern cut ([`super::pattern::PatternCut::distance`]).
+    Pattern(Box<super::pattern::PatternCut>),
 }
 
 /// Edges of a section taken together for [`Section::dist`].
@@ -420,6 +422,7 @@ impl Prim {
             Prim::Groove(g) => g.distance(p),
             Prim::Prong(prong) => prong.distance(p),
             Prim::Channel(c) => c.distance(p),
+            Prim::Pattern(c) => c.distance(p),
         };
         if v.is_nan() { f64::INFINITY } else { v }
     }
@@ -482,6 +485,7 @@ impl Prim {
             Prim::Groove(g) => g.bounds(),
             Prim::Prong(prong) => prong.bounds(),
             Prim::Channel(c) => c.bounds(),
+            Prim::Pattern(c) => c.bounds(),
         }
     }
 }

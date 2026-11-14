@@ -135,6 +135,51 @@ export interface PavePart {
   span: string;
 }
 
+/** The generative patterns on a band (`Motif` in `pattern.rs`), and none. */
+export const PATTERN_MOTIFS: readonly Choice[] = [
+  { value: "none", label: "None" },
+  { value: "voronoi", label: "Voronoi cells" },
+  { value: "hex", label: "Honeycomb" },
+  { value: "wave", label: "Wave lenses" },
+  { value: "truchet", label: "Truchet (relief)" },
+];
+
+/** Pierced through, or relief on the outside with the lines raised or sunk. */
+export const PATTERN_FINISHES: readonly Choice[] = [
+  { value: "pierced", label: "Pierced" },
+  { value: "raised", label: "Relief, lines raised" },
+  { value: "recessed", label: "Relief, lines sunk" },
+];
+
+/** The relief depth a finish picked from "Pierced" starts at, mm. */
+export const PATTERN_DEPTH = 0.3;
+
+/** A generative pattern on the band, as the section shows it (`pattern` in `pattern.rs`). */
+export interface PatternPart {
+  motif: string;
+  /** The motif's own number: cells, hexagon size, lens count or tile. */
+  amount: number | null;
+  seed: number | null;
+  wall: number | null;
+  /** Null when pierced. */
+  depth: number | null;
+  relief: string;
+}
+
+/** Each motif's own number: its key, its label, and whether it is whole. */
+const PATTERN_AMOUNT: Readonly<Record<string, { key: string; label: string; whole: boolean }>> = {
+  voronoi: { key: "cells", label: "Cells", whole: true },
+  hex: { key: "size", label: "Cell size, mm", whole: false },
+  wave: { key: "count", label: "Openings", whole: true },
+  truchet: { key: "tile", label: "Tile, mm", whole: false },
+};
+
+/** The next seed Shuffle asks for: a step through the 32-bit seeds that never repeats soon. */
+export function nextSeed(seed: number | null): number {
+  const s = seed === null || !Number.isFinite(seed) ? 1 : Math.floor(seed);
+  return (s * 1103515245 + 12345) % 4294967296;
+}
+
 /** What a count reads, and what is typed, when the engine fits as many stones as go around. */
 export const AUTO = "auto";
 
@@ -207,6 +252,8 @@ export interface PieceParams {
   sideProngs: number | null;
   /** Pavé on the band: false for none, null when the engine does not offer it. */
   pave: PavePart | false | null;
+  /** A generative pattern on the band: false for none, null when the engine does not offer it. */
+  pattern: PatternPart | false | null;
   /** How the stones are held (prong or bezel), and a bezel's wall and height over the girdle (null: the engine's). */
   head: string;
   bezelWall: number | null;
@@ -376,6 +423,7 @@ function parseParams(value: unknown): PieceParams | null {
     sideWidth: sizeOf(value["sideWidth"]),
     sideProngs: wholeOf(value["sideProngs"]),
     pave: paveOf(value["pave"]),
+    pattern: patternOf(value["pattern"]),
     head: nameOf(value["head"]) || "prong",
     bezelWall: sizeOf(value["bezelWall"]),
     bezelHeight: sizeOf(value["bezelHeight"]),
@@ -515,7 +563,7 @@ function shankRows(p: PieceParams): PieceRow[] {
   if (p.kind === "band") {
     if (sh.rail !== null) {
       rows.push({ key: "rail", label: "Rail", value: "Drawn curve", kind: "readonly" });
-    } else {
+    } else if (p.pattern === null || p.pattern === false) {
       rows.push({ key: "twist", label: "Twisted cable", value: sh.twist === null ? "false" : "true", kind: "tick" });
       if (sh.twist !== null) {
         rows.push({ key: "strands", label: "Strands", value: num(sh.twist.strands), kind: "whole" });
@@ -572,6 +620,46 @@ function paveOf(value: unknown): PavePart | false | null {
     gap: sizeOf(value["gap"]),
     span: span === "" ? PAVE_CUSTOM : span,
   };
+}
+
+function patternOf(value: unknown): PatternPart | false | null {
+  if (value === false) return false;
+  if (!isRecord(value)) return null;
+  const motif = Object.keys(value).find((k) => k in PATTERN_AMOUNT);
+  if (motif === undefined) return null;
+  const inner = value[motif];
+  if (!isRecord(inner)) return null;
+  const amount = PATTERN_AMOUNT[motif];
+  return {
+    motif,
+    amount: amount === undefined ? null : sizeOf(inner[amount.key]),
+    seed: wholeOf(inner["seed"]),
+    wall: sizeOf(inner["wall"]),
+    depth: sizeOf(inner["depth"]),
+    relief: nameOf(inner["relief"]) || "raised",
+  };
+}
+
+/** The pattern rows: the motif, its number, the rib, the finish, the depth, and Shuffle. */
+function patternRows(p: PieceParams): PieceRow[] {
+  const pat = p.pattern;
+  if (pat === null) return [];
+  const rows: PieceRow[] = [{ key: "pattern", label: "Pattern", value: pat === false ? "none" : pat.motif, kind: "choice", choices: PATTERN_MOTIFS }];
+  if (pat === false) return rows;
+  const amount = PATTERN_AMOUNT[pat.motif];
+  if (amount !== undefined) rows.push({ key: "patternAmount", label: amount.label, value: num(pat.amount), kind: amount.whole ? "whole" : "number" });
+  rows.push({ key: "patternWall", label: "Rib, mm", value: num(pat.wall), kind: "number" });
+  const finish = pat.depth === null ? "pierced" : pat.relief === "recessed" ? "recessed" : "raised";
+  const finishes = pat.motif === "truchet" ? PATTERN_FINISHES.filter((c) => c.value !== "pierced") : PATTERN_FINISHES;
+  rows.push({ key: "patternFinish", label: "Finish", value: finish, kind: "choice", choices: finishes });
+  if (pat.depth !== null) rows.push({ key: "patternDepth", label: "Relief depth, mm", value: num(pat.depth), kind: "number" });
+  if (pat.seed !== null) rows.push({ key: "patternShuffle", label: "Shuffle", value: String(pat.seed), kind: "action" });
+  return rows;
+}
+
+/** A change to the pattern: the motif's own object, merged over the stored one by the engine. */
+function patternPatch(motif: string, fields: Record<string, unknown>): Record<string, unknown> {
+  return { pattern: { [motif]: fields } };
 }
 
 /** The pavé field each row edits. */
@@ -713,7 +801,7 @@ export function readPieceChoices(engine: JewelryEngine): PieceChoices {
  * How a row is edited: a pick from a list, a typed length, a typed whole number, the ring size,
  * the stone count (a whole number or "auto"), or a tick.
  */
-export type PieceRowKind = "choice" | "number" | "whole" | "size" | "count" | "tick" | "readonly" | "words";
+export type PieceRowKind = "choice" | "number" | "whole" | "size" | "count" | "tick" | "readonly" | "words" | "action";
 
 export interface PieceRow {
   /** The row's id: the parameter it edits (`haloWidth` is `halo` given as a width). */
@@ -779,7 +867,7 @@ export function profileUpdate(piece: Piece): { profile: { curve: string } } | nu
  * size system the section shows.
  */
 export function pieceRows(piece: Piece, choices: PieceChoices, system: string): PieceRow[] {
-  return [...kindRows(piece, choices, system), ...engraveRows(piece.params)];
+  return [...kindRows(piece, choices, system), ...(isWorn(piece.params.kind) ? [] : engraveRows(piece.params))];
 }
 
 function kindRows(piece: Piece, choices: PieceChoices, system: string): PieceRow[] {
@@ -797,7 +885,14 @@ function kindRows(piece: Piece, choices: PieceChoices, system: string): PieceRow
     { key: "metal", label: "Metal", value: p.metal, kind: "choice", choices: withHeld(choices.metals, p.metal, metalLabel) },
   ];
   rows.push(...shankRows(p));
-  if (p.kind === "band") return p.shank.rail !== null || p.shank.twist !== null ? rows : [...rows, ...paveRows(p)];
+  if (p.kind === "band") {
+    // A rail or a cable is the band itself: no pavé or pattern on it. Pavé and a pattern both
+    // want the outside, so each shows only while the other is off.
+    const shaped = p.shank.rail !== null || p.shank.twist !== null;
+    const noPave = p.pave === false || p.pave === null;
+    const noPattern = p.pattern === null || p.pattern === false;
+    return [...rows, ...(shaped || !noPave ? [] : patternRows(p)), ...(shaped || !noPattern ? [] : paveRows(p))];
+  }
   if (p.kind === "dome" || p.kind === "signet") {
     // The top of a tapered shank: empty reads as the engine's own share of the bottom.
     rows.push({ key: "topWidth", label: "Top width, mm", value: num(p.topWidth), kind: "number" });
@@ -827,13 +922,7 @@ function kindRows(piece: Piece, choices: PieceChoices, system: string): PieceRow
       rows.push({ key: "bezelHeight", label: "Bezel height, mm", value: num(p.bezelHeight), kind: "number" });
     } else {
       rows.push({ key: "prongs", label: "Prongs", value: num(p.prongs), kind: "whole" });
-      if (p.prongStyle !== null) {
-        // The Setting group: the prongs' shape, height over the girdle, cover over the crown and wire.
-        rows.push({ key: "prongStyle", label: "Prong style", value: p.prongStyle, kind: "choice", choices: withHeld(PIECE_PRONG_STYLES, p.prongStyle, capital) });
-        rows.push({ key: "prongHeight", label: "Prong height, mm", value: num(p.prongHeight), kind: "number" });
-        rows.push({ key: "prongTip", label: "Prong tip, mm", value: num(p.prongTip), kind: "number" });
-        rows.push({ key: "prongWire", label: "Prong wire, mm", value: num(p.prongWire), kind: "number" });
-      }
+      rows.push(...prongStyleRows(p));
     }
     if (p.kind === "threestone") {
       // The side stones: empty reads as the engine's own share of the centre stone.
@@ -861,6 +950,17 @@ function kindRows(piece: Piece, choices: PieceChoices, system: string): PieceRow
  * the stone, the head that holds it, and its findings (the bail and chain, the post and back, the
  * jump ring, the ear wire or the stud top).
  */
+/** The Setting group: the prongs' shape, height over the girdle, cover over the crown and wire (none from an engine without styles). */
+function prongStyleRows(p: PieceParams): PieceRow[] {
+  if (p.prongStyle === null) return [];
+  return [
+    { key: "prongStyle", label: "Prong style", value: p.prongStyle, kind: "choice", choices: withHeld(PIECE_PRONG_STYLES, p.prongStyle, capital) },
+    { key: "prongHeight", label: "Prong height, mm", value: num(p.prongHeight), kind: "number" },
+    { key: "prongTip", label: "Prong tip, mm", value: num(p.prongTip), kind: "number" },
+    { key: "prongWire", label: "Prong wire, mm", value: num(p.prongWire), kind: "number" },
+  ];
+}
+
 function wornRows(p: PieceParams, choices: PieceChoices): PieceRow[] {
   const rows: PieceRow[] = [
     { key: "kind", label: "Kind", value: p.kind, kind: "choice", choices: PIECE_KINDS },
@@ -880,6 +980,7 @@ function wornRows(p: PieceParams, choices: PieceChoices): PieceRow[] {
     rows.push({ key: "bezelHeight", label: "Bezel height, mm", value: num(p.bezelHeight), kind: "number" });
   } else {
     rows.push({ key: "prongs", label: "Prongs", value: num(p.prongs), kind: "whole" });
+    rows.push(...prongStyleRows(p));
   }
   rows.push({ key: "halo", label: "Halo", value: p.halo === null ? "false" : "true", kind: "tick" });
   if (p.halo !== null) {
@@ -1022,7 +1123,7 @@ export function passingLine(passing: number, failing: number): string {
 
 /** A group of the parameters, under its name. */
 export interface PieceGroup {
-  name: "Ring" | "Piece" | "Band" | "Shank" | "Stones" | "Head" | "Setting" | "Findings" | "Pavé" | "Engraving";
+  name: "Ring" | "Piece" | "Band" | "Shank" | "Stones" | "Head" | "Setting" | "Findings" | "Pavé" | "Pattern" | "Engraving";
   rows: PieceRow[];
 }
 
@@ -1106,12 +1207,19 @@ function groupOf(row: PieceRow, kind: string): PieceGroup["name"] {
     case "hallmark":
     case "hallmarkMaker":
       return "Engraving";
+    case "pattern":
+    case "patternAmount":
+    case "patternWall":
+    case "patternFinish":
+    case "patternDepth":
+    case "patternShuffle":
+      return "Pattern";
     default:
       return "Stones";
   }
 }
 
-const GROUP_ORDER: readonly PieceGroup["name"][] = ["Ring", "Piece", "Band", "Shank", "Stones", "Head", "Setting", "Findings", "Pavé", "Engraving"];
+const GROUP_ORDER: readonly PieceGroup["name"][] = ["Ring", "Piece", "Band", "Shank", "Stones", "Head", "Setting", "Findings", "Pavé", "Pattern", "Engraving"];
 
 /**
  * The rows in the groups a bench reads them in: the ring (what it is and the finger), the band,
@@ -1180,9 +1288,33 @@ function judgeSize(row: PieceRow, draft: string, system: string): DraftVerdict {
  * number's range is the engine's to refuse. `system` is the size system the section shows (the
  * size is sent in it); the size-system row itself changes only what is shown and sends nothing.
  */
-export function judgePieceDraft(row: PieceRow, draft: string, system = "us"): DraftVerdict {
+export function judgePieceDraft(row: PieceRow, draft: string, system = "us", held: PatternPart | false | null = null): DraftVerdict {
   if (typeof draft !== "string") return { kind: "keep" };
+  const pattern = held === false ? null : held;
+  if (row.kind === "action") {
+    // Shuffle: the same pattern with the next seed.
+    if (row.key !== "patternShuffle" || pattern === null) return { kind: "keep" };
+    const held = readNumber(row.value);
+    return { kind: "send", patch: patternPatch(pattern.motif, { seed: nextSeed(held.ok ? held.value : null) }) };
+  }
   if (draft === row.value) return { kind: "keep" };
+  if (row.key === "pattern") {
+    if (draft === "none") return { kind: "send", patch: { pattern: false } };
+    return { kind: "send", patch: { pattern: { [draft]: draft === "truchet" ? { depth: PATTERN_DEPTH } : {} } } };
+  }
+  if (row.key === "patternFinish" && pattern !== null) {
+    if (draft === "pierced") return { kind: "send", patch: patternPatch(pattern.motif, { depth: null, relief: null }) };
+    return { kind: "send", patch: patternPatch(pattern.motif, { depth: pattern.depth ?? PATTERN_DEPTH, relief: draft }) };
+  }
+  if ((row.key === "patternAmount" || row.key === "patternWall" || row.key === "patternDepth") && pattern !== null) {
+    const read = readNumber(draft);
+    if (!read.ok) return read.fault === "empty" ? { kind: "keep" } : { kind: "refuse", message: `${rowName(row)} needs a number` };
+    if (row.kind === "whole" && !Number.isInteger(read.value)) return { kind: "refuse", message: `${rowName(row)} takes a whole number` };
+    const held = readNumber(row.value);
+    if (held.ok && held.value === read.value) return { kind: "keep" };
+    const key = row.key === "patternWall" ? "wall" : row.key === "patternDepth" ? "depth" : (PATTERN_AMOUNT[pattern.motif]?.key ?? "cells");
+    return { kind: "send", patch: patternPatch(pattern.motif, { [key]: read.value }) };
+  }
   switch (row.kind) {
     case "readonly":
       return { kind: "keep" };
@@ -1287,6 +1419,14 @@ export function refusalRow(error: unknown, rows: readonly PieceRow[]): string | 
   if (/fineness|hallmark/i.test(text)) return first("hallmark");
   if (/^V prongs\b/.test(text)) return first("prongStyle", "cut");
   // Pavé's own keys: `pave.melee` is the pavé stones' row.
+  // The pattern's keys: `pattern.wall` is the rib's row, the motif's own number its amount.
+  const pattern = /`pattern\.([a-z]{1,12})/.exec(text);
+  if (pattern !== null) {
+    const key = pattern[1] ?? "";
+    const row = key === "wall" ? "patternWall" : key === "depth" ? "patternDepth" : key === "relief" ? "patternFinish" : "patternAmount";
+    return first(row, "pattern");
+  }
+  if (/\bpattern\b/i.test(text) && /^`?pattern|Truchet|pierced|a pattern/i.test(text)) return first("pattern");
   const pave = /`pave\.([a-z]{1,12})/.exec(text);
   if (pave !== null) {
     const row = Object.entries(PAVE_FIELDS).find(([, field]) => field === pave[1])?.[0];
