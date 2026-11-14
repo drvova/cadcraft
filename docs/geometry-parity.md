@@ -52,7 +52,7 @@ constraints 10%.
 | Spline editing: knot insertion, split, refine, rebuild, convert to polyline | SPLINEDIT, grips | knot insertion and splitting (`curves.rs:539-622`); refine/rebuild partial |
 | Helix | yes | **no** |
 | 3D polyline | yes | stored and drawn; no 3D operations |
-| Regions, 3D solids, surfaces, meshes (ACIS/B-rep, NURBS surfaces, subdivision) | yes | **no** (M11) |
+| Regions, 3D solids, surfaces, meshes (ACIS/B-rep, NURBS surfaces, subdivision) | yes | **NURBS surface kernel in `crates/geom`** ([nurbs-surfaces.md](nurbs-surfaces.md)): evaluation with derivatives, knot insertion, degree elevation, bilinear/extrude/revolve/ruled/loft/sweep1, adaptive watertight tessellation, closest point, area, volume. No surface entity in the drawing yet; no trims, B-rep, solids or subdivision (M11) |
 
 ## Intersections (≈ 40%)
 
@@ -170,6 +170,7 @@ Total ≈ 90–140 h; items 1–6 parallelise across two or three agents.
 |---|---|---|
 | 2026-11-14 | minor | SubD foundation in `crates/geom`: cage, Catmull–Clark with creases, limit surface, mesh, edits, bicubic patches ([subd.md](subd.md)) |
 | 2026-10-22 | minor | Constraint expressions count operator chains toward the syntax-tree depth limit; evaluation shares one depth limit across operators and parameter references, with a 1 MiB-stack regression (#1936) |
+| 2026-11-14 | minor | NURBS surface foundation in `crates/geom` (docs/nurbs-surfaces.md); not yet a drawing entity |
 | 2026-10-14 | trivial | JOIN Close: a single arc becomes its circle, a single elliptical arc its full ellipse (#1175) |
 | 2026-10-12 | trivial | TRIM on a closed polyline keeps only the complementary run when the pick lies past the last cut (#726) |
 | 2026-10-12 | minor | Property-based and hostile-input tests for geometry numerics landed (`crates/geom/src/property_tests.rs`): intersections, closest points, three-point arcs, bounds, vector identities; hostile f64s never panic; known answers at 1e6–1e7 |

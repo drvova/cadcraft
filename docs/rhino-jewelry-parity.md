@@ -19,7 +19,8 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 |---|---|---|
 | Band from a circle and a profile; dome, comfort, court, knife, bevel, concave sections | `piece {kind:"band", profile}`, the Piece panel | done |
 | Band from a profile curve you draw | `piece {profile:{curve}}`, "Update from curve" | done |
-| Profile swept along a rail (oval, shaped shank); two-rail sweep | rail on `piece` | planned (J8) |
+| Profile swept along a rail (oval, shaped shank); two-rail sweep | rail on `piece` | planned (J8); the kernel's one-rail sweep (rotation-minimising and upright frames) exists in `crates/geom` |
+| Free-form NURBS surfaces (loft, revolve, sweep, extrude, ruled), area and volume | `NurbsSurface` in `crates/geom` ([nurbs-surfaces.md](nurbs-surfaces.md)) | partial: kernel only, no surface entity, commands, trims or 3dm surfaces yet |
 | Dome ring, tapered shank | `kind:"dome"` | done |
 | Signet (flat face for engraving) | `kind:"signet"` | done; flush stone in the face partial |
 | Solitaire, three-stone, halo | `kind:"solitaire"`, `"threestone"`, `halo` | done |
@@ -111,6 +112,7 @@ own tests — never from Rhino's binaries, code, interface or artwork.
 |---|---|---|
 | 2026-11-14 | minor | SubD row: the subdivision-surface foundation landed in `crates/geom` |
 | 2026-11-14 | minor | Roadmap to a Rhino replacement for jewellers |
+| 2026-11-14 | minor | NURBS surface kernel row (crates/geom) |
 | 2026-11-14 | minor | Behaviours to match, from the public command reference |
 | 2026-11-14 | minor | Interoperability row for `.3dm` (ADR 0003) |
 | 2026-11-14 | minor | The render row: image, turntable and contact sheet export |

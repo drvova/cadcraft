@@ -206,7 +206,7 @@ fn solve_multi(mut a: Vec<f64>, mut b: Vec<f64>, n: usize, k: usize) -> Option<V
             ai.total_cmp(&aj)
         })?;
         let pv = a.get(piv * n + c).copied().unwrap_or(0.0);
-        if !(pv.abs() > 1e-14 * scale.max(1e-300)) {
+        if pv.abs().partial_cmp(&(1e-14 * scale.max(1e-300))) != Some(std::cmp::Ordering::Greater) {
             return None;
         }
         if piv != c {

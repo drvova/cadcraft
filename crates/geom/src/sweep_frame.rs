@@ -133,17 +133,18 @@ pub fn rail_frames(rail: &NurbsCurve3, params: &[f64], mode: FrameMode) -> Surfa
         frames.push(Frame { origin: x, tangent: t, normal: r, binormal: t.cross(r) });
     }
     // Closed rail, rotation-minimising: spread the holonomy so the end frame meets the start.
-    if axis.is_none() && frames.len() > 2 {
-        if let (Some(f0), Some(fe)) = (frames.first().copied(), frames.last().copied()) {
-            let scale = rail.points().iter().fold(0.0f64, |m, p| m.max(p.len())).max(1.0);
-            if (f0.origin - fe.origin).len() <= 1e-9 * scale && f0.tangent.dot(fe.tangent) > 1.0 - 1e-9 {
-                let phi = fe.normal.cross(f0.normal).dot(f0.tangent).atan2(fe.normal.dot(f0.normal));
-                let last = (frames.len() - 1) as f64;
-                for (k, f) in frames.iter_mut().enumerate() {
-                    let ang = phi * k as f64 / last;
-                    f.normal = rotate_about(f.normal, f.tangent, ang).normalized();
-                    f.binormal = f.tangent.cross(f.normal);
-                }
+    if axis.is_none()
+        && frames.len() > 2
+        && let (Some(f0), Some(fe)) = (frames.first().copied(), frames.last().copied())
+    {
+        let scale = rail.points().iter().fold(0.0f64, |m, p| m.max(p.len())).max(1.0);
+        if (f0.origin - fe.origin).len() <= 1e-9 * scale && f0.tangent.dot(fe.tangent) > 1.0 - 1e-9 {
+            let phi = fe.normal.cross(f0.normal).dot(f0.tangent).atan2(fe.normal.dot(f0.normal));
+            let last = (frames.len() - 1) as f64;
+            for (k, f) in frames.iter_mut().enumerate() {
+                let ang = phi * k as f64 / last;
+                f.normal = rotate_about(f.normal, f.tangent, ang).normalized();
+                f.binormal = f.tangent.cross(f.normal);
             }
         }
     }

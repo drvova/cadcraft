@@ -220,15 +220,15 @@ fn build_mesh(s: &NurbsSurface, us: &[f64], vs: &[f64], size: f64, capped: bool)
             } else {
                 None
             };
-            if let Some(src) = src {
-                if let (Some(&v), Some(slot)) = (id.get(src), id.get(k)) {
-                    if v != u32::MAX && *slot == u32::MAX {
-                        if let Some(x) = id.get_mut(k) {
-                            *x = v;
-                        }
-                        continue;
-                    }
+            if let Some(src) = src
+                && let (Some(&v), Some(slot)) = (id.get(src), id.get(k))
+                && v != u32::MAX
+                && *slot == u32::MAX
+            {
+                if let Some(x) = id.get_mut(k) {
+                    *x = v;
                 }
+                continue;
             }
             let pole = if i == 0 && poles[0] {
                 Some(0)
@@ -241,13 +241,13 @@ fn build_mesh(s: &NurbsSurface, us: &[f64], vs: &[f64], size: f64, capped: bool)
             } else {
                 None
             };
-            if let Some(e) = pole {
-                if let Some(v) = pole_ids.get(e).copied().flatten() {
-                    if let Some(x) = id.get_mut(k) {
-                        *x = v;
-                    }
-                    continue;
+            if let Some(e) = pole
+                && let Some(v) = pole_ids.get(e).copied().flatten()
+            {
+                if let Some(x) = id.get_mut(k) {
+                    *x = v;
                 }
+                continue;
             }
             let (u, v) = (us.get(i).copied().unwrap_or(0.0), vs.get(j).copied().unwrap_or(0.0));
             let idx = mesh.positions.len() as u32;
@@ -257,10 +257,10 @@ fn build_mesh(s: &NurbsSurface, us: &[f64], vs: &[f64], size: f64, capped: bool)
             if let Some(x) = id.get_mut(k) {
                 *x = idx;
             }
-            if let Some(e) = pole {
-                if let Some(slot) = pole_ids.get_mut(e) {
-                    *slot = Some(idx);
-                }
+            if let Some(e) = pole
+                && let Some(slot) = pole_ids.get_mut(e)
+            {
+                *slot = Some(idx);
             }
         }
     }
@@ -273,7 +273,7 @@ fn build_mesh(s: &NurbsSurface, us: &[f64], vs: &[f64], size: f64, capped: bool)
             let p = |x: u32| mesh.positions.get(x as usize).copied().unwrap_or_default();
             let tris = if (p(a) - p(c)).len() <= (p(b) - p(d)).len() { [[a, b, c], [a, c, d]] } else { [[a, b, d], [b, c, d]] };
             for t in tris {
-                if t.iter().any(|&x| x == u32::MAX) || t[0] == t[1] || t[1] == t[2] || t[0] == t[2] {
+                if t.contains(&u32::MAX) || t[0] == t[1] || t[1] == t[2] || t[0] == t[2] {
                     continue;
                 }
                 mesh.indices.extend(t);
