@@ -491,3 +491,51 @@ describe("the section's layout", () => {
     expect(stone && rowShownName(stone)).toBe(stone?.both === true ? "Stone size" : "Stone width");
   });
 });
+
+describe("pavé on the band", () => {
+  const PAVE = { layout: "honeycomb", rows: 3, melee: 1.2, gap: 0.15, span: "top-half", from: 0, to: 90, symmetric: true, graduated: null };
+  const find = (rows: readonly PieceRow[], key: string): PieceRow => {
+    const found = rows.find((r) => r.key === key);
+    if (found === undefined) throw new Error(`no ${key} row`);
+    return found;
+  };
+
+  test("an engine without pavé shows no pavé rows; one with it shows a tick, and the group when it is on", () => {
+    expect(keys(pieceRows(piece("band"), CHOICES, "us"))).not.toContain("pave");
+    expect(keys(pieceRows(piece("band", { pave: false }), CHOICES, "us")).slice(-1)).toEqual(["pave"]);
+    const rows = pieceRows(piece("solitaire", { pave: PAVE }), CHOICES, "us");
+    expect(keys(rows).slice(-6)).toEqual(["pave", "paveLayout", "paveRows", "paveMelee", "paveGap", "paveSpan"]);
+    expect(pieceGroups(rows, "solitaire").map((g) => g.name)).toEqual(["Ring", "Band", "Stones", "Head", "Pavé"]);
+    expect(find(rows, "paveSpan").value).toBe("top-half");
+    // A single row has no rows count; an eternity band has no pavé.
+    expect(keys(pieceRows(piece("band", { pave: { ...PAVE, layout: "row" } }), CHOICES, "us"))).not.toContain("paveRows");
+    expect(keys(pieceRows(piece("eternity", { pave: false }), CHOICES, "us"))).not.toContain("pave");
+    // Angles instead of a named span read as custom.
+    const custom = find(pieceRows(piece("band", { pave: { ...PAVE, span: null } }), CHOICES, "us"), "paveSpan");
+    expect(custom.value).toBe("custom");
+    expect(custom.choices?.[0]).toEqual({ value: "custom", label: "Custom angles" });
+  });
+
+  test("each pavé row sends its one field inside `pave`", () => {
+    const rows = pieceRows(piece("band", { pave: PAVE }), CHOICES, "us");
+    expect(judgePieceDraft(find(rows, "pave"), "false")).toEqual({ kind: "send", patch: { pave: false } });
+    expect(judgePieceDraft(find(rows, "paveLayout"), "scallop")).toEqual({ kind: "send", patch: { pave: { layout: "scallop" } } });
+    expect(judgePieceDraft(find(rows, "paveRows"), "2")).toEqual({ kind: "send", patch: { pave: { rows: 2 } } });
+    expect(judgePieceDraft(find(rows, "paveRows"), "2.5")).toEqual({ kind: "refuse", message: "Rows takes a whole number" });
+    expect(judgePieceDraft(find(rows, "paveMelee"), "1,3")).toEqual({ kind: "send", patch: { pave: { melee: 1.3 } } });
+    expect(judgePieceDraft(find(rows, "paveGap"), "0.15")).toEqual({ kind: "keep" });
+    expect(judgePieceDraft(find(rows, "paveSpan"), "full")).toEqual({ kind: "send", patch: { pave: { span: "full" } } });
+    // The halo's tick still sends the halo.
+    const halo = find(pieceRows(piece("solitaire"), CHOICES, "us"), "halo");
+    expect(judgePieceDraft(halo, "true")).toEqual({ kind: "send", patch: { halo: true } });
+    const off = find(pieceRows(piece("band", { pave: false }), CHOICES, "us"), "pave");
+    expect(judgePieceDraft(off, "true")).toEqual({ kind: "send", patch: { pave: true } });
+  });
+
+  test("an engine refusal of a pavé key lands on its row", () => {
+    const rows = pieceRows(piece("band", { pave: PAVE }), CHOICES, "us");
+    expect(refusalRow("invalid parameters for `piece`: `pave.melee` must be a number of millimetres from 0.8 to 3", rows)).toBe("paveMelee");
+    expect(refusalRow("`pave.rows` must be 1, 2 or 3", rows)).toBe("paveRows");
+    expect(refusalRow("`pave.graduated.from` must be a stone size", rows)).toBe("pave");
+  });
+});
