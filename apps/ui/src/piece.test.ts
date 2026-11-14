@@ -685,3 +685,30 @@ describe("the Setting group: prong styles", () => {
     expect(keys(pieceRows(piece("solitaire"), CHOICES, "us"))).not.toContain("prongStyle");
   });
 });
+
+describe("where the features meet", () => {
+  const plain = { rail: null, shank: null, pattern: false, pave: false, engrave: false, hallmark: false };
+
+  test("a pendant or earrings show the Setting rows and no Engraving, Shank, Pattern or Pavé", () => {
+    for (const kind of ["pendant", "stud", "drop"]) {
+      const rows = pieceRows(piece(kind, { ...plain, prongStyle: "claw", prongHeight: null, prongTip: null, prongWire: null }), CHOICES, "us");
+      const groups = pieceGroups(rows, kind).map((g) => g.name);
+      expect(groups).toContain("Setting");
+      for (const ring of ["Engraving", "Shank", "Pattern", "Pavé"]) expect(groups).not.toContain(ring);
+      expect(keys(rows)).not.toContain("engrave");
+    }
+  });
+
+  test("a cable band shows no pattern or pavé rows, and a patterned band no twist", () => {
+    const cable = pieceRows(piece("band", { ...plain, pattern: { twist: { strands: 3, turns: null, wire: 1 } } }), CHOICES, "us");
+    expect(keys(cable)).toContain("twist");
+    expect(keys(cable)).not.toContain("pattern");
+    expect(keys(cable)).not.toContain("pave");
+    const voronoi = { voronoi: { cells: 24, seed: 1, jitter: 0.8, wall: 0.8, rim: null, depth: null, relief: null } };
+    const patterned = pieceRows(piece("band", { ...plain, pattern: voronoi }), CHOICES, "us");
+    expect(keys(patterned)).toContain("pattern");
+    expect(keys(patterned)).not.toContain("twist");
+    const bare = pieceRows(piece("band", plain), CHOICES, "us");
+    expect(keys(bare)).toEqual(expect.arrayContaining(["twist", "pattern", "engrave"]));
+  });
+});
