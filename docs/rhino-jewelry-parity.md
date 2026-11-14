@@ -70,7 +70,7 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 | History (edit and it rebuilds) | the parametric piece | done |
 | Grasshopper sliders, the Player's input panel | the Piece panel; proposals; the assistant | done |
 | Generative patterns (Voronoi, lattice, Truchet, image-driven) | pattern options on the band | planned |
-| Interoperability: open and save Rhino `.3dm` | today via Rhino's DXF (curves) and STL/OBJ (meshes) exports, and `STLOUT` back; a 3dm reader waits on an owner decision (ADR 0003: no public 3dm specification) | planned |
+| Interoperability: open and save Rhino `.3dm` | `IMPORT3DM` (and File ▸ Import) reads Rhino 5–8 files: each mesh measured (triangles, closed, volume, grams in every metal, bounds, in mm from the model units) and curves brought in as lines, arcs, circles, polylines and splines on the file's layers, ready for `PIECE {profile: {curve}}`; `EXPORT3DM` writes the cast piece as a mesh with its section and finger circle. NURBS surfaces and polysurfaces are not read yet (mesh them in Rhino first); the export is not yet checked in Rhino itself (ADR 0003) | partial |
 
 ## Behaviours to match (from McNeel's public command reference, in our words)
 
@@ -94,6 +94,7 @@ versions behave as a jeweller expects. Our implementations are our own.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | `.3dm` read (meshes weighed, curves as profiles) and written (EXPORT3DM) |
 | 2026-11-14 | minor | Behaviours to match, from the public command reference |
 | 2026-11-14 | minor | Interoperability row for `.3dm` (ADR 0003) |
 | 2026-11-14 | new | The feature list against Rhino's jewelry workflow, and the no-code rule |
