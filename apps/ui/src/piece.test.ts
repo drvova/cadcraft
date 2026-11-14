@@ -175,8 +175,29 @@ describe("pieceRows", () => {
   });
 
   test("a solitaire adds its stone and head; the halo's rows come with the halo", () => {
-    expect(keys(pieceRows(piece("solitaire"), CHOICES, "us"))).toEqual(["kind", "system", "size", "wall", "width", "profile", "metal", "cut", "stone", "stoneWidth", "prongs", "halo"]);
+    expect(keys(pieceRows(piece("solitaire"), CHOICES, "us"))).toEqual(["kind", "system", "size", "wall", "width", "profile", "metal", "cut", "stone", "stoneWidth", "head", "prongs", "halo"]);
     expect(keys(pieceRows(piece("solitaire", { halo: 1.3 }), CHOICES, "us")).slice(-3)).toEqual(["halo", "haloWidth", "gap"]);
+  });
+
+  test("a bezel head trades the prongs for its wall and height, in the Head group", () => {
+    const rows = pieceRows(piece("solitaire", { head: "bezel", bezelWall: 0.7 }), CHOICES, "us");
+    expect(keys(rows)).toEqual(["kind", "system", "size", "wall", "width", "profile", "metal", "cut", "stone", "stoneWidth", "head", "bezelWall", "bezelHeight", "halo"]);
+    expect(rows.find((r) => r.key === "bezelWall")?.value).toBe("0.7");
+    expect(rows.find((r) => r.key === "bezelHeight")?.value).toBe("");
+    const head = pieceGroups(rows, "solitaire").find((g) => g.name === "Head");
+    expect(head?.rows.map((r) => r.key)).toEqual(["head", "bezelWall", "bezelHeight", "halo"]);
+    const three = keys(pieceRows(piece("threestone", { head: "bezel" }), CHOICES, "us"));
+    expect(three).not.toContain("sideProngs");
+    expect(judgePieceDraft(rows.find((r) => r.key === "head")!, "prong")).toEqual({ kind: "send", patch: { head: "prong" } });
+  });
+
+  test("the new kinds show their own rows", () => {
+    expect(keys(pieceRows(piece("halfeternity"), CHOICES, "us")).slice(-3)).toEqual(["melee", "count", "gap"]);
+    expect(keys(pieceRows(piece("dome"), CHOICES, "us")).slice(-2)).toEqual(["topWidth", "topWall"]);
+    const signet = pieceRows(piece("signet", { face: "cushion" }), CHOICES, "us");
+    expect(keys(signet).slice(-5)).toEqual(["topWidth", "face", "faceLength", "faceWidth", "topWall"]);
+    expect(signet.find((r) => r.key === "face")?.value).toBe("cushion");
+    expect(pieceGroups(signet, "signet").map((g) => g.name)).toEqual(["Ring", "Band"]);
   });
 
   test("a round stone is one diameter; any other cut is a length and a width", () => {

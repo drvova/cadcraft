@@ -74,6 +74,7 @@ export const TEMPLATES: readonly Template[] = [
     name: "Bezel Three-Stone",
     blurb: "Three stones, each in its own bezel, in platinum.",
     params: { kind: "threestone", head: "bezel", cut: "round", stone: "diamond", stoneWidth: 5, stoneLength: 5, wall: 1.8, width: 2.4, profile: "flat", metal: "platinum" },
+    requires: "the three-stone setting",
   },
   {
     id: "plain-band",
@@ -158,12 +159,12 @@ const GROUP_LABELS: Readonly<Record<string, string>> = {
   solitaire: "Solitaires",
   band: "Bands",
   eternity: "Eternity",
-  halfeternity: "Eternity",
-  dome: "Bands",
+  halfeternity: "Half eternity",
+  dome: "Dome rings",
   signet: "Signets",
 };
 
-const GROUP_ORDER: readonly string[] = ["solitaire", "band", "dome", "signet", "eternity", "halfeternity"];
+const GROUP_ORDER: readonly string[] = ["solitaire", "band", "eternity", "halfeternity", "dome", "signet"];
 
 /** A group heading for a kind the table knows, else the kind with a capital and an "s". */
 function groupLabel(kind: string): string {
