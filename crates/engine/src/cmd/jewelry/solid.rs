@@ -296,6 +296,8 @@ pub(super) enum Prim {
     },
     /// A styled prong's top: a claw's cone, a tab's or V's bars ([`super::prongs::ProngSolid`]).
     Prong(super::prongs::ProngSolid),
+    /// A channel setting's rails, or the channel cut between them ([`super::channel::ChannelBound`]).
+    Channel(super::channel::ChannelBound),
 }
 
 /// Edges of a section taken together for [`Section::dist`].
@@ -408,6 +410,7 @@ impl Prim {
             Prim::Bezel(b) => b.distance(p),
             Prim::Face { face, outline } => face.distance(p, outline),
             Prim::Prong(prong) => prong.distance(p),
+            Prim::Channel(c) => c.distance(p),
         };
         if v.is_nan() { f64::INFINITY } else { v }
     }
@@ -466,6 +469,7 @@ impl Prim {
                 bx
             }
             Prim::Prong(prong) => prong.bounds(),
+            Prim::Channel(c) => c.bounds(),
         }
     }
 }

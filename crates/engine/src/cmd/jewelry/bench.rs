@@ -244,6 +244,7 @@ fn parse_band(block: &str, desc: &str) -> Option<Value> {
         "head": field("head"),
         "prongs": field("prongs"),
         "prongGrams": number("prongGrams"),
+        "channelGrams": number("channelGrams"),
     }))
 }
 

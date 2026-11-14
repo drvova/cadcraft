@@ -76,6 +76,8 @@ use cadcraft_doc::EntityKind;
 use cadcraft_geom::{PI, TAU, Vec2, Vec3};
 use serde_json::{Value, json};
 
+#[path = "channel_mesh.rs"]
+mod channel_mesh;
 #[path = "mesh_kinds.rs"]
 mod mesh_kinds;
 #[path = "prongs_mesh.rs"]
@@ -919,6 +921,8 @@ struct Parts {
     beads: Buf,
     bezel: Buf,
     face: Buf,
+    /// A channel setting's rails ([`super::channel`]).
+    channel: Buf,
     centre: Buf,
     sides: Buf,
     melee: Buf,
@@ -1386,6 +1390,8 @@ fn build_pave(s: &Sane, d: &Detail, out: &mut Parts) {
         return;
     };
     let table = gem::CUTS.first().map_or(0.57, shared::table_ratio);
+    // A channel keeps its lips: its stones' seats have no bore, its rails no beads ([`super::channel`]).
+    let channel = fit.spec.layout == pave_band::Layout::Channel;
     for st in &fit.stones {
         // u × v = w: the girdle's plane, its table along the normal.
         let (w, u) = (st.normal, -st.around);
@@ -1396,7 +1402,8 @@ fn build_pave(s: &Sane, d: &Detail, out: &mut Parts) {
         if let Some(cut) = gem::CUTS.first() {
             let shape = StoneShape::of(cut, st.diameter, st.diameter, st.depth, 16 * d.melee.clamp(1, 8));
             let (girdle, crown, pavilion) = proportions(st.depth);
-            let mut envelope = seat_envelope(&shape, &f, girdle, crown, pavilion, Some(girdle / 2.0 + crown + SEAT_CLEARANCE + BORE_OVER));
+            let bore = (!channel).then_some(girdle / 2.0 + crown + SEAT_CLEARANCE + BORE_OVER);
+            let mut envelope = seat_envelope(&shape, &f, girdle, crown, pavilion, bore);
             fit_seat(&mut envelope, d, &|b, dd| round_brilliant(b, &f, st.diameter / 2.0, st.depth, table, dd.melee));
             let through = (Vec2::new(st.girdle.x, st.girdle.y).len() - s.ri + BORE_OVER).max(BORE_OVER);
             out.csg.cut.push(Prim::Cylinder { axes: axes_of(&f), r: PAVE_HOLE * envelope.reach, lo: -through, hi: 0.0 });
@@ -1405,7 +1412,10 @@ fn build_pave(s: &Sane, d: &Detail, out: &mut Parts) {
         }
     }
     out.stones = out.stones.saturating_add(u32::try_from(fit.stones.len()).unwrap_or(u32::MAX));
-    if let Some(surf) = pave_band::Surface::of(&s.p) {
+    if channel {
+        channel_mesh::build(out, &s.p.channel_pieces(), d.radial);
+    }
+    if let Some(surf) = pave_band::Surface::of(&s.p).filter(|_| !channel) {
         for (c, up, rb) in pave_band::beads(&fit, &surf) {
             bead(&mut out.beads, c, up, rb, d.bead_radial, d.bead_lat);
             out.csg.add.push(Prim::Sphere { c, r: rb });
@@ -1513,6 +1523,7 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
         parts.beads.part("metal", "beads", metal),
         parts.bezel.part("metal", "bezel", metal),
         parts.face.part("metal", "face", metal),
+        parts.channel.part("metal", "channel", metal),
         parts.centre.part("stone", "centre stone", stone),
         parts.sides.part("stone", "side stones", stone),
         parts.melee.part("stone", "melee", small),
@@ -1725,6 +1736,7 @@ fn run_piecemesh(_s: &mut Session, p: &Value) -> Result<Value> {
             "grams": r3(piece.band_grams()),
             "bezelGrams": if piece.bezeled() { json!(r3(piece.bezel_grams())) } else { Value::Null },
             "prongGrams": if piece.pronged() { json!(r3(piece.prong_grams())) } else { Value::Null },
+            "channelGrams": if piece.channeled() { json!(r3(piece.channel_grams())) } else { Value::Null },
             "shells": { "volumeMm3": r3(shells), "grams": r3(shells / 1000.0 * piece.density) },
         },
         "notes": mesh.notes,

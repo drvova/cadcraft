@@ -295,6 +295,8 @@ pub(super) struct PieceParams {
     pub face_width: f64,
     /// Prong heads: the prongs' style, height, tip and wire ([`super::prongs`]).
     pub prong: super::prongs::ProngSpec,
+    /// A channel setting's wall and lip ([`super::channel`]).
+    pub channel: super::channel::ChannelSpec,
 }
 
 /// The most stones an eternity band may be asked for.
@@ -425,6 +427,7 @@ impl PieceParams {
         let face_width = mm_in(cmd, p, "faceWidth", 10.0, 4.0, 30.0)?;
         Ok(PieceParams {
             prong: super::prongs::ProngSpec::parse(cmd, p)?,
+            channel: super::channel::ChannelSpec::parse(cmd, p)?,
             head,
             bezel_wall,
             bezel_height,
@@ -518,6 +521,7 @@ impl PieceParams {
         });
         if let Some(o) = out.as_object_mut() {
             self.prong.json_into(o);
+            self.channel.json_into(o);
         }
         out
     }

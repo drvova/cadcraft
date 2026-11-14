@@ -316,6 +316,8 @@ const PARAMS: &[(&str, &str, Option<&str>)] = &[
     ("prongHeight", "Prong height", Some("mm")),
     ("prongTip", "Prong tip", Some("mm")),
     ("prongWire", "Prong wire", Some("mm")),
+    ("channelWall", "Channel wall", Some("mm")),
+    ("channelLip", "Channel lip", Some("mm")),
     ("topWidth", "Top width", Some("mm")),
     ("topWall", "Top wall", Some("mm")),
     ("face", "Face", None),

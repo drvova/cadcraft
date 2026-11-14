@@ -48,6 +48,9 @@ describe("the bench sheet", () => {
     expect(sheet?.grams).toBeCloseTo(2.25, 9);
     const hostile = parseBench({ stones: { count: 0, carat: 0, groups: [] }, bands: [{ grams: 2, metal: "gold18", prongs: { x: 1 }, prongGrams: -3 }] });
     expect(hostile?.lines.length).toBe(1);
+    const channel = parseBench({ stones: { count: 0, carat: 0, groups: [] }, bands: [{ grams: 2, metal: "gold18", size: "US 6", channelGrams: 0.5 }] });
+    expect(channel?.lines.map((l) => l.label)).toEqual(["18k gold band", "Channel rails"]);
+    expect(channel?.grams).toBeCloseTo(2.5, 9);
   });
 
   test("names a fancy cut by both sides, a material by its gravity, and melee off the calibrated list", () => {

@@ -85,6 +85,13 @@ export const TEMPLATES: readonly Template[] = [
     requires: "prong styles",
   },
   {
+    id: "channel-band",
+    name: "Channel-Set Band",
+    blurb: "A row of stones between two rails across the top.",
+    params: { kind: "band", wall: 2, width: 3.5, profile: "flat", metal: "gold18", pave: { layout: "channel", melee: 2, gap: 0.1, span: "top-half" } },
+    requires: "channel settings",
+  },
+  {
     id: "bezel-solitaire",
     name: "Bezel Solitaire",
     blurb: "A round stone in a smooth metal collar: nothing to snag.",

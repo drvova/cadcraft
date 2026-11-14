@@ -81,6 +81,7 @@ export const PAVE_LAYOUTS: readonly Choice[] = [
   { value: "rows", label: "Rows" },
   { value: "honeycomb", label: "Honeycomb" },
   { value: "scallop", label: "Scalloped" },
+  { value: "channel", label: "Channel" },
 ];
 
 /** The spans pavé is fitted to (`Span` in `pave_band.rs`); angles given instead read "custom". */
@@ -152,6 +153,9 @@ export interface PieceParams {
   prongHeight: number | null;
   prongTip: number | null;
   prongWire: number | null;
+  /** A channel setting's rail wall and lip (null: the engine's). */
+  channelWall: number | null;
+  channelLip: number | null;
   /** A dome ring's or a signet's top (null: the engine's share of the bottom). */
   topWidth: number | null;
   topWall: number | null;
@@ -276,6 +280,8 @@ function parseParams(value: unknown): PieceParams | null {
     prongHeight: sizeOf(value["prongHeight"]),
     prongTip: sizeOf(value["prongTip"]),
     prongWire: sizeOf(value["prongWire"]),
+    channelWall: sizeOf(value["channelWall"]),
+    channelLip: sizeOf(value["channelLip"]),
     topWidth: sizeOf(value["topWidth"]),
     topWall: sizeOf(value["topWall"]),
     face: nameOf(value["face"]) || "oval",
@@ -318,6 +324,11 @@ function paveRows(p: PieceParams): PieceRow[] {
   rows.push({ key: "paveMelee", label: "Pavé stones, mm", value: num(pave.melee), kind: "number" });
   rows.push({ key: "paveGap", label: "Pavé gap, mm", value: num(pave.gap), kind: "number" });
   rows.push({ key: "paveSpan", label: "Span", value: pave.span, kind: "choice", choices: withHeld(PAVE_SPANS, pave.span, () => "Custom angles") });
+  if (pave.layout === "channel") {
+    // The channel's rails, in the Setting group: their wall beyond the girdles and the lip over them.
+    rows.push({ key: "channelWall", label: "Channel wall, mm", value: num(p.channelWall), kind: "number" });
+    rows.push({ key: "channelLip", label: "Channel lip, mm", value: num(p.channelLip), kind: "number" });
+  }
   return rows;
 }
 
@@ -702,6 +713,8 @@ function groupOf(row: PieceRow, kind: string): PieceGroup["name"] {
     case "prongHeight":
     case "prongTip":
     case "prongWire":
+    case "channelWall":
+    case "channelLip":
       return "Setting";
     case "gap":
       return kind === "eternity" || kind === "halfeternity" ? "Stones" : "Head";

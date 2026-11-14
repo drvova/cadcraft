@@ -656,6 +656,7 @@ fn design(p: &PieceParams) -> Result<Design> {
     notes.extend(pave_band::unused(p));
     if let Some(f) = &pave {
         checks.push(check("pave", f.ok(), f.message()));
+        checks.extend(p.channel_checks().into_iter().map(|(id, ok, words)| check(id, ok, words)));
         carat += f.stones.iter().map(|s| pave_band::stone_carat(s.diameter)).sum::<f64>();
     }
     if let Some(sh) = &pave_sheet {
@@ -702,6 +703,10 @@ fn design(p: &PieceParams) -> Result<Design> {
         for (at, d) in &sh.inserts {
             pave_stones.push((layout_at + *at, pave_band::melee_stone(CMD, *d)?));
         }
+        // A channel's rails: their tops in the front view, their footprints in the layout.
+        let (front, rails) = super::channel::sheet(&p.channel_pieces(), p.inner() / 2.0 + section.height_at(0.0));
+        shapes.extend(front.into_iter().map(|v| (On::Metal, Shape::Poly { v: v.into_iter().map(|q| (q, 0.0)).collect(), closed: false })));
+        shapes.extend(rails.into_iter().map(|v| (On::Metal, Shape::Poly { v: v.into_iter().map(|q| (layout_at + q, 0.0)).collect(), closed: true })));
     }
     if !(grams.is_finite() && carat.is_finite()) {
         return Err(bad(CMD, "the piece has no weight"));
