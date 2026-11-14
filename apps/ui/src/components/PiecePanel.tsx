@@ -30,7 +30,7 @@
  */
 
 import { createEffect, createMemo, createSignal, For, Index, Match, onCleanup, Show, Switch, untrack, type Accessor, type JSX } from "solid-js";
-import { passingLine, pieceGroups, pieceHeading, pieceSummary, PIECE_KINDS, rowShownName, rowUnit, type PieceChoices, type PieceRow, type PieceState } from "../piece";
+import { passingLine, pieceGroups, pieceHeading, pieceSummary, PIECE_KINDS, profileUpdate, rowShownName, rowUnit, type PieceChoices, type PieceRow, type PieceState } from "../piece";
 import { createPieceSection, createRowEdit, type Refused } from "../piece-edit";
 import { sizeExample } from "../jewelry-dialog";
 import { ToolIcon } from "../icons";
@@ -234,6 +234,13 @@ export function PiecePanel(props: PiecePanelProps): JSX.Element {
               </div>
             </Show>
             <div class="piece-foot">
+              <Show when={props.state.kind === "piece" ? profileUpdate(props.state.piece) : null}>
+                {(patch) => (
+                  <Button variant="quiet" size="sm" title="Read the profile again from the curve it was drawn as" onClick={() => run(patch())}>
+                    Update from curve
+                  </Button>
+                )}
+              </Show>
               <Button variant="quiet" size="sm" title="Undo brings it back" onClick={() => run({ remove: true })}>
                 Remove piece
               </Button>
@@ -314,9 +321,9 @@ function PieceRowView(props: PieceRowViewProps): JSX.Element {
   };
 
   /** Which control the row gets; the control is kept across refreshes, so focus survives one. */
-  const mode = createMemo((): "choice" | "tick" | "text" => {
+  const mode = createMemo((): "choice" | "tick" | "text" | "readonly" => {
     const kind = props.row().kind;
-    return kind === "choice" || kind === "tick" ? kind : "text";
+    return kind === "choice" || kind === "tick" || kind === "readonly" ? kind : "text";
   });
   /** A length takes the decimal keyboard; a UK size and "auto" are letters. */
   const inputMode = (): "decimal" | "numeric" | undefined => {
@@ -334,6 +341,12 @@ function PieceRowView(props: PieceRowViewProps): JSX.Element {
       </span>
       <span class="prop-value">
         <Switch>
+          <Match when={mode() === "readonly"}>
+            <span class="prop-readonly" title="From the drawn profile: scale the curve and update the piece from it">
+              {props.row().value}
+              {rowUnit(props.row()) === "" ? "" : ` ${rowUnit(props.row())}`}
+            </span>
+          </Match>
           <Match when={mode() === "tick"}>
             <Checkbox
               ariaLabel={props.row().label}

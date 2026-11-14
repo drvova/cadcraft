@@ -202,11 +202,13 @@ and MCP all reach them, and DESCRIBE reads jewelry out of any drawing.
 | J5 | Settings on a heart: at the cleft a bezel's wall is thinner than asked (0.42 mm for 0.48), a halo stone lands over the centre stone and a channel's rail comes inside its distance. The outward offset of a concave corner is not held at its distance (a first repair of the fold is in `setting.rs`, not enough). Found by property tests, which are set aside until fixed | 3–5 |
 | J6 | A halo around a sharp tip (a long pear) can put two stones slightly nearer than the gap: the halo is spaced by length along its path, not by straight distance | 2–3 |
 | J7 | Outside a size system's own chart (under 12.84 mm, over 22.5 mm) a finger is named by that chart's last size (a 25 mm finger reads UK Z); it should have no size in that system, which changes the shape of every size row | 2–4 |
+| J8 | A rail for `PIECE`: a closed curve (an oval, a shaped shank seen from the front) giving the band's path, scaled so its inside matches the finger, with the drawn profile swept along it kept perpendicular; the sheet's front view, the weight (numerically) and `PIECEMESH` would follow it. Today a custom profile is always revolved round a circular finger | 3–5 |
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-13 | minor | Jewelry: PIECE takes a band profile drawn as a closed curve; a rail for it is the new row J8 |
 | 2026-11-12 | minor | Jewelry: band profiles and a three-stone ring in PIECE; property tests (Hegel) fixed six faults and left three as new rows J5–J7 |
 | 2026-11-12 | minor | Jewelry: PRICEBOOK and an estimated cost on the bench sheet; in the interface a rendered tech sheet, templates and the Cost group. No row closes |
 | 2026-11-12 | major | A parametric piece (PIECE) with a solid (PIECEMESH, STLOUT) and a 3D view in the interface; OBJECTS; in the interface a tabbed ribbon, Source, the Piece and Objects sections. J2 narrowed. New drawings in the interface are millimetres |

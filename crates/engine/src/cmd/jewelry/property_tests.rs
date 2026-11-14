@@ -1376,7 +1376,7 @@ fn a_pieces_parameters_read_back_as_the_same_piece(tc: TestCase) {
     // A number that was not finite would have become a null.
     let nulls = j.as_object().unwrap().iter().filter(|(_, v)| v.is_null()).map(|(k, _)| k.as_str()).collect::<Vec<_>>();
     // The parameters that are "none" by default say so with a null; no other key may.
-    const OPTIONAL: [&str; 8] = ["bevel", "comfort", "count", "hollow", "ridge", "sideCut", "sideLength", "sideWidth"];
+    const OPTIONAL: [&str; 9] = ["bevel", "comfort", "count", "hollow", "profileCurve", "ridge", "sideCut", "sideLength", "sideWidth"];
     assert!(nulls.iter().all(|k| OPTIONAL.contains(k)), "{what}: null in {nulls:?}");
     assert_merged(&j, None, &asked, &what);
     assert!(density_of(j["metal"].as_str().unwrap()) == Some(p.density) && p.density > 0.0, "{what}");

@@ -46,6 +46,9 @@ export const PIECE_PROFILES: readonly Choice[] = [
   { value: "concave", label: "Concave" },
 ];
 
+/** How the section names a profile the jeweller drew (`profile: "custom"`). */
+export const CUSTOM_PROFILE_LABEL = "Custom (from drawing)";
+
 /** What a count reads, and what is typed, when the engine fits as many stones as go around. */
 export const AUTO = "auto";
 
@@ -67,6 +70,8 @@ export interface PieceParams {
   wall: number | null;
   width: number | null;
   profile: string;
+  /** A drawn profile's source curve (its handle), when the profile is `custom` and the engine named one. */
+  profileCurve: string | null;
   metal: string;
   cut: string;
   stoneLength: number | null;
@@ -158,6 +163,13 @@ const sizeNumber = (value: unknown): string | null => {
   return n === null ? null : numberText(n);
 };
 
+/** The handle of a custom profile's curve; null for a named profile or a handle that is not one. */
+function curveOf(profile: unknown, stored: unknown): string | null {
+  if (nameOf(profile) !== "custom" || !isRecord(stored)) return null;
+  const handle = asString(stored["curve"]);
+  return handle !== null && HANDLE_RE.test(handle) ? handle.toUpperCase() : null;
+}
+
 function parseParams(value: unknown): PieceParams | null {
   if (!isRecord(value)) return null;
   const kind = kindOf(value["kind"]);
@@ -171,6 +183,7 @@ function parseParams(value: unknown): PieceParams | null {
     wall: sizeOf(value["wall"]),
     width: sizeOf(value["width"]),
     profile: nameOf(value["profile"]),
+    profileCurve: curveOf(value["profile"], value["profileCurve"]),
     metal: nameOf(value["metal"]),
     cut: nameOf(value["cut"]),
     stoneLength: sizeOf(value["stoneLength"]),
@@ -294,7 +307,7 @@ export function readPieceChoices(engine: JewelryEngine): PieceChoices {
  * How a row is edited: a pick from a list, a typed length, a typed whole number, the ring size,
  * the stone count (a whole number or "auto"), or a tick.
  */
-export type PieceRowKind = "choice" | "number" | "whole" | "size" | "count" | "tick";
+export type PieceRowKind = "choice" | "number" | "whole" | "size" | "count" | "tick" | "readonly";
 
 export interface PieceRow {
   /** The row's id: the parameter it edits (`haloWidth` is `halo` given as a width). */
@@ -339,6 +352,21 @@ function withHeld(choices: readonly Choice[], held: string, label: (name: string
   return [{ value: held, label: label(held) }, ...choices];
 }
 
+/** The profiles offered: the named ones, and the drawn one first while the piece has it. */
+export function profileChoices(held: string): readonly Choice[] {
+  if (held === "custom") return [{ value: "custom", label: CUSTOM_PROFILE_LABEL }, ...PIECE_PROFILES];
+  return withHeld(PIECE_PROFILES, held, capital);
+}
+
+/**
+ * "Update from curve": the patch that reads a custom profile's curve again (`piece {profile:
+ * {curve}}`), or null when the piece has no drawn profile or its curve is not known.
+ */
+export function profileUpdate(piece: Piece): { profile: { curve: string } } | null {
+  const p = piece.params;
+  return p.profile === "custom" && p.profileCurve !== null ? { profile: { curve: p.profileCurve } } : null;
+}
+
 /**
  * The rows of a piece, in the order a bench reads them: what it is and the finger, the band, then
  * what its kind adds (a solitaire's stone, head and halo; an eternity's stones). `system` is the
@@ -351,9 +379,10 @@ export function pieceRows(piece: Piece, choices: PieceChoices, system: string): 
     { key: "kind", label: "Kind", value: p.kind, kind: "choice", choices: PIECE_KINDS },
     { key: "system", label: "Size system", value: shown, kind: "choice", choices: RING_SYSTEMS },
     { key: "size", label: "Size", value: sizeIn(piece, shown), kind: "size" },
-    { key: "wall", label: "Wall, mm", value: num(p.wall), kind: "number" },
-    { key: "width", label: "Width, mm", value: num(p.width), kind: "number" },
-    { key: "profile", label: "Profile", value: p.profile, kind: "choice", choices: withHeld(PIECE_PROFILES, p.profile, capital) },
+    // A drawn profile's box is its wall and width: shown, not typed (scale the curve instead).
+    { key: "wall", label: "Wall, mm", value: num(p.wall), kind: p.profile === "custom" ? "readonly" : "number" },
+    { key: "width", label: "Width, mm", value: num(p.width), kind: p.profile === "custom" ? "readonly" : "number" },
+    { key: "profile", label: "Profile", value: p.profile, kind: "choice", choices: profileChoices(p.profile) },
     { key: "metal", label: "Metal", value: p.metal, kind: "choice", choices: withHeld(choices.metals, p.metal, metalLabel) },
   ];
   if (p.kind === "band") return rows;
@@ -588,6 +617,8 @@ export function judgePieceDraft(row: PieceRow, draft: string, system = "us"): Dr
   if (typeof draft !== "string") return { kind: "keep" };
   if (draft === row.value) return { kind: "keep" };
   switch (row.kind) {
+    case "readonly":
+      return { kind: "keep" };
     case "size":
       return judgeSize(row, draft, system);
     case "tick":

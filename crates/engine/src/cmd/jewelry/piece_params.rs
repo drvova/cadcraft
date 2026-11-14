@@ -89,6 +89,9 @@ use cadcraft_doc::{Entity, Handle};
 use cadcraft_geom::{PI, TAU, Vec2};
 use serde_json::{Map, Value, json};
 
+use std::sync::Arc;
+
+use super::profile::CustomProfile;
 use super::sizes::{self, RingSize};
 use super::*;
 
@@ -145,6 +148,8 @@ pub(super) enum Profile {
     Bevel,
     /// The outside hollowed between two raised edges.
     Concave,
+    /// A closed curve the jeweller drew ([`super::profile`]); not in [`PROFILES`].
+    Custom,
 }
 
 /// Every profile, in the order a list shows them.
@@ -165,13 +170,14 @@ impl Profile {
             Profile::Knife => "knife",
             Profile::Bevel => "bevel",
             Profile::Concave => "concave",
+            Profile::Custom => "custom",
         }
     }
 
     /// The parameter that carries the profile's own number, when it has one.
     pub(super) fn key(self) -> Option<&'static str> {
         match self {
-            Profile::Flat | Profile::Dome => None,
+            Profile::Flat | Profile::Dome | Profile::Custom => None,
             Profile::Comfort | Profile::Court => Some("comfort"),
             Profile::Knife => Some("ridge"),
             Profile::Bevel => Some("bevel"),
@@ -183,7 +189,7 @@ impl Profile {
     /// words.
     pub(super) fn most(self, width: f64, wall: f64) -> (f64, &'static str) {
         match self {
-            Profile::Flat | Profile::Dome => (0.0, ""),
+            Profile::Flat | Profile::Dome | Profile::Custom => (0.0, ""),
             Profile::Comfort | Profile::Court => ((0.4 * wall).min(0.5 * width), "the lesser of 40 % of the wall and half the width"),
             Profile::Knife => (0.9 * wall, "90 % of the wall"),
             Profile::Bevel => ((0.4 * width).min(0.8 * wall), "the lesser of 40 % of the width and 80 % of the wall"),
@@ -194,7 +200,7 @@ impl Profile {
     /// The profile's own number when none is given.
     pub(super) fn usual(self, width: f64, wall: f64) -> f64 {
         match self {
-            Profile::Flat | Profile::Dome => 0.0,
+            Profile::Flat | Profile::Dome | Profile::Custom => 0.0,
             Profile::Comfort | Profile::Court => (wall / 6.0).min(0.5 * width),
             Profile::Knife => 0.6 * wall,
             Profile::Bevel => (0.2 * width).min(0.5 * wall),
@@ -217,6 +223,9 @@ pub(super) struct PieceParams {
     /// The band's width along the finger.
     pub width: f64,
     pub profile: Profile,
+    /// Custom: the drawn profile, by value (`profileCurve` in the JSON); its box gives `width`
+    /// and `wall`.
+    pub custom: Option<Arc<CustomProfile>>,
     /// Comfort and court: how far the eased inside stands off the finger at the band's edges, or
     /// `None` for a sixth of the wall.
     pub comfort: Option<f64>,
@@ -292,11 +301,23 @@ impl PieceParams {
             Some(v) => v
                 .as_str()
                 .map(|s| s.trim().to_ascii_lowercase())
-                .and_then(|s| PROFILES.into_iter().find(|profile| profile.name() == s))
-                .ok_or_else(|| bad(cmd, "`profile` must be flat, dome, comfort, court, knife, bevel or concave"))?,
+                .and_then(|s| PROFILES.into_iter().chain([Profile::Custom]).find(|profile| profile.name() == s))
+                .ok_or_else(|| {
+                    bad(
+                        cmd,
+                        "`profile` must be flat, dome, comfort, court, knife, bevel or concave, or {curve: handle} for a closed curve of the drawing",
+                    )
+                })?,
         };
-        let wall = mm_in(cmd, p, "wall", 1.8, 0.3, 10.0)?;
-        let width = mm_in(cmd, p, "width", 2.2, 0.5, 30.0)?;
+        // A drawn profile brings its own width and wall: its box, read-only.
+        let custom = match profile {
+            Profile::Custom => Some(Arc::new(CustomProfile::from_json(cmd, p.get("profileCurve"))?)),
+            _ => None,
+        };
+        let (wall, width) = match &custom {
+            Some(c) => (c.wall(), c.width()),
+            None => (mm_in(cmd, p, "wall", 1.8, 0.3, 10.0)?, mm_in(cmd, p, "width", 2.2, 0.5, 30.0)?),
+        };
         // A profile's own number is read whatever the profile, and held to the band only by the
         // profile that uses it, so changing the profile never trips over a number it ignores.
         let shape = |key: &str, max: f64| -> Result<Option<f64>> {
@@ -368,6 +389,7 @@ impl PieceParams {
             wall,
             width,
             profile,
+            custom,
             comfort,
             ridge,
             bevel,
@@ -414,6 +436,7 @@ impl PieceParams {
             "wall": self.wall,
             "width": self.width,
             "profile": self.profile.name(),
+            "profileCurve": self.custom.as_ref().map(|c| c.json()),
             "comfort": self.comfort,
             "ridge": self.ridge,
             "bevel": self.bevel,
@@ -454,7 +477,7 @@ pub(super) fn round_us(us: f64) -> f64 {
 /// The band's cross-section: `width` across (along the finger) by `wall` high (radially), heights
 /// measured from the finger at the middle of the width. The module's comment defines each profile
 /// and gives its area and centroid.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct Section {
     pub width: f64,
     pub wall: f64,
@@ -462,6 +485,8 @@ pub(super) struct Section {
     /// The profile's own number in millimetres (the easing, the ridge, the chamfer, the hollow);
     /// nothing for flat and dome.
     pub by: f64,
+    /// A drawn profile, which every measure below defers to (a custom section without one is flat).
+    pub custom: Option<Arc<CustomProfile>>,
 }
 
 /// A circular segment of half-chord `h` and sagitta `s` (no more than a half circle): its radius,
@@ -490,12 +515,12 @@ fn pieces(segments: usize, length: f64) -> usize {
 impl Section {
     /// A flat section.
     pub(super) fn flat(width: f64, wall: f64) -> Section {
-        Section { width, wall, profile: Profile::Flat, by: 0.0 }
+        Section { width, wall, profile: Profile::Flat, by: 0.0, custom: None }
     }
 
     /// A half-round.
     pub(super) fn dome(width: f64, wall: f64) -> Section {
-        Section { width, wall, profile: Profile::Dome, by: 0.0 }
+        Section { width, wall, profile: Profile::Dome, by: 0.0, custom: None }
     }
 
     fn half(&self) -> f64 {
@@ -552,10 +577,13 @@ impl Section {
     /// The outside's height above the finger at `x` across the width (`x = 0` is the middle of
     /// the band, `±width/2` its edges).
     pub(super) fn height_at(&self, x: f64) -> f64 {
+        if let Some(c) = &self.custom {
+            return c.top_at(x);
+        }
         let a = self.half();
         let x = x.abs().min(a);
         match self.profile {
-            Profile::Flat => self.wall,
+            Profile::Flat | Profile::Custom => self.wall,
             Profile::Dome | Profile::Comfort | Profile::Court => {
                 let Some((r, _)) = self.arc() else { return self.wall };
                 let rise = self.rise();
@@ -573,6 +601,9 @@ impl Section {
     /// The inside's height above the finger at `x` across the width: nothing, but for an eased
     /// inside, which stands off the finger towards the edges.
     pub(super) fn inside_at(&self, x: f64) -> f64 {
+        if let Some(c) = &self.custom {
+            return c.bottom_at(x);
+        }
         let Some((r, _)) = self.inner_arc() else { return 0.0 };
         let x = x.abs().min(self.half());
         (r - (r * r - x * x).max(0.0).sqrt()).clamp(0.0, self.ease())
@@ -581,6 +612,9 @@ impl Section {
     /// The least radial thickness a bench should judge the band by, and where it is when it is
     /// not simply the wall: a knife or bevelled band's edges, the middle of a concave one.
     pub(super) fn thinnest(&self) -> (f64, Option<&'static str>) {
+        if let Some(c) = &self.custom {
+            return (c.thinnest().0, Some("where the drawn profile has the least metal, 0.4 mm or more in from its edges"));
+        }
         let n = self.number();
         let place = match self.profile {
             Profile::Knife => "at its edges, beside the ridge's two faces",
@@ -604,11 +638,14 @@ impl Section {
 
     /// The area, and its first moment about the finger (the line the heights are measured from).
     fn area_and_moment(&self) -> (f64, f64) {
+        if let Some(c) = &self.custom {
+            return (c.area(), c.area() * c.centroid());
+        }
         let (a, w, t) = (self.half(), self.width, self.wall);
         // A rectangle the full width from `y0` up to `y1`.
         let rect = |y0: f64, y1: f64| (w * (y1 - y0), w * (y1 * y1 - y0 * y0) / 2.0);
         match self.profile {
-            Profile::Flat => rect(0.0, t),
+            Profile::Flat | Profile::Custom => rect(0.0, t),
             Profile::Dome | Profile::Comfort | Profile::Court => {
                 let (c, side) = (self.ease(), self.side());
                 let mut out = rect(c, side);
@@ -650,11 +687,14 @@ impl Section {
     /// across the width with the finger at `y = 0`: each vertex with the bulge of the edge that
     /// follows it. Exact.
     pub(super) fn outline(&self) -> Vec<(Vec2, f64)> {
+        if let Some(c) = &self.custom {
+            return c.points().iter().map(|p| (*p, 0.0)).collect();
+        }
         let (a, t) = (self.half(), self.wall);
         let straight = |pts: &[(f64, f64)]| pts.iter().map(|(x, y)| (Vec2::new(*x, *y), 0.0)).collect::<Vec<_>>();
         let rectangle = || straight(&[(-a, 0.0), (a, 0.0), (a, t), (-a, t)]);
         match self.profile {
-            Profile::Flat => rectangle(),
+            Profile::Flat | Profile::Custom => rectangle(),
             Profile::Dome | Profile::Comfort | Profile::Court => {
                 if self.arc().is_none() {
                     return rectangle();
@@ -697,7 +737,7 @@ impl Section {
     pub(super) fn outside(&self, segments: usize) -> Vec<Vec2> {
         let (a, t) = (self.half(), self.wall);
         match self.profile {
-            Profile::Flat => vec![Vec2::new(a, t), Vec2::new(-a, t)],
+            Profile::Flat | Profile::Custom => vec![Vec2::new(a, t), Vec2::new(-a, t)],
             Profile::Dome | Profile::Comfort | Profile::Court => {
                 let Some((r, half)) = self.arc() else { return vec![Vec2::new(a, t), Vec2::new(-a, t)] };
                 let n = pieces(segments, 2.0 * r * half);
@@ -772,6 +812,9 @@ impl Section {
     /// then the outside back), inscribed in the section. Where the outside comes down to the
     /// inside (a dome with no sides to speak of, a lens) the two share the corner.
     pub(super) fn polygon(&self, segments: usize) -> Vec<Vec2> {
+        if let Some(c) = &self.custom {
+            return c.polygon(segments.saturating_mul(6));
+        }
         let mut out: Vec<Vec2> = Vec::new();
         for p in self.inside(segments).into_iter().chain(self.outside(segments)) {
             if out.last().is_none_or(|l| l.dist(p) > 2e-3) {
@@ -789,14 +832,15 @@ impl PieceParams {
     /// The band's section.
     pub(super) fn section(&self) -> Section {
         let given = match self.profile {
-            Profile::Flat | Profile::Dome => None,
+            Profile::Flat | Profile::Dome | Profile::Custom => None,
             Profile::Comfort | Profile::Court => self.comfort,
             Profile::Knife => self.ridge,
             Profile::Bevel => self.bevel,
             Profile::Concave => self.hollow,
         };
         let by = given.filter(|x| x.is_finite()).unwrap_or_else(|| self.profile.usual(self.width, self.wall));
-        Section { width: self.width, wall: self.wall, profile: self.profile, by }
+        let custom = if self.profile == Profile::Custom { self.custom.clone() } else { None };
+        Section { width: self.width, wall: self.wall, profile: self.profile, by, custom }
     }
 
     /// The radius of the band's outside in the middle of its width, where a stone stands: the

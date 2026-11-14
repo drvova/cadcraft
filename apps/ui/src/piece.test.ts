@@ -9,6 +9,7 @@ import { AppFacade } from "./facade";
 import { MockFacade } from "./mock";
 import {
   AUTO,
+  CUSTOM_PROFILE_LABEL,
   MAX_CHECKS,
   MAX_PIECE_HANDLES,
   NO_CHOICES,
@@ -24,6 +25,8 @@ import {
   pieceRows,
   pieceSummary,
   passingLine,
+  profileChoices,
+  profileUpdate,
   rowShownName,
   rowUnit,
   readPieceChoices,
@@ -489,5 +492,41 @@ describe("the section's layout", () => {
     expect(kind && rowUnit(kind)).toBe("");
     const stone = rows.find((r) => r.key === "stoneWidth");
     expect(stone && rowShownName(stone)).toBe(stone?.both === true ? "Stone size" : "Stone width");
+  });
+});
+
+describe("a profile drawn in the drawing", () => {
+  const drawn = { profile: "custom", width: 3.2, wall: 1.9, profileCurve: { curve: "1a", points: [[-1.6, 0], [1.6, 0], [0, 1.9]] } };
+
+  test("reads the curve's handle, and only for a custom profile", () => {
+    expect(piece("band", drawn).params.profileCurve).toBe("1A");
+    expect(piece("band", { ...drawn, profile: "flat" }).params.profileCurve).toBeNull();
+    expect(piece("band", { ...drawn, profileCurve: { curve: "not a handle!" } }).params.profileCurve).toBeNull();
+    expect(piece("band", { ...drawn, profileCurve: 7 }).params.profileCurve).toBeNull();
+    expect(piece("band").params.profileCurve).toBeNull();
+  });
+
+  test("names it Custom (from drawing) and shows its wall and width read-only", () => {
+    const rows = pieceRows(piece("band", drawn), CHOICES, "us");
+    const row = (key: string) => rows.find((r) => r.key === key);
+    expect(row("profile")?.value).toBe("custom");
+    expect(row("profile")?.choices?.[0]).toEqual({ value: "custom", label: CUSTOM_PROFILE_LABEL });
+    expect(row("wall")?.kind).toBe("readonly");
+    expect(row("width")?.kind).toBe("readonly");
+    expect(row("width")?.value).toBe("3.2");
+    // A named profile is typed as before, and Custom is not offered.
+    const named = pieceRows(piece("band"), CHOICES, "us");
+    expect(named.find((r) => r.key === "wall")?.kind).toBe("number");
+    expect(profileChoices("flat").some((c) => c.value === "custom")).toBe(false);
+    // Typing into a read-only row sends nothing.
+    const wall = rows.find((r) => r.key === "wall");
+    if (wall === undefined) throw new Error("no wall row");
+    expect(judgePieceDraft(wall, "2.5")).toEqual({ kind: "keep" });
+  });
+
+  test("Update from curve re-reads the stored handle", () => {
+    expect(profileUpdate(piece("band", drawn))).toEqual({ profile: { curve: "1A" } });
+    expect(profileUpdate(piece("band"))).toBeNull();
+    expect(profileUpdate(piece("band", { ...drawn, profileCurve: { curve: null } }))).toBeNull();
   });
 });

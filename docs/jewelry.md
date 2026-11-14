@@ -209,6 +209,34 @@ side eased), `court` (curved outside and inside), `knife` (two faces meeting at 
 optional number of its own (`comfort`, `ridge`, `bevel`, `hollow`). The finger's size is the
 inside at its narrowest, and the `wall` check reads the band where it is thinnest and says where.
 
+**A profile drawn in the drawing.** `PIECE {profile: {curve: "<handle>"}}` makes the band's
+cross-section a closed curve of the drawing: a closed polyline (straight or with bulges), a
+spline whose ends meet, a circle, a full ellipse or a one-loop region. The frame: the curve is
+drawn in the XY plane with **X across the band's width** (along the finger) and **Y outward from
+the finger**; where it is drawn does not matter, because its bounding box places it — the box's
+lowest edge is the finger line and the box is centred across, so a stone stands on the curve's
+top above the box's middle. Drawing units become millimetres through `INSUNITS`, as for every
+jewelry command. The piece stores the profile **by value**: `params.profile` is `"custom"` and
+`params.profileCurve` is `{curve: handle, points: [[x, y], …]}` in millimetres in that frame (the
+curve flattened within a twenty-thousandth of its size, at most 400 points, rounded to the
+micrometre), so the piece survives the curve being moved, edited or erased and travels through
+DXF in the `JEWELRY_PIECE` group like its other parameters. Giving the same handle again (the
+Piece panel's **Update from curve**) reads the curve afresh; a handle that is gone is refused and
+the stored profile kept. `width` and `wall` are the box's and are **read-only** while the
+profile is custom (a different number given is refused with the curve's figure: scaling a drawn
+shape by two numbers would distort the jeweller's curve, so it is scaled where it was drawn); the
+size still drives the inside diameter, so a size change rebuilds the band from the same profile.
+Weight is Pappus on the stored polygon (area × the path of its centroid, exact for the polygon;
+against the true half-disc the flattening costs under 2 × 10⁻⁴). The `wall` check reads the least
+radial metal at least 0.4 mm (and at most a quarter of the width) in from either edge, since every
+drawn edge tapers to nothing. The solid revolves the same polygon (thinned to 6 points per dome
+segment of the quality). Refused with a sentence: an open, self-crossing or degenerate curve, one
+under 0.5 × 0.3 mm or over 30 × 10 mm, a region with holes or several pieces, another kind of
+object, and a profile that stands off the finger in its middle by more than half its wall.
+**Not yet:** a rail (`rail: {curve}`, the band's path seen from the front, swept with the profile
+kept perpendicular) is not built — the band is always the profile revolved round a circular
+finger (gap row J8).
+
 The parameters: `size` (with `system`), `wall`, `width`, `profile`, `metal`;
 for a solitaire `cut`, `stone`, `stoneWidth`, `stoneLength`, `prongs` (3 to 8) and `halo` (off, or
 the melee's width); for an eternity band `cut`, `stone`, `melee`, `count` (none: as many as fit)
@@ -413,6 +441,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-13 | minor | `PIECE {profile: {curve: handle}}`: a band profile drawn as a closed curve of the drawing (polyline with bulges, spline, circle, ellipse, region), kept by value with its frame (box bottom on the finger, centred across), width and wall read from it, weight by Pappus, the wall check at its thinnest, the solid revolved from it; the Piece panel names it "Custom (from drawing)" with Update from curve. Rails are not built yet (J8) |
 | 2026-11-13 | patch | Realistic studio: concentric gradient rings round the lens replace the front strips and low cards, so flat faces carry a band from the front, top, side and through an orbit and the side view is calm; the lights are eased toward a ceiling and strips mirror coloured alloys a shade deeper (gold18 lit-pixel median saturation 0.53 → 0.59, silver near-white pixels 19% → 0%); coloured stones return a deeper body colour and mirror the rings dimmed; the derivatives variant of the shader compiles again; the stage stays dark in the light theme by design |
 | 2026-11-13 | patch | Realistic studio: gradient strips round the lens, tall side strips and low cards, a smaller dark lens spot, so broad polished faces carry a bright highlight band beside a dark one instead of reading as flat bronze |
 | 2026-11-13 | patch | Realistic gold reads warm: metal keeps its hue through the tone curve, and a coloured alloy's dim reflections take its deeper tint; platinum, silver and the stones unchanged |
