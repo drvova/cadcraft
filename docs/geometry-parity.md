@@ -1,6 +1,6 @@
 # Geometry parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-22 · **Change:** minor (bounded constraint expression and parameter depth) · **Target:** Autodesk AutoCAD 2027
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-11-14 · **Change:** minor (SubD foundation) · **Target:** Autodesk AutoCAD 2027
 
 CAD users trust numbers: a trimmed endpoint, an offset, an intersection or an area is either right
 to the last displayed digit or the tool is unusable for production drawings. This document
@@ -126,6 +126,17 @@ lines are scanline families clipped against the tessellated loops (`render/src/h
 | Degrees of freedom, fully constrained state | shown (constraint bars, status) | `constraints.dof` and `constraints.inspect`: free parameters minus Jacobian rank per component, per-object DOF from the null space, under/fully/over-constrained status (`dof.rs`); a status strip on each constraint bar and the drawing's state on the canvas |
 | Inference while drawing (CONSTRAINTINFER) | yes | CONSTRAINTINFER (variable and command): after a drawing or editing command, what it placed exactly onto existing geometry (snaps, ortho, polar) gets Coincident (end, mid, centre, on object), Tangent, Perpendicular, Parallel and Horizontal/Vertical, filtered by the AutoConstrain types (`auto.rs` `infer_placed`) |
 
+## SubD (subdivision surfaces)
+
+| Item | Rhino / reference | CADCraft (`crates/geom/src/subd*.rs`, [subd.md](subd.md)) |
+|---|---|---|
+| Control cage (quads, n-gons, creases, corners) | yes | done: half-edge cage, full validation, sharp and semi-sharp creases, corner tags |
+| Catmull–Clark with boundary and crease rules | yes | done: boundary curve rule, sharp, dart, crease, corner; levels capped |
+| Limit positions and normals | yes | done: limit masks, tangent masks at any valence; display triangle mesh, volume, area |
+| Editing (primitives, extrude, inset, bridge, loop cut, move, crease) | yes | done as pure functions on the cage; not yet commands |
+| Conversion to NURBS | exact for regular regions | partial: regular quads as exact bicubic B-spline patches; extraordinary regions not yet |
+| SubD as a drawing object, in the cast solid, in `.3dm` | yes | planned (signed distance to the limit mesh exists) |
+
 ## Tests
 
 `#[test]` counts on 2026-10-10: geom 28, constraints 22, render 50, engine 174. A property-based
@@ -157,6 +168,7 @@ Total ≈ 90–140 h; items 1–6 parallelise across two or three agents.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | SubD foundation in `crates/geom`: cage, Catmull–Clark with creases, limit surface, mesh, edits, bicubic patches ([subd.md](subd.md)) |
 | 2026-10-22 | minor | Constraint expressions count operator chains toward the syntax-tree depth limit; evaluation shares one depth limit across operators and parameter references, with a 1 MiB-stack regression (#1936) |
 | 2026-10-14 | trivial | JOIN Close: a single arc becomes its circle, a single elliptical arc its full ellipse (#1175) |
 | 2026-10-12 | trivial | TRIM on a closed polyline keeps only the complementary run when the pick lies past the last cut (#726) |

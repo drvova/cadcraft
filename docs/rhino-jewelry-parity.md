@@ -60,6 +60,8 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 | Sprue, supports, shrinkage allowance | | planned |
 | 2D blueprint with dimensions and sections | the drawing, layouts, Tech Sheet | done |
 | Photoreal render, turntable | Realistic 3D view; Save Render: stills to 4096 px (studio, light, transparent), turntables as WebM or APNG, a contact sheet | partial (rasterised studio, not ray traced: no caustics, no depth of field, no HDRI) |
+| SubD for organic forms (baskets, wavy and twisted shanks, sculpture) | Catmull–Clark cage, creases, limit mesh, volume and edits in `crates/geom` ([subd.md](subd.md)); not yet a drawing object or in the cast solid | partial |
+| Photoreal render, turntable | Realistic 3D view; stills | partial (no turntable or image export) |
 
 ## Working
 
@@ -107,6 +109,7 @@ own tests — never from Rhino's binaries, code, interface or artwork.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | SubD row: the subdivision-surface foundation landed in `crates/geom` |
 | 2026-11-14 | minor | Roadmap to a Rhino replacement for jewellers |
 | 2026-11-14 | minor | Behaviours to match, from the public command reference |
 | 2026-11-14 | minor | Interoperability row for `.3dm` (ADR 0003) |
