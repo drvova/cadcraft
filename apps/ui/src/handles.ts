@@ -82,12 +82,14 @@ export function pieceHandles(params: Readonly<Record<string, unknown>>, diameter
     if (!Number.isFinite(value) || !anchor.every(Number.isFinite)) return;
     out.push({ id, label, key, value, ...RANGES[id], anchor, axis, rate });
   };
-  if (mesh !== null && (kind === "solitaire" || kind === "threestone")) {
+  // A pendant's or an earring's stone takes the solitaire's handles; it has no band to drag.
+  const worn = kind === "pendant" || kind === "stud" || kind === "drop";
+  if (mesh !== null && (kind === "solitaire" || kind === "threestone" || worn)) {
     const stoneWidth = num(params["stoneWidth"]);
     const girdle = extreme(mesh, "centre stone", [1, 0, 0]);
     if (stoneWidth !== null && girdle !== null) make("stone", "Centre stone size", "stoneWidth", stoneWidth, girdle, [1, 0, 0], 2);
     const halo = num(params["halo"]);
-    const ring = kind === "solitaire" && halo !== null ? extreme(mesh, "melee", [-1, 0, 0]) : null;
+    const ring = (kind === "solitaire" || worn) && halo !== null ? extreme(mesh, "melee", [-1, 0, 0]) : null;
     if (halo !== null && ring !== null) make("halo", "Halo stone size", "halo", halo, ring, [-1, 0, 0], 1);
   }
   if (mesh !== null && kind === "eternity") {
@@ -99,7 +101,7 @@ export function pieceHandles(params: Readonly<Record<string, unknown>>, diameter
       if (edge !== null) make("melee", "Stone size", "melee", melee, edge, [0, 0, 1], 2);
     }
   }
-  if (radius !== null && wall !== null) {
+  if (radius !== null && wall !== null && !worn) {
     // The band's outside on the right at the finger's height: the surface that moves with the wall
     // (the inside is the finger's size and stays where it is).
     make("wall", "Wall", "wall", wall, [radius + wall, 0, 0], [1, 0, 0], 1);

@@ -36,7 +36,7 @@ export interface Template {
 }
 
 /** The piece kinds the engine builds today; a template on another kind carries `requires`. */
-export const BUILDABLE_KINDS: readonly string[] = ["band", "solitaire", "eternity", "halfeternity", "dome", "signet"];
+export const BUILDABLE_KINDS: readonly string[] = ["band", "solitaire", "eternity", "halfeternity", "dome", "signet", "pendant", "stud", "drop"];
 
 /**
  * The preset pieces, in the order the gallery reads them: the solitaires, the bands, the eternity
@@ -131,6 +131,42 @@ export const TEMPLATES: readonly Template[] = [
     blurb: "A broad flat band with a bold face to engrave.",
     params: { kind: "band", wall: 1.6, width: 9, profile: "flat", metal: "gold14" },
   },
+  {
+    id: "halo-pendant",
+    name: "Halo Pendant",
+    blurb: "A haloed round stone on a loop bail for a 1.5 mm chain.",
+    params: { kind: "pendant", cut: "round", stone: "diamond", stoneWidth: 6.5, stoneLength: 6.5, prongs: 6, halo: 1.3, gap: 0.15, bail: "loop", bailOpening: 3, bailWire: 1, chain: 1.5, metal: "gold18" },
+  },
+  {
+    id: "bezel-drop-pendant",
+    name: "Bezel Drop Pendant",
+    blurb: "An oval in a bezel on a jump ring under a tube bail.",
+    params: { kind: "pendant", cut: "oval", stone: "sapphire", stoneWidth: 6, stoneLength: 8, head: "bezel", bail: "tube", bailOpening: 3, bailWire: 0.9, bailWidth: 3, drop: true, metal: "gold18" },
+  },
+  {
+    id: "bezel-studs",
+    name: "Bezel Studs",
+    blurb: "A pair of round stones in bezels on 0.8 × 10 mm posts.",
+    params: { kind: "stud", cut: "round", stone: "diamond", stoneWidth: 5, stoneLength: 5, head: "bezel", postDiameter: 0.8, postLength: 10, back: "butterfly", metal: "gold18" },
+  },
+  {
+    id: "prong-studs",
+    name: "Four-prong Studs",
+    blurb: "A pair of classic four-prong studs, 4 mm round diamonds.",
+    params: { kind: "stud", cut: "round", stone: "diamond", stoneWidth: 4, stoneLength: 4, prongs: 4, metal: "platinum" },
+  },
+  {
+    id: "pear-drops",
+    name: "Pear Drops",
+    blurb: "A pair of pear stones hanging on jump rings from French wires.",
+    params: { kind: "drop", cut: "pear", stone: "diamond", stoneWidth: 5, stoneLength: 7, prongs: 3, top: "hook", metal: "gold18" },
+  },
+  {
+    id: "stud-drops",
+    name: "Stud-top Drops",
+    blurb: "A pair of ovals hanging under 3 mm round stud tops.",
+    params: { kind: "drop", cut: "oval", stone: "diamond", stoneWidth: 5, stoneLength: 7, top: "stud", topStone: 3, metal: "gold18" },
+  },
 ];
 
 /** The parameters a template sends to `piece`, as a fresh object (never the shared literal). */
@@ -162,9 +198,12 @@ const GROUP_LABELS: Readonly<Record<string, string>> = {
   halfeternity: "Half eternity",
   dome: "Dome rings",
   signet: "Signets",
+  pendant: "Pendants",
+  stud: "Stud earrings",
+  drop: "Drop earrings",
 };
 
-const GROUP_ORDER: readonly string[] = ["solitaire", "band", "eternity", "halfeternity", "dome", "signet"];
+const GROUP_ORDER: readonly string[] = ["solitaire", "band", "eternity", "halfeternity", "dome", "signet", "pendant", "stud", "drop"];
 
 /** A group heading for a kind the table knows, else the kind with a capital and an "s". */
 function groupLabel(kind: string): string {

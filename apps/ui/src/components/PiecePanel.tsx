@@ -193,7 +193,7 @@ export function PiecePanel(props: PiecePanelProps): JSX.Element {
                   </div>
                   <div class="piece-list" role="list" aria-label={`${group().name} parameters`}>
                     <Index each={group().rows}>{(row) => <PieceRowView row={row} system={system} refused={refused} onRefused={setRefused} onPick={setPicked} onRun={run} onNotice={props.onNotice} />}</Index>
-                    <Show when={group().name === "Ring"}>
+                    <Show when={group().name === "Ring" || group().name === "Piece"}>
                       <For each={others()}>
                         {(fact) => (
                           <div class="prop-row piece-also" role="listitem">
