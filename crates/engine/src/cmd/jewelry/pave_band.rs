@@ -382,7 +382,8 @@ impl Surface {
         self.ss.last().copied().unwrap_or(self.half)
     }
 
-    /// The point across the width (`x`) an arc length `u` from the middle reaches, kept on the band.
+    /// The point across the width (`x`) an arc length `u` from the middle reaches; past the edge,
+    /// straight on along the finger.
     pub(super) fn x_of(&self, u: f64) -> f64 {
         let a = u.abs();
         let k = self.ss.partition_point(|s| *s < a);
@@ -392,7 +393,8 @@ impl Surface {
                 x0 + (x1 - x0) * t
             }
             (None, Some(_)) => 0.0,
-            _ => self.half,
+            // Past the edge (a band too narrow for its rows): straight on, so stones never meet.
+            _ => self.half + (a - self.edge()).max(0.0),
         };
         if u < 0.0 { -x } else { x }
     }
@@ -453,6 +455,10 @@ pub(super) fn melee_depth(d: f64) -> f64 {
 /// defines it.
 pub(super) fn metal_between(a: &PaveStone, b: &PaveStone) -> f64 {
     let v = b.girdle - a.girdle;
+    if v.len() < 1e-12 {
+        // One on the other.
+        return -(a.diameter + b.diameter) / 2.0;
+    }
     let edge = |s: &PaveStone, toward: Vec3| -> Vec3 {
         let flat = toward - s.normal * toward.dot(s.normal);
         let dir = if flat.len() > 1e-12 { flat.normalized() } else { s.around };
@@ -689,7 +695,7 @@ impl Fitter<'_> {
 }
 
 /// The span asked for, cut around the head: the runs to fill.
-fn runs(spec: &PaveSpec, head: f64) -> Vec<Run> {
+fn runs(spec: &PaveSpec, head: f64, close: f64) -> Vec<Run> {
     let (from, to) = (spec.from.to_radians(), spec.to.to_radians());
     let loop_run = |head: f64| -> Run {
         if head > 0.0 {
@@ -698,38 +704,36 @@ fn runs(spec: &PaveSpec, head: f64) -> Vec<Run> {
             Run { origin: 0.0, dir: 1.0, length: PI, start: End::Centre, end: End::Mirror, mirror: true }
         }
     };
+    // Two ends nearer than a gap round the band are one span all the way round.
+    let close = close.max(1e-9);
     if spec.symmetric {
-        if from < 0.0 {
-            let m = to.max(-from);
-            if m >= PI - 1e-9 {
+        // The right-hand arc; the left is its mirror.
+        let (a, b) = if to <= 0.0 { (-to, -from) } else { (from, to) };
+        let centred = |m: f64| -> Run {
+            if head > 0.0 {
+                Run { origin: head, dir: 1.0, length: m - head, start: End::Edge, end: End::Edge, mirror: true }
+            } else {
+                Run { origin: 0.0, dir: 1.0, length: m, start: End::Centre, end: End::Edge, mirror: true }
+            }
+        };
+        if a <= 1e-12 {
+            // Through 12 o'clock.
+            let m = b.max(-a);
+            return vec![if m >= PI - close { loop_run(head) } else { centred(m) }];
+        }
+        if b >= PI - close {
+            // The arc and its mirror meet through 6 o'clock.
+            let start = a.min(TAU - b);
+            if start <= 1e-12 {
                 return vec![loop_run(head)];
             }
-            return if head > 0.0 {
-                vec![Run { origin: head, dir: 1.0, length: m - head, start: End::Edge, end: End::Edge, mirror: true }]
-            } else {
-                vec![Run { origin: 0.0, dir: 1.0, length: m, start: End::Centre, end: End::Edge, mirror: true }]
-            };
-        }
-        // From 0 out: one span through 12 o'clock.
-        if from <= 1e-12 {
-            if to >= PI - 1e-9 {
-                return vec![loop_run(head)];
-            }
-            return if head > 0.0 {
-                vec![Run { origin: head, dir: 1.0, length: to - head, start: End::Edge, end: End::Edge, mirror: true }]
-            } else {
-                vec![Run { origin: 0.0, dir: 1.0, length: to, start: End::Centre, end: End::Edge, mirror: true }]
-            };
-        }
-        let start = from.max(head);
-        let end = to.min(TAU - start);
-        // The span reaches past 6 o'clock to meet its mirror.
-        if to >= PI {
+            let start = start.max(head);
             return vec![Run { origin: start, dir: 1.0, length: PI - start, start: End::Edge, end: End::Mirror, mirror: true }];
         }
-        return vec![Run { origin: start, dir: 1.0, length: end - start, start: End::Edge, end: End::Edge, mirror: true }];
+        let start = a.max(head);
+        return vec![Run { origin: start, dir: 1.0, length: b - start, start: End::Edge, end: End::Edge, mirror: true }];
     }
-    if to - from >= TAU - 1e-9 {
+    if to - from >= TAU - close {
         return vec![loop_run(head)];
     }
     // One arc, less the head's (−head, head) wherever it falls round the band.
@@ -871,7 +875,7 @@ fn fit_with(p: &PieceParams, spec: &PaveSpec, surf: &Surface, gap: f64) -> PaveF
     }
     // Two mirrored runs must not meet at 12 o'clock: the first girdle is at least half a gap out.
     let head = head_edge(p, surf, d, gap).max(if spec.symmetric && spec.from > 0.0 { gap / (2.0 * surf.ri) } else { 0.0 });
-    let runs = runs(spec, head);
+    let runs = runs(spec, head, gap / surf.ri);
     let honey = spec.layout == Layout::Honeycomb && rows.len() > 1;
     // Rows offset in a honeycomb: the middle one of three, the second of two.
     let offset_row = |j: usize| honey && if rows.len() == 3 { j == 1 } else { j == 1 };
@@ -951,8 +955,9 @@ pub(super) fn least_metal(stones: &[PaveStone]) -> Option<f64> {
     for (i, a) in stones.iter().enumerate() {
         for b in stones.iter().skip(i + 1) {
             // Only near neighbours can be the least.
-            let far = (a.diameter + b.diameter) / 2.0 + best.unwrap_or(2.0).max(0.0) + 1.0;
-            if (a.girdle - b.girdle).len() > far {
+            if let Some(x) = best
+                && (a.girdle - b.girdle).len() > (a.diameter + b.diameter) / 2.0 + x.max(0.0) + 1.0
+            {
                 continue;
             }
             let m = metal_between(a, b);
@@ -1016,7 +1021,9 @@ fn judge(f: &mut PaveFit) {
 // For the solid builder
 // ---------------------------------------------------------------------------------------------
 
-/// A pavé stone's seat, as a seat cutter reads it.
+/// A pavé stone's seat, as a seat cutter reads it. (The solid builder's seat cutter is its
+/// reader; until it lands, the tests are.)
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct StoneFrame {
     /// The girdle's centre (mm; the solid's frame: finger along Z, 12 o'clock +Y).
@@ -1036,6 +1043,7 @@ pub(super) struct StoneFrame {
 
 /// Every pavé stone's frame on a piece, in the solid's coordinates: what a seat cutter needs to
 /// cut a seat for each stone. Empty when the piece has no pavé.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn stone_frames(p: &PieceParams) -> Vec<StoneFrame> {
     fit(p).map_or_else(Vec::new, |f| {
         let scallop = f.spec.layout == Layout::Scallop;
