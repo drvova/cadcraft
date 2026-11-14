@@ -294,6 +294,10 @@ pub(super) enum Prim {
         face: Face,
         outline: Vec<Vec2>,
     },
+    /// A band swept along a drawn rail ([`super::sweep::RailBound`]).
+    Rail(super::sweep::RailBound),
+    /// A split or cathedral shank ([`super::shank::ShankBound`]).
+    Shank(super::shank::ShankBound),
 }
 
 /// Edges of a section taken together for [`Section::dist`].
@@ -329,7 +333,7 @@ impl Section {
     }
 
     /// The signed distance, negative inside: [`poly_dist`], faster.
-    fn dist(&self, p: Vec2) -> f64 {
+    pub(super) fn dist(&self, p: Vec2) -> f64 {
         let n = self.pts.len();
         if n < 3 {
             return f64::INFINITY;
@@ -405,6 +409,8 @@ impl Prim {
             Prim::Taper { taper, section, ri } => taper.distance_by(*ri, p, |q| section.dist(q)),
             Prim::Bezel(b) => b.distance(p),
             Prim::Face { face, outline } => face.distance(p, outline),
+            Prim::Rail(b) => b.distance(p),
+            Prim::Shank(b) => b.distance(p),
         };
         if v.is_nan() { f64::INFINITY } else { v }
     }
@@ -454,6 +460,8 @@ impl Prim {
                 let axes = Axes { o: b.o, u: b.u, v: b.v, w: b.w };
                 axes.bounds(Vec3::new(lo.x - wall, lo.y - wall, b.bezel.bottom), Vec3::new(hi.x + wall, hi.y + wall, b.bezel.top()))
             }
+            Prim::Rail(b) => b.bounds(),
+            Prim::Shank(b) => b.bounds(),
             Prim::Face { face, outline } => {
                 let mut bx = empty;
                 for q in outline {

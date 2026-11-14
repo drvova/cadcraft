@@ -123,7 +123,7 @@ pub(super) fn self_intersects(pts: &[Vec2]) -> bool {
 
 /// Drop the corner that matters least (the smallest triangle with its neighbours) until at most
 /// `most` are left.
-fn thinned(mut pts: Vec<Vec2>, most: usize) -> Vec<Vec2> {
+pub(super) fn thinned(mut pts: Vec<Vec2>, most: usize) -> Vec<Vec2> {
     let most = most.max(3);
     let corner = |pts: &[Vec2], i: usize| -> f64 {
         let n = pts.len();
@@ -150,7 +150,7 @@ fn thinned(mut pts: Vec<Vec2>, most: usize) -> Vec<Vec2> {
 }
 
 /// Consecutive repeats and the closing repeat taken out.
-fn deduped(pts: Vec<Vec2>, tol: f64) -> Vec<Vec2> {
+pub(super) fn deduped(pts: Vec<Vec2>, tol: f64) -> Vec<Vec2> {
     let mut out: Vec<Vec2> = Vec::with_capacity(pts.len());
     for p in pts {
         if out.last().is_none_or(|l| l.dist(p) > tol) {
@@ -164,7 +164,7 @@ fn deduped(pts: Vec<Vec2>, tol: f64) -> Vec<Vec2> {
 }
 
 /// A curve of the drawing as one closed loop of points in drawing units, or why it is not one.
-fn entity_loop(cmd: &str, e: &Entity, name: &str) -> Result<Vec<Vec2>> {
+pub(super) fn entity_loop(cmd: &str, e: &Entity, name: &str) -> Result<Vec<Vec2>> {
     let size = |pts: &[Vec2]| {
         let (lo, hi) = bounds(pts);
         (hi - lo).len()
