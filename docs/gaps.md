@@ -29,6 +29,9 @@ do them first.
 | 6 | **No CI runs the Rust tests on pull requests** (`cargo fmt` on main is fixed) | open PRs land without a gate; regressions go unseen | 2–3 | [stability](#stability) |
 | 7 | **The interface has two dialogs (Drafting Settings, Layer Properties Manager) and opens no DWG** (W1, W6, W8, FF12). Added 2026-11-11 and not yet ranked against the rows above; the next review re-ranks. Grips, right-click menus, dynamic input and recovery copies landed on 2026-11-12 (W2, W4, W5 and W7 are now leftovers) | A drafter can draw, select and grip-edit with the pointer, with ortho, polar, tracking and dynamic input, but cannot plot or set options from a dialog, or open a colleague's DWG in the app | not estimated | [UI/UX](#uiux) |
 
+
+**Jewelry text (2026-11-14):** engraving and the hallmark landed (`docs/jewelry.md`). Open: outline (filled) fonts for engraving, text on a dome ring's or signet's outside, several lines or text along a path, and a per-letter relief check of the cast at 0.1 mm (the grooves are near the grid step).
+
 ## Features
 
 | # | Gap | Evidence | User impact | Est. |

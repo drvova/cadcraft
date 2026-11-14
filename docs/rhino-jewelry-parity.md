@@ -28,7 +28,7 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 | Eternity, half eternity | `kind:"eternity"`, `"halfeternity"` | done |
 | Split shank, double shank, bypass, cathedral shoulders | `piece {shank:{split:2\|3, gap, from, cathedral, height}}`, the Piece panel's Shank group, templates | split and cathedral done (solitaire); double shank and bypass planned (J10) |
 | Twisted cable, braided bands | `piece {kind:"band", pattern:{twist:{strands, turns, wire}}}`, template Cable Band | twisted cable done (2–3 strands); braids planned (J11) |
-| Text and names on a band; hallmark | engraving/text on `piece` | planned |
+| Text and names on a band; hallmark | `piece {engrave: {text, at: inside|outside, style: cut|raised, font: block|script}, hallmark: true|{maker}}` | done (2026-11-14): CADCraft's own stroke font cut as round-bottomed grooves wrapped round the band; raised names add metal; fineness from the metal; weight, checks, developed view, 3D view and cast solid. Not yet: outline (filled) fonts, text on a dome or signet's outside, several lines |
 | Earrings, pendants, chains, links | other piece kinds | planned |
 
 ## Stones and settings
@@ -119,3 +119,4 @@ own tests — never from Rhino's binaries, code, interface or artwork.
 | 2026-11-14 | minor | Making it: STL surface on the true surface, scallops cut, sprue and shrinkage allowance |
 | 2026-11-14 | minor | Shank shapes: a drawn rail, a split shank, cathedral shoulders and a twisted cable band are done; two-rail sweep, double shank/bypass and braids are rows J9–J11 |
 | 2026-11-14 | new | The feature list against Rhino's jewelry workflow, and the no-code rule |
+| 2026-11-14 | minor | Text and names on a band, and the hallmark: done |

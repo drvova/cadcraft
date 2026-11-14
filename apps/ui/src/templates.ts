@@ -162,6 +162,21 @@ export const TEMPLATES: readonly Template[] = [
     params: { kind: "band", metal: "gold18", pattern: { twist: { strands: 3, wire: 1.1, turns: null } } },
     requires: "cable bands",
   },
+  {
+    id: "name-ring",
+    name: "Name Ring",
+    blurb: "A band with a name raised on top and the hallmark inside.",
+    params: {
+      kind: "band",
+      wall: 1.6,
+      width: 3,
+      profile: "flat",
+      metal: "gold18",
+      engrave: { text: "ANNA", at: "outside", style: "raised" },
+      hallmark: true,
+    },
+    requires: "engrave",
+  },
 ];
 
 

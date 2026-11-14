@@ -295,6 +295,10 @@ pub(super) struct PieceParams {
     pub face_width: f64,
     /// The shank's shape past the round band: a rail, a split, cathedral arches, a cable ([`super::shank`]).
     pub shape: super::shank::ShankShape,
+    /// Text on the band ([`super::engrave`]), or none.
+    pub engrave: Option<super::engrave::EngraveSpec>,
+    /// The hallmark inside the shank ([`super::hallmark`]), or none.
+    pub hallmark: Option<super::hallmark::HallmarkSpec>,
 }
 
 /// The most stones an eternity band may be asked for.
@@ -460,6 +464,8 @@ impl PieceParams {
             count,
             gap: mm_in(cmd, p, "gap", 0.2, 0.0, 5.0)?,
             pave: super::pave_band::PaveSpec::parse(cmd, p)?,
+            engrave: super::engrave::EngraveSpec::parse(cmd, p)?,
+            hallmark: super::hallmark::HallmarkSpec::parse(cmd, p)?,
         };
         super::shank::settle(cmd, &mut params)?;
         Ok(params)
@@ -517,6 +523,8 @@ impl PieceParams {
             "face": self.face.name(),
             "faceLength": self.face_length,
             "faceWidth": self.face_width,
+            "engrave": self.engrave.as_ref().map_or(Value::Bool(false), super::engrave::EngraveSpec::json),
+            "hallmark": self.hallmark.as_ref().map_or(Value::Bool(false), super::hallmark::HallmarkSpec::json),
         });
         if let Some(o) = v.as_object_mut() {
             self.shape.json_into(o);
@@ -924,10 +932,12 @@ impl PieceParams {
             return v;
         }
         let section = self.section();
-        match self.kind {
+        let band = match self.kind {
             PieceKind::Dome | PieceKind::Signet => self.taper_volume(),
             _ => TAU * (self.inner() / 2.0 + section.centroid()) * section.area(),
-        }
+        };
+        // Lettering cut in takes metal away; raised letters add it.
+        band + super::engrave::volume_delta(self)
     }
 
     /// The band's weight in grams at the alloy's density: the one metal weight a piece reports.

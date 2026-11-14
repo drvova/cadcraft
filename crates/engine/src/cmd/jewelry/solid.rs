@@ -298,6 +298,8 @@ pub(super) enum Prim {
     Rail(super::sweep::RailBound),
     /// A split or cathedral shank ([`super::shank::ShankBound`]).
     Shank(super::shank::ShankBound),
+    /// A letter's stroke cut in or raised ([`super::engrave::Groove`]).
+    Groove(super::engrave::Groove),
 }
 
 /// Edges of a section taken together for [`Section::dist`].
@@ -411,6 +413,7 @@ impl Prim {
             Prim::Face { face, outline } => face.distance(p, outline),
             Prim::Rail(b) => b.distance(p),
             Prim::Shank(b) => b.distance(p),
+            Prim::Groove(g) => g.distance(p),
         };
         if v.is_nan() { f64::INFINITY } else { v }
     }
@@ -470,6 +473,7 @@ impl Prim {
                 }
                 bx
             }
+            Prim::Groove(g) => g.bounds(),
         }
     }
 }

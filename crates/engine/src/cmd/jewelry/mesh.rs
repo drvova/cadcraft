@@ -240,7 +240,7 @@ impl PieceMesh {
     /// The tessellated metal shells' volume in cubic millimetres (overlaps counted twice): an
     /// approximation, not the piece's metal weight.
     pub(super) fn shells_volume(&self) -> f64 {
-        self.meshes.iter().filter(|m| m.part == "metal").map(PartMesh::volume).sum()
+        self.meshes.iter().filter(|m| m.part == "metal" && m.name != "engraving").map(PartMesh::volume).sum()
     }
     /// The corners of the box around every vertex, rounded as the reply rounds them.
     pub(super) fn bounds(&self) -> ([f64; 3], [f64; 3]) {
@@ -929,6 +929,9 @@ struct Parts {
     melee: Buf,
     /// Pavé on the band ([`super::pave_band`]).
     pave: Buf,
+    /// Lettering ([`super::engrave`]): raised letters, and the shadow of cut ones.
+    lettering: Buf,
+    engraving: Buf,
     notes: Vec<String>,
     stones: u32,
     fits: Option<u32>,
@@ -1480,6 +1483,22 @@ pub(super) fn stone_color(name: &str) -> [u8; 3] {
     }
 }
 
+/// Lettering ([`super::engrave`]): its grooves cut from (or raised letters added to) the solid,
+/// and for the view raised letters as metal and cut ones as dark wires sunk in the surface.
+fn build_lettering(s: &Sane, d: &Detail, out: &mut Parts) {
+    if let Err(e) = super::engrave::lettering(&s.p) {
+        out.note(format!("The lettering is not shown: {e}."));
+        return;
+    }
+    let (add, cut) = super::engrave::grooves(&s.p);
+    out.csg.add.extend(add.into_iter().map(Prim::Groove));
+    out.csg.cut.extend(cut.into_iter().map(Prim::Groove));
+    for path in super::engrave::view_paths(&s.p) {
+        let buf = if path.raised { &mut out.lettering } else { &mut out.engraving };
+        capsule(buf, &path.pts, path.r, d.radial.min(8), 2);
+    }
+}
+
 fn build(p: &PieceParams, level: usize) -> PieceMesh {
     let d = DETAILS.get(level).or(DETAILS.last()).copied().unwrap_or(Detail {
         band: 48,
@@ -1510,6 +1529,7 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
         PieceKind::Eternity => build_eternity(&s, &d, &mut parts),
     }
     build_pave(&s, &d, &mut parts);
+    build_lettering(&s, &d, &mut parts);
     let metal = metal_color(&p.metal);
     let stone = stone_color(&p.stone);
     // A halo's melee are diamonds whatever the centre stone is; an eternity band's are the piece's stone.
@@ -1522,6 +1542,8 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
         parts.beads.part("metal", "beads", metal),
         parts.bezel.part("metal", "bezel", metal),
         parts.face.part("metal", "face", metal),
+        parts.lettering.part("metal", "lettering", metal),
+        parts.engraving.part("metal", "engraving", metal.map(|c| c / 3)),
         parts.centre.part("stone", "centre stone", stone),
         parts.sides.part("stone", "side stones", stone),
         parts.melee.part("stone", "melee", small),
@@ -1653,7 +1675,7 @@ pub(super) fn stl_ascii(tris: &[[Vec3; 4]], title: &str) -> String {
 
 const PIECE_KEYS: &str = "kind: band|solitaire|threestone|eternity|halfeternity|dome|signet, head?: prong|bezel, bezelWall?, bezelHeight?, topWidth?, topWall?, face?: round|oval|cushion|rectangle, faceLength?, faceWidth?, system?, size? (default US 6), wall?: mm (1.8), width?: mm (2.2), \
     profile?: flat|dome|comfort|court|knife|bevel|concave|custom (with profileCurve, as PIECE reports it), comfort?|ridge?|bevel?|hollow?: mm (the profile's own number), metal? (gold18), cut? (round), stoneWidth?: mm (6.5), stoneLength?: mm, stone? (diamond), prongs?: 3–8 (6), halo?: bool | melee mm, \
-    sideWidth?: mm, sideLength?: mm, sideCut?, sideProngs?: 3–8 (4), melee?: mm (1.8), count?: stones (default: as many as fit), gap?: mm (0.2), pave?: false|true|{layout, rows, melee, gap, span|from/to, symmetric, graduated} (as PIECE takes it)";
+    sideWidth?: mm, sideLength?: mm, sideCut?, sideProngs?: 3–8 (4), melee?: mm (1.8), count?: stones (default: as many as fit), gap?: mm (0.2), pave?: false|true|{layout, rows, melee, gap, span|from/to, symmetric, graduated} (as PIECE takes it), engrave?: false|text|{text, at, style, font, side, height, stroke, depth}, hallmark?: false|true|{maker, height, depth} (as PIECE takes them)";
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
