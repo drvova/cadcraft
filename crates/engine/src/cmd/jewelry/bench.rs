@@ -240,6 +240,8 @@ fn parse_band(block: &str, desc: &str) -> Option<Value> {
         "grams": number("grams").unwrap_or(0.0),
         "width": number("width").map(size_json),
         "wall": number("wall").map(size_json),
+        "piece": field("piece"),
+        "head": field("head"),
     }))
 }
 

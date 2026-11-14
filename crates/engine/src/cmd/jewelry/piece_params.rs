@@ -91,6 +91,8 @@ use serde_json::{Map, Value, json};
 
 use std::sync::Arc;
 
+use super::heads::{Bezel, HeadStyle};
+use super::kinds::FaceShape;
 use super::profile::CustomProfile;
 use super::sizes::{self, RingSize};
 use super::*;
@@ -106,10 +108,16 @@ pub(super) enum PieceKind {
     ThreeStone,
     /// A band with stones of one size all the way around.
     Eternity,
+    /// An eternity row across the top half only, the bottom of the shank plain ([`super::kinds::HalfRow`]).
+    HalfEternity,
+    /// A band much wider and thicker at the top than at the bottom ([`super::kinds::Taper`]).
+    Dome,
+    /// A tapered shank under a flat face ([`super::kinds::Face`]).
+    Signet,
 }
 
 /// The kinds, as a refusal lists them.
-pub(super) const KINDS: &str = "band, solitaire, threestone or eternity";
+pub(super) const KINDS: &str = "band, solitaire, threestone, eternity, halfeternity, dome or signet";
 
 impl PieceKind {
     pub(super) fn name(self) -> &'static str {
@@ -118,6 +126,9 @@ impl PieceKind {
             PieceKind::Solitaire => "solitaire",
             PieceKind::ThreeStone => "threestone",
             PieceKind::Eternity => "eternity",
+            PieceKind::HalfEternity => "halfeternity",
+            PieceKind::Dome => "dome",
+            PieceKind::Signet => "signet",
         }
     }
     fn parse(cmd: &str, s: &str) -> Result<Self> {
@@ -126,6 +137,9 @@ impl PieceKind {
             "solitaire" => Ok(PieceKind::Solitaire),
             "threestone" | "three-stone" | "trilogy" => Ok(PieceKind::ThreeStone),
             "eternity" => Ok(PieceKind::Eternity),
+            "halfeternity" | "half-eternity" | "half eternity" => Ok(PieceKind::HalfEternity),
+            "dome" | "domed" => Ok(PieceKind::Dome),
+            "signet" => Ok(PieceKind::Signet),
             _ => Err(bad(cmd, format!("`kind` must be {KINDS}"))),
         }
     }
@@ -266,6 +280,19 @@ pub(super) struct PieceParams {
     pub gap: f64,
     /// Band, solitaire, three-stone: pavé on the band's outside ([`super::pave_band`]), or none.
     pub pave: Option<super::pave_band::PaveSpec>,
+    /// Solitaire and three-stone: how every stone is held (`head`: prong or bezel).
+    pub head: HeadStyle,
+    /// Bezel: the collar's wall, or `None` for [`super::heads::BEZEL_WALL`].
+    pub bezel_wall: Option<f64>,
+    /// Bezel: how far the collar stands over the top of the girdle, or `None` for the usual lip.
+    pub bezel_height: Option<f64>,
+    /// Dome and signet: the band's width and wall at 12 o'clock (`width` and `wall` are the bottom's).
+    pub top_width: Option<f64>,
+    pub top_wall: Option<f64>,
+    /// Signet: the face's shape, its length along the finger and its width around it.
+    pub face: FaceShape,
+    pub face_length: f64,
+    pub face_width: f64,
 }
 
 /// The most stones an eternity band may be asked for.
@@ -299,6 +326,7 @@ impl PieceParams {
             .ok_or_else(|| bad(cmd, "that size is at the very edge of the ring sizes; give one a little inside the range"))?;
         let (metal, density) = sizes::metal_density(cmd, p)?;
         let profile = match p.get("profile").filter(|v| !v.is_null()) {
+            None if kind == PieceKind::Dome => Profile::Dome,
             None => Profile::Flat,
             Some(v) => v
                 .as_str()
@@ -384,7 +412,24 @@ impl PieceParams {
                 None => return Err(bad(cmd, format!("`count` must be a whole number from 1 to {MAX_PIECE_STONES}"))),
             },
         };
+        let optional = |key: &str, min: f64, max: f64| -> Result<Option<f64>> {
+            if p.get(key).is_none_or(Value::is_null) { Ok(None) } else { mm_in(cmd, p, key, min, min, max).map(Some) }
+        };
+        let (bezel_wall, bezel_height) = (optional("bezelWall", 0.2, 2.0)?, optional("bezelHeight", 0.0, 5.0)?);
+        let (top_width, top_wall) = (optional("topWidth", 0.5, 30.0)?, optional("topWall", 0.3, 10.0)?);
+        let head = HeadStyle::parse(cmd, p.get("head"))?;
+        let face = FaceShape::parse(cmd, p.get("face"))?;
+        let face_length = mm_in(cmd, p, "faceLength", 12.0, 4.0, 30.0)?;
+        let face_width = mm_in(cmd, p, "faceWidth", 10.0, 4.0, 30.0)?;
         Ok(PieceParams {
+            head,
+            bezel_wall,
+            bezel_height,
+            top_width,
+            top_wall,
+            face,
+            face_length,
+            face_width,
             kind,
             size,
             system,
@@ -459,6 +504,14 @@ impl PieceParams {
             "count": self.count,
             "gap": self.gap,
             "pave": self.pave.as_ref().map_or(Value::Bool(false), super::pave_band::PaveSpec::json),
+            "head": self.head.name(),
+            "bezelWall": self.bezel_wall,
+            "bezelHeight": self.bezel_height,
+            "topWidth": self.top_width,
+            "topWall": self.top_wall,
+            "face": self.face.name(),
+            "faceLength": self.face_length,
+            "faceWidth": self.face_width,
         })
     }
 }
@@ -858,7 +911,10 @@ impl PieceParams {
     /// section's centroid. The stones' seats are not taken off and no head is added.
     pub(super) fn band_volume(&self) -> f64 {
         let section = self.section();
-        TAU * (self.inner() / 2.0 + section.centroid()) * section.area()
+        match self.kind {
+            PieceKind::Dome | PieceKind::Signet => self.taper_volume(),
+            _ => TAU * (self.inner() / 2.0 + section.centroid()) * section.area(),
+        }
     }
 
     /// The band's weight in grams at the alloy's density: the one metal weight a piece reports.
@@ -1231,6 +1287,8 @@ pub(super) struct Head {
     /// The girdle's thickness (none on a cabochon).
     pub girdle: f64,
     pub halo: Option<HaloSeat>,
+    /// A bezel's collar, when the stone is held by one rather than by prongs.
+    pub bezel: Option<Bezel>,
 }
 
 impl Head {
@@ -1240,7 +1298,10 @@ impl Head {
     }
     /// The prongs' tips over the band.
     pub(super) fn prong_height(&self) -> f64 {
-        self.girdle_height() + self.girdle / 2.0 + PRONG_OVER * self.prong
+        match self.bezel {
+            Some(b) => self.girdle_height() + b.top(),
+            None => self.girdle_height() + self.girdle / 2.0 + PRONG_OVER * self.prong,
+        }
     }
 }
 
@@ -1270,14 +1331,20 @@ impl PieceParams {
         let cab = cut.is_some_and(|c| c.name == "cabochon");
         let depth = cut.map_or(0.6 * width, |c| stone_depth(c, width));
         let below = if cab { 0.0 } else { girdle_rise(depth) };
-        let prong = prong_wire(length, width);
+        let bezel = self.bezel_of(cut, length, width, depth);
+        // A bezel's metal beyond the girdle is its wall: it stands in for the prong wire's diameter.
+        let prong = bezel.map_or_else(|| prong_wire(length, width), |b| 2.0 * b.wall);
         let halo = halo.map(|h| {
             let melee_depth = gem::CUTS.first().map_or(0.6 * h, |c| stone_depth(c, h));
             HaloSeat { melee: h, depth: melee_depth, offset: halo_offset(prong, self.gap, h), under: girdle_rise(melee_depth) + HALO_UNDER }
         });
         // A halo's seat under a shallow stone would foul the band: the head stands that much higher.
         let lift = halo.map_or(0.0, |h| (h.under - below).max(0.0));
-        Head { depth, prong, clear: CULET_CLEAR + lift, below, girdle: if cab { 0.0 } else { GIRDLE * depth }, halo }
+        let mut head = Head { depth, prong, clear: CULET_CLEAR + lift, below, girdle: if cab { 0.0 } else { GIRDLE * depth }, halo, bezel };
+        if let Some(b) = head.bezel.as_mut() {
+            b.bottom -= lift;
+        }
+        head
     }
 
     /// Whether the centre stone has a halo: a solitaire asked for one. (A three-stone ring has
@@ -1328,9 +1395,8 @@ impl PieceParams {
             let (up, across) = (Vec2::new(angle.sin(), angle.cos()), Vec2::new(angle.cos(), -angle.sin()));
             polygon.iter().map(|q| up * (top + clear + q.y) + across * q.x).collect()
         };
-        let middle =
-            stand(&self.cut_data().map_or_else(Vec::new, |c| head_polygon(c, self.stone_width, centre.depth, centre.clear)), centre.clear, 0.0);
-        let beside = self.side_cut_data().map_or_else(Vec::new, |c| head_polygon(c, width, head.depth, head.clear));
+        let middle = stand(&self.cut_data().map_or_else(Vec::new, |c| self.head_outline(c, self.stone_width, &centre)), centre.clear, 0.0);
+        let beside = self.side_cut_data().map_or_else(Vec::new, |c| self.head_outline(c, width, &head));
         // The metal each stone carries beyond its girdle: half its prong wire.
         let metal = (centre.prong + head.prong) / 2.0;
         let apart = |angle: f64| polygons_apart(&middle, &stand(&beside, head.clear, angle));

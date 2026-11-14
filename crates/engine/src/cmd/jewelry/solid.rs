@@ -20,6 +20,9 @@ use std::collections::HashMap;
 
 use cadcraft_geom::{Vec2, Vec3};
 
+use super::heads::BezelBound;
+use super::kinds::{Face, Taper};
+
 /// Cells along a block's edge.
 const BLOCK: usize = 8;
 /// The most grid blocks one extraction looks at.
@@ -277,6 +280,20 @@ pub(super) enum Prim {
         hi: f64,
     },
     Seat(Envelope),
+    /// A dome ring's or a signet's tapered shank: the bottom `section` (`(x across, height over
+    /// the finger)`) scaled as it goes round a finger of radius `ri` ([`Taper::distance_by`]).
+    Taper {
+        taper: Taper,
+        section: Section,
+        ri: f64,
+    },
+    /// A bezel's collar round a stone's girdle ([`BezelBound::distance`]).
+    Bezel(BezelBound),
+    /// A signet's face plate, its outline `(x around, z along)` ([`Face::distance`]).
+    Face {
+        face: Face,
+        outline: Vec<Vec2>,
+    },
 }
 
 /// Edges of a section taken together for [`Section::dist`].
@@ -385,6 +402,9 @@ impl Prim {
                 (inner - d).max(d - outer).max((lo - q.z).max(q.z - hi))
             }
             Prim::Seat(e) => e.eval(p),
+            Prim::Taper { taper, section, ri } => taper.distance_by(*ri, p, |q| section.dist(q)),
+            Prim::Bezel(b) => b.distance(p),
+            Prim::Face { face, outline } => face.distance(p, outline),
         };
         if v.is_nan() { f64::INFINITY } else { v }
     }
@@ -415,6 +435,33 @@ impl Prim {
                 axes.bounds(Vec3::new(a.x - o, a.y - o, *lo), Vec3::new(b.x + o, b.y + o, *hi))
             }
             Prim::Seat(e) => e.bounds(),
+            Prim::Taper { taper, section, ri } => {
+                // The scale is largest at the top or at the bottom of the shank.
+                let ((ax, ay), (bx, by)) = (taper.scale(0.0), taper.scale(std::f64::consts::PI));
+                let (sx, sy) = (ax.max(bx).max(0.0), ay.max(by).max(0.0));
+                let x = section.pts.iter().map(|q| q.x.abs()).fold(0.0, f64::max) * sx;
+                let r = (ri + section.pts.iter().map(|q| q.y.abs()).fold(0.0, f64::max) * sy).max(0.0);
+                (Vec3::new(-r, -r, -x), Vec3::new(r, r, x))
+            }
+            Prim::Bezel(b) => {
+                let (lo, hi) = b
+                    .girdle
+                    .iter()
+                    .fold((Vec2::new(f64::INFINITY, f64::INFINITY), Vec2::new(f64::NEG_INFINITY, f64::NEG_INFINITY)), |(lo, hi), q| {
+                        (lo.min(*q), hi.max(*q))
+                    });
+                let wall = b.bezel.wall.max(0.0);
+                let axes = Axes { o: b.o, u: b.u, v: b.v, w: b.w };
+                axes.bounds(Vec3::new(lo.x - wall, lo.y - wall, b.bezel.bottom), Vec3::new(hi.x + wall, hi.y + wall, b.bezel.top()))
+            }
+            Prim::Face { face, outline } => {
+                let mut bx = empty;
+                for q in outline {
+                    grow(&mut bx, Vec3::new(q.x, face.bottom, q.y));
+                    grow(&mut bx, Vec3::new(q.x, face.top, q.y));
+                }
+                bx
+            }
         }
     }
 }

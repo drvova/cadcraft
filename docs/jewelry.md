@@ -380,6 +380,42 @@ direction round the band, girdle diameter, depth, scallop).
 object's handle, kind, layer, block, first words, one telling size and its groups, capped at
 5,000, and it changes nothing.
 
+### Bezel heads, half eternity, dome rings and signets
+
+The parametric piece covers the ring typology a jewelry course teaches: band, dome, signet,
+solitaire, bezel, eternity, half eternity, three-stone. The numbers live in
+`crates/engine/src/cmd/jewelry/heads.rs` and `kinds.rs`; the sheet and the solid read them.
+
+- **Bezel** — `head: "prong" | "bezel"` (default prong) on a solitaire or a three-stone ring (all
+  three stones). The collar follows the girdle outline of any cut. In section it is the wall
+  (`bezelWall`, default 0.6 mm, 0.2–2) from under the band's outside up to `bezelHeight` over the
+  top of the girdle (default 12 % of the stone's lesser size, 0.4–1 mm, never over 70 % of the
+  crown), and a seat ledge inside the girdle (6 % of the lesser size, 0.2–0.5 mm) the stone rests
+  on; below the ledge the collar is open. Checks `bezel-wall` (at least 0.4 mm) and `bezel-lip`
+  (at least 0.3 mm over the girdle and short of the table). The collar's weight is reported apart
+  as `metal.bezelGrams`: `P·A + 2π·M` (perimeter, section area and its first moment) — exact for
+  convex girdles, approximate in a heart's cleft. These are our approximations of bench practice.
+- **Half eternity** — `kind: "halfeternity"` (a kind rather than an eternity option, because the
+  gallery, the Piece panel's kind list and a proposal switch one key, and it carries its own
+  `resize` check): the eternity row packed at the least pitch that keeps `gap`, centred on 12
+  o'clock, as many as keep every centre within 90° of it unless `count` asks for fewer; the bottom
+  is plain. `resize` passes with at least 10 mm of plain shank.
+- **Dome ring** — `kind: "dome"` (profile default dome) with `topWidth`/`topWall` (defaults 3.5 ×
+  width and 1.8 × wall); `width`/`wall` are the bottom, where the ring is sized. The bottom section
+  is scaled by `f(θ) = ((1 + cos θ)/2)²` round the ring; the weight is the exact swept volume (a
+  kind, not a `taper` on band, because the signet shares the shank and a kind is one key to switch).
+  `wall` judges the thinnest point.
+- **Signet** — `kind: "signet"`: a tapered shank (top `topWidth`, default 60 % of the face length)
+  under a flat plate, `face: oval | round | cushion | rectangle` (default oval), `faceLength` along
+  the finger (12) by `faceWidth` around (10), its top `topWall` over the finger (default wall +
+  1.2, at least 2.6), its underside 0.3 mm over the finger. Grams: the shank exactly plus the plate
+  outside it (column integration over the face). Check `face`: at least 1.2 mm thick (a 0.4 mm
+  engraving over a 0.8 mm cast wall). A flush-set stone in the face (signet cocktail) is not built yet.
+
+The solid is a closed shell per part (`bezel`, `face`, the tapered `band`); each part also exposes
+a signed-distance bound for the single-solid builder (`BezelBound::distance`,
+`PieceParams::taper_distance`, `PieceParams::signet_face_distance`).
+
 ## In the interface
 
 The interface opens on a jewelry drawing: a size 6 solitaire in 18k gold (Help ▸ Open Sample
@@ -567,6 +603,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 | 2026-11-13 | minor | The 3D tab's four-view workspace (Top, Front, Right orthographic and flat-shaded at one scale; Perspective in its mode; maximise by double-click, M or the bar; remembered; single view under 560 px) on one scissored context, and drag handles on the piece (centre stone, halo melee, eternity stones, wall, width) that preview at draft quality, show the value and the checks it would break, and commit one `piece` change or, with Alt, a proposal; keyboard sliders |
 | 2026-11-13 | minor | `PIECE {profile: {curve: handle}}`: a band profile drawn as a closed curve of the drawing (polyline with bulges, spline, circle, ellipse, region), kept by value with its frame (box bottom on the finger, centred across), width and wall read from it, weight by Pappus, the wall check at its thinnest, the solid revolved from it; the Piece panel names it "Custom (from drawing)" with Update from curve. Rails are not built yet (J8) |
 | 2026-11-13 | minor | Pavé on the band: `PIECE {pave}` (row, rows, honeycomb, scallop; 1–3 rows; a named span or angles, mirrored; graduated sizes) placed on the outside of every profile with tables square to the surface, auto-fitted to the span with the residual shared, clear of the head and the rim; a `pave` check; the sheet, the bench sheet, `PIECEMESH`, `propose` and the Piece section's Pavé group read it |
+| 2026-11-13 | minor | `PIECE`: a bezel head (`head`, `bezelWall`, `bezelHeight`, checks `bezel-wall`/`bezel-lip`, `metal.bezelGrams`) and three kinds — `halfeternity` (`resize` check), `dome` (`topWidth`, `topWall`, tapered weight) and `signet` (`face`, `faceLength`, `faceWidth`, `face` check); solids, proposals, templates and the Piece panel |
 | 2026-11-13 | patch | Realistic studio: concentric gradient rings round the lens replace the front strips and low cards, so flat faces carry a band from the front, top, side and through an orbit and the side view is calm; the lights are eased toward a ceiling and strips mirror coloured alloys a shade deeper (gold18 lit-pixel median saturation 0.53 → 0.59, silver near-white pixels 19% → 0%); coloured stones return a deeper body colour and mirror the rings dimmed; the derivatives variant of the shader compiles again; the stage stays dark in the light theme by design |
 | 2026-11-13 | minor | `STLOUT` writes the metal as one closed, manifold shell (implicit CSG, marching tetrahedra) with stone seats cut: prong bearings and culet holes, cone seats with bores and through-holes for halo and eternity melee; reports the cast weight beside the band's; `maxTriangles`, `step`, `seats`, `bodies` |
 | 2026-11-13 | patch | Realistic studio: gradient strips round the lens, tall side strips and low cards, a smaller dark lens spot, so broad polished faces carry a bright highlight band beside a dark one instead of reading as flat bronze |

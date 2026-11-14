@@ -36,7 +36,7 @@ export interface Template {
 }
 
 /** The piece kinds the engine builds today; a template on another kind carries `requires`. */
-export const BUILDABLE_KINDS: readonly string[] = ["band", "solitaire", "eternity"];
+export const BUILDABLE_KINDS: readonly string[] = ["band", "solitaire", "eternity", "halfeternity", "dome", "signet"];
 
 /**
  * The preset pieces, in the order the gallery reads them: the solitaires, the bands, the eternity
@@ -64,6 +64,19 @@ export const TEMPLATES: readonly Template[] = [
     requires: "the three-stone setting",
   },
   {
+    id: "bezel-solitaire",
+    name: "Bezel Solitaire",
+    blurb: "A round stone in a smooth metal collar: nothing to snag.",
+    params: { kind: "solitaire", head: "bezel", cut: "round", stone: "diamond", stoneWidth: 6.5, stoneLength: 6.5, wall: 1.8, width: 2.4, profile: "flat", metal: "gold18" },
+  },
+  {
+    id: "bezel-three-stone",
+    name: "Bezel Three-Stone",
+    blurb: "Three stones, each in its own bezel, in platinum.",
+    params: { kind: "threestone", head: "bezel", cut: "round", stone: "diamond", stoneWidth: 5, stoneLength: 5, wall: 1.8, width: 2.4, profile: "flat", metal: "platinum" },
+    requires: "the three-stone setting",
+  },
+  {
     id: "plain-band",
     name: "Plain Band",
     blurb: "A simple flat band in 18k gold.",
@@ -87,6 +100,30 @@ export const TEMPLATES: readonly Template[] = [
     name: "Eternity Band",
     blurb: "Round diamonds set all the way around, in platinum.",
     params: { kind: "eternity", cut: "round", stone: "diamond", melee: 1.8, count: null, gap: 0.2, wall: 1.8, width: 2.4, profile: "flat", metal: "platinum" },
+  },
+  {
+    id: "half-eternity",
+    name: "Half Eternity",
+    blurb: "Diamonds across the top half; the plain bottom can be resized.",
+    params: { kind: "halfeternity", cut: "round", stone: "diamond", melee: 2.0, count: null, gap: 0.2, wall: 1.8, width: 2.6, profile: "flat", metal: "gold18" },
+  },
+  {
+    id: "dome-ring",
+    name: "Dome Ring",
+    blurb: "A bold dome, wide and high on top, tapering to a slim shank.",
+    params: { kind: "dome", wall: 1.6, width: 2.5, topWidth: 9, topWall: 3.2, profile: "dome", metal: "gold18" },
+  },
+  {
+    id: "signet-oval",
+    name: "Oval Signet",
+    blurb: "A flat oval face for engraving over a tapered shank.",
+    params: { kind: "signet", face: "oval", faceLength: 12, faceWidth: 10, wall: 1.6, width: 3, profile: "comfort", metal: "gold18" },
+  },
+  {
+    id: "signet-cushion",
+    name: "Cushion Signet",
+    blurb: "A square-cushion face in platinum, for a crest or initials.",
+    params: { kind: "signet", face: "cushion", faceLength: 11, faceWidth: 11, wall: 1.7, width: 3, profile: "comfort", metal: "platinum" },
   },
   {
     id: "signet-band",
@@ -122,9 +159,12 @@ const GROUP_LABELS: Readonly<Record<string, string>> = {
   solitaire: "Solitaires",
   band: "Bands",
   eternity: "Eternity",
+  halfeternity: "Half eternity",
+  dome: "Dome rings",
+  signet: "Signets",
 };
 
-const GROUP_ORDER: readonly string[] = ["solitaire", "band", "eternity"];
+const GROUP_ORDER: readonly string[] = ["solitaire", "band", "eternity", "halfeternity", "dome", "signet"];
 
 /** A group heading for a kind the table knows, else the kind with a capital and an "s". */
 function groupLabel(kind: string): string {

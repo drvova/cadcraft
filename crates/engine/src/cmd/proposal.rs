@@ -309,6 +309,14 @@ const PARAMS: &[(&str, &str, Option<&str>)] = &[
     ("sideLength", "Side stone length", Some("mm")),
     ("sideWidth", "Side stone width", Some("mm")),
     ("sideProngs", "Side prongs", None),
+    ("head", "Head", None),
+    ("bezelWall", "Bezel wall", Some("mm")),
+    ("bezelHeight", "Bezel height", Some("mm")),
+    ("topWidth", "Top width", Some("mm")),
+    ("topWall", "Top wall", Some("mm")),
+    ("face", "Face", None),
+    ("faceLength", "Face length", Some("mm")),
+    ("faceWidth", "Face width", Some("mm")),
 ];
 
 /// Pavé's parameters a card names.
