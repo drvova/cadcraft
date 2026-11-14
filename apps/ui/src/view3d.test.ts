@@ -384,6 +384,21 @@ describe("the vertex buffers", () => {
     expect(worst).toBeGreaterThan(Math.cos((4 * Math.PI) / 180));
   });
 
+  test("a sliver is shaded as the surface round it: a flipped one neither glints nor tilts its neighbours", () => {
+    // A unit square in z = 0, wound up, with a sliver along its diagonal that the reply's
+    // rounding turned over: its own normal points down.
+    const positions = [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0.5001, 0.5, 0];
+    const indices = [0, 1, 2, 0, 2, 4, 0, 4, 3, 4, 2, 3];
+    const mesh = parsed({ meshes: [{ part: "metal", name: "band", color: [1, 1, 1], positions, indices }], bounds: { min: [0, 0, 0], max: [1, 1, 0] }, triangles: 4 });
+    const { data, vertices } = buildBuffers(mesh).metal;
+    expect(vertices).toBe(12);
+    for (let v = 0; v < vertices; v += 1) {
+      const at = v * VERTEX_FLOATS;
+      const n: Vec3 = [data[at + 3] ?? 0, data[at + 4] ?? 0, data[at + 5] ?? 0];
+      expect(near(n, [0, 0, 1], 1e-6)).toBe(true);
+    }
+  });
+
   test("a stone is lit flat, and a triangle with no area is left out", () => {
     const stone = { part: "stone", name: "s", color: [9, 9, 9], ...torus(9, 1.5, 12, 6) };
     const sliver = { part: "metal", name: "sliver", color: [9, 9, 9], positions: [0, 0, 0, 1, 0, 0, 2, 0, 0, 0, 1, 0], indices: [0, 1, 2, 0, 1, 3] };

@@ -489,7 +489,7 @@ fn report_pieces() -> Vec<(&'static str, Value)> {
 }
 
 /// The surface's distance from the true surface, raw (the grid's piecewise-linear zero set) and
-/// smoothed (vertices projected onto the field's zero set), at STLOUT's default fine step and
+/// smoothed (vertices on the field's zero set along their grid edges), at STLOUT's default fine step and
 /// triangle cap; with `MAKING_DIR` set, the STLs too (run in release with `--ignored --nocapture`).
 #[test]
 #[ignore = "a report, not a check: run in release with --ignored --nocapture"]
@@ -519,9 +519,9 @@ fn surface_report() {
     }
 }
 
-/// The vertices lie on the true surface: projected onto the field's zero set, they stand far
-/// nearer it than the grid's piecewise-linear surface does, on curved bands, beads and seats, and
-/// the shell stays everything a caster's must be.
+/// The vertices lie on the true surface: found where the field is zero along their grid edges, they
+/// stand far nearer it than the grid's piecewise-linear surface does, on curved bands, beads and
+/// seats, and the shell stays everything a caster's must be.
 #[test]
 fn the_smoothed_surface_lies_on_the_true_one() {
     for (what, v) in report_pieces() {
@@ -535,7 +535,7 @@ fn the_smoothed_surface_lies_on_the_true_one() {
         println!("{what}: vertices mean {rm:.5} → {sm:.5} mm, max {rx:.4} → {sx:.4} mm");
         assert!(sm < 0.5 * rm, "{what}: mean {sm} vs raw {rm}");
         assert!(sx <= rx + 1e-9, "{what}: max {sx} vs raw {rx}");
-        // The volume moves little: the projection takes off facets, it does not reshape.
+        // The volume moves little: finding the true surface takes off facets, it does not reshape.
         assert!((smooth.volume() / raw.volume() - 1.0).abs() < 0.02, "{what}: {} vs {}", smooth.volume(), raw.volume());
     }
 }
@@ -672,4 +672,26 @@ fn the_notes_say_what_each_mesh_is() {
         let notes = r["notes"].to_string();
         assert!(!notes.contains("This view draws") && notes.contains("one closed shell with a seat cut"), "{kind}: {notes}");
     }
+}
+
+/// Regression (the Hegel case `seed 0, cells 8` of `a_patterned_band_casts_as_one_watertight_body`):
+/// a pierced Voronoi band's solid. Its vertices used to be moved off their grid edges by Newton
+/// steps, which on the openings' sharp walls folded about a fifth of the shell through itself;
+/// those were put back on the grid's faceted surface, leaving a patchwork the Realistic view showed
+/// as speckle, and the check took long enough that the property failed its time budget. Each
+/// vertex is now found on the true surface along its own grid edge: one clean body, every vertex
+/// on the true surface, no triangle through another.
+#[test]
+fn a_pierced_voronoi_band_solid_lies_on_its_surface() {
+    let v = json!({"kind": "band", "width": 6.0, "wall": 1.6, "pattern": {"voronoi": {"cells": 8, "seed": 0}}});
+    let mesh = piece_mesh(&params(&v), Quality::Draft);
+    let (s, _) = solidify(&mesh.csg, 0.15, 400_000).unwrap();
+    assert_castable(&s, "voronoi band");
+    assert_eq!(s.bodies, 1);
+    let raw = solidify_with(&mesh.csg, 0.15, 400_000, false).unwrap().0;
+    let (sm, sx, _, _) = surface_error(&mesh.csg, &s);
+    let (rm, rx, _, _) = surface_error(&mesh.csg, &raw);
+    println!("voronoi band: vertices mean {rm:.5} → {sm:.5} mm, max {rx:.4} → {sx:.4} mm");
+    assert!(sm < 0.1 * rm, "mean {sm} vs raw {rm}");
+    assert!(sx < 0.1 * rx && sx < 0.05 * s.step, "max {sx} mm off the surface (raw {rx}) at step {}", s.step);
 }

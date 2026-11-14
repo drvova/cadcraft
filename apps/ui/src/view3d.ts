@@ -398,12 +398,16 @@ export interface Buffers {
 
 /** Faces that meet at less than this angle (as its cosine) shade as one curved surface. */
 const CREASE_COS = Math.cos((38 * Math.PI) / 180);
+/** A metal face under this fraction of the mean area of the faces round a corner is a sliver there. */
+const SLIVER = 0.02;
 
 /**
  * The buffers the viewport uploads. The engine sends no normals: each is taken from the triangles.
  * A stone is facets, so each of its faces is lit flat. Metal is lit smooth across faces that share
  * a vertex and meet at a shallow angle (a band's curve) and flat across a sharp edge (a band's
- * rim). A triangle with no area is left out. The total is capped at `MAX_TRIANGLES`, the same
+ * rim), each face weighed by its area. A sliver (a cast solid's grid leaves them where the surface
+ * passes by a grid node, and the reply's micrometre rounding turns them any way) is shaded as the
+ * surface round it, not by its own normal: otherwise it glints. A triangle with no area is left out. The total is capped at `MAX_TRIANGLES`, the same
  * ceiling the reply is held to, so the memory is bounded whatever is passed.
  */
 export function buildBuffers(mesh: PieceMesh): Buffers {
@@ -428,8 +432,9 @@ function writePart(part: PartMesh, smooth: boolean, data: Float32Array, start: n
   const { positions, indices, color } = part;
   const faces = indices.length / 3;
   const vertices = positions.length / 3;
-  // Each face's unit normal (zero for a face with no area).
+  // Each face's unit normal (zero for a face with no area), and its area.
   const normals = new Float32Array(faces * 3);
+  const areas = new Float64Array(faces);
   for (let face = 0; face < faces; face += 1) {
     const a = (indices[face * 3] ?? 0) * 3;
     const b = (indices[face * 3 + 1] ?? 0) * 3;
@@ -448,6 +453,7 @@ function writePart(part: PartMesh, smooth: boolean, data: Float32Array, start: n
     normals[face * 3] = nx / length;
     normals[face * 3 + 1] = ny / length;
     normals[face * 3 + 2] = nz / length;
+    areas[face] = length / 2;
   }
   // The faces around each vertex, as one flat list with an offset per vertex.
   let offsets: Uint32Array | null = null;
@@ -479,25 +485,56 @@ function writePart(part: PartMesh, smooth: boolean, data: Float32Array, start: n
       let ny = fy;
       let nz = fz;
       if (offsets !== null && around !== null) {
+        const begin = offsets[v] ?? 0;
+        const end = offsets[v + 1] ?? 0;
+        // A sliver's own normal is not to be trusted: it takes the area-weighted normal of every
+        // face round the corner as its own.
+        let rx = fx;
+        let ry = fy;
+        let rz = fz;
+        let total = 0;
+        for (let k = begin; k < end; k += 1) total += areas[around[k] ?? 0] ?? 0;
+        if (end > begin && (areas[face] ?? 0) < (SLIVER * total) / (end - begin)) {
+          let wx = 0;
+          let wy = 0;
+          let wz = 0;
+          for (let k = begin; k < end; k += 1) {
+            const other = around[k] ?? 0;
+            const w = areas[other] ?? 0;
+            wx += (normals[other * 3] ?? 0) * w;
+            wy += (normals[other * 3 + 1] ?? 0) * w;
+            wz += (normals[other * 3 + 2] ?? 0) * w;
+          }
+          const wl = Math.hypot(wx, wy, wz);
+          if (wl > 1e-12) {
+            rx = wx / wl;
+            ry = wy / wl;
+            rz = wz / wl;
+          }
+        }
         let sx = 0;
         let sy = 0;
         let sz = 0;
-        const end = offsets[v + 1] ?? 0;
-        for (let k = offsets[v] ?? 0; k < end; k += 1) {
-          const other = (around[k] ?? 0) * 3;
-          const ox = normals[other] ?? 0;
-          const oy = normals[other + 1] ?? 0;
-          const oz = normals[other + 2] ?? 0;
-          if (ox * fx + oy * fy + oz * fz < CREASE_COS) continue;
-          sx += ox;
-          sy += oy;
-          sz += oz;
+        for (let k = begin; k < end; k += 1) {
+          const other = around[k] ?? 0;
+          const ox = normals[other * 3] ?? 0;
+          const oy = normals[other * 3 + 1] ?? 0;
+          const oz = normals[other * 3 + 2] ?? 0;
+          if (ox * rx + oy * ry + oz * rz < CREASE_COS) continue;
+          const w = areas[other] ?? 0;
+          sx += ox * w;
+          sy += oy * w;
+          sz += oz * w;
         }
         const length = Math.hypot(sx, sy, sz);
-        if (length > 1e-6) {
+        if (length > 1e-18 && Number.isFinite(length)) {
           nx = sx / length;
           ny = sy / length;
           nz = sz / length;
+        } else {
+          nx = rx;
+          ny = ry;
+          nz = rz;
         }
       }
       const at = (triangle * 3 + corner) * VERTEX_FLOATS;

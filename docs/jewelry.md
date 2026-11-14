@@ -299,15 +299,22 @@ dropped. `stones: true` appends the stones as shells of their own.
 - *Resolution.* Fine quality samples at 0.1 mm, draft at 0.2 mm. A file holds at most
   `maxTriangles` (default 150,000, what the interface downloads; up to 1,000,000); a piece that
   needs more is sampled more coarsely and `step` and `notes` say so. At the default cap a usual
-  piece comes out at about 0.19–0.29 mm. Every vertex is then moved onto the true surface (up to
-  four Newton steps along the field's gradient, by central differences, at most 0.6 of a step;
-  a move that would turn a triangle over is undone), so curved metal — beads, the band, a dome —
-  is no longer the grid's facets: measured at the default cap, the mean vertex distance from the
-  true surface falls from 0.0014–0.0061 mm to 0.0004–0.0021 mm (3–7×) and the mean at triangle
-  centres by about 25–35 %; vertices whose move would make two triangles cross are put back with
-  the ring round them, so seat rims and tight gaps keep the grid's surface. It costs 0.7–1.9 s more. Sharp edges (seat rims, a flat band's corners) are still
+  piece comes out at about 0.19–0.29 mm. Every vertex is found on the true surface: where the
+  field itself is zero along its own grid edge (bracketed false position, at most eight field
+  evaluations, kept a thousandth of the edge from either end), not where its linear interpolant
+  is. A vertex never leaves its edge, so each triangle stays in its own tetrahedron and the shell
+  is closed, manifold, wound outward and free of self-intersections by construction, with nothing
+  to put back. Measured at the draft step (0.2 mm), the mean vertex distance from the true surface
+  falls from 0.0010–0.0043 mm to under 0.0001 mm and the worst from 0.11–0.17 mm to 0.003–0.06 mm
+  (at sharp edges). Until 2026-11-14 vertices were moved by Newton steps along the field's
+  gradient instead; on a pierced pattern's sharp walls that made about a fifth of the triangles
+  cross, which were put back on the grid's facets: the patchwork showed as speckle in the 3D view
+  and made a Voronoi band's solid about 3.5× slower (5.6 s, now 1.6 s). Sharp edges (seat rims, a
+  flat band's corners, a pierced opening's walls) are still
   chamfered by up to about half a step and look ragged close up; ask for `maxTriangles: 1000000`
-  for the 0.1 mm solid. Times (release, native): 0.9–2.1 s at the default cap.
+  for the 0.1 mm solid. Times (release, native): 0.9–2.1 s at the default cap. In the 3D view a
+  sliver triangle (left where the surface passes by a grid node, and turned any way by the reply's
+  micrometre rounding) is shaded as the surface round it, and faces are weighed by area.
 - *Scallops.* A scalloped pavé row's scallops — the arcs the sheet draws — are cut into both sides
   of the band, from the side in to a girdle's width plus 0.1 mm from the row's middle.
 - *Sprue.* `sprue: true | {diameter (2.5), length (6), at (180)}` merges a round sprue standing
@@ -838,6 +845,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | patch | The cast solid's vertices are found on the true surface along their own grid edges instead of by Newton steps, so no triangle crosses another by construction: a pierced Voronoi band's solid is 3.5× faster (the `a_patterned_band_casts_as_one_watertight_body` property had failed its time budget), its 3D view no longer a patchwork of projected and put-back vertices, and the mean vertex error under 0.0001 mm; the 3D view shades slivers as the surface round them |
 | 2026-11-14 | patch | A worn piece's prong head is weighed from its parts (seat, overlaps, styled tops; `head_metal.rs`): within 10 % of the cast solid where it read 37–53 % heavy, checked on every run; the Piece panel's metal weight is the whole piece's as the Bench sheet's (band, prongs and rail, channel rails), said so; the Twisted cable row is not offered on a band with pavé or a channel; a pendant's or earrings' ring-only keys (`rail`, `shank`, `pattern`, `engrave`, `hallmark`, `pave`) are kept, unused, and come back with a ring |
 | 2026-11-14 | minor | Save Render in the 3D tab: a still PNG (to 4096 px, square or 16:9, studio, light or transparent, held to the GPU's limits), a turntable (WebM via MediaRecorder, or an animated PNG of our own writing) and a contact sheet with the Tech Sheet's facts |
 | 2026-11-14 | minor | `STLOUT`: vertices projected onto the true surface; scallops cut; `sprue` and `shrink`; display-mesh notes made accurate |

@@ -60,12 +60,13 @@ and the tests check the four properties and self-intersection independently.
 
 - Sharp edges (a flat band's corners, a knife edge) are chamfered by about half a grid step
   (0.06–0.1 mm at fine quality). Smooth surfaces are within a few micrometres at that step.
-- Since 2026-11-14 each vertex is projected onto the field's own zero set (Newton steps along a
-  central-difference gradient, at most 0.6 step, undone where a triangle would turn over). The
-  connectivity is unchanged, so closed, manifold and oriented still hold by construction;
-  non-self-intersection is no longer by construction: the extractor checks every nearby pair of
-  triangles after the move and puts back the vertices (and the ring round them) of any pair that
-  crosses, round by round, falling back to the unmoved shell; the tests check it independently.
+- Each vertex is placed where the field itself is zero along its grid edge (bracketed false
+  position, Illinois variant, at most eight evaluations; kept 0.001 of the edge from either end),
+  not where the field's linear interpolant is. Every vertex still lies inside its own grid edge,
+  so closed, manifold, oriented and non-self-intersecting all hold by construction, as for the
+  raw grid surface; the tests check them independently. (An earlier version, the same day, moved
+  vertices off their edges by Newton steps and put back those that made triangles cross; on a
+  pierced pattern's sharp walls that was a fifth of the shell and most of the time.)
 - Triangle count grows with surface area over the step squared; the step coarsens until the
   solid is under `MAX_TRIANGLES`, and `notes` says so.
 - Work is bounded: candidates per grid block come from a binned index, block count and field
