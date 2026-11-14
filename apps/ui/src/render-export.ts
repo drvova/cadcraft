@@ -14,6 +14,7 @@
  * and `fdAT`. The cost is size: frames are stored losslessly, so an APNG is many times a WebM.
  */
 
+import type { SheetModel } from "./techsheet";
 import { fitCamera, sceneOf, STANDARD_VIEWS, type Camera, type Scene, type StandardView, type Vec3 } from "./view3d";
 
 // ---- what is asked ----
@@ -405,4 +406,42 @@ export function apngFrameCount(file: Uint8Array): number {
   const actl = readChunks(file)?.find((chunk) => chunk.type === "acTL");
   if (actl === undefined || actl.data.length < 8) return 0;
   return new DataView(actl.data.buffer, actl.data.byteOffset, 8).getUint32(0);
+}
+
+// ---- the contact sheet ----
+
+/** The facts printed under a contact sheet's four views, from the Tech Sheet's model: one line each. */
+export function sheetFactLines(model: Pick<SheetModel, "title" | "dimensions" | "ringSizes" | "metalTotal" | "stoneTotal">): { title: string; lines: string[] } {
+  const lines: string[] = [];
+  for (const fact of model.dimensions) lines.push(`${fact.label}: ${fact.value}`);
+  if (model.ringSizes.length > 0) lines.push(`Ring size: ${model.ringSizes.map((fact) => `${fact.label} ${fact.value}`).join(" · ")}`);
+  if (model.metalTotal !== null) lines.push(`Metal: ${model.metalTotal.value}`);
+  if (model.stoneTotal !== null) lines.push(`Stones: ${model.stoneTotal.value}`);
+  return { title: model.title, lines };
+}
+
+/** The contact sheet's layout: four square views 2 × 2, a label under each, and the facts under all. */
+export interface SheetLayout {
+  width: number;
+  height: number;
+  tile: number;
+  margin: number;
+  label: number;
+  /** Where each view's tile stands (top-left), in the order of `SHEET_VIEWS`. */
+  tiles: { x: number; y: number }[];
+  /** Where the facts begin (the title's line), and the line height. */
+  factsY: number;
+  line: number;
+}
+
+export function sheetLayout(tile: number, factLines: number): SheetLayout {
+  const t = Number.isFinite(tile) ? Math.max(64, Math.min(2048, Math.round(tile))) : 800;
+  const margin = Math.round(t * 0.05);
+  const label = Math.round(t * 0.06);
+  const line = Math.round(t * 0.045);
+  const cell = t + label;
+  const tiles = [0, 1, 2, 3].map((i) => ({ x: margin + (i % 2) * (t + margin), y: margin + Math.floor(i / 2) * (cell + margin) }));
+  const factsY = margin + 2 * (cell + margin);
+  const rows = 1 + Math.max(0, Math.min(40, Math.floor(Number.isFinite(factLines) ? factLines : 0)));
+  return { width: 2 * t + 3 * margin, height: factsY + Math.round(line * 1.5) * rows + margin, tile: t, margin, label, tiles, factsY, line };
 }

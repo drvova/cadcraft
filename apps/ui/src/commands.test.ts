@@ -160,6 +160,9 @@ describe("classify", () => {
     expect(classify("ui.focus.cmdline")).toBe("focus");
     expect(classify("ui.focus.next")).toBe("focus");
     expect(classify("ui.focus.previous")).toBe("focus");
+    expect(classify("ui.render.image")).toBe("render");
+    expect(classify("ui.render.turntable")).toBe("render");
+    expect(classify("ui.render.sheet")).toBe("render");
     expect(classify("circle")).toBe("engine");
     expect(classify("zoom.extents")).toBe("engine");
     expect(classify("ui.dialog.about")).toBe("engine");
@@ -216,6 +219,9 @@ describe("UI_ITEMS", () => {
         "ui.animations.on",
         "ui.animations.off",
         "ui.animations.system",
+        "ui.render.image",
+        "ui.render.turntable",
+        "ui.render.sheet",
       ].sort(),
     );
   });

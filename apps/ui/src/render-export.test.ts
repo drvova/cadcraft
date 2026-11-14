@@ -12,6 +12,8 @@ import {
   pictureSize,
   pngChunk,
   readChunks,
+  sheetFactLines,
+  sheetLayout,
   stillCamera,
   storePlan,
   turntableCameras,
@@ -145,6 +147,34 @@ describe("backgrounds and names", () => {
   test("a file name from the title", () => {
     expect(exportFileName("Solitaire · US 6½ · 18k gold", "2048", "png")).toBe("Solitaire US 6½ 18k gold - 2048.png");
     expect(exportFileName("  ", "turntable", "webm")).toBe("Piece - turntable.webm");
+  });
+});
+
+describe("contact sheet", () => {
+  test("facts: dimensions, sizes, grams and carats, one line each", () => {
+    const facts = sheetFactLines({
+      title: "Solitaire · US 6½ · 18k gold",
+      dimensions: [{ label: "Overall size", value: "21 × 23 × 6 mm" }],
+      ringSizes: [
+        { label: "US", value: "6½" },
+        { label: "EU", value: "53" },
+      ],
+      metalTotal: { label: "Total", value: "3.2 g" },
+      stoneTotal: { label: "Total", value: "17 pc · 0.92 ct" },
+    });
+    expect(facts.title).toBe("Solitaire · US 6½ · 18k gold");
+    expect(facts.lines).toEqual(["Overall size: 21 × 23 × 6 mm", "Ring size: US 6½ · EU 53", "Metal: 3.2 g", "Stones: 17 pc · 0.92 ct"]);
+  });
+  test("layout: four tiles 2 × 2 that do not overlap, facts below them", () => {
+    const layout = sheetLayout(800, 4);
+    expect(layout.tiles.length).toBe(4);
+    expect(layout.width).toBe(2 * 800 + 3 * 40);
+    const [a, b, c] = layout.tiles;
+    expect((b?.x ?? 0) - (a?.x ?? 0)).toBeGreaterThanOrEqual(800);
+    expect((c?.y ?? 0) - (a?.y ?? 0)).toBeGreaterThanOrEqual(800 + layout.label);
+    expect(layout.factsY).toBeGreaterThan((c?.y ?? 0) + 800);
+    expect(layout.height).toBeGreaterThan(layout.factsY + 4 * layout.line);
+    expect(sheetLayout(Number.NaN, Number.NaN).tile).toBe(800);
   });
 });
 

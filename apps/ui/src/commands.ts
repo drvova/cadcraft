@@ -14,7 +14,7 @@
 import type { CommandInfo } from "./facade";
 
 /** What the shell does with an invoked id. */
-export type CommandAction = "engine" | "open" | "save" | "sample" | "visibility" | "theme" | "animations" | "palette" | "ask" | "focus" | "drafting" | "layers" | "jewelry" | "templates" | "none";
+export type CommandAction = "engine" | "open" | "save" | "sample" | "visibility" | "theme" | "animations" | "palette" | "ask" | "focus" | "drafting" | "layers" | "jewelry" | "templates" | "render" | "none";
 
 /** One `ui.*` command the web shell can honour, transcribed from `menus.rs`'s `UI_COMMANDS`. */
 export interface UiItem {
@@ -54,6 +54,10 @@ export const UI_ITEMS: readonly UiItem[] = [
   { id: "ui.dialog.templates", label: "Templates...", menu: ["Window", "Templates..."] },
   // The web shell's own: the piece as a printable bench sheet, shown over the editor.
   { id: "ui.view.techsheet", label: "Tech Sheet", menu: ["Window", "Tech Sheet"] },
+  // The web shell's own: the piece rendered to a file for a client (Save Render, from the 3D tab).
+  { id: "ui.render.image", label: "Save Render Image...", menu: ["View", "Render", "Save Render Image..."] },
+  { id: "ui.render.turntable", label: "Save Turntable...", menu: ["View", "Render", "Save Turntable..."] },
+  { id: "ui.render.sheet", label: "Save Contact Sheet...", menu: ["View", "Render", "Save Contact Sheet..."] },
   { id: "ui.animations.system", label: "Use System Setting", menu: ["View", "Accessibility", "Animation Effects", "Use System Setting"] },
   { id: "ui.animations.on", label: "On", menu: ["View", "Accessibility", "Animation Effects", "On"] },
   { id: "ui.animations.off", label: "Off", menu: ["View", "Accessibility", "Animation Effects", "Off"] },
@@ -84,6 +88,8 @@ export function classify(id: string): CommandAction {
   // The template gallery is the interface's own dialog of preset pieces.
   if (id === "ui.dialog.templates") return "templates";
   if (id === "ui.assistant.ask") return "ask";
+  // Save Render is the interface's own dialog over the 3D stage's renderer.
+  if (id.startsWith("ui.render.")) return "render";
   // Drafting Settings is the interface's dialog over the engine's settings, not a prompt sequence.
   if (id === "dsettings") return "drafting";
   // Layers is the Layer Properties Manager; `-layer` stays the command line's prompt sequence.

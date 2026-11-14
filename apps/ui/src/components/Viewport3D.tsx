@@ -122,6 +122,7 @@ import { IconButton } from "../ui/IconButton";
 import { Select } from "../ui/Select";
 import { Toggle } from "../ui/Toggle";
 import { rovingBand } from "./ToolStrip";
+import { RenderExportButtons } from "./RenderExportDialog";
 import "../view3d.css";
 
 export interface Viewport3DProps {
@@ -217,6 +218,11 @@ const GIZMO_REACH = 0.7;
  * in the window, and it is unmounted while a layout shows.
  */
 let remembered: { camera: Camera; framed: boolean } | null = null;
+
+/** The Perspective camera as it was left (Save Render's "Current view"); null before the stage was shown. */
+export function stageCamera(): Camera | null {
+  return remembered?.camera ?? null;
+}
 
 /**
  * A token's colour as red, green and blue in 0…1, whatever notation the token is written in: the
@@ -1422,6 +1428,7 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
             <Button variant="quiet" size="sm" title="Save the piece as a file for printing" onClick={() => void downloadStl()}>
               Download STL
             </Button>
+            <RenderExportButtons />
           </div>
         </div>
       </Show>

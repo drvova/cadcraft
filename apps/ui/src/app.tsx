@@ -38,7 +38,8 @@ import { CanvasView } from "./components/CanvasView";
 import { LayersPanel } from "./components/LayersPanel";
 import { PropertiesPanel } from "./components/PropertiesPanel";
 import { SourcePanel } from "./components/SourcePanel";
-import { Viewport3D } from "./components/Viewport3D";
+import { stageCamera, Viewport3D } from "./components/Viewport3D";
+import { openRenderExport, RenderExportDialog, renderKindOf } from "./components/RenderExportDialog";
 import { TechSheet } from "./components/TechSheet";
 import { BenchPanel } from "./components/BenchPanel";
 import { ObjectsPanel } from "./components/ObjectsPanel";
@@ -1031,6 +1032,11 @@ export function App(props: AppProps): JSX.Element {
       case "templates":
         setShowTemplates(true);
         return;
+      case "render": {
+        const kind = renderKindOf(id);
+        if (kind !== null) openRenderExport(kind);
+        return;
+      }
       case "focus":
         if (id === "ui.focus.cmdline") focusCommandLine();
         else focusRegion(id === "ui.focus.previous" ? -1 : 1);
@@ -1544,6 +1550,7 @@ export function App(props: AppProps): JSX.Element {
         }}
       />
       <TemplateGallery open={showTemplates()} onClose={() => setShowTemplates(false)} execute={(command, params) => props.facade.execute(command, params)} onChoose={onTemplateChoose} />
+      <RenderExportDialog execute={(command, params) => props.facade.execute(command, params)} camera={stageCamera} />
       <TechSheet open={showTechSheet()} execute={(command, params) => props.facade.execute(command, params)} revision={drawing()?.revision ?? 0} onClose={() => setShowTechSheet(false)} />
       <DraftingSettings
         facade={props.facade}

@@ -938,3 +938,83 @@ async function drawStill(mesh: PieceMesh, options: StillOptions): Promise<Blob> 
     canvas.height = 0;
   }
 }
+
+// ---- frames for export ----
+
+/** What the GPU can draw into, read from the export's context. */
+export interface FrameLimits {
+  maxTexture: number;
+  maxRenderbuffer: number;
+  maxViewport: number;
+}
+
+/** One context held for a run of export frames (a still, a turntable, a sheet's views). */
+export interface FrameSession {
+  limits: FrameLimits;
+  /**
+   * Draw the piece from `camera` on a store `width` by `height` device pixels over `background`
+   * (null: a cut-out). Answers the store's canvas, which holds the frame until the next draw; it
+   * throws, in words, when the context is lost.
+   */
+  draw: (camera: Camera, width: number, height: number, background: Vec3 | null) => HTMLCanvasElement;
+}
+
+/**
+ * Hold one off-screen context for `work`, in the stills' own line (so it never runs beside a
+ * thumbnail or a sheet's still), and give it back when `work` settles. It rejects, in words, where
+ * WebGL is not available.
+ */
+export function withPieceFrames<T>(mesh: PieceMesh, mode: DisplayMode, work: (session: FrameSession) => Promise<T>): Promise<T> {
+  const run = line.then(() => holdFrames(mesh, mode, work));
+  line = run.catch(() => undefined);
+  return run;
+}
+
+async function holdFrames<T>(mesh: PieceMesh, mode: DisplayMode, work: (session: FrameSession) => Promise<T>): Promise<T> {
+  if (typeof document === "undefined") throw new Error("a render needs a browser to draw in");
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  const attributes: WebGLContextAttributes = { antialias: true, alpha: true, depth: true, stencil: false, premultipliedAlpha: true, preserveDrawingBuffer: true };
+  let gl: WebGLRenderingContext | null = null;
+  try {
+    gl = canvas.getContext("webgl", attributes);
+  } catch {
+    gl = null;
+  }
+  if (gl === null) throw new Error("the render could not be drawn: WebGL is not available");
+  const context = gl;
+  let renderer: Renderer | null = null;
+  try {
+    const made = createRenderer(context);
+    if (typeof made === "string") throw new Error(`the render could not be drawn: ${made}`);
+    renderer = made;
+    const drawer = made;
+    const scene = sceneOf(mesh.extent);
+    const plan = drawPlan(mode).filter((pass) => pass.kind !== "ground");
+    drawer.upload(buildBuffers(mesh), null, modeHasEdges(mode) ? featureEdges(mesh) : null, contactShadow(mesh.extent));
+    const read = (name: number): number => {
+      const value: unknown = context.getParameter(name);
+      if (typeof value === "number") return value;
+      if (value instanceof Int32Array) return Math.min(value[0] ?? 0, value[1] ?? 0);
+      return 0;
+    };
+    const limits: FrameLimits = { maxTexture: read(context.MAX_TEXTURE_SIZE), maxRenderbuffer: read(context.MAX_RENDERBUFFER_SIZE), maxViewport: read(context.MAX_VIEWPORT_DIMS) };
+    const draw = (camera: Camera, width: number, height: number, background: Vec3 | null): HTMLCanvasElement => {
+      const w = Math.max(1, Math.round(width));
+      const h = Math.max(1, Math.round(height));
+      if (canvas.width !== w) canvas.width = w;
+      if (canvas.height !== h) canvas.height = h;
+      const frame: Frame = { ...eyeFrame(camera, scene, w / h), background, gridInk: background ?? [0, 0, 0], edgeInk: null };
+      drawer.draw(frame, plan, w, h);
+      if (context.isContextLost()) throw new Error("the render could not be drawn: the graphics context was lost");
+      return canvas;
+    };
+    return await work({ limits, draw });
+  } finally {
+    renderer?.dispose();
+    context.getExtension("WEBGL_lose_context")?.loseContext();
+    canvas.width = 0;
+    canvas.height = 0;
+  }
+}
