@@ -24,11 +24,11 @@ const STEP: f64 = 0.2;
 /// The most triangles a property's solid may take before it is sampled more coarsely.
 const TEST_TRIS: usize = 400_000;
 
-fn params(v: &Value) -> PieceParams {
+pub(super) fn params(v: &Value) -> PieceParams {
     PieceParams::parse("test", v).unwrap_or_else(|e| panic!("{v}: {e}"))
 }
 
-fn tri(s: &Solid, t: &[u32]) -> [Vec3; 3] {
+pub(super) fn tri(s: &Solid, t: &[u32]) -> [Vec3; 3] {
     [s.positions[t[0] as usize], s.positions[t[1] as usize], s.positions[t[2] as usize]]
 }
 
@@ -76,10 +76,10 @@ fn crosses(p: Vec3, q: Vec3, t: &[Vec3; 3]) -> bool {
 }
 
 /// No two triangles that share no vertex cross each other: every pair in the same grid cell is
-/// tested (each triangle binned by its centroid into cells of twice the step, and the 27 cells
+/// tested (each triangle binned by its centroid into cells of three steps, and the 27 cells
 /// around it searched), up to `max_pairs` pairs.
-fn self_intersections(s: &Solid, max_pairs: usize) -> (usize, usize) {
-    let cell = 2.0 * s.step;
+pub(super) fn self_intersections(s: &Solid, max_pairs: usize) -> (usize, usize) {
+    let cell = 3.0 * s.step;
     let key = |p: Vec3| ((p.x / cell).floor() as i64, (p.y / cell).floor() as i64, (p.z / cell).floor() as i64);
     let mut bins: HashMap<(i64, i64, i64), Vec<usize>> = HashMap::new();
     let tris: Vec<&[u32]> = s.indices.chunks_exact(3).collect();
@@ -114,7 +114,7 @@ fn self_intersections(s: &Solid, max_pairs: usize) -> (usize, usize) {
 }
 
 /// Everything a caster's shell must be.
-fn assert_castable(s: &Solid, what: &str) {
+pub(super) fn assert_castable(s: &Solid, what: &str) {
     verify(&s.positions, &s.indices).unwrap_or_else(|e| panic!("{what}: {e}"));
     assert!(!s.indices.is_empty(), "{what}: empty");
     for t in s.indices.chunks_exact(3) {
@@ -444,7 +444,7 @@ fn surface_distance(csg: &Csg, p: Vec3) -> f64 {
 }
 
 /// Mean and max surface distance over the vertices, then over the triangles' centroids.
-fn surface_error(csg: &Csg, s: &Solid) -> (f64, f64, f64, f64) {
+pub(super) fn surface_error(csg: &Csg, s: &Solid) -> (f64, f64, f64, f64) {
     let v: Vec<f64> = s.positions.iter().map(|p| surface_distance(csg, *p)).collect();
     let c: Vec<f64> = s
         .indices
@@ -459,7 +459,7 @@ fn surface_error(csg: &Csg, s: &Solid) -> (f64, f64, f64, f64) {
     (mean(&v), max(&v), mean(&c), max(&c))
 }
 
-fn write_stl(path: &std::path::Path, s: &Solid) {
+pub(super) fn write_stl(path: &std::path::Path, s: &Solid) {
     let mut out = vec![0u8; 80];
     out.extend((s.triangles() as u32).to_le_bytes());
     for t in s.indices.chunks_exact(3) {
@@ -476,7 +476,7 @@ fn write_stl(path: &std::path::Path, s: &Solid) {
 }
 
 /// The pieces the surface report measures.
-fn report_pieces() -> Vec<(&'static str, Value)> {
+pub(super) fn report_pieces() -> Vec<(&'static str, Value)> {
     vec![
         ("band", json!({"kind": "band"})),
         ("halo", json!({"kind": "solitaire", "halo": true})),
@@ -499,7 +499,7 @@ fn surface_report() {
         let mesh = piece_mesh(&params(&v), Quality::Fine);
         for smooth in [false, true] {
             let t = Instant::now();
-            let (s, _) = solidify_with(&mesh.csg, 0.1, 150_000, smooth).unwrap();
+            let (s, _) = solidify_with(&mesh.csg, 0.1, 150_000, if smooth { Finish::Sharp } else { Finish::Grid }).unwrap();
             let el = t.elapsed();
             let (vm, vx, cm, cx) = surface_error(&mesh.csg, &s);
             println!(
@@ -526,7 +526,7 @@ fn surface_report() {
 fn the_smoothed_surface_lies_on_the_true_one() {
     for (what, v) in report_pieces() {
         let mesh = piece_mesh(&params(&v), Quality::Draft);
-        let raw = solidify_with(&mesh.csg, STEP, TEST_TRIS, false).unwrap().0;
+        let raw = solidify_with(&mesh.csg, STEP, TEST_TRIS, Finish::Grid).unwrap().0;
         let smooth = solid_of(&mesh, STEP, what);
         assert_castable(&smooth, what);
         assert_eq!(raw.triangles(), smooth.triangles(), "{what}: the same connectivity");
@@ -688,7 +688,7 @@ fn a_pierced_voronoi_band_solid_lies_on_its_surface() {
     let (s, _) = solidify(&mesh.csg, 0.15, 400_000).unwrap();
     assert_castable(&s, "voronoi band");
     assert_eq!(s.bodies, 1);
-    let raw = solidify_with(&mesh.csg, 0.15, 400_000, false).unwrap().0;
+    let raw = solidify_with(&mesh.csg, 0.15, 400_000, Finish::Grid).unwrap().0;
     let (sm, sx, _, _) = surface_error(&mesh.csg, &s);
     let (rm, rx, _, _) = surface_error(&mesh.csg, &raw);
     println!("voronoi band: vertices mean {rm:.5} → {sm:.5} mm, max {rx:.4} → {sx:.4} mm");

@@ -39,6 +39,8 @@ const EDGE_CLAMP: f64 = 0.01;
 /// surface passing close by a grid node is kept within a thousandth of a step of it, while no
 /// triangle is left without area.
 const ROOT_CLAMP: f64 = 0.001;
+/// How far the grid is set off its box, as a fraction of the step ([`extract_with`]).
+const OFFSET: f64 = 0.3819660112501051;
 /// The finest step a piece too thin for the asked one is sampled at, mm.
 const MIN_STEP: f64 = 0.02;
 /// The most attempts at successively coarser (or, for a thin piece, finer) steps.
@@ -542,9 +544,22 @@ pub(super) enum Fail {
     Broken(String),
 }
 
-/// One extraction at `step`, at most `max_tris` triangles; `smooth`: each vertex found where the field itself is zero along its grid edge ([`edge_root`]), else left
-/// on the grid's piecewise-linear surface.
-pub(super) fn extract_with(csg: &Csg, step: f64, max_tris: usize, smooth: bool) -> Result<Solid, Fail> {
+/// Where the extracted vertices are put.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Finish {
+    /// On the grid's piecewise-linear surface.
+    Grid,
+    /// Where the field itself is zero along each vertex's grid edge ([`edge_root`]); creases
+    /// chamfered. The tests' and reports' baseline.
+    #[cfg_attr(not(test), allow(dead_code))]
+    Smooth,
+    /// Smooth, then the creases made crisp ([`super::solid_sharp::sharpen_shell`]): STLOUT's.
+    Sharp,
+}
+
+/// One extraction at `step`, at most `max_tris` triangles, its vertices put by `finish`.
+pub(super) fn extract_with(csg: &Csg, step: f64, max_tris: usize, finish: Finish) -> Result<Solid, Fail> {
+    let smooth = finish != Finish::Grid;
     if !(step.is_finite() && step > 1e-4) {
         return Err(Fail::Over(2.0));
     }
@@ -569,8 +584,12 @@ pub(super) fn extract_with(csg: &Csg, step: f64, max_tris: usize, smooth: bool) 
         return Err(Fail::Empty);
     }
     let pad = 3.0 * step;
-    let origin = bb.0 - Vec3::new(pad, pad, pad);
-    let span = bb.1 - bb.0 + Vec3::new(2.0 * pad, 2.0 * pad, 2.0 * pad);
+    // The grid is set off by an odd fraction of a step, so a flat side at the box's edge (a band's
+    // side, its bottom) does not lie on a plane of grid nodes, where every node would be exactly
+    // on the surface and the vertices next to them crowd together.
+    let lead = pad + OFFSET * step;
+    let origin = bb.0 - Vec3::new(lead, lead, lead);
+    let span = bb.1 - bb.0 + Vec3::new(lead + pad, lead + pad, lead + pad);
     let cell = (BLOCK as f64) * step;
     let nbf = [span.x / cell, span.y / cell, span.z / cell].map(|x| x.ceil().max(1.0));
     let total = nbf[0] * nbf[1] * nbf[2];
@@ -693,11 +712,14 @@ pub(super) fn extract_with(csg: &Csg, step: f64, max_tris: usize, smooth: bool) 
     let side = BLOCK + 1;
     let mut vals = vec![0.0f64; side * side * side];
     let mut positions: Vec<Vec3> = Vec::new();
+    // The block each vertex was made in: its field's candidates, for the crease pass.
+    let mut owner: Vec<u32> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
     let mut keyed: HashMap<(u64, u64), u32> = HashMap::new();
     let mut done = 0usize;
     for (b, [bx, by, bz]) in &surface {
         let cand = candidates(*b);
+        let blk = u32::try_from(*b).unwrap_or(u32::MAX);
         let (i0, j0, k0) = (bx * BLOCK, by * BLOCK, bz * BLOCK);
         for k in 0..side {
             for j in 0..side {
@@ -747,6 +769,7 @@ pub(super) fn extract_with(csg: &Csg, step: f64, max_tris: usize, smooth: bool) 
                             let t = if t.is_finite() { t.clamp(clamp, 1.0 - clamp) } else { 0.5 };
                             let v = u32::try_from(positions.len()).unwrap_or(u32::MAX);
                             positions.push(pa + (pb - pa) * t);
+                            owner.push(blk);
                             keyed.insert(key, v);
                             v
                         };
@@ -785,6 +808,11 @@ pub(super) fn extract_with(csg: &Csg, step: f64, max_tris: usize, smooth: bool) 
         return Err(Fail::Empty);
     }
     verify(&positions, &indices).map_err(Fail::Broken)?;
+    if finish == Finish::Sharp {
+        let field = |v: usize, p: Vec3| value(p, candidates(owner.get(v).copied().unwrap_or(u32::MAX) as usize));
+        super::solid_sharp::sharpen_shell(&mut positions, &mut indices, step, &field);
+        verify(&positions, &indices).map_err(Fail::Broken)?;
+    }
     let (positions, indices, bodies) = drop_crumbs(positions, indices);
     if indices.is_empty() {
         return Err(Fail::Empty);
@@ -793,7 +821,7 @@ pub(super) fn extract_with(csg: &Csg, step: f64, max_tris: usize, smooth: bool) 
 }
 
 /// The most field evaluations spent finding where the surface crosses one grid edge.
-const ROOT_STEPS: usize = 8;
+const ROOT_STEPS: usize = 16;
 
 /// Where along a grid edge, as a fraction `t` of it, the field `f(t)` is zero, given its values
 /// `fa` at 0 and `fb` at 1 of opposite signs: the Illinois variant of false position, bracketed
@@ -960,15 +988,15 @@ fn kuhn_tets() -> [[usize; 4]; 6] {
 /// The solid at `step` or as much coarser as it takes to stay under `max_tris`: the solid and
 /// whether it was coarsened.
 pub(super) fn solidify(csg: &Csg, step: f64, max_tris: usize) -> Result<(Solid, bool), String> {
-    solidify_with(csg, step, max_tris, true)
+    solidify_with(csg, step, max_tris, Finish::Sharp)
 }
 
 /// [`solidify`], smoothed or not ([`extract_with`]).
-pub(super) fn solidify_with(csg: &Csg, step: f64, max_tris: usize, smooth: bool) -> Result<(Solid, bool), String> {
+pub(super) fn solidify_with(csg: &Csg, step: f64, max_tris: usize, finish: Finish) -> Result<(Solid, bool), String> {
     let mut step = if step.is_finite() && step > 1e-3 { step } else { 0.1 };
     let mut coarsened = false;
     for _ in 0..MAX_ATTEMPTS {
-        match extract_with(csg, step, max_tris, smooth) {
+        match extract_with(csg, step, max_tris, finish) {
             Ok(s) => return Ok((s, coarsened)),
             Err(Fail::Over(by)) => {
                 let by = if by.is_finite() { by.clamp(1.0, 1e6) } else { 2.0 };
