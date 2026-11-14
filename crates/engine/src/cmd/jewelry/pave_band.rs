@@ -990,7 +990,7 @@ fn judge(f: &mut PaveFit) {
     if reach + PAVE_RIM > f.edge + 1e-9 {
         let rows = f.rows.len();
         f.problems.push(format!(
-            "The band is too narrow for {}{} mm pavé: {} needs {} mm across the band's outside ({PAVE_RIM} mm of rim each side); this band's outside is {} mm across.",
+            "The band is too narrow for {}{} mm pavé: {} {} mm across the band's outside ({PAVE_RIM} mm of rim each side); this band's outside is {} mm across.",
             if rows > 1 { format!("{rows} rows of ") } else { String::new() },
             fmt_mm(d),
             if rows > 1 { "they need".to_string() } else { "a stone needs".to_string() },
