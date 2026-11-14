@@ -71,8 +71,27 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 | Grasshopper sliders, the Player's input panel | the Piece panel; proposals; the assistant | done |
 | Generative patterns (Voronoi, lattice, Truchet, image-driven) | pattern options on the band | planned |
 
+## Behaviours to match (from McNeel's public command reference, in our words)
+
+These are the behaviours of general Rhino tools that jewellers lean on, noted so CADCraft's own
+versions behave as a jeweller expects. Our implementations are our own.
+
+| Rhino tool | Behaviour a jeweller relies on | CADCraft |
+|---|---|---|
+| Sweep along one rail | The section keeps its angle to the rail ("free-form" frame), or stays upright against a fixed axis; a closed sweep returns to the first section; a taper can blend linearly end to end | The rail sweep (shank shapes) must keep the profile perpendicular and upright, with no twist where the rail's tangent meets the fixed axis |
+| Sweep along two rails | Height can scale with width or stay fixed | Two-rail band: planned |
+| Pipe | Round wire with a start and end radius, a taper blended either evenly or held at the ends; flat or round caps; a hollow wall option | Prongs, beads, cable strands are pipes; tapered prongs (claw) done |
+| Array along a curve / on a surface | Count or spacing; copies oriented by the curve's frame, kept upright, or by the surface normal; even spacing by length rather than by parameter | Pavé on the band places by arc length and orients to the surface normal; auto-fit by gap |
+| Flow along a curve or surface | Wraps flat decoration onto a band, rigid (move only) or deforming, with optional stretch | Engraving and generative patterns are laid out on the developed band and wrapped; a general "flow a drawing onto the band" is planned |
+| Offset surface / shell | Wall thickness with sharp or round corners; a closed solid from inside and outside | The band's wall and the hollow options are parametric |
+| Twist, bend, cage edit | Deform with a falloff: twist over an axis, bend along a spine, a lattice with local influence | Cable twist done; general deformers planned |
+| Booleans | Need closed solids with outward normals; coincident faces and poles are where they fail | The cast solid avoids general Booleans (implicit CSG, ADR 0002) |
+| ShrinkWrap | One closed mesh around many parts: a target edge length, an offset, smoothing | The merged cast solid: sampling step (≈ edge length), a shrink allowance, smoothing in progress |
+| Volume, centroid | Volume and centroid of closed objects; no density built in | Grams by alloy, carats, cost, built in |
+
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | Behaviours to match, from the public command reference |
 | 2026-11-14 | new | The feature list against Rhino's jewelry workflow, and the no-code rule |
