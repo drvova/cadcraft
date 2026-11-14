@@ -204,6 +204,9 @@ and MCP all reach them, and DESCRIBE reads jewelry out of any drawing.
 | J7 | Outside a size system's own chart (under 12.84 mm, over 22.5 mm) a finger is named by that chart's last size (a 25 mm finger reads UK Z); it should have no size in that system, which changes the shape of every size row | 2–4 |
 | J8 | A rail for `PIECE`: a closed curve (an oval, a shaped shank seen from the front) giving the band's path, scaled so its inside matches the finger, with the drawn profile swept along it kept perpendicular; the sheet's front view, the weight (numerically) and `PIECEMESH` would follow it. Today a custom profile is always revolved round a circular finger | 3–5 |
 
+| J9 | Pendants and earrings (`PIECE` pendant, stud, drop) landed. Left: **hoops** (a band profile swept round an open circle with a hinge or post, pavé along the front); chains and links; a bail of its own shape (a drawn profile, a hidden or pinch bail); a lever-back or omega clip; the stud's back is counted but not drawn; the head metal of a prong head is weighed as wires along their paths and reads 30–50 % over the merged solid (a bezel within 5 %) | 6–10 |
+| J10 | A drop's head and its top, and a drop pendant's head and bail, are separate cast bodies joined by a bought-in jump ring; nothing yet models a soldered (closed) jump ring or a cast-in-place link | 2–3 |
+
 ## Revision history
 
 | Date | Change | Summary |
@@ -211,6 +214,7 @@ and MCP all reach them, and DESCRIBE reads jewelry out of any drawing.
 | 2026-11-14 | patch | Jewelry: the merged solid for casting takes bezels, tapered shanks, the signet's face, drawn profiles and pavé and half eternity seats; J2 narrowed |
 | 2026-11-13 | minor | Jewelry: PIECE takes a band profile drawn as a closed curve; a rail for it is the new row J8 |
 | 2026-11-13 | minor | Jewelry: pavé on a parametric piece's band (PIECE `pave`: row, rows, honeycomb, scallop, auto-fit to a span, graduated sizes, a `pave` check), drawn, counted on the bench sheet and built by PIECEMESH. No row closes: the solid still cuts no seat (J2) |
+| 2026-11-14 | minor | Jewelry: pendants, stud pairs and drop earrings in PIECE; new rows J9 (hoops, chains, bail shapes, head weight estimate) and J10 (cast bodies joined by bought-in jump rings) |
 | 2026-11-12 | minor | Jewelry: band profiles and a three-stone ring in PIECE; property tests (Hegel) fixed six faults and left three as new rows J5–J7 |
 | 2026-11-12 | minor | Jewelry: PRICEBOOK and an estimated cost on the bench sheet; in the interface a rendered tech sheet, templates and the Cost group. No row closes |
 | 2026-11-12 | major | A parametric piece (PIECE) with a solid (PIECEMESH, STLOUT) and a 3D view in the interface; OBJECTS; in the interface a tabbed ribbon, Source, the Piece and Objects sections. J2 narrowed. New drawings in the interface are millimetres |

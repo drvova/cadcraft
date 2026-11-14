@@ -28,7 +28,7 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 | Split shank, double shank, bypass, cathedral shoulders | shank options on `piece` | planned |
 | Twisted cable, braided bands | band pattern on `piece` | planned |
 | Text and names on a band; hallmark | engraving/text on `piece` | planned |
-| Earrings, pendants, chains, links | other piece kinds | planned |
+| Earrings, pendants, chains, links | `PIECE` kinds `pendant` (the solitaire head, prongs or bezel, halo optional, with a loop or tube bail sized for a chain; a drop on a jump ring), `stud` (a pair: head and post, bought-in butterfly or scroll back) and `drop` (a pair: a hanging head on a jump ring under a French wire or a stud top); checks bail-opening, bail-wire, jump-ring, jump-ring-wire, post, ear-wire; weight, carats, sheet, 3D and cast solid count both of a pair; hoops, chains and links not yet | partial |
 
 ## Stones and settings
 
@@ -75,4 +75,5 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | Earrings and pendants: pendant, stud and drop kinds with bails, posts, jump rings and ear wires (partial; hoops, chains and links planned) |
 | 2026-11-14 | new | The feature list against Rhino's jewelry workflow, and the no-code rule |

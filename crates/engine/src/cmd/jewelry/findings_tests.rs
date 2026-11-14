@@ -228,15 +228,17 @@ fn the_piece_survives_a_dxf_round_trip() {
 
 #[test]
 fn proposals_rebuild_the_same_piece() {
-    // Running the same keys twice gives the same piece (what an accepted proposal runs).
-    let mut a = mm_drawing();
-    let mut b = mm_drawing();
-    let one = piece(&mut a, json!({"kind": "pendant", "halo": 1.2, "bail": "tube"}));
-    piece(&mut b, json!({"kind": "stud"}));
-    let two = piece(&mut b, one["params"].clone());
-    assert_eq!(one["params"], two["params"]);
-    assert_eq!(one["metal"], two["metal"]);
-    assert_eq!(one["stones"], two["stones"]);
+    for change in [json!({"kind": "pendant", "bail": "tube"}), json!({"kind": "stud", "postLength": 9}), json!({"kind": "drop", "top": "stud"})] {
+        let mut s = mm_drawing();
+        piece(&mut s, json!({"kind": "solitaire"}));
+        let r = s.execute("propose", &json!({"steps": [{"command": "piece", "params": change}], "title": "Worn"})).unwrap();
+        let id = r["proposals"][0]["id"].as_u64().unwrap();
+        s.execute("accept", &json!({"id": id})).unwrap();
+        let mut direct = mm_drawing();
+        piece(&mut direct, json!({"kind": "solitaire"}));
+        piece(&mut direct, change.clone());
+        assert!(*s.state().unwrap().doc == *direct.state().unwrap().doc, "{change}: accepted and run directly are the same drawing");
+    }
 }
 
 /// Rule: a worn piece's weight is positive, a pair is exactly twice one, and its stones are two

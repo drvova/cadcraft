@@ -419,6 +419,57 @@ solid takes each part's signed-distance bound (`BezelBound::distance`, `Taper::d
 `Face::distance`), so a bezel, a dome's or a signet's shank and a signet's face cast as one body
 with the rest.
 
+### Pendants and earrings
+
+`PIECE {kind: pendant | stud | drop}` builds a piece that is not worn on a finger. The head is a
+solitaire's (`cut`, `stone`, `stoneWidth`, `stoneLength`, `prongs` or `head: bezel` with
+`bezelWall`, `bezelHeight`, `halo`, `gap`), standing on a base instead of a band: under prongs a
+wire ring through the prongs' feet and a cross to its middle, under a bezel a cross touching the
+collar. The findings are worked out in `crates/engine/src/cmd/jewelry/findings.rs`, the sheet in
+`pendant.rs`, the solid in `mesh_findings.rs`.
+
+| Kind | What it is | Its keys (defaults) | Checks |
+|---|---|---|---|
+| `pendant` | the head with a bail on top | `bail: loop` or `tube`; `bailOpening` 3 mm inside; `bailWire` 1 mm (a tube's wall); `bailWidth` 3 mm (a tube's length); `chain` 1.5 mm; `drop: true` hangs the head from a jump ring (`jumpRing` 3 mm inside, `jumpRingWire` 0.8 mm) through the bail | `bail-opening` (≥ chain + 0.5 mm), `bail-wire` (≥ 0.8 mm), with a drop `jump-ring` and `jump-ring-wire` (≥ 0.6 mm) |
+| `stud` | a **pair**: the head with a post on its back | `postDiameter` 0.8 mm, `postLength` 10 mm, `back: butterfly`, `scroll` or `none` (bought in: counted, not drawn or cast) | `post` (0.7–1.0 mm by 8–12 mm) |
+| `drop` | a **pair**: the hanging head on a jump ring under a top | `top: hook` (a French wire, `hookWire` 0.8 mm, bought in) or `stud` (a round stone of `topStone` 3 mm in the same head style, on a post); `jumpRing`, `jumpRingWire` | `jump-ring`, `jump-ring-wire`, `ear-wire` (≥ 0.7 mm) or `post` |
+
+These figures are this project's approximation of usual bench figures, not a cited standard.
+Links that pass through each other rest wire on wire: their centres are `R₁ + R₂ − (w₁ + w₂)/2`
+apart (mean radii, wires). A loop (bail, eye) lies in the plane across the piece's face and a
+jump ring square to it, as a chain's links do.
+
+**No ring size.** A pendant or earrings have no finger and no band: `size`, `system`, `wall`,
+`width`, `profile`, the profile's own number and `pave` are kept in the stored parameters (so a
+change back to a ring finds them) but not used, and a request that gives one says so in the
+reply's message ("A pendant has no ring size…"). The reply's `size` is null and `pieces` is 1 or 2.
+
+**A pair counts two of everything.** The sheet draws both earrings' front views, so every stone of
+the pair is a `GEM` insert the bench sheet counts; `stones.count`, `stones.carat` and
+`metal.grams` are the pair's, and `metal.eachGrams` one earring's. The band's record says
+`piece=stud, pieces=2`; `TECHSHEET` writes "stud earrings, a pair (2 of everything)" and the
+Bench line reads "pair". The solid builds both earrings side by side along X, `6 mm` apart.
+
+**Weight.** `metal.grams` is every metal part: the findings exactly (a loop as a torus
+`2π²·R·(w/2)²`, a tube `π(R²−r²)·L`, a post, connector or wire `π(w/2)²·L`), a bezel's collar
+exactly, and a prong head's prongs, gallery rail and base as wires along their paths — an
+estimate that counts their overlaps twice and does not take the seats off, so it reads heavy
+against the merged solid: measured at the draft step, a bezel pendant or stud within 5 % and a
+prong head 30–50 % over (the head is most of a small piece's metal). `castGrams` is what is cast,
+`boughtGrams` the jump rings and French wires.
+
+**The solid.** `PIECEMESH` adds the parts `findings` (bail, eyes, connectors, posts, the bases)
+and `bought-in findings` (jump rings, ear wires). `STLOUT` casts the head, its base and the cast
+findings as one shell per body; the bought-in parts are not in it. A drop pendant's head and bail,
+a drop earring's head and its top, and the two earrings of a pair are separate bodies (`bodies`
+2 or 4).
+
+**In the interface.** The Piece panel shows a pendant's or an earring's own groups — Piece (kind,
+metal), Stones, Head, Findings — and never the size system, size, wall, width, profile or pavé
+rows; the heading reads "Stud earrings · pair" and the summary has a "Pair" tile. The Template
+Gallery has Pendants (halo, bezel drop), Stud earrings (bezel, four-prong) and Drop earrings (pear
+on French wires, stud-top). The 3D tab offers only the stone's and the halo's handles.
+
 ## In the interface
 
 The interface opens on a jewelry drawing: a size 6 solitaire in 18k gold (Help ▸ Open Sample
@@ -607,6 +658,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 | 2026-11-13 | minor | The 3D tab's four-view workspace (Top, Front, Right orthographic and flat-shaded at one scale; Perspective in its mode; maximise by double-click, M or the bar; remembered; single view under 560 px) on one scissored context, and drag handles on the piece (centre stone, halo melee, eternity stones, wall, width) that preview at draft quality, show the value and the checks it would break, and commit one `piece` change or, with Alt, a proposal; keyboard sliders |
 | 2026-11-13 | minor | `PIECE {profile: {curve: handle}}`: a band profile drawn as a closed curve of the drawing (polyline with bulges, spline, circle, ellipse, region), kept by value with its frame (box bottom on the finger, centred across), width and wall read from it, weight by Pappus, the wall check at its thinnest, the solid revolved from it; the Piece panel names it "Custom (from drawing)" with Update from curve. Rails are not built yet (J8) |
 | 2026-11-13 | minor | Pavé on the band: `PIECE {pave}` (row, rows, honeycomb, scallop; 1–3 rows; a named span or angles, mirrored; graduated sizes) placed on the outside of every profile with tables square to the surface, auto-fitted to the span with the residual shared, clear of the head and the rim; a `pave` check; the sheet, the bench sheet, `PIECEMESH`, `propose` and the Piece section's Pavé group read it |
+| 2026-11-14 | minor | `PIECE` kinds `pendant` (bail: loop or tube, chain, drop on a jump ring), `stud` (a pair, post, bought-in back) and `drop` (a pair, jump ring under a French wire or a stud top): checks, weights, the sheet, the solid, the Piece panel, templates, the bench sheet's pair |
 | 2026-11-13 | minor | `PIECE`: a bezel head (`head`, `bezelWall`, `bezelHeight`, checks `bezel-wall`/`bezel-lip`, `metal.bezelGrams`) and three kinds — `halfeternity` (`resize` check), `dome` (`topWidth`, `topWall`, tapered weight) and `signet` (`face`, `faceLength`, `faceWidth`, `face` check); solids, proposals, templates and the Piece panel |
 | 2026-11-13 | patch | Realistic studio: concentric gradient rings round the lens replace the front strips and low cards, so flat faces carry a band from the front, top, side and through an orbit and the side view is calm; the lights are eased toward a ceiling and strips mirror coloured alloys a shade deeper (gold18 lit-pixel median saturation 0.53 → 0.59, silver near-white pixels 19% → 0%); coloured stones return a deeper body colour and mirror the rings dimmed; the derivatives variant of the shader compiles again; the stage stays dark in the light theme by design |
 | 2026-11-13 | minor | `STLOUT` writes the metal as one closed, manifold shell (implicit CSG, marching tetrahedra) with stone seats cut: prong bearings and culet holes, cone seats with bores and through-holes for halo and eternity melee; reports the cast weight beside the band's; `maxTriangles`, `step`, `seats`, `bodies` |
