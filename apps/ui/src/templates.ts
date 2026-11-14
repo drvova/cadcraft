@@ -131,6 +131,21 @@ export const TEMPLATES: readonly Template[] = [
     blurb: "A broad flat band with a bold face to engrave.",
     params: { kind: "band", wall: 1.6, width: 9, profile: "flat", metal: "gold14" },
   },
+  {
+    id: "name-ring",
+    name: "Name Ring",
+    blurb: "A band with a name raised on top and the hallmark inside.",
+    params: {
+      kind: "band",
+      wall: 1.6,
+      width: 3,
+      profile: "flat",
+      metal: "gold18",
+      engrave: { text: "ANNA", at: "outside", style: "raised" },
+      hallmark: true,
+    },
+    requires: "engrave",
+  },
 ];
 
 /** The parameters a template sends to `piece`, as a fresh object (never the shared literal). */

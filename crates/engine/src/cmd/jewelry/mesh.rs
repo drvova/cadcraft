@@ -1650,7 +1650,7 @@ pub(super) fn stl_ascii(tris: &[[Vec3; 4]], title: &str) -> String {
 
 const PIECE_KEYS: &str = "kind: band|solitaire|threestone|eternity|halfeternity|dome|signet, head?: prong|bezel, bezelWall?, bezelHeight?, topWidth?, topWall?, face?: round|oval|cushion|rectangle, faceLength?, faceWidth?, system?, size? (default US 6), wall?: mm (1.8), width?: mm (2.2), \
     profile?: flat|dome|comfort|court|knife|bevel|concave|custom (with profileCurve, as PIECE reports it), comfort?|ridge?|bevel?|hollow?: mm (the profile's own number), metal? (gold18), cut? (round), stoneWidth?: mm (6.5), stoneLength?: mm, stone? (diamond), prongs?: 3–8 (6), halo?: bool | melee mm, \
-    sideWidth?: mm, sideLength?: mm, sideCut?, sideProngs?: 3–8 (4), melee?: mm (1.8), count?: stones (default: as many as fit), gap?: mm (0.2), pave?: false|true|{layout, rows, melee, gap, span|from/to, symmetric, graduated} (as PIECE takes it)";
+    sideWidth?: mm, sideLength?: mm, sideCut?, sideProngs?: 3–8 (4), melee?: mm (1.8), count?: stones (default: as many as fit), gap?: mm (0.2), pave?: false|true|{layout, rows, melee, gap, span|from/to, symmetric, graduated} (as PIECE takes it), engrave?: false|text|{text, at, style, font, side, height, stroke, depth}, hallmark?: false|true|{maker, height, depth} (as PIECE takes them)";
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![

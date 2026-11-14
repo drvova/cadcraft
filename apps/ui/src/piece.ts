@@ -97,6 +97,38 @@ export interface PavePart {
 /** What a count reads, and what is typed, when the engine fits as many stones as go around. */
 export const AUTO = "auto";
 
+/** Where text goes on the band, how it is made, and its letters (`engrave.rs`). */
+export const ENGRAVE_PLACES: readonly Choice[] = [
+  { value: "inside", label: "Inside" },
+  { value: "outside", label: "Outside" },
+];
+export const ENGRAVE_STYLES: readonly Choice[] = [
+  { value: "cut", label: "Cut in" },
+  { value: "raised", label: "Raised" },
+];
+export const ENGRAVE_FONTS: readonly Choice[] = [
+  { value: "block", label: "Block" },
+  { value: "script", label: "Script" },
+];
+
+/** The engraving on the band; a null number is the engine's default. */
+export interface EngravePart {
+  text: string;
+  at: string;
+  style: string;
+  font: string;
+  depth: number | null;
+  height: number | null;
+}
+
+/** The hallmark inside the shank: the maker's mark ("" for none). */
+export interface HallmarkPart {
+  maker: string;
+}
+
+/** The longest engraving the engine takes. */
+export const MAX_ENGRAVE = 48;
+
 /** The longest name read (an alloy, a cut, a size's letter) and the longest sentence (a check, a refusal). */
 const MAX_NAME = 40;
 const MAX_WORDS = 400;
@@ -145,6 +177,9 @@ export interface PieceParams {
   face: string;
   faceLength: number | null;
   faceWidth: number | null;
+  /** Text on the band and the hallmark: false for none, null when the engine does not offer it. */
+  engrave: EngravePart | false | null;
+  hallmark: HallmarkPart | false | null;
 }
 
 /** The finger in every system, each as it is shown; null where the engine gave none. */
@@ -263,7 +298,72 @@ function parseParams(value: unknown): PieceParams | null {
     face: nameOf(value["face"]) || "oval",
     faceLength: sizeOf(value["faceLength"]),
     faceWidth: sizeOf(value["faceWidth"]),
+    engrave: engraveOf(value["engrave"]),
+    hallmark: hallmarkOf(value["hallmark"]),
   };
+}
+
+/** Text the engine stored, kept as it is but for line breaks, clipped to what it takes. */
+const textOf = (value: unknown, max: number): string => {
+  const text = asString(value);
+  return text === null ? "" : [...text.replace(/[\r\n\t]+/g, " ")].slice(0, max).join("");
+};
+
+function engraveOf(value: unknown): EngravePart | false | null {
+  if (value === false) return false;
+  if (!isRecord(value)) return null;
+  return {
+    text: textOf(value["text"], MAX_ENGRAVE),
+    at: nameOf(value["at"]) || "inside",
+    style: nameOf(value["style"]) || "cut",
+    font: nameOf(value["font"]) || "block",
+    depth: sizeOf(value["depth"]),
+    height: sizeOf(value["height"]),
+  };
+}
+
+function hallmarkOf(value: unknown): HallmarkPart | false | null {
+  if (value === false) return false;
+  if (!isRecord(value)) return null;
+  return { maker: textOf(value["maker"], 8) };
+}
+
+/** The engraving field each row edits. */
+const ENGRAVE_FIELDS: Readonly<Record<string, string>> = {
+  engraveText: "text",
+  engraveAt: "at",
+  engraveStyle: "style",
+  engraveFont: "font",
+  engraveDepth: "depth",
+  engraveHeight: "height",
+};
+
+/** The text the engraving starts with when it is ticked on. */
+export const ENGRAVE_START = "Forever";
+
+/**
+ * The engraving rows: a tick, and when it is on the text, where it goes, how it is made, the
+ * letters, their height and depth; then the hallmark's tick and maker's mark.
+ */
+function engraveRows(p: PieceParams): PieceRow[] {
+  const rows: PieceRow[] = [];
+  if (p.engrave !== null) {
+    rows.push({ key: "engrave", label: "Engraving", value: p.engrave === false ? "false" : "true", kind: "tick" });
+    if (p.engrave !== false) {
+      const e = p.engrave;
+      rows.push({ key: "engraveText", label: "Text", value: e.text, kind: "words" });
+      rows.push({ key: "engraveAt", label: "Placement", value: e.at, kind: "choice", choices: withHeld(ENGRAVE_PLACES, e.at, capital) });
+      if (e.at === "outside") rows.push({ key: "engraveStyle", label: "Style", value: e.style, kind: "choice", choices: withHeld(ENGRAVE_STYLES, e.style, capital) });
+      rows.push({ key: "engraveFont", label: "Letters", value: e.font, kind: "choice", choices: withHeld(ENGRAVE_FONTS, e.font, capital) });
+      rows.push({ key: "engraveHeight", label: "Letter height, mm", value: num(e.height), kind: "number" });
+      rows.push({ key: "engraveDepth", label: e.style === "raised" ? "Relief, mm" : "Depth, mm", value: num(e.depth), kind: "number" });
+    }
+  }
+  if (p.hallmark !== null) {
+    rows.push({ key: "hallmark", label: "Hallmark", value: p.hallmark === false ? "false" : "true", kind: "tick" });
+    if (p.hallmark !== false) rows.push({ key: "hallmarkMaker", label: "Maker's mark", value: p.hallmark.maker, kind: "words" });
+  }
+  return rows;
 }
 
 function paveOf(value: unknown): PavePart | false | null {
@@ -411,7 +511,7 @@ export function readPieceChoices(engine: JewelryEngine): PieceChoices {
  * How a row is edited: a pick from a list, a typed length, a typed whole number, the ring size,
  * the stone count (a whole number or "auto"), or a tick.
  */
-export type PieceRowKind = "choice" | "number" | "whole" | "size" | "count" | "tick" | "readonly";
+export type PieceRowKind = "choice" | "number" | "whole" | "size" | "count" | "tick" | "readonly" | "words";
 
 export interface PieceRow {
   /** The row's id: the parameter it edits (`haloWidth` is `halo` given as a width). */
@@ -477,6 +577,10 @@ export function profileUpdate(piece: Piece): { profile: { curve: string } } | nu
  * size system the section shows.
  */
 export function pieceRows(piece: Piece, choices: PieceChoices, system: string): PieceRow[] {
+  return [...kindRows(piece, choices, system), ...engraveRows(piece.params)];
+}
+
+function kindRows(piece: Piece, choices: PieceChoices, system: string): PieceRow[] {
   const p = piece.params;
   const shown = systemOf(system);
   const rows: PieceRow[] = [
@@ -641,7 +745,7 @@ export function passingLine(passing: number, failing: number): string {
 
 /** A group of the parameters, under its name. */
 export interface PieceGroup {
-  name: "Ring" | "Band" | "Stones" | "Head" | "Pavé";
+  name: "Ring" | "Band" | "Stones" | "Head" | "Pavé" | "Engraving";
   rows: PieceRow[];
 }
 
@@ -681,12 +785,22 @@ function groupOf(row: PieceRow, kind: string): PieceGroup["name"] {
     case "paveGap":
     case "paveSpan":
       return "Pavé";
+    case "engrave":
+    case "engraveText":
+    case "engraveAt":
+    case "engraveStyle":
+    case "engraveFont":
+    case "engraveHeight":
+    case "engraveDepth":
+    case "hallmark":
+    case "hallmarkMaker":
+      return "Engraving";
     default:
       return "Stones";
   }
 }
 
-const GROUP_ORDER: readonly PieceGroup["name"][] = ["Ring", "Band", "Stones", "Head", "Pavé"];
+const GROUP_ORDER: readonly PieceGroup["name"][] = ["Ring", "Band", "Stones", "Head", "Pavé", "Engraving"];
 
 /**
  * The rows in the groups a bench reads them in: the ring (what it is and the finger), the band,
@@ -765,11 +879,26 @@ export function judgePieceDraft(row: PieceRow, draft: string, system = "us"): Dr
       return judgeSize(row, draft, system);
     case "tick":
       if (draft !== "true" && draft !== "false") return { kind: "keep" };
+      if (row.key === "engrave") return { kind: "send", patch: { engrave: draft === "true" ? { text: ENGRAVE_START } : false } };
+      if (row.key === "hallmark") return { kind: "send", patch: { hallmark: draft === "true" } };
       return { kind: "send", patch: { [row.key === "pave" ? "pave" : "halo"]: draft === "true" } };
+    case "words": {
+      const text = draft.normalize("NFC").replace(/\s+/g, " ").trim();
+      if (text === row.value.trim()) return { kind: "keep" };
+      if (row.key === "hallmarkMaker") {
+        if ([...text].length > 8) return { kind: "refuse", message: "A maker's mark is at most 8 characters" };
+        return { kind: "send", patch: { hallmark: { maker: text === "" ? null : text } } };
+      }
+      if (text === "") return { kind: "refuse", message: "Give the words to engrave, or untick the engraving" };
+      if ([...text].length > MAX_ENGRAVE) return { kind: "refuse", message: `An engraving is at most ${MAX_ENGRAVE} characters` };
+      return { kind: "send", patch: { engrave: { text } } };
+    }
     case "choice": {
       if (row.key === "system" || draft.trim() === "") return { kind: "keep" };
       const field = PAVE_FIELDS[row.key];
       if (field !== undefined) return draft === PAVE_CUSTOM ? { kind: "keep" } : { kind: "send", patch: { pave: { [field]: draft } } };
+      const engraved = ENGRAVE_FIELDS[row.key];
+      if (engraved !== undefined) return { kind: "send", patch: { engrave: { [engraved]: draft } } };
       return { kind: "send", patch: { [row.key]: draft } };
     }
     case "count": {
@@ -785,7 +914,11 @@ export function judgePieceDraft(row: PieceRow, draft: string, system = "us"): Dr
     case "number": {
       const read = readNumber(draft);
       if (!read.ok) {
-        if (read.fault === "empty") return { kind: "keep" };
+        if (read.fault === "empty") {
+        // An emptied engraving number goes back to the engine's default.
+        const engraved = ENGRAVE_FIELDS[row.key];
+        return engraved !== undefined && row.value !== "" ? { kind: "send", patch: { engrave: { [engraved]: null } } } : { kind: "keep" };
+      }
         if (read.fault === "unit") return { kind: "refuse", message: `${rowName(row)} takes a number without a unit` };
         return { kind: "refuse", message: `${rowName(row)} needs a number` };
       }
@@ -795,6 +928,8 @@ export function judgePieceDraft(row: PieceRow, draft: string, system = "us"): Dr
       if (row.key === "haloWidth") return { kind: "send", patch: { halo: read.value } };
       const field = PAVE_FIELDS[row.key];
       if (field !== undefined) return { kind: "send", patch: { pave: { [field]: read.value } } };
+      const engraved = ENGRAVE_FIELDS[row.key];
+      if (engraved !== undefined) return { kind: "send", patch: { engrave: { [engraved]: read.value } } };
       if (row.both === true) return { kind: "send", patch: { stoneWidth: read.value, stoneLength: read.value } };
       return { kind: "send", patch: { [row.key]: read.value } };
     }
@@ -825,6 +960,15 @@ export function refusalRow(error: unknown, rows: readonly PieceRow[]): string | 
   if (/is not a metal\b/i.test(text)) return first("metal");
   if (/is not a cut\b/i.test(text)) return first("cut");
   if (/is not a stone\b/i.test(text)) return first("stone");
+  // The engraving's and the hallmark's own keys, and the words they refuse in.
+  const engraved = /`engrave\.([a-z]{1,12})/.exec(text);
+  if (engraved !== null) {
+    const row = Object.entries(ENGRAVE_FIELDS).find(([, field]) => field === engraved[1])?.[0];
+    return first(row ?? "engraveText", "engrave");
+  }
+  if (/`hallmark\.maker`/.test(text)) return first("hallmarkMaker", "hallmark");
+  if (/engraving font|too long for the band|no room inside/i.test(text)) return first("engraveText", "engrave");
+  if (/fineness|hallmark/i.test(text)) return first("hallmark");
   // Pavé's own keys: `pave.melee` is the pavé stones' row.
   const pave = /`pave\.([a-z]{1,12})/.exec(text);
   if (pave !== null) {
