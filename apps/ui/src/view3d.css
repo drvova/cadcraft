@@ -324,6 +324,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--gap-2);
+  /* Its own width, not what is left of the stage beside the pointer: it may stand to the left. */
+  width: max-content;
   max-width: 40ch;
   transform: translate(var(--gap-16), var(--gap-16));
   padding: var(--gap-4) var(--gap-8);
