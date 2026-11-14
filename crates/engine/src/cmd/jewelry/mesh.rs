@@ -1224,7 +1224,9 @@ fn build_pave(s: &Sane, d: &Detail, out: &mut Parts) {
     if fit.spec.layout == pave_band::Layout::Scallop {
         out.notes.push("The pavé's scallops are drawn on the sheet; the solid does not cut them.".to_string());
     }
-    out.notes.push("Pavé stones sit on the band's outside, tables level with it; no seat is cut for them and the beads pass through the band.".to_string());
+    out.notes.push(
+        "Pavé stones sit on the band's outside, tables level with it; no seat is cut for them and the beads pass through the band.".to_string(),
+    );
 }
 
 /// The alloy's colour.

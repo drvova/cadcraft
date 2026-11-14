@@ -344,7 +344,13 @@ fn changes(before: &Value, after: &Value) -> Vec<Value> {
         let path = |v: &'static str| ["piece", "params", "pave", v];
         rows.extend(change(&format!("piece.pave.{key}"), label, at(before, &path(key)), at(after, &path(key)), *unit));
     }
-    rows.extend(change("piece.stones.pave.count", "Pavé stones", at(before, &["piece", "stones", "pave", "count"]), at(after, &["piece", "stones", "pave", "count"]), Some("pc")));
+    rows.extend(change(
+        "piece.stones.pave.count",
+        "Pavé stones",
+        at(before, &["piece", "stones", "pave", "count"]),
+        at(after, &["piece", "stones", "pave", "count"]),
+        Some("pc"),
+    ));
     rows.extend(change("grams", "Metal weight", at(before, &["grams"]), at(after, &["grams"]), Some("g")));
     rows.extend(change("stones.count", "Stones", at(before, &["stones", "count"]), at(after, &["stones", "count"]), Some("pc")));
     rows.extend(change("stones.carat", "Stone weight", at(before, &["stones", "carat"]), at(after, &["stones", "carat"]), Some("ct")));

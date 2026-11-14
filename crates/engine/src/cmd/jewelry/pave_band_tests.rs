@@ -68,7 +68,8 @@ fn every_profile_puts_tables_on_the_outside_square_to_it() {
             assert!((s.normal.len() - 1.0).abs() < 1e-9);
             let dz = 1e-4;
             let (z0, z1) = ((s.table.z - dz).max(-p.width / 2.0), (s.table.z + dz).min(p.width / 2.0));
-            let tangent = Vec3::new(0.0, 0.0, z1 - z0) + Vec3::new(s.angle.sin(), s.angle.cos(), 0.0) * (section.height_at(z1) - section.height_at(z0));
+            let tangent =
+                Vec3::new(0.0, 0.0, z1 - z0) + Vec3::new(s.angle.sin(), s.angle.cos(), 0.0) * (section.height_at(z1) - section.height_at(z0));
             if !matches!(profile.name(), "knife" | "bevel") || s.table.z.abs() > 1e-3 {
                 assert!(s.normal.dot(tangent.normalized()).abs() < 2e-3, "{}: normal not square to the section", profile.name());
             }
@@ -85,7 +86,8 @@ fn a_flat_band_faces_its_stones_straight_out_and_a_dome_tilts_its_outer_rows() {
     for s in &flat.stones {
         assert!(s.normal.z.abs() < 1e-9, "flat: straight out");
     }
-    let (_, dome) = fitted(json!({"kind": "band", "profile": "dome", "width": 6.0, "wall": 2.5, "pave": {"layout": "rows", "rows": 3, "melee": 1.0}}));
+    let (_, dome) =
+        fitted(json!({"kind": "band", "profile": "dome", "width": 6.0, "wall": 2.5, "pave": {"layout": "rows", "rows": 3, "melee": 1.0}}));
     let tilt = |row: usize| dome.stones.iter().find(|s| s.row == row).map(|s| s.normal.z).unwrap();
     assert!(tilt(1).abs() < 1e-9, "the middle row faces out");
     assert!(tilt(0) < -0.05 && tilt(2) > 0.05, "the outer rows lean outward: {} {}", tilt(0), tilt(2));
@@ -282,7 +284,8 @@ fn pave_clears_a_solitaires_head_and_a_three_stone_rings_side_heads() {
         .collect();
     for s in &f.stones {
         let q = s.girdle.xy() + cadcraft_geom::Vec2::new(s.around.x, s.around.y) * (s.diameter / 2.0) * -s.angle.signum();
-        let inside = super::piece_params::polygons_apart(&poly, &[q, q + cadcraft_geom::Vec2::new(1e-6, 0.0), q + cadcraft_geom::Vec2::new(0.0, 1e-6)]);
+        let inside =
+            super::piece_params::polygons_apart(&poly, &[q, q + cadcraft_geom::Vec2::new(1e-6, 0.0), q + cadcraft_geom::Vec2::new(0.0, 1e-6)]);
         assert!(inside >= head.prong / 2.0 + 0.2 - 1e-6, "{inside}");
     }
     let (_, three) = fitted(json!({"kind": "threestone", "width": 2.6, "pave": true}));
@@ -314,7 +317,10 @@ fn bad_pave_parameters_are_refused_with_the_key() {
 
 #[test]
 fn the_spec_reads_back_and_merges_key_by_key() {
-    for v in [json!(true), json!({"layout": "honeycomb", "rows": 3, "gap": 0.1, "from": 10, "to": 120, "symmetric": false, "graduated": {"from": 1, "to": 1.6}})] {
+    for v in [
+        json!(true),
+        json!({"layout": "honeycomb", "rows": 3, "gap": 0.1, "from": 10, "to": 120, "symmetric": false, "graduated": {"from": 1, "to": 1.6}}),
+    ] {
         let spec = PaveSpec::parse("piece", &json!({"pave": v})).unwrap().unwrap();
         assert_eq!(PaveSpec::parse("piece", &json!({"pave": spec.json()})).unwrap().unwrap(), spec);
     }
@@ -371,7 +377,11 @@ fn the_bench_sheet_and_the_solid_count_the_pave_as_the_piece_does() {
             let p = params(piece["params"].clone());
             let f = pave_band::fit(&p).unwrap();
             for (d, count) in f.sizes() {
-                let group = sheet["stones"]["groups"].as_array().unwrap().iter().find(|g| (g["mm"].as_f64().unwrap_or(g["width"].as_f64().unwrap_or(0.0)) - d).abs() < 1e-6 && g["cut"] == "round");
+                let group = sheet["stones"]["groups"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|g| (g["mm"].as_f64().unwrap_or(g["width"].as_f64().unwrap_or(0.0)) - d).abs() < 1e-6 && g["cut"] == "round");
                 let group = group.unwrap_or_else(|| panic!("no group for {d} mm: {}", sheet["stones"]["groups"]));
                 assert!(group["count"].as_u64().unwrap() as usize >= count);
             }
@@ -385,7 +395,9 @@ fn the_bench_sheet_and_the_solid_count_the_pave_as_the_piece_does() {
 
 #[test]
 fn the_solid_builds_each_stone_on_its_frame() {
-    let p = params(json!({"kind": "band", "width": 4.0, "profile": "dome", "wall": 2.0, "pave": {"layout": "rows", "rows": 2, "melee": 1.2, "span": "full"}}));
+    let p = params(
+        json!({"kind": "band", "width": 4.0, "profile": "dome", "wall": 2.0, "pave": {"layout": "rows", "rows": 2, "melee": 1.2, "span": "full"}}),
+    );
     let frames = stone_frames(&p);
     let mesh = piece_mesh(&p, Quality::Draft);
     let pave = mesh.meshes.iter().find(|m| m.name == "pave").unwrap();
@@ -468,7 +480,12 @@ fn hostile_pave_never_panics() {
     ];
     for pave in odd {
         for kind in ["band", "solitaire", "threestone", "eternity"] {
-            for extra in [json!({}), json!({"width": 0.5, "wall": 0.3}), json!({"width": 30, "wall": 10, "profile": "knife"}), json!({"size": 0, "profile": "concave"})] {
+            for extra in [
+                json!({}),
+                json!({"width": 0.5, "wall": 0.3}),
+                json!({"width": 30, "wall": 10, "profile": "knife"}),
+                json!({"size": 0, "profile": "concave"}),
+            ] {
                 let mut p = json!({"kind": kind, "pave": pave});
                 for (k, v) in extra.as_object().unwrap() {
                     p[k] = v.clone();

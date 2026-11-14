@@ -552,7 +552,11 @@ impl PaveFit {
             fmt_mm(self.gap.unwrap_or(s.gap).max(0.0)),
             fmt_mm(s.gap),
             fmt_mm(self.rim.unwrap_or(0.0).max(0.0)),
-            if self.head > 0.0 { format!(", starting {}° from 12 o'clock to clear the head", fmt_mm(self.head.to_degrees())) } else { String::new() }
+            if self.head > 0.0 {
+                format!(", starting {}° from 12 o'clock to clear the head", fmt_mm(self.head.to_degrees()))
+            } else {
+                String::new()
+            }
         )
     }
 
@@ -615,10 +619,7 @@ struct Fitter<'a> {
 impl Fitter<'_> {
     /// Every row's stone of `d` at `angle`.
     fn metal_at(&self, d1: f64, d2: f64, step: f64) -> f64 {
-        self.rows
-            .iter()
-            .map(|u| metal_between(&self.surf.stone(0.0, *u, 0, d1), &self.surf.stone(step, *u, 0, d2)))
-            .fold(f64::INFINITY, f64::min)
+        self.rows.iter().map(|u| metal_between(&self.surf.stone(0.0, *u, 0, d1), &self.surf.stone(step, *u, 0, d2))).fold(f64::INFINITY, f64::min)
     }
     /// The least angle between a stone of `d1` and the next of `d2` along every row.
     fn step(&self, d1: f64, d2: f64) -> f64 {
@@ -837,8 +838,7 @@ pub(super) fn fit(p: &PieceParams) -> Option<PaveFit> {
 
 /// The note a piece's reply carries when it was given pavé it cannot use.
 pub(super) fn unused(p: &PieceParams) -> Option<String> {
-    (p.pave.is_some() && p.kind == PieceKind::Eternity)
-        .then(|| "An eternity band's stones are its own row: `pave` is not used.".to_string())
+    (p.pave.is_some() && p.kind == PieceKind::Eternity).then(|| "An eternity band's stones are its own row: `pave` is not used.".to_string())
 }
 
 fn fit_with(p: &PieceParams, spec: &PaveSpec, surf: &Surface, gap: f64) -> PaveFit {
@@ -878,7 +878,7 @@ fn fit_with(p: &PieceParams, spec: &PaveSpec, surf: &Surface, gap: f64) -> PaveF
     let runs = runs(spec, head, gap / surf.ri);
     let honey = spec.layout == Layout::Honeycomb && rows.len() > 1;
     // Rows offset in a honeycomb: the middle one of three, the second of two.
-    let offset_row = |j: usize| honey && if rows.len() == 3 { j == 1 } else { j == 1 };
+    let offset_row = |j: usize| honey && j == 1;
     let per_column = rows.len().max(1);
     let cap = MAX_PIECE_STONES as usize;
     let mut capped = false;

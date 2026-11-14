@@ -74,8 +74,8 @@ use cadcraft_geom::{PolyVertex, Vec2, Vec3};
 use serde_json::{Map, Value, json};
 
 use super::super::*;
-use super::piece_params::{self as shared, MIN_CAST_WALL, PieceKind, PieceParams, Row, Section, carat_of, least_spacing};
 use super::pave_band;
+use super::piece_params::{self as shared, MIN_CAST_WALL, PieceKind, PieceParams, Row, Section, carat_of, least_spacing};
 use super::sizes::RingSize;
 use super::*;
 use crate::{Accept, Input, Interactive, Prompt, Step};
@@ -621,7 +621,9 @@ fn design(p: &PieceParams) -> Result<Design> {
     if let Some(sh) = &pave_sheet {
         shapes.extend(sh.front.iter().map(|v| (On::Stones, Shape::Poly { v: v.clone(), closed: true })));
         shapes.extend(sh.scallops.iter().map(|v| (On::Metal, Shape::Poly { v: v.clone(), closed: false })));
-        plan.extend(sh.plan.iter().map(|(c, r, ratio)| (On::Stones, Shape::Ellipse { c: *c, major: Vec2::new(0.0, *r), ratio: ratio.clamp(0.05, 1.0) })));
+        plan.extend(
+            sh.plan.iter().map(|(c, r, ratio)| (On::Stones, Shape::Ellipse { c: *c, major: Vec2::new(0.0, *r), ratio: ratio.clamp(0.05, 1.0) })),
+        );
     }
 
     // The section, to the right of the front view, its base (the finger side) down.
@@ -632,7 +634,8 @@ fn design(p: &PieceParams) -> Result<Design> {
         shapes.push((On::Stones, place_profile(side, seat, Vec2::new(1.0, 0.0), Vec2::new(0.0, 1.0))));
     }
     if let Some(sh) = &pave_sheet {
-        shapes.extend(sh.section.iter().map(|v| (On::Stones, Shape::Poly { v: v.iter().map(|(q, b)| (section_at + *q, *b)).collect(), closed: true })));
+        shapes
+            .extend(sh.section.iter().map(|v| (On::Stones, Shape::Poly { v: v.iter().map(|(q, b)| (section_at + *q, *b)).collect(), closed: true })));
     }
     // The plan, under the front view.
     let plan_at = Vec2::new(0.0, -(ro + VIEW_GAP + plan_reach));
