@@ -421,8 +421,13 @@ export interface Ground {
 export interface Renderer {
   /** Hand over what is drawn. `shadow` is the realistic contact shadow's quad (`contactShadow`), null for none. */
   upload: (buffers: Buffers | null, ground: Ground | null, edges: EdgeBatch | null, shadow?: Float32Array | null) => void;
-  /** Draw one frame as `plan`'s passes on a store `width` by `height` device pixels. */
-  draw: (frame: Frame, plan: readonly DrawPass[], width: number, height: number) => void;
+  /**
+   * Draw one frame as `plan`'s passes on a store `width` by `height` device pixels. With `at`, the
+   * frame is drawn into that rectangle of the store alone (device pixels from the bottom-left;
+   * `width` and `height` are then the rectangle's), scissored, so the rest of the store is kept:
+   * the panes of the four-view workspace share one context this way.
+   */
+  draw: (frame: Frame, plan: readonly DrawPass[], width: number, height: number, at?: { x: number; y: number }) => void;
   dispose: () => void;
   /** Whether the realistic program runs here, and how: "full", "no derivatives", or why it does not (then a realistic pass is drawn shaded). */
   realistic: string;
@@ -772,9 +777,15 @@ export function createRenderer(gl: WebGLRenderingContext): Renderer | string {
       gridCount = ground?.vertices ?? 0;
       edgeCount = edges?.vertices ?? 0;
     },
-    draw(frame, plan, width, height) {
+    draw(frame, plan, width, height, at) {
       if (!(width > 0) || !(height > 0)) return;
-      gl.viewport(0, 0, width, height);
+      const x = at !== undefined && Number.isFinite(at.x) ? Math.round(at.x) : 0;
+      const y = at !== undefined && Number.isFinite(at.y) ? Math.round(at.y) : 0;
+      gl.viewport(x, y, width, height);
+      if (at !== undefined) {
+        gl.enable(gl.SCISSOR_TEST);
+        gl.scissor(x, y, width, height);
+      }
       const back = frame.background;
       gl.clearColor(back?.[0] ?? 0, back?.[1] ?? 0, back?.[2] ?? 0, back === null ? 0 : 1);
       gl.clearDepth(1);
@@ -794,6 +805,7 @@ export function createRenderer(gl: WebGLRenderingContext): Renderer | string {
       }
       gl.disable(gl.BLEND);
       gl.enable(gl.DEPTH_TEST);
+      gl.disable(gl.SCISSOR_TEST);
     },
     dispose() {
       gl.bindBuffer(gl.ARRAY_BUFFER, null);

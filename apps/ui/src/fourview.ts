@@ -13,7 +13,7 @@
  * on its own after that.
  */
 
-import { cameraBasis, clipPlanes, eyeFrame, mat4Multiply, viewMatrix, type Bounds, type Camera, type EyeFrame, type Mat4, type Scene, type Vec3 } from "./view3d";
+import { cameraBasis, clipPlanes, eyeFrame, mat4Multiply, viewMatrix, type Bounds, type Camera, type DrawPass, type EyeFrame, type Mat4, type Scene, type Vec3 } from "./view3d";
 
 export type OrthoPane = "top" | "front" | "right";
 export type Pane = OrthoPane | "perspective";
@@ -279,5 +279,19 @@ export function mmPerPixel(view: OrthoView, height: number): number {
 /** The world direction a pane's screen right points along (for tests and the handles). */
 export function orthoRight(pane: OrthoPane): Vec3 {
   return cameraBasis({ target: [0, 0, 0], distance: 1, ...ORTHO_ANGLES[pane] }).right;
+}
+
+// ---- how the orthographic panes are drawn ----
+
+/**
+ * The passes of an orthographic pane, whatever the Perspective pane's mode: flat shading with its
+ * feature edges in one ink over it, and the ground's lines. A drawing to measure from wants a
+ * silhouette that is sharp and the same from frame to frame; the studio's reflections in the
+ * Realistic mode move a highlight across a face and blur where an edge is, so they are kept for
+ * the Perspective pane.
+ */
+export function orthoPlan(): DrawPass[] {
+  const face = (what: "metal" | "stone"): DrawPass => ({ kind: "faces", what, color: true, depthTest: true, depthWrite: true, opacity: null, rim: 0, pushed: true, real: false });
+  return [face("metal"), { kind: "ground" }, face("stone"), { kind: "edges", depthTest: true, alpha: 1, bold: false }];
 }
 

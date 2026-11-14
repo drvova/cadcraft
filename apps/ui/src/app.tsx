@@ -500,6 +500,19 @@ export function App(props: AppProps): JSX.Element {
   };
 
   /**
+   * A handle on the piece in the 3D tab was let go: the same `piece` change the Piece section makes
+   * (one undo step), or with Alt held at the release a proposal of it, which the assistant's panel
+   * shows as a card. Answers null when it went through, else the engine's refusal.
+   */
+  const onPieceHandle = (params: Record<string, unknown>, propose: boolean, title: string): string | null => {
+    const env = propose ? props.facade.execute("propose", { steps: [{ command: "piece", params }], title }) : props.facade.execute("piece", params);
+    setNotice(env.ok ? null : env.error);
+    if (env.ok) pieceAt = null;
+    refresh();
+    return env.ok ? null : env.error;
+  };
+
+  /**
    * The template gallery chose a preset: start it from a clean slate. Any current piece is removed
    * first (so no stale parameter survives the merge), then the template's own parameters build it —
    * both through the Piece section's own handler, so a template reaches `piece` exactly as a start
@@ -1447,7 +1460,7 @@ export function App(props: AppProps): JSX.Element {
       </Show>
       {/* Over the drawing, which stays mounted under it at its own view. */}
       <Show when={stage3d()}>
-        <Viewport3D execute={(command, params) => props.facade.execute(command, params)} revision={drawing()?.revision ?? 0} onNotice={setNotice} />
+        <Viewport3D execute={(command, params) => props.facade.execute(command, params)} revision={drawing()?.revision ?? 0} onNotice={setNotice} onPieceEdit={onPieceHandle} />
       </Show>
       <InlineAsk
         open={askOpen()}
