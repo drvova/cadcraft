@@ -168,9 +168,10 @@ function drawFrame(session: FrameSession, camera: Camera, plan: ReturnType<typeo
   blit(out.context, store, 0, 0, plan.width, plan.height);
 }
 
-export function renderTurntable(mesh: PieceMesh, request: TurntableRequest, control: Control): Promise<Rendered> {
+export async function renderTurntable(mesh: PieceMesh, request: TurntableRequest, control: Control): Promise<Rendered> {
   const started = performance.now();
-  return withPieceFrames(mesh, "realistic", async (session) => {
+  // The WebM's frames are drawn with the context held, then recorded after it is given back.
+  const drawn = await withPieceFrames(mesh, "realistic", async (session): Promise<Rendered | { held: ImageBitmap[]; width: number; height: number; note: string | null; frameMs: number; type: string }> => {
     const plan = storePlan(request.width, request.height, session.limits);
     const timing = turntablePlan(request.seconds, request.fps);
     const cameras = turntableCameras(sceneOf(mesh.extent), plan.width / plan.height, timing.frames, request.tilt);
@@ -204,17 +205,29 @@ export function renderTurntable(mesh: PieceMesh, request: TurntableRequest, cont
         report(i + 1, "Drawing");
         await nextTask();
       }
-      const blob = await record(held, plan.width, plan.height, timing.frameMs, type, control, (done) => report(done, "Recording"));
-      return { blob, width: plan.width, height: plan.height, note: plan.note, frames: timing.frames, ms: performance.now() - started };
-    } finally {
+    } catch (error) {
       for (const bitmap of held) bitmap.close();
+      throw error;
     }
+    return { held, width: plan.width, height: plan.height, note: plan.note, frameMs: timing.frameMs, type };
   });
+  if (!("held" in drawn)) return drawn;
+  try {
+    const total = drawn.held.length;
+    const blob = await record(drawn.held, drawn.width, drawn.height, drawn.frameMs, drawn.type, control, (done) => control.onProgress?.({ done, total, phase: "Recording" }));
+    return { blob, width: drawn.width, height: drawn.height, note: drawn.note, frames: total, ms: performance.now() - started };
+  } finally {
+    for (const bitmap of drawn.held) bitmap.close();
+  }
 }
 
 /** Play the drawn frames into a recorder at their own rate: one `requestFrame` each, on time. */
 async function record(frames: readonly ImageBitmap[], width: number, height: number, frameMs: number, type: string, control: Control, onFrame: (done: number) => void): Promise<Blob> {
-  const { canvas, context } = canvas2d(width, height);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (context === null) throw new Error("the video could not be made: the browser gave no 2D canvas");
   const stream = canvas.captureStream(0);
   const track = stream.getVideoTracks()[0];
   if (track === undefined || !("requestFrame" in track) || typeof track.requestFrame !== "function") throw new Error("this browser cannot record a canvas frame by frame");
