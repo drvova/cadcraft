@@ -13,6 +13,7 @@
 //! and the bench sheet reads it back.
 
 mod bench;
+mod casting;
 mod gem;
 mod heads;
 #[cfg(test)]

@@ -514,8 +514,9 @@ pub(super) enum Fail {
     Broken(String),
 }
 
-/// One extraction at `step`, at most `max_tris` triangles.
-pub(super) fn extract(csg: &Csg, step: f64, max_tris: usize) -> Result<Solid, Fail> {
+/// One extraction at `step`, at most `max_tris` triangles; `smooth`: its vertices moved onto the true surface ([`project`]), else left
+/// on the grid's piecewise-linear surface.
+pub(super) fn extract_with(csg: &Csg, step: f64, max_tris: usize, smooth: bool) -> Result<Solid, Fail> {
     if !(step.is_finite() && step > 1e-4) {
         return Err(Fail::Over(2.0));
     }
@@ -664,11 +665,14 @@ pub(super) fn extract(csg: &Csg, step: f64, max_tris: usize) -> Result<Solid, Fa
     let side = BLOCK + 1;
     let mut vals = vec![0.0f64; side * side * side];
     let mut positions: Vec<Vec3> = Vec::new();
+    // The block each vertex was made in: its field's candidates, for the projection.
+    let mut owner: Vec<u32> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
     let mut keyed: HashMap<(u64, u64), u32> = HashMap::new();
     let mut done = 0usize;
     for (b, [bx, by, bz]) in &surface {
         let cand = candidates(*b);
+        let blk = u32::try_from(*b).unwrap_or(u32::MAX);
         let (i0, j0, k0) = (bx * BLOCK, by * BLOCK, bz * BLOCK);
         for k in 0..side {
             for j in 0..side {
@@ -711,6 +715,7 @@ pub(super) fn extract(csg: &Csg, step: f64, max_tris: usize) -> Result<Solid, Fa
                             let (pa, pb) = (node(i0 + ga.0, j0 + ga.1, k0 + ga.2), node(i0 + gb.0, j0 + gb.1, k0 + gb.2));
                             let v = u32::try_from(positions.len()).unwrap_or(u32::MAX);
                             positions.push(pa + (pb - pa) * t);
+                            owner.push(blk);
                             keyed.insert(key, v);
                             v
                         };
@@ -749,11 +754,215 @@ pub(super) fn extract(csg: &Csg, step: f64, max_tris: usize) -> Result<Solid, Fa
         return Err(Fail::Empty);
     }
     verify(&positions, &indices).map_err(Fail::Broken)?;
+    let field = |v: usize, p: Vec3| value(p, candidates(owner.get(v).copied().unwrap_or(u32::MAX) as usize));
+    if smooth {
+        project(&mut positions, &indices, step, &field);
+        verify(&positions, &indices).map_err(Fail::Broken)?;
+    }
     let (positions, indices, bodies) = drop_crumbs(positions, indices);
     if indices.is_empty() {
         return Err(Fail::Empty);
     }
     Ok(Solid { positions, indices, step, bodies })
+}
+
+/// Newton steps per vertex onto the field's zero set.
+const NEWTON_STEPS: usize = 4;
+/// The farthest a vertex is moved onto the true surface, as a fraction of the grid step: it stays
+/// in the cells around the grid edge it was made on.
+const MAX_MOVE: f64 = 0.6;
+/// The rounds of putting back vertices whose move turned a triangle over.
+const UNDO_ROUNDS: usize = 12;
+/// The least area a triangle keeps after the projection, mm².
+const MIN_AREA: f64 = 1e-9;
+
+/// The field's gradient at `p` by central differences `h` apart.
+fn gradient(f: &dyn Fn(Vec3) -> f64, p: Vec3, h: f64) -> Vec3 {
+    let d = |e: Vec3| (f(p + e) - f(p - e)) / (2.0 * h);
+    Vec3::new(d(Vec3::new(h, 0.0, 0.0)), d(Vec3::new(0.0, h, 0.0)), d(Vec3::new(0.0, 0.0, h)))
+}
+
+/// A point moved onto the field's zero set by Newton steps along its gradient, at most
+/// [`MAX_MOVE`] × `step` from where it was; the point itself when that does not bring it nearer.
+pub(super) fn onto_surface(f: &dyn Fn(Vec3) -> f64, p0: Vec3, step: f64) -> Vec3 {
+    let f0 = f(p0);
+    if !f0.is_finite() {
+        return p0;
+    }
+    let (h, reach) = (0.02 * step, MAX_MOVE * step);
+    let mut p = p0;
+    let mut fp = f0;
+    for _ in 0..NEWTON_STEPS {
+        if fp.abs() <= 1e-7 * step {
+            break;
+        }
+        let g = gradient(f, p, h);
+        let g2 = g.dot(g);
+        if !(g2.is_finite() && g2 > 0.04) {
+            break;
+        }
+        let mut q = p - g * (fp / g2);
+        let off = q - p0;
+        let l = off.len();
+        if !l.is_finite() {
+            break;
+        }
+        if l > reach {
+            q = p0 + off * (reach / l);
+        }
+        let fq = f(q);
+        if !(fq.is_finite() && fq.abs() < fp.abs()) {
+            break;
+        }
+        p = q;
+        fp = fq;
+    }
+    p
+}
+
+/// Moves every surface vertex onto the true surface (the zero set of the field itself, not of its
+/// piecewise-linear interpolant), which takes off the grid's facets on curved parts. The
+/// connectivity is the extractor's, unchanged; a vertex whose move turns one of its triangles over
+/// (against its normal before), or leaves it without area, is put back, round by round, so the
+/// shell stays closed, manifold and wound outward. `field(v, p)` is the field at `p` for vertex
+/// `v`'s neighbourhood.
+fn project(positions: &mut [Vec3], indices: &[u32], step: f64, field: &dyn Fn(usize, Vec3) -> f64) {
+    let before: Vec<Vec3> = positions.to_vec();
+    for (v, p) in positions.iter_mut().enumerate() {
+        *p = onto_surface(&|q| field(v, q), *p, step);
+    }
+    let at = |ps: &[Vec3], i: u32| ps.get(i as usize).copied().unwrap_or(Vec3::ZERO);
+    let tris: Vec<[u32; 3]> = indices.chunks_exact(3).filter_map(|t| Some([*t.first()?, *t.get(1)?, *t.get(2)?])).collect();
+    // The triangles round each vertex.
+    let mut around: Vec<Vec<u32>> = vec![Vec::new(); positions.len()];
+    for (i, t) in tris.iter().enumerate() {
+        for v in t {
+            if let Some(list) = around.get_mut(*v as usize) {
+                list.push(u32::try_from(i).unwrap_or(u32::MAX));
+            }
+        }
+    }
+    // The triangles whose shape changed since they were last checked: all of them at first.
+    let mut dirty: Vec<u32> = (0..u32::try_from(tris.len()).unwrap_or(u32::MAX)).collect();
+    for round in 0..=UNDO_ROUNDS {
+        let mut undo: Vec<u32> = Vec::new();
+        for &ti in &dirty {
+            let Some(&[a, b, c]) = tris.get(ti as usize) else { continue };
+            let n0 = (at(&before, b) - at(&before, a)).cross(at(&before, c) - at(&before, a));
+            let n1 = (at(positions, b) - at(positions, a)).cross(at(positions, c) - at(positions, a));
+            if n0.dot(n1) <= 0.0 || n1.len() < 2.0 * MIN_AREA {
+                undo.extend([a, b, c]);
+            }
+        }
+        undo.extend(crossings(positions, &tris, &dirty, step));
+        if undo.is_empty() {
+            return;
+        }
+        if round == UNDO_ROUNDS {
+            break;
+        }
+        // Put back each offending vertex and the ring round it, and check again what that moved.
+        let mut moved: Vec<u32> = Vec::new();
+        for i in undo {
+            for &ti in around.get(i as usize).map_or(&[][..], Vec::as_slice) {
+                if let Some(t) = tris.get(ti as usize) {
+                    moved.extend(t.iter().copied());
+                }
+            }
+        }
+        moved.sort_unstable();
+        moved.dedup();
+        let mut next: Vec<u32> = Vec::new();
+        for i in moved {
+            if let (Some(p), Some(q)) = (positions.get_mut(i as usize), before.get(i as usize))
+                && *p != *q
+            {
+                *p = *q;
+                next.extend(around.get(i as usize).map_or(&[][..], Vec::as_slice));
+            }
+        }
+        next.sort_unstable();
+        next.dedup();
+        dirty = next;
+    }
+    // Still turned over or crossing after every round: the extractor's own shell.
+    positions.copy_from_slice(&before);
+}
+
+/// Whether the segment `p`–`q` passes through the inside of triangle `t`.
+fn segment_crosses(p: Vec3, q: Vec3, t: &[Vec3; 3]) -> bool {
+    let [t0, t1, t2] = *t;
+    let (e1, e2, d) = (t1 - t0, t2 - t0, q - p);
+    let h = d.cross(e2);
+    let a = e1.dot(h);
+    if a.is_nan() || a.abs() < 1e-14 {
+        return false;
+    }
+    let f = 1.0 / a;
+    let s = p - t0;
+    let u = f * s.dot(h);
+    let qv = s.cross(e1);
+    let v = f * d.dot(qv);
+    let w = f * e2.dot(qv);
+    let eps = 1e-9;
+    u > -eps && v > -eps && u + v < 1.0 + eps && w > -eps && w < 1.0 + eps
+}
+
+/// The vertices of every pair of triangles, sharing no vertex, one of them in `check`, that pass
+/// through each other: each triangle binned by its centroid in cells of twice the step and the
+/// 27 cells around each checked one searched (a moved triangle is never longer than about two
+/// steps).
+fn crossings(positions: &[Vec3], tris: &[[u32; 3]], check: &[u32], step: f64) -> Vec<u32> {
+    if check.is_empty() {
+        return Vec::new();
+    }
+    let cell = 2.0 * step;
+    let pos = |i: u32| positions.get(i as usize).copied().unwrap_or(Vec3::ZERO);
+    let key = |p: Vec3| ((p.x / cell).floor() as i64, (p.y / cell).floor() as i64, (p.z / cell).floor() as i64);
+    let mut bins: HashMap<(i64, i64, i64), Vec<u32>> = HashMap::new();
+    for (i, t) in tris.iter().enumerate() {
+        let c = (pos(t[0]) + pos(t[1]) + pos(t[2])) * (1.0 / 3.0);
+        bins.entry(key(c)).or_default().push(u32::try_from(i).unwrap_or(u32::MAX));
+    }
+    let boxed = |v: &[Vec3; 3]| {
+        let mut b = (v[0], v[0]);
+        grow(&mut b, v[1]);
+        grow(&mut b, v[2]);
+        b
+    };
+    let mut out = Vec::new();
+    for &i in check {
+        let Some(t) = tris.get(i as usize) else { continue };
+        let tv = [pos(t[0]), pos(t[1]), pos(t[2])];
+        let (tlo, thi) = boxed(&tv);
+        let (x, y, z) = key((tv[0] + tv[1] + tv[2]) * (1.0 / 3.0));
+        for dz in -1..=1 {
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    let Some(list) = bins.get(&(x + dx, y + dy, z + dz)) else { continue };
+                    for &j in list {
+                        let Some(u) = tris.get(j as usize) else { continue };
+                        if j == i || t.iter().any(|v| u.contains(v)) {
+                            continue;
+                        }
+                        let uv = [pos(u[0]), pos(u[1]), pos(u[2])];
+                        let (ulo, uhi) = boxed(&uv);
+                        if ulo.x > thi.x || ulo.y > thi.y || ulo.z > thi.z || tlo.x > uhi.x || tlo.y > uhi.y || tlo.z > uhi.z {
+                            continue;
+                        }
+                        let hit = (0..3).any(|k| {
+                            let (a, b) = (k, (k + 1) % 3);
+                            segment_crosses(tv[a], tv[b], &uv) || segment_crosses(uv[a], uv[b], &tv)
+                        });
+                        if hit {
+                            out.extend(t.iter().chain(u.iter()).copied());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
 }
 
 /// The closed shells smaller than this fraction of the whole (by volume) are sampling crumbs —
@@ -875,10 +1084,15 @@ fn kuhn_tets() -> [[usize; 4]; 6] {
 /// The solid at `step` or as much coarser as it takes to stay under `max_tris`: the solid and
 /// whether it was coarsened.
 pub(super) fn solidify(csg: &Csg, step: f64, max_tris: usize) -> Result<(Solid, bool), String> {
+    solidify_with(csg, step, max_tris, true)
+}
+
+/// [`solidify`], smoothed or not ([`extract_with`]).
+pub(super) fn solidify_with(csg: &Csg, step: f64, max_tris: usize, smooth: bool) -> Result<(Solid, bool), String> {
     let mut step = if step.is_finite() && step > 1e-3 { step } else { 0.1 };
     let mut coarsened = false;
     for _ in 0..MAX_ATTEMPTS {
-        match extract(csg, step, max_tris) {
+        match extract_with(csg, step, max_tris, smooth) {
             Ok(s) => return Ok((s, coarsened)),
             Err(Fail::Over(by)) => {
                 let by = if by.is_finite() { by.clamp(1.0, 1e6) } else { 2.0 };

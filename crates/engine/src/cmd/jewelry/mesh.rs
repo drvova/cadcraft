@@ -56,8 +56,9 @@
 //!
 //! Every part is a closed shell, wound counter-clockwise seen from outside. The band, the rail,
 //! the prongs, the halo seat and the beads are separate shells that pass through each other where
-//! they join, and stone seats are not cut from the metal: that is how such a model is commonly
-//! handed to a caster's slicer, which unions them.
+//! they join, and stone seats are not cut from the metal: this is the display mesh. What is cast
+//! is `STLOUT`'s merged solid ([`super::solid`]): one closed shell, the parts unioned and a seat
+//! cut for every stone.
 //!
 //! # Metal weight
 //!
@@ -80,11 +81,15 @@ use serde_json::{Value, json};
 mod mesh_kinds;
 
 use super::super::*;
+use super::casting::{self, Sprue};
 use super::heads::BezelBound;
 use super::piece_params::{self as shared, Head, MAX_PIECE_STONES, MIN_CAST_WALL, PieceKind, PieceParams, Profile, Row, Section, proportions};
 use super::sizes::RingSize;
 use super::solid::{self as solid, Axes, Csg, Envelope, Outline, Prim, Solid, solidify};
 use super::*;
+
+/// How the display mesh's notes about its own shells begin (`STLOUT` leaves them out).
+pub(super) const DISPLAY_NOTE: &str = "This view draws";
 
 /// The most triangles a reply holds.
 pub(super) const MAX_TRIANGLES: usize = 150_000;
@@ -1261,8 +1266,8 @@ fn build_solitaire(s: &Sane, d: &Detail, out: &mut Parts) {
         }
     }
     out.notes.push(
-        "The band, the gallery rail, the prongs and the halo seat are separate closed shells that pass through each other where they join, \
-         and no seat is cut for a stone; a slicer unions them."
+        "This view draws the band, the gallery rail, the prongs and the halo seat as separate closed shells that pass through each other where they join, \
+         the stones unseated; STLOUT writes the metal as one merged closed solid with a seat cut for every stone."
             .to_string(),
     );
 }
@@ -1356,7 +1361,7 @@ fn build_eternity(s: &Sane, d: &Detail, out: &mut Parts) {
         out.notes.push(format!("The stones ({} mm) are wider than the band ({} mm).", size_json(m), size_json(p.width)));
     }
     out.notes.push(
-        "The band and the bead prongs are separate closed shells that pass through each other, and no seat is cut for a stone; a slicer unions them."
+        "This view draws the band and the bead prongs as separate closed shells that pass through each other, the stones unseated; STLOUT writes the metal as one merged closed solid with a seat cut for every stone."
             .to_string(),
     );
 }
@@ -1399,7 +1404,23 @@ fn build_pave(s: &Sane, d: &Detail, out: &mut Parts) {
         out.notes.push(format!("Pavé: {}", fit.message()));
     }
     if fit.spec.layout == pave_band::Layout::Scallop {
-        out.notes.push("The pavé's scallops are drawn on the sheet; the solid does not cut them.".to_string());
+        // Each stone's scallop, the sheet's arc, cut into both sides of the band from the side in
+        // to a girdle's width and 0.1 mm from the row's middle (the seat keeps its walls).
+        let side = s.p.width / 2.0 + 1.0;
+        for st in &fit.stones {
+            let Some(region) = pave_band::scallop_region(st, s.ri) else { continue };
+            let zin = st.girdle.z.abs() + st.diameter / 2.0 + 0.1;
+            if zin >= s.p.width / 2.0 {
+                continue;
+            }
+            let axes = Axes { o: Vec3::ZERO, u: Vec3::new(1.0, 0.0, 0.0), v: Vec3::new(0.0, 1.0, 0.0), w: Vec3::Z };
+            for (lo, hi) in [(zin, side), (-side, -zin)] {
+                out.csg.cut.push(Prim::Plate { axes, outline: Outline::Poly(region.clone()), inner: -1e3, outer: 0.0, lo, hi });
+            }
+        }
+        out.notes.push(
+            "The pavé's scallops are cut into both sides of the band in STLOUT's merged solid; this display mesh draws the band whole.".to_string(),
+        );
     }
     out.notes.push(
         "Pavé stones sit on the band's outside, tables level with it, and the beads pass through the band; STLOUT cuts each stone's seat."
@@ -1651,9 +1672,14 @@ pub fn specs() -> Vec<CommandSpec> {
             .params(
                 "{kind: band|solitaire|threestone|eternity, …the piece's parameters as PIECE takes them, stones?: bool (default false: the metal only, which \
                  is what is cast), quality?: draft|fine (default fine: the metal sampled at 0.1 mm; draft 0.2 mm), binary?: bool (default true), \
-                 maxTriangles?: 1000–1000000 (default 150000; an ASCII STL at most 30000)} → {format: stl-binary|stl-ascii, base64 | text, bytes, \
+                 maxTriangles?: 1000–1000000 (default 150000; an ASCII STL at most 30000), sprue?: false|true|{diameter?: mm 0.5–8 (default 2.5), \
+                 length?: mm 0.5–40 (default 6, beyond the band's outside), at?: degrees clockwise from 12 o'clock (default 180: the bottom of the \
+                 shank, opposite the head)} (a round sprue merged into the metal, starting half way into the wall; refused within 0.3 mm of a stone \
+                 or a seat), shrink?: percent 0–10 (default 0: the solid, sprue included, scaled up about the finger's centre by 1 + shrink/100 for \
+                 the metal's casting shrinkage)} → {format: stl-binary|stl-ascii, base64 | text, bytes, \
                  triangles, name, quality, step (the grid step the metal was sampled at, mm: coarser than asked when it must be to fit), seats, \
-                 bodies (1: the metal casts whole), metal: {name, density, volumeMm3, grams (the merged solid: what is cast), band: {volumeMm3, \
+                 bodies (1: the metal casts whole), sprue: {diameter, length, at} | null, shrink, metal: {name, density, volumeMm3, grams (the merged \
+                 solid as drawn, without the sprue and before the shrinkage scale: what is cast), band: {volumeMm3, \
                  grams} (the band alone, exactly: what PIECE and the bench sheet report)}, notes}: the piece as an STL in millimetres, the \
                  metal one closed, manifold, outward-facing shell with a seat cut for every stone, the stones (when asked) shells of their \
                  own; changes nothing",
@@ -1776,8 +1802,17 @@ fn run_stlout(_s: &mut Session, p: &Value) -> Result<Value> {
     // The tessellated piece gives the stones (and the notes); the metal is the merged solid.
     // At most half the file for the tessellated piece (the stones are what is kept of it), so the
     // merged metal always has the other half.
+    let sprue = Sprue::parse(cmd, p)?;
+    let shrink = casting::shrink(cmd, p)?;
     let budget = Budget { triangles: cap / 2, json: None, stones };
-    let mesh = piece_mesh_within(&piece, quality, budget);
+    let mut mesh = piece_mesh_within(&piece, quality, budget);
+    if let Some(sp) = sprue {
+        let prim = sp.prim(&piece);
+        if let Some(why) = sp.clash(&prim, &mesh) {
+            return Err(bad(cmd, format!("{why}: move it with `sprue.at` (degrees clockwise from 12 o'clock) or make it thinner")));
+        }
+        mesh.csg.add.push(prim);
+    }
     if stones && mesh.over {
         return Err(bad(
             cmd,
@@ -1790,7 +1825,32 @@ fn run_stlout(_s: &mut Session, p: &Value) -> Result<Value> {
     if stones {
         tris.extend(stone_tris);
     }
-    let mut notes = mesh.notes;
+    // Shrinkage allowance: everything written scales about the finger's centre.
+    let scale = 1.0 + shrink / 100.0;
+    if shrink > 0.0 {
+        for t in &mut tris {
+            for v in t.iter_mut().skip(1) {
+                *v = *v * scale;
+            }
+        }
+    }
+    // The display mesh's notes about its own shells are not about this file.
+    let mut notes: Vec<String> = mesh.notes.into_iter().filter(|n| !n.starts_with(DISPLAY_NOTE)).collect();
+    if let Some(sp) = sprue {
+        notes.push(format!(
+            "A sprue {} mm across stands {} mm out of the band at {}° clockwise from 12 o'clock, merged into the metal; the weight below is the piece without it (about {:.1} mm³ of sprue).",
+            fmt_mm(sp.diameter),
+            fmt_mm(sp.length),
+            fmt_mm(sp.at),
+            sp.volume()
+        ));
+    }
+    if shrink > 0.0 {
+        notes.push(format!(
+            "Scaled up {}% for the metal's shrinkage: the file is {scale:.4}× the drawn size; the volume and grams are the drawn piece's.",
+            fmt_mm(shrink)
+        ));
+    }
     notes.append(&mut extra);
     if piece.wall < MIN_CAST_WALL {
         notes.push(format!("A {} mm wall is thinner than a bench casts ({MIN_CAST_WALL} mm).", size_json(piece.wall)));
@@ -1803,7 +1863,7 @@ fn run_stlout(_s: &mut Session, p: &Value) -> Result<Value> {
         }
         .to_string(),
     );
-    let volume = solid.volume();
+    let volume = (solid.volume() - sprue.map_or(0.0, |sp| sp.volume())).max(0.0);
     let band = piece.band_volume();
     if solid.bodies > 1 {
         notes.push(format!(
@@ -1813,7 +1873,7 @@ fn run_stlout(_s: &mut Session, p: &Value) -> Result<Value> {
     }
     let agreement = SOLID_AGREEMENT_PER_MM * solid.step;
     // Only a plain band is its section revolved: pavé seats take metal away on purpose.
-    if piece.kind == PieceKind::Band && mesh.seats == 0 && band > 0.0 && ((volume - band) / band).abs() > agreement {
+    if piece.kind == PieceKind::Band && mesh.seats == 0 && sprue.is_none() && band > 0.0 && ((volume - band) / band).abs() > agreement {
         notes.push(format!(
             "The solid's volume ({volume:.1} mm³) is more than {:.0}% from the band's exact volume ({band:.1} mm³): the band is thin for the {} mm sampling step.",
             agreement * 100.0,
@@ -1830,6 +1890,8 @@ fn run_stlout(_s: &mut Session, p: &Value) -> Result<Value> {
         "step": r3(solid.step),
         "seats": mesh.seats,
         "bodies": solid.bodies,
+        "sprue": sprue.map_or(Value::Null, |sp| sp.json()),
+        "shrink": shrink,
         "metal": {
             "name": piece.metal,
             "density": piece.density,

@@ -51,8 +51,9 @@
 //! - `honeycomb`: offset rows: every other row's stones stand half way between its
 //!   neighbours', and the rows close up until the diagonal neighbours keep `gap`.
 //! - `scallop`: one row in the middle, each stone in a scalloped cut-out of the band's side: the
-//!   sheet draws the scallops in the front view; the solid does not cut them (no seat is cut for
-//!   any stone: the solid builder's seat cutter reads [`stone_frames`]).
+//!   sheet draws the scallops in the front view, and `STLOUT`'s merged solid cuts the same arcs
+//!   into both sides of the band ([`scallop_region`]), in from each side to a girdle's width
+//!   and 0.1 mm from the row's middle, so each stone's seat keeps its walls.
 //!
 //! # What is checked (the `pave` check)
 //!
@@ -1136,15 +1137,10 @@ pub(super) fn sheet(f: &PaveFit, surf: &Surface) -> PaveSheet {
         let rho = s.table.xy().len();
         let at = out_dir * (rho - s.depth);
         out.front.push(profile(s.diameter).into_iter().map(|(q, b)| (at + along * q.x + out_dir * q.y, b)).collect());
-        if f.spec.layout == Layout::Scallop {
-            // The scallop under the stone in the band's side: an arc from girdle edge to edge.
-            let r = s.diameter / 2.0 + 0.1;
-            let sag = (0.5 * s.diameter).min(0.8 * (rho - surf.ri));
-            let (a, b) = (out_dir * rho - along * r, out_dir * rho + along * r);
-            let chord = a.dist(b);
-            if chord > 1e-9 && sag > 1e-9 {
-                out.scallops.push(vec![(a, -2.0 * sag / chord), (b, 0.0)]);
-            }
+        if f.spec.layout == Layout::Scallop
+            && let Some((a, b, sag)) = scallop_arc(s, surf.ri)
+        {
+            out.scallops.push(vec![(a, -2.0 * sag / a.dist(b)), (b, 0.0)]);
         }
     }
     // Section: the stones of the rows at the top of the band (one per row).
@@ -1178,6 +1174,46 @@ pub(super) fn sheet(f: &PaveFit, surf: &Surface) -> PaveSheet {
         out.inserts.push((Vec2::new(a * top, s.across), s.diameter));
     }
     out
+}
+
+/// The scallop under a stone in the band's side, in the ring's plane (the front view, about the
+/// ring's centre): the arc's ends at the table's radius, a girdle and 0.1 mm each side of the
+/// stone, and how far it dips toward the finger (half the stone, at most 80 % of the way down).
+pub(super) fn scallop_arc(s: &PaveStone, ri: f64) -> Option<(Vec2, Vec2, f64)> {
+    let out_dir = Vec2::new(s.angle.sin(), s.angle.cos());
+    let along = Vec2::new(-out_dir.y, out_dir.x);
+    let rho = s.table.xy().len();
+    let r = s.diameter / 2.0 + 0.1;
+    let sag = (0.5 * s.diameter).min(0.8 * (rho - ri));
+    let (a, b) = (out_dir * rho - along * r, out_dir * rho + along * r);
+    (a.dist(b) > 1e-9 && sag > 1e-9 && sag.is_finite()).then_some((a, b, sag))
+}
+
+/// Segments in a scallop's arc as the solid cuts it.
+const SCALLOP_SEGMENTS: usize = 24;
+
+/// The scallop's cut-out as the solid takes it: the region between its arc and its chord (and
+/// above the chord to beyond the band's outside), a simple polygon in the ring's plane.
+pub(super) fn scallop_region(s: &PaveStone, ri: f64) -> Option<Vec<Vec2>> {
+    let (a, b, sag) = scallop_arc(s, ri)?;
+    let half = a.dist(b) / 2.0;
+    let mid = (a + b) * 0.5;
+    let out_dir = Vec2::new(s.angle.sin(), s.angle.cos());
+    let along = Vec2::new(-out_dir.y, out_dir.x);
+    let radius = (half * half + sag * sag) / (2.0 * sag);
+    let centre = mid + out_dir * (radius - sag);
+    let t0 = (half / radius).clamp(-1.0, 1.0).asin();
+    let mut poly: Vec<Vec2> = (0..=SCALLOP_SEGMENTS)
+        .map(|k| {
+            let t = -t0 + 2.0 * t0 * k as f64 / SCALLOP_SEGMENTS as f64;
+            centre - out_dir * (radius * t.cos()) + along * (radius * t.sin())
+        })
+        .collect();
+    // Up past the outside, so no skin of metal is left over the scallop.
+    let up = out_dir * (s.diameter + 1.0);
+    poly.push(b + up);
+    poly.push(a + up);
+    Some(poly)
 }
 
 /// A round diamond melee as `GEM` reads it.
