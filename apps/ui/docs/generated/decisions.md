@@ -973,3 +973,30 @@ notice first. Local styles only; no token, component or wording changed.
   put a value 40 characters from its name ("Wall, in mm" ... "1.8"). They are `sm` (52ch), so the
   name and value read as one line and the refusal under a field stands near it. Drafting Settings
   keeps `md`: its Object Snap page wraps to more rows at `sm` and every page takes its height.
+
+## The four views and the handles (2026-11-13)
+
+- **Four views on one context, not four canvases.** The 3D tab tiles Top, Perspective, Front and
+  Right on its one canvas: each pane is a scissored viewport of a store kept between frames
+  (`preserveDrawingBuffer`), so a pane is drawn only when its eye or the piece changed. Four
+  contexts would quadruple the programs and the buffers and run into the browser's few contexts;
+  an offscreen cache per pane would be the same saving with more to go wrong. The pane frames and
+  names are DOM over the canvas that take no pointer; the canvas finds the pane itself
+  (`fourview.ts`, `paneAt`). The workflow (four tiled views, a double-click maximises) is the
+  jewellers' common one; the look is ours: names in the elevated-surface chip of the region
+  labels, the active pane ringed in `--canvas-focus-ring`, the hairline between panes in
+  `--chrome-dark`.
+- **The orthographic panes are flat-shaded with edges.** Realistic stays the Perspective pane's;
+  a measuring view wants a sharp, steady silhouette. Edges take `--text-faint`, the one ink.
+- **Controls added to the 3D bar**: a `Toggle` "4 views" (text, a setting switched in place) and,
+  in four views, a quiet `Button` "Maximise"/"Restore" for the active pane (M). No new component.
+- **A handle is a `role="slider"` element, not a registry component.** It is a grip drawn on the
+  piece at a projected point, in the drawing's own grip inks (`--canvas-focus-ring` at rest,
+  `--canvas-grip-hover`, `--canvas-grip-hot` while held), with a touch-sized hit area round a
+  12 px dot. It carries its name, range and value in millimetres; the arrows nudge, Enter commits,
+  Escape puts it back. Only one placing of each handle takes the Tab stop (the Perspective pane's
+  when it is shown); the same handle on another pane is `aria-hidden`.
+- **The number in hand** stands beside the pointer on the elevated surface (`.view3d-drag`), flips
+  to the other side near the stage's right or bottom edge, and is a polite status: the value, what
+  it was, and the checks it would break in `--error`, or "Checks pass" in `--text-faint`. The gizmo
+  hides while a handle is held, so the words are never under it.

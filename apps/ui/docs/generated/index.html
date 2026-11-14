@@ -2641,6 +2641,17 @@ export default function InStatusBar() {
 <p>  label; it is now a word beside the title in <code>--warn</code> at 600 (8.79:1 dark on   <code>--surface-elevated</code>, 4.53:1 light). Same wording.</p>
 <ul><li><strong>The small field dialogs are small.</strong> Ring, Stone and Price book were the medium width, which</li></ul>
 <p>  put a value 40 characters from its name (&quot;Wall, in mm&quot; ... &quot;1.8&quot;). They are <code>sm</code> (52ch), so the   name and value read as one line and the refusal under a field stands near it. Drafting Settings   keeps <code>md</code>: its Object Snap page wraps to more rows at <code>sm</code> and every page takes its height.</p>
+<h3 id="decisions-the-four-views-and-the-handles-2026-11-13">The four views and the handles (2026-11-13)</h3>
+<ul><li><strong>Four views on one context, not four canvases.</strong> The 3D tab tiles Top, Perspective, Front and</li></ul>
+<p>  Right on its one canvas: each pane is a scissored viewport of a store kept between frames   (<code>preserveDrawingBuffer</code>), so a pane is drawn only when its eye or the piece changed. Four   contexts would quadruple the programs and the buffers and run into the browser's few contexts;   an offscreen cache per pane would be the same saving with more to go wrong. The pane frames and   names are DOM over the canvas that take no pointer; the canvas finds the pane itself   (<code>fourview.ts</code>, <code>paneAt</code>). The workflow (four tiled views, a double-click maximises) is the   jewellers' common one; the look is ours: names in the elevated-surface chip of the region   labels, the active pane ringed in <code>--canvas-focus-ring</code>, the hairline between panes in   <code>--chrome-dark</code>.</p>
+<ul><li><strong>The orthographic panes are flat-shaded with edges.</strong> Realistic stays the Perspective pane's;</li></ul>
+<p>  a measuring view wants a sharp, steady silhouette. Edges take <code>--text-faint</code>, the one ink.</p>
+<ul><li><strong>Controls added to the 3D bar</strong>: a <code>Toggle</code> &quot;4 views&quot; (text, a setting switched in place) and,</li></ul>
+<p>  in four views, a quiet <code>Button</code> &quot;Maximise&quot;/&quot;Restore&quot; for the active pane (M). No new component.</p>
+<ul><li><strong>A handle is a <code>role=&quot;slider&quot;</code> element, not a registry component.</strong> It is a grip drawn on the</li></ul>
+<p>  piece at a projected point, in the drawing's own grip inks (<code>--canvas-focus-ring</code> at rest,   <code>--canvas-grip-hover</code>, <code>--canvas-grip-hot</code> while held), with a touch-sized hit area round a   12 px dot. It carries its name, range and value in millimetres; the arrows nudge, Enter commits,   Escape puts it back. Only one placing of each handle takes the Tab stop (the Perspective pane's   when it is shown); the same handle on another pane is <code>aria-hidden</code>.</p>
+<ul><li><strong>The number in hand</strong> stands beside the pointer on the elevated surface (<code>.view3d-drag</code>), flips</li></ul>
+<p>  to the other side near the stage's right or bottom edge, and is a polite status: the value, what   it was, and the checks it would break in <code>--error</code>, or &quot;Checks pass&quot; in <code>--text-faint</code>. The gizmo   hides while a handle is held, so the words are never under it.</p>
 </section>
 </body>
 </html>
