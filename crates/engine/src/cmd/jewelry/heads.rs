@@ -44,6 +44,9 @@ pub(super) enum HeadStyle {
     Prong,
     /// A metal collar around the girdle.
     Bezel,
+    /// Prongs joined under the girdle by one or two rails, with an optional under-gallery
+    /// ([`super::basket`]).
+    Basket,
 }
 
 impl HeadStyle {
@@ -51,6 +54,7 @@ impl HeadStyle {
         match self {
             HeadStyle::Prong => "prong",
             HeadStyle::Bezel => "bezel",
+            HeadStyle::Basket => "basket",
         }
     }
     pub(super) fn parse(cmd: &str, v: Option<&serde_json::Value>) -> Result<HeadStyle> {
@@ -59,7 +63,8 @@ impl HeadStyle {
             Some(v) => match v.as_str().map(|s| s.trim().to_ascii_lowercase()).as_deref() {
                 Some("prong" | "prongs") => Ok(HeadStyle::Prong),
                 Some("bezel") => Ok(HeadStyle::Bezel),
-                _ => Err(bad(cmd, "`head` must be prong or bezel")),
+                Some("basket") => Ok(HeadStyle::Basket),
+                _ => Err(bad(cmd, "`head` must be prong, bezel or basket")),
             },
         }
     }
@@ -245,8 +250,13 @@ impl BezelBound {
 
 impl PieceParams {
     /// Whether the piece's stones stand in bezels: a solitaire or three-stone ring asked for them.
+    /// A basket head's rails and under-gallery, when the stones stand in one.
+    pub(super) fn basket(&self) -> Option<(Option<u32>, super::basket::Gallery)> {
+        (self.head == HeadStyle::Basket).then_some((self.prong.rails, self.prong.gallery))
+    }
+
     pub(super) fn bezeled(&self) -> bool {
-        self.head == HeadStyle::Bezel && (matches!(self.kind, PieceKind::Solitaire | PieceKind::ThreeStone) || self.kind.worn())
+        self.head == HeadStyle::Bezel && (matches!(self.kind, PieceKind::Solitaire | PieceKind::ThreeStone) || self.kind.headed())
     }
 
     /// The bezel a stone of this cut, size and depth stands in, or `None` for prongs. Its bottom

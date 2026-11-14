@@ -96,6 +96,7 @@ impl JewelryFacts {
                 Some("pendant") => Some("a pendant"),
                 Some("stud") => Some("a pair of stud earrings"),
                 Some("drop") => Some("a pair of drop earrings"),
+                Some("hoop") => Some("a pair of hoop earrings"),
                 _ => None,
             };
             match worn {
@@ -357,6 +358,7 @@ fn run_techsheet(s: &mut Session, p: &Value) -> Result<Value> {
             Some("pendant") => Some("pendant"),
             Some("stud") => Some("stud earrings, a pair (2 of everything)"),
             Some("drop") => Some("drop earrings, a pair (2 of everything)"),
+            Some("hoop") => Some("hoop earrings, a pair (2 of everything)"),
             _ => None,
         };
         if let Some(what) = worn {

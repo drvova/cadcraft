@@ -226,7 +226,9 @@ pub(super) fn prong_head_volume(p: &PieceParams) -> f64 {
     let rail_r = 0.7 * r;
     let sites: Vec<Vec2> = p.prong_sites().unwrap_or_default().into_iter().filter(|s| s.is_finite()).collect();
     let styled = prongs::styled_sites(cut, l, wd, &sites, p.prong.style, head.prong);
-    let rail_h = -(girdle / 2.0 + 0.5 * pavilion);
+    let basket = p.head == super::heads::HeadStyle::Basket;
+    let fractions = super::basket::rail_fractions(basket, p.prong.rails);
+    let rail_h = |f: f64| super::basket::rail_height(girdle, pavilion, f);
     let tip_h = head.prong_height() - head.girdle_height() - r;
     let (_, foot_h) = super::findings::foot(p, Vec2::ZERO);
     let spec = p.top_spec(&head, l.min(wd), cut);
@@ -236,6 +238,9 @@ pub(super) fn prong_head_volume(p: &PieceParams) -> f64 {
     let along = if wd > l { Vec2::new(1.0, 0.0) } else { Vec2::new(0.0, 1.0) };
     let under = |q: Vec2| if q.dot(along) >= 0.0 { along * keel } else { along * -keel };
     let mut v = 0.0;
+    // Every wire the under-gallery may pass through: the legs and the rails.
+    let mut wires: Vec<(Vec<Vec3>, f64, bool)> = Vec::new();
+    let mut legs: Vec<super::basket::Leg> = Vec::new();
     for site in &styled {
         let dir = site.at.normalized();
         if dir.len() < 0.5 {
@@ -244,8 +249,13 @@ pub(super) fn prong_head_volume(p: &PieceParams) -> f64 {
         let foot = site.at * PRONG_FOOT;
         let mut path = vec![Vec3::new(foot.x, foot.y, foot_h)];
         if !cab {
-            let q = site.at.lerp(under(site.at), 0.5) + dir * (1.2 * rail_r);
-            path.push(Vec3::new(q.x, q.y, rail_h));
+            for (i, f) in fractions.iter().enumerate() {
+                let q = site.at.lerp(under(site.at), *f) + dir * (1.2 * rail_r);
+                path.push(Vec3::new(q.x, q.y, rail_h(*f)));
+                if i == 0 {
+                    legs.push(super::basket::Leg { foot: Vec3::new(foot.x, foot.y, foot_h), rail: Vec3::new(q.x, q.y, rail_h(*f)), site: site.at });
+                }
+            }
         }
         path.push(Vec3::new(site.at.x, site.at.y, 0.0));
         let round = prongs::is_round(p.prong.style, site);
@@ -255,6 +265,9 @@ pub(super) fn prong_head_volume(p: &PieceParams) -> f64 {
         }
         let smooth = super::mesh::smooth_path(&path, 8);
         v += wire(&seat, site, &smooth, r);
+        if basket {
+            wires.push((smooth.clone(), r, false));
+        }
         if round {
             if let Some(end) = smooth.last() {
                 v += cap(&seat, site, *end, r);
@@ -265,14 +278,35 @@ pub(super) fn prong_head_volume(p: &PieceParams) -> f64 {
             v += top(&seat, site, &prongs::top_parts(&plane, site, &spec), leg, r);
         }
         if !cab {
-            v -= crossing(rail_r, r);
+            v -= fractions.len() as f64 * crossing(rail_r, r);
         }
     }
     if !cab {
-        // The rail: half-way down the pavilion, just outside it.
-        let len = 0.5 * ellipse_perimeter(l, wd) + 2.0 * keel + TAU * 1.2 * rail_r;
-        let d = 1.2 * rail_r / seat.slope() - CLEARANCE;
-        v += len * (PI * rail_r * rail_r - segment(rail_r, d));
+        // Each rail: a fraction of the way down the pavilion, just outside it.
+        for f in fractions {
+            let len = (1.0 - f) * ellipse_perimeter(l, wd) + 4.0 * f * keel + TAU * 1.2 * rail_r;
+            let d = 1.2 * rail_r / seat.slope() - CLEARANCE;
+            v += len * (PI * rail_r * rail_r - segment(rail_r, d));
+        }
+    }
+    if basket && !cab {
+        // The under-gallery: each wire less what of it the legs and the lowest rail hold.
+        let outline: Vec<Vec2> = super::piece_params::girdle_outline(cut, l, wd)
+            .unwrap_or_else(|| (0..64).map(|k| TAU * f64::from(k) / 64.0).map(|a| Vec2::new(wd / 2.0 * a.cos(), l / 2.0 * a.sin())).collect());
+        let low = fractions.first().copied().unwrap_or(0.5);
+        let rail: Vec<Vec3> = outline
+            .iter()
+            .map(|q| {
+                let out = q.normalized();
+                let at = q.lerp(under(*q), low) + out * (1.2 * rail_r);
+                Vec3::new(at.x, at.y, rail_h(low))
+            })
+            .collect();
+        wires.push((rail.clone(), rail_r, true));
+        let others: Vec<(&[Vec3], f64, bool)> = wires.iter().map(|(p, r, c)| (p.as_slice(), *r, *c)).collect();
+        for g in super::basket::gallery_wires(p.prong.gallery, &legs, Vec2::ZERO, &rail, super::basket::DROP * pavilion, 3.0 * r) {
+            v += super::basket::wire_outside(&g, rail_r, &others);
+        }
     }
     // The base: a ring through the feet, and a spoke from each foot to the middle.
     let mut feet: Vec<Vec2> = sites.iter().map(|s| *s * PRONG_FOOT).collect();

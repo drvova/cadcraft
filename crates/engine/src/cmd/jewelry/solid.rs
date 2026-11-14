@@ -306,6 +306,8 @@ pub(super) enum Prim {
     Channel(super::channel::ChannelBound),
     /// A band's generative pattern cut ([`super::pattern::PatternCut::distance`]).
     Pattern(Box<super::pattern::PatternCut>),
+    /// A hoop earring's wire, open at its gap ([`super::hoop::HoopBound`]).
+    Hoop(Box<super::hoop::HoopBound>),
 }
 
 /// Edges of a section taken together for [`Section::dist`].
@@ -423,6 +425,7 @@ impl Prim {
             Prim::Prong(prong) => prong.distance(p),
             Prim::Channel(c) => c.distance(p),
             Prim::Pattern(c) => c.distance(p),
+            Prim::Hoop(h) => h.distance(p),
         };
         if v.is_nan() { f64::INFINITY } else { v }
     }
@@ -486,6 +489,7 @@ impl Prim {
             Prim::Prong(prong) => prong.bounds(),
             Prim::Channel(c) => c.bounds(),
             Prim::Pattern(c) => c.bounds(),
+            Prim::Hoop(h) => h.bounds(),
         }
     }
 }

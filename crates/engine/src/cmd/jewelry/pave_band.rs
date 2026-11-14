@@ -361,8 +361,8 @@ pub(super) struct Surface {
 
 impl Surface {
     pub(super) fn of(p: &PieceParams) -> Option<Surface> {
-        let section = p.section();
-        let ri = p.inner() / 2.0;
+        // A hoop's pavé runs along its own wire, not a ring's band ([`super::hoop`]).
+        let (section, ri) = if p.kind == PieceKind::Hoop { super::hoop::pave_surface(p) } else { (p.section(), p.inner() / 2.0) };
         let half = section.width / 2.0;
         if !(ri.is_finite() && half.is_finite() && ri > 0.0 && half > 0.0 && section.wall.is_finite() && section.wall > 0.0) {
             return None;
@@ -776,6 +776,9 @@ fn runs(spec: &PaveSpec, head: f64, close: f64) -> Vec<Run> {
 /// Where the pavé must start beside the head: the angle (radians) of the span's edge at which a
 /// stone of `d` at the crown clears the head's outline; 0 for a plain band.
 fn head_edge(p: &PieceParams, surf: &Surface, d: f64, gap: f64) -> f64 {
+    if p.kind == PieceKind::Hoop {
+        return super::hoop::closure_edge(p, surf, gap);
+    }
     if !matches!(p.kind, PieceKind::Solitaire | PieceKind::ThreeStone) {
         return 0.0;
     }

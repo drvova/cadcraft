@@ -83,6 +83,23 @@ fn draw_head(
                 shapes.push((On::Settings, Shape::Poly { v: line.into_iter().map(|q| (q, 0.0)).collect(), closed: false }));
             }
             shapes.push((On::Settings, rect(so + Vec2::new(base, 0.0), head.prong, 2.0 * shared::PRONG_FOOT * l + head.prong)));
+            if let Some((rails, gallery)) = p.basket() {
+                // A basket's rails and under-gallery in the side view (its X the depth, its Y up
+                // the piece): the mark's across runs along Y.
+                let (mid, pav) = (head.girdle_height(), shared::proportions(head.depth).2);
+                let marks = super::super::basket::side_marks(
+                    gallery,
+                    rails,
+                    head.girdle,
+                    pav,
+                    Vec2::new(shared::PRONG_FOOT * l, base - mid),
+                    Vec2::new(l, girdle_bottom - mid),
+                );
+                for m in marks {
+                    let v = m.into_iter().map(|(q, b)| (so + Vec2::new(mid + q.y, q.x), -b)).collect();
+                    shapes.push((On::Settings, Shape::Poly { v, closed: false }));
+                }
+            }
         }
     }
     if centre && let (Some(sites), Some(_)) = (p.halo_sites(), p.haloed()) {
@@ -143,6 +160,9 @@ fn fronts(p: &PieceParams, lay: &findings::Layout) -> Vec<Vec2> {
 
 /// Work a pendant or a pair of earrings out from its parameters.
 pub(super) fn design(p: &PieceParams) -> Result<Design> {
+    if p.kind == PieceKind::Hoop {
+        return super::piece_hoop::design(p);
+    }
     let stone = p.centre_stone(CMD)?;
     if let Some(h) = p.haloed()
         && p.halo_sites().is_none()
@@ -261,6 +281,9 @@ fn front_of(s: &Shape, so: Vec2) -> bool {
 /// The block's outline: a frame around the front view(s), so `TECHSHEET` and a rebuild find the
 /// piece by its insert.
 pub(super) fn block_outline(p: &PieceParams) -> EntityKind {
+    if p.kind == PieceKind::Hoop {
+        return super::piece_hoop::block_outline(p);
+    }
     let lay = findings::layout(p);
     let fronts = fronts(p, &lay);
     let left = fronts.first().map_or(0.0, |o| o.x) - lay.across - 1.0;
@@ -274,6 +297,9 @@ pub(super) fn block_outline(p: &PieceParams) -> EntityKind {
 /// the whole piece (both of a pair) and how many pieces.
 pub(super) fn record(d: &Design) -> String {
     let p = &d.params;
+    if p.kind == PieceKind::Hoop {
+        return super::piece_hoop::record(d);
+    }
     let mut out = format!("ring: piece={}, metal={}, grams={:.2}, pieces={}", p.kind.name(), p.metal, d.grams, findings::pieces(p));
     if p.head == HeadStyle::Bezel {
         out.push_str(&format!(", head=bezel, bezelGrams={:.2}", p.bezel_grams() * f64::from(findings::pieces(p))));
@@ -287,9 +313,18 @@ pub(super) fn record(d: &Design) -> String {
 /// One line a jeweler reads.
 pub(super) fn line(d: &Design) -> String {
     let p = &d.params;
+    if p.kind == PieceKind::Hoop {
+        return super::piece_hoop::line(d);
+    }
     let w = &p.worn;
     let n = findings::pieces(p);
-    let held = if p.bezeled() { "a bezel".to_string() } else { format!("{} prongs", p.prongs) };
+    let held = if p.bezeled() {
+        "a bezel".to_string()
+    } else if p.basket().is_some() {
+        format!("a {}-prong basket", p.prongs)
+    } else {
+        format!("{} prongs", p.prongs)
+    };
     let stone = d.centre.as_ref().map_or(String::new(), |c| {
         let size = if (c.length - c.width).abs() < 1e-6 {
             format!("{} mm", fmt_mm(c.width))

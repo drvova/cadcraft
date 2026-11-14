@@ -205,6 +205,11 @@ fn the_prong_head_estimate_is_within_ten_percent_of_the_cast_solid() {
         ("stud", 4.0, 4, json!({})),
         ("pendant", 8.0, 4, json!({"prongStyle": "claw"})),
         ("stud", 5.0, 4, json!({"cut": "princess", "prongStyle": "v"})),
+        // Basket heads: their rails and under-gallery weighed from their parts too.
+        ("pendant", 6.5, 4, json!({"head": "basket"})),
+        ("pendant", 7.0, 6, json!({"head": "basket", "basketRails": 1, "gallery": "arches"})),
+        ("stud", 5.0, 4, json!({"head": "basket", "gallery": "scallop"})),
+        ("pendant", 6.0, 4, json!({"head": "basket", "gallery": "arches", "cut": "oval", "stoneLength": 8})),
     ] {
         let mut v = json!({"kind": kind, "stoneWidth": w, "stoneLength": w, "prongs": prongs, "metal": "gold18"});
         for (k, x) in extra.as_object().unwrap() {
@@ -235,6 +240,10 @@ fn measure_prong_head_estimate_against_the_cast_solid() {
         ("stud", 6.0, 4, json!({"cut": "princess", "prongStyle": "v"})),
         ("pendant", 6.0, 4, json!({"cut": "oval", "stoneLength": 8})),
         ("pendant", 8.0, 4, json!({"cut": "cabochon", "stoneLength": 10})),
+        ("pendant", 6.5, 4, json!({"head": "basket"})),
+        ("pendant", 6.5, 6, json!({"head": "basket", "basketRails": 1, "gallery": "arches"})),
+        ("stud", 5.0, 4, json!({"head": "basket", "gallery": "scallop"})),
+        ("pendant", 6.0, 4, json!({"head": "basket", "gallery": "arches", "cut": "oval", "stoneLength": 8})),
     ] {
         let mut v = json!({"kind": kind, "stoneWidth": w, "stoneLength": w, "prongs": prongs, "metal": "gold18"});
         for (k, x) in extra.as_object().unwrap() {

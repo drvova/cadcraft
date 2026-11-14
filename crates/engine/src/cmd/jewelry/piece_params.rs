@@ -120,10 +120,12 @@ pub(super) enum PieceKind {
     Stud,
     /// A pair of drop earrings: a hanging head on a jump ring under a hook or a stud top.
     Drop,
+    /// A pair of hoop earrings: a wire hoop with a hinged post or a click-top ([`super::hoop`]).
+    Hoop,
 }
 
 /// The kinds, as a refusal lists them.
-pub(super) const KINDS: &str = "band, solitaire, threestone, eternity, halfeternity, dome, signet, pendant, stud or drop";
+pub(super) const KINDS: &str = "band, solitaire, threestone, eternity, halfeternity, dome, signet, pendant, stud, drop or hoop";
 
 impl PieceKind {
     pub(super) fn name(self) -> &'static str {
@@ -138,6 +140,7 @@ impl PieceKind {
             PieceKind::Pendant => "pendant",
             PieceKind::Stud => "stud",
             PieceKind::Drop => "drop",
+            PieceKind::Hoop => "hoop",
         }
     }
     fn parse(cmd: &str, s: &str) -> Result<Self> {
@@ -152,6 +155,7 @@ impl PieceKind {
             "pendant" => Ok(PieceKind::Pendant),
             "stud" | "studs" => Ok(PieceKind::Stud),
             "drop" | "drops" | "dangle" => Ok(PieceKind::Drop),
+            "hoop" | "hoops" | "huggie" | "huggies" => Ok(PieceKind::Hoop),
             _ => Err(bad(cmd, format!("`kind` must be {KINDS}"))),
         }
     }
@@ -238,9 +242,11 @@ impl Profile {
 /// The ring-only keys a worn piece keeps but does not use, each read as a ring reads it and
 /// written back in its own JSON; a key that does not read (or reads as none) is not kept, as
 /// before, so a worn piece never refuses what it does not use.
-fn held_ring_keys(cmd: &str, p: &Value) -> Map<String, Value> {
+fn held_ring_keys(cmd: &str, p: &Value, hoop: bool) -> Map<String, Value> {
     let mut out = Map::new();
-    if let Ok(Some(s)) = super::pave_band::PaveSpec::parse(cmd, p) {
+    if let Ok(Some(s)) = super::pave_band::PaveSpec::parse(cmd, p)
+        && !hoop
+    {
         out.insert("pave".into(), s.json());
     }
     if let Ok(Some(s)) = super::pattern::PatternSpec::parse(cmd, p) {
@@ -352,6 +358,8 @@ pub(super) struct PieceParams {
     pub channel: super::channel::ChannelSpec,
     /// A pendant's or earrings' findings: bail, post, jump ring, ear wire ([`super::findings`]).
     pub worn: super::findings::Worn,
+    /// Hoop earrings: the hoop's size, wire and closure ([`super::hoop`]), read whatever the kind.
+    pub hoop: super::hoop::HoopSpec,
 }
 
 /// The most stones an eternity band may be asked for.
@@ -482,7 +490,8 @@ impl PieceParams {
         let face_width = mm_in(cmd, p, "faceWidth", 10.0, 4.0, 30.0)?;
         let worn = super::findings::Worn::parse(cmd, p)?;
         // A piece off the finger has no band to carry pavé.
-        let pave = if kind.worn() { None } else { super::pave_band::PaveSpec::parse(cmd, p)? };
+        // A hoop carries it along its own wire ([`super::hoop`]).
+        let pave = if kind.worn() && kind != PieceKind::Hoop { None } else { super::pave_band::PaveSpec::parse(cmd, p)? };
         // Nor a shank to shape, engrave or pattern: those keys are a ring's, not used off the
         // finger (the reply says so, as for pavé: [`super::findings::ignored`]).
         let ring = !kind.worn();
@@ -529,9 +538,13 @@ impl PieceParams {
             pattern: if ring { super::pattern::PatternSpec::parse(cmd, p)? } else { None },
             engrave: if ring { super::engrave::EngraveSpec::parse(cmd, p)? } else { None },
             hallmark: if ring { super::hallmark::HallmarkSpec::parse(cmd, p)? } else { None },
-            held: if ring { Map::new() } else { held_ring_keys(cmd, p) },
+            held: if ring { Map::new() } else { held_ring_keys(cmd, p, kind == PieceKind::Hoop) },
+            hoop: super::hoop::HoopSpec::parse(cmd, p)?,
         };
         super::shank::settle(cmd, &mut params)?;
+        if kind == PieceKind::Hoop {
+            super::hoop::refuse(cmd, &params)?;
+        }
         Ok(params)
     }
 
@@ -596,6 +609,7 @@ impl PieceParams {
             self.prong.json_into(o);
             self.channel.json_into(o);
             self.worn.json(o);
+            self.hoop.json_into(o);
             for (k, v) in &self.held {
                 o.insert(k.clone(), v.clone());
             }
@@ -1005,7 +1019,7 @@ impl PieceParams {
         let section = self.section();
         let band = match self.kind {
             PieceKind::Dome | PieceKind::Signet => self.taper_volume(),
-            PieceKind::Pendant | PieceKind::Stud | PieceKind::Drop => super::findings::worn_volume(self),
+            PieceKind::Pendant | PieceKind::Stud | PieceKind::Drop | PieceKind::Hoop => super::findings::worn_volume(self),
             _ => TAU * (self.inner() / 2.0 + section.centroid()) * section.area() - super::pattern::removed(self),
         };
         // Lettering cut in takes metal away; raised letters add it.
@@ -1456,7 +1470,7 @@ impl PieceParams {
     /// Whether the centre stone has a halo: a solitaire asked for one. (A three-stone ring has
     /// none: its side stones stand where a halo would be.)
     pub(super) fn haloed(&self) -> Option<f64> {
-        self.halo.filter(|_| self.kind == PieceKind::Solitaire || self.kind.worn())
+        self.halo.filter(|_| self.kind == PieceKind::Solitaire || self.kind.headed())
     }
 
     /// The centre stone's head (a solitaire's, a three-stone ring's).

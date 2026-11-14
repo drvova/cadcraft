@@ -218,7 +218,7 @@ fn refusals_are_sentences() {
         (json!({"kind": "stud", "postLength": 99}), "`postLength` must be"),
         (json!({"kind": "drop", "top": "clip"}), "`top` must be hook or stud"),
         (json!({"kind": "pendant", "drop": 3}), "`drop` must be true or false"),
-        (json!({"kind": "brooch"}), "`kind` must be band, solitaire, threestone, eternity, halfeternity, dome, signet, pendant, stud or drop"),
+        (json!({"kind": "brooch"}), "`kind` must be band, solitaire, threestone, eternity, halfeternity, dome, signet, pendant, stud, drop or hoop"),
     ] {
         let e = s.execute("piece", &p).unwrap_err().to_string();
         assert!(e.contains(words), "{p}: {e}");

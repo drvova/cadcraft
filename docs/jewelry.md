@@ -605,6 +605,104 @@ rows; the heading reads "Stud earrings · pair" and the summary has a "Pair" til
 Gallery has Pendants (halo, bezel drop), Stud earrings (bezel, four-prong) and Drop earrings (pear
 on French wires, stud-top). The 3D tab offers only the stone's and the halo's handles.
 
+### Hoop earrings
+
+`PIECE {kind: hoop}` builds a **pair of hoops** (`hoop.rs`; the sheet `piece_hoop.rs`, the solid
+`mesh_hoop.rs`). A hoop has no head: its stones, when it has any, are pavé or a channel along its
+outside. It lies in the ring's frame — its plane XY, its axis Z, its top (where it closes) at +Y,
+angles clockwise from the top — and its **front**, the side that faces forward when the post is
+through the ear, is the +X side from the top round to the bottom (0°–180°).
+
+| Key | What it is | Default |
+|---|---|---|
+| `hoopDiameter` | across the outside, 6–80 mm | 20 |
+| `hoopThickness` | from the inside to the outside, 0.5–8 mm, at most half the diameter less 2 mm | 2 |
+| `hoopWidth` | along the axis (square and knife only), 0.5–12 mm | the thickness |
+| `hoopSection` | `round`, `square`, `knife` (flat inside, a ridge 60 % of the thickness high outside) or `tube` | round |
+| `hoopWall` | a tube's wall, 0.1–3 mm, under half the thickness | 0.35 |
+| `closure` | `post` (a hinged post) or `click` (a click-top) | post |
+| `hoopGap` | the post's opening, along the chord between the two ends' middles, 0.3–10 mm | 1 |
+| `postDiameter` | the hinged post | 0.8 |
+| `pave` | a band's pavé or channel, laid on the hoop's outside | none |
+
+**The closure.** A hinged post runs straight from 1.5 mm inside one end across the gap and into a
+hole in the other end 0.1 mm wider than the post and 1.8 mm deep (the hole is drilled in the cast
+solid, so the post and the hoop it is hinged to are one body). A click-top is the hoop whole: its
+hinge knuckle is a barrel across the wire at the top, 0.2 mm proud of it all round, and the click's
+seam lies 50° behind the top — drawn on the sheet and cut at the bench, not in the cast solid. An
+open tube's ends are closed with solid metal for 1 mm, which holds the post and takes its hole.
+
+**Pavé along the front.** `pave` is a band's (`layout`, `rows`, `melee`, `gap`, spans,
+`graduated`, the channel's `channelWall` and `channelLip`), laid as on a band whose finger is the
+hoop's inside circle and whose section is the hoop's: a round or tube wire's outside is a dome
+band's half-round, a square's flat, a knife's the knife band's. Its angles are the hoop's, so
+`{from: 0, to: 180, symmetric: false}` is the front arc from the closure to the bottom, and a
+symmetric span is mirrored onto the back. Stones keep clear of the closure as a ring's pavé keeps
+clear of its head: the first girdle stands past the post's hole (or the knuckle) by the pavé's gap
+or 0.2 mm, whichever is more.
+
+**Weight.** One hoop is the section's exact area swept round the arc at its centroid (Pappus,
+less the gap; a knife's centroid is its rectangle's and ridge's together), less the post's hole,
+plus the post's run across the gap and, for a click-top, the knuckle's metal outside the wire (a
+grid of samples through the barrel); a tube's capped ends add their plugs. The seats are not taken
+off, as a band's are not. `metal.grams` is the pair's; `metal.eachGrams` one hoop's. Against the
+cast solid (`STLOUT` at the draft step) every section and both closures read within 10 %
+(`hoop_tests::every_section_and_closure_builds_a_closed_solid_within_ten_percent_of_its_weight`).
+
+**Checks.** `hoop-wall`: a solid wire at least 0.8 mm at its thinnest (a square's or knife's lesser
+side, a knife's flank), a tube's wall at least 0.3 mm. `post`: 0.7–1.0 mm (what an ear piercing
+takes) and its hole leaving at least 0.25 mm of metal in the end it goes into (in a tube, the bore
+must take it); a click-top passes. With pavé, `pave`, the channel's `channel-lip` and
+`channel-wall`, `calibrated` and, on a click-top, `click-seam` (no stone across the seam). A
+wire too thick for its hoop, a tube's wall that leaves no bore or a gap too wide for the hoop is
+refused, the key named. These are this project's approximation of usual bench figures.
+
+**The sheet, the bench and the solid.** The sheet draws both hoops' front views (the wire with its
+gap, the post and its hole, or the knuckle and seam, and the stones' side profiles round the
+outside), the section with a stone in its seat, the hoop edge-on, and under each hoop its pavé
+layout with every stone a `GEM` insert, so the bench counts both hoops' stones. The record says
+`piece=hoop, pieces=2, hoop=20x2 round, closure=post`; `TECHSHEET` writes "hoop earrings, a pair (2
+of everything)". `PIECEMESH` builds the two hoops side by side along X; the hoop is the `band`
+part, the post and knuckle `findings`; `STLOUT` casts two bodies, each one closed shell.
+
+**In the interface.** The Piece panel shows a hoop's groups — Piece (kind, metal), Hoop (diameter,
+section, thickness, width or tube wall), Findings (closure, gap, post) and Pavé — and no stone,
+head or ring rows; the heading reads "Hoop earrings · pair". The 3D tab's handle drags the hoop's
+diameter. The Template Gallery's Hoop earrings group holds plain hinged hoops and click-top pavé
+hoops.
+
+### Basket heads
+
+`head: basket` holds a stone in a **basket**: the prong head (its `prongs`, `prongStyle`,
+`prongHeight`, `prongTip`, `prongWire`, seat and culet hole unchanged) with its prongs joined under
+the girdle by rails, and an optional under-gallery between them (`basket.rs`). It works wherever a
+prong head does: a solitaire, a three-stone ring (every head), a pendant, studs and drops.
+
+- **Rails** (`basketRails`: 1 or 2, default 2): round wires of 0.7 prong wires' diameter (the
+  plain head's gallery rail), each running round the pavilion a fraction of the way from the
+  girdle's underside to the culet or keel, its axis 1.2 of its radius outside the pavilion: one
+  rail at 30 %, two at 20 % and 60 %. Each prong's leg runs from its foot up through every rail.
+- **Under-gallery** (`gallery`: `plain`, `arches` or `scallop`, default plain): between two
+  neighbouring prongs (a double prong's pair counts as one), under the lowest rail — arches rise
+  from each leg 30 % of the pavilion's depth under the rail to touch it half-way between the
+  prongs; scallops hang from the rail at each prong and fall 30 % of the pavilion's depth half-way
+  between them. Each is a quadratic Bézier of the rail's wire.
+
+The sheet draws the rails as lines between the two prongs the front view (a ring) or the side view
+(a pendant, studs, drops) shows, and the under-gallery as one arc between them. A ring's
+`metal.prongGrams` adds each rail and the under-gallery; off the finger the head is weighed from its
+parts as a prong head is (`head_metal.rs`): each rail as the plain rail less its share in the seat,
+each prong through every rail, and each under-gallery wire sampled on its section along its path,
+less what of it lies in the legs and the lowest rail. Measured against the cast solid
+(`cross_tests::measure_prong_head_estimate_against_the_cast_solid`; the head alone in brackets): a
+6.5 mm four-prong two-rail basket pendant 0.99× (0.98×), a six-prong one-rail arched basket 0.98×
+(0.96×), a 5 mm scalloped basket stud pair 0.97× (0.97×), an 8×6 mm oval arched basket pendant
+1.02× (1.00×); `cross_tests::the_prong_head_estimate_is_within_ten_percent_of_the_cast_solid` holds
+all four to 10 % on every run. In the Piece panel the Head group adds Basket rails and
+Under-gallery under a basket head; the Template Gallery has a Basket Solitaire (four prongs, two
+rails, arches, platinum).
+
+
 ### Generative patterns on the band
 
 What a Rhino jeweller builds as a Grasshopper definition (a Voronoi ring, a honeycomb lattice, Truchet tiles, waves) is here a parameter of the band, a handful of numbers and a seed: `PIECE {kind: "band", pattern: {voronoi: {cells, seed, jitter?, wall?, rim?, depth?, relief?}}}`, or `{hex: {size}}`, `{wave: {count, amplitude?}}`, `{truchet: {tile, seed, depth}}`. Without `depth` the pattern is pierced through; with it, it is relief on the outside, the lines `raised` (the cells sunk) or `recessed` (the lines sunk as grooves). The code is `crates/engine/src/cmd/jewelry/pattern.rs` (the layout, the field, the check) and `voronoi.rs` (the diagram); tests `pattern_tests.rs`.
@@ -838,6 +936,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | `PIECE` kind `hoop`: a pair of hoop earrings (round, square, knife or tube wire; a hinged post or a click-top; pavé or a channel along the front kept clear of the closure), weighed exactly and within 10 % of the cast solid, checks `hoop-wall`, `post`, `click-seam`, the sheet, the solid, the Piece panel's Hoop group, a hoop-diameter handle, templates, the bench's pair. `head: basket`: one or two rails under the girdle and an under-gallery (plain, arches, scallop) on rings, pendants and earrings, drawn, built, weighed (within 10 % of the cast solid off the finger), a Basket Solitaire template |
 | 2026-11-14 | patch | A worn piece's prong head is weighed from its parts (seat, overlaps, styled tops; `head_metal.rs`): within 10 % of the cast solid where it read 37–53 % heavy, checked on every run; the Piece panel's metal weight is the whole piece's as the Bench sheet's (band, prongs and rail, channel rails), said so; the Twisted cable row is not offered on a band with pavé or a channel; a pendant's or earrings' ring-only keys (`rail`, `shank`, `pattern`, `engrave`, `hallmark`, `pave`) are kept, unused, and come back with a ring |
 | 2026-11-14 | minor | Save Render in the 3D tab: a still PNG (to 4096 px, square or 16:9, studio, light or transparent, held to the GPU's limits), a turntable (WebM via MediaRecorder, or an animated PNG of our own writing) and a contact sheet with the Tech Sheet's facts |
 | 2026-11-14 | minor | `STLOUT`: vertices projected onto the true surface; scallops cut; `sprue` and `shrink`; display-mesh notes made accurate |

@@ -29,7 +29,7 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 | Split shank, double shank, bypass, cathedral shoulders | `piece {shank:{split:2\|3, gap, from, cathedral, height}}`, the Piece panel's Shank group, templates | split and cathedral done (solitaire); double shank and bypass planned (J10) |
 | Twisted cable, braided bands | `piece {kind:"band", pattern:{twist:{strands, turns, wire}}}`, template Cable Band | twisted cable done (2–3 strands); braids planned (J11) |
 | Text and names on a band; hallmark | `piece {engrave: {text, at: inside|outside, style: cut|raised, font: block|script}, hallmark: true|{maker}}` | done (2026-11-14): CADCraft's own stroke font cut as round-bottomed grooves wrapped round the band; raised names add metal; fineness from the metal; weight, checks, developed view, 3D view and cast solid. Not yet: outline (filled) fonts, text on a dome or signet's outside, several lines |
-| Earrings, pendants, chains, links | `PIECE` kinds `pendant` (the solitaire head, prongs or bezel, halo optional, with a loop or tube bail sized for a chain; a drop on a jump ring), `stud` (a pair: head and post, bought-in butterfly or scroll back) and `drop` (a pair: a hanging head on a jump ring under a French wire or a stud top); checks bail-opening, bail-wire, jump-ring, jump-ring-wire, post, ear-wire; weight (a prong head within 10 % of the cast solid), carats, sheet, 3D and cast solid count both of a pair; a ring's own keys are kept while worn and come back with a ring; hoops, chains and links not yet | partial |
+| Earrings, pendants, chains, links | `PIECE` kinds `pendant` (the solitaire head, prongs or bezel, halo optional, with a loop or tube bail sized for a chain; a drop on a jump ring), `stud` (a pair: head and post, bought-in butterfly or scroll back) and `drop` (a pair: a hanging head on a jump ring under a French wire or a stud top); checks bail-opening, bail-wire, jump-ring, jump-ring-wire, post, ear-wire; weight (a prong head within 10 % of the cast solid), carats, sheet, 3D and cast solid count both of a pair; a ring's own keys are kept while worn and come back with a ring; `hoop` (a pair: round, square, knife or tube wire, hinged post or click-top, pavé or a channel along the front; weight within 10 % of the cast solid); chains and links not yet | partial |
 
 ## Stones and settings
 
@@ -38,7 +38,8 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 | Gem library (round and fancy cuts) | `gem`, `gemlist`; cuts in `gem.rs` | done; a bench's own library planned (J3) |
 | Stones along a curve | `pave` on a region; pavé on the band | partial |
 | Pavé on a surface: rows, honeycomb, scalloped, auto-spacing | `piece {pave}` | done (scallops cut into the band's sides in the STL) |
-| Prongs: count, shape (round, claw, tab, V), height | `prongs`, `prongStyle` (round, claw, tab, v, double), `prongHeight`, `prongTip`, `prongWire`; the Setting group | done (baskets planned, J9) |
+| Prongs: count, shape (round, claw, tab, V), height | `prongs`, `prongStyle` (round, claw, tab, v, double), `prongHeight`, `prongTip`, `prongWire`; the Setting group | done |
+| Basket heads and under-galleries | `head: basket`, `basketRails` (1 or 2), `gallery` (plain, arches, scallop) on rings, pendants and earrings: sheet, mesh, cast solid, weight (within 10 % off the finger) | done |
 | Channel setting | `pave {layout: "channel"}`, `channelWall`, `channelLip` (sheet, mesh, cast solid, checks) | done |
 | Cutters (seats) for every stone | cut automatically in the cast solid | done |
 | Graduated stones along a row | `pave.graduated` on a pavé or channel row | partial (eternity rows planned, J1) |
@@ -110,6 +111,7 @@ own tests — never from Rhino's binaries, code, interface or artwork.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | Hoop earrings (`kind: hoop`) and basket heads with an under-gallery (`head: basket`) |
 | 2026-11-14 | patch | Earrings and pendants: a prong head's weight within 10 % of the cast solid; ring-only keys kept while worn |
 | 2026-11-14 | minor | `.3dm` read (meshes weighed, curves as profiles) and written (EXPORT3DM) |
 | 2026-11-14 | minor | SubD row: the subdivision-surface foundation landed in `crates/geom` |
