@@ -13,6 +13,7 @@ mod fillet;
 mod intersect;
 mod mat;
 mod nurbs;
+mod nurbs_surface;
 pub mod region;
 mod spline;
 mod spline_fit;
@@ -20,6 +21,10 @@ mod subd;
 mod subd_cage;
 pub mod subd_edit;
 mod subd_limit;
+mod surface_build;
+mod surface_project;
+mod sweep_frame;
+mod tessellate;
 mod vec;
 
 pub use bounds::Bounds2;
@@ -29,11 +34,18 @@ pub use curve::{
 pub use fillet::{CornerFit, TanCurve, tangent_circles};
 pub use intersect::{circle_circle, intersect_ext, intersect_segments, line_circle, line_line, line_line_infinite};
 pub use mat::{Mat3, Mat4};
+pub use nurbs_surface::{
+    MAX_CURVE_POINTS, MAX_SURFACE_DEGREE, MAX_SURFACE_POINTS, NurbsCurve3, NurbsSurface, SurfaceDerivs, SurfaceError, SurfaceResult,
+};
 pub use spline::{MAX_DEGREE as MAX_SPLINE_DEGREE, Spline};
 pub use spline_fit::{FitOptions, KnotParam};
 pub use subd::{MAX_SUBD_LEVELS, subdivide, subdivide_levels};
 pub use subd_cage::{MAX_CAGE_FACES, MAX_CAGE_VERTICES, MAX_FACE_SIDES, SHARP, SubdCage, SubdError, edge_key};
 pub use subd_limit::{BicubicPatch, LimitOptions, SubdMesh, limit_mesh, limit_positions, regular_patch, regular_patches};
+pub use surface_build::{MAX_LOFT_SECTIONS, make_compatible};
+pub use surface_project::ClosestPoint;
+pub use sweep_frame::{Frame, FrameMode, MAX_SWEEP_STATIONS, rail_frames};
+pub use tessellate::{MAX_TESS_TRIANGLES, SurfaceMesh, TessOptions, tessellate};
 pub use vec::{Vec2, Vec3};
 
 /// Geometric tolerance for coincidence tests in drawing units.
@@ -87,5 +99,7 @@ pub fn arc_segments(radius: f64, sweep: f64, tol: f64) -> usize {
 mod property_tests;
 #[cfg(test)]
 mod subd_tests;
+#[cfg(test)]
+mod surface_tests;
 #[cfg(test)]
 mod tests;
