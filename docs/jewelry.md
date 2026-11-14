@@ -299,10 +299,26 @@ dropped. `stones: true` appends the stones as shells of their own.
 - *Resolution.* Fine quality samples at 0.1 mm, draft at 0.2 mm. A file holds at most
   `maxTriangles` (default 150,000, what the interface downloads; up to 1,000,000); a piece that
   needs more is sampled more coarsely and `step` and `notes` say so. At the default cap a usual
-  piece comes out at about 0.18–0.25 mm, which leaves small beads and seat edges visibly stepped;
-  ask for `maxTriangles: 1000000` (about 25–30 MB) for the 0.1 mm solid. Times on this machine
-  (release, native): 0.3–0.5 s at the default cap, 1.0–1.7 s at 0.1 mm for a solitaire, halo,
-  three-stone or eternity.
+  piece comes out at about 0.19–0.29 mm. Every vertex is then moved onto the true surface (up to
+  four Newton steps along the field's gradient, by central differences, at most 0.6 of a step;
+  a move that would turn a triangle over is undone), so curved metal — beads, the band, a dome —
+  is no longer the grid's facets: measured at the default cap, the mean vertex distance from the
+  true surface falls from 0.0014–0.0061 mm to 0.0004–0.0021 mm (3–7×) and the mean at triangle
+  centres by about 25–35 %; vertices whose move would make two triangles cross are put back with
+  the ring round them, so seat rims and tight gaps keep the grid's surface. It costs 0.7–1.9 s more. Sharp edges (seat rims, a flat band's corners) are still
+  chamfered by up to about half a step and look ragged close up; ask for `maxTriangles: 1000000`
+  for the 0.1 mm solid. Times (release, native): 0.9–2.1 s at the default cap.
+- *Scallops.* A scalloped pavé row's scallops — the arcs the sheet draws — are cut into both sides
+  of the band, from the side in to a girdle's width plus 0.1 mm from the row's middle.
+- *Sprue.* `sprue: true | {diameter (2.5), length (6), at (180)}` merges a round sprue standing
+  straight out of the shank (`at` degrees clockwise from 12 o'clock; the default is the bottom,
+  opposite the head), starting half way into the wall. The defaults are our approximation of a
+  usual ring sprue, not a foundry rule. A sprue within 0.3 mm of a stone or any seat is refused
+  (a full eternity has stones all round: no sprue fits it). The reply's weight leaves the sprue out.
+- *Shrinkage.* `shrink: percent` (0–10, default 0) scales the file, sprue included, about the
+  finger's centre by `1 + percent/100`; the reply's volume and grams stay the drawn piece's.
+- *Notes.* `PIECEMESH`'s notes describe its display mesh (parts as separate shells, stones
+  unseated) and say that `STLOUT` writes the merged solid; `STLOUT` leaves those notes out.
 - *Weight.* The reply's `metal.grams` is the merged solid's (band, head, beads, less the seats):
   the metal that is cast. `metal.band` is the band alone, exactly, which is what `PIECE` and the
   bench sheet keep reporting, since it does not depend on sampling. On a plain band the two agree
@@ -625,6 +641,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 | Date | Change | Summary |
 |---|---|---|
 | 2026-11-14 | minor | Save Render in the 3D tab: a still PNG (to 4096 px, square or 16:9, studio, light or transparent, held to the GPU's limits), a turntable (WebM via MediaRecorder, or an animated PNG of our own writing) and a contact sheet with the Tech Sheet's facts |
+| 2026-11-14 | minor | `STLOUT`: vertices projected onto the true surface; scallops cut; `sprue` and `shrink`; display-mesh notes made accurate |
 | 2026-11-14 | minor | `STLOUT`'s merged solid takes the drawn profile, the bezel collar with its stone's seat, the dome's and signet's tapered shank, the signet's face, and seats and beads for half eternity and pavé stones |
 | 2026-11-13 | minor | The 3D tab's four-view workspace (Top, Front, Right orthographic and flat-shaded at one scale; Perspective in its mode; maximise by double-click, M or the bar; remembered; single view under 560 px) on one scissored context, and drag handles on the piece (centre stone, halo melee, eternity stones, wall, width) that preview at draft quality, show the value and the checks it would break, and commit one `piece` change or, with Alt, a proposal; keyboard sliders |
 | 2026-11-13 | minor | `PIECE {profile: {curve: handle}}`: a band profile drawn as a closed curve of the drawing (polyline with bulges, spline, circle, ellipse, region), kept by value with its frame (box bottom on the finger, centred across), width and wall read from it, weight by Pappus, the wall check at its thinnest, the solid revolved from it; the Piece panel names it "Custom (from drawing)" with Update from curve. Rails are not built yet (J8) |

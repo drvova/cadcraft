@@ -37,7 +37,7 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 |---|---|---|
 | Gem library (round and fancy cuts) | `gem`, `gemlist`; cuts in `gem.rs` | done; a bench's own library planned (J3) |
 | Stones along a curve | `pave` on a region; pavé on the band | partial |
-| Pavé on a surface: rows, honeycomb, scalloped, auto-spacing | `piece {pave}` | done (scallops not cut in the solid) |
+| Pavé on a surface: rows, honeycomb, scalloped, auto-spacing | `piece {pave}` | done (scallops cut into the band's sides in the STL) |
 | Prongs: count, shape (round, claw, tab, V), height | `prongs` count | partial |
 | Channel setting | `setting` (2D) | partial (no solid) |
 | Cutters (seats) for every stone | cut automatically in the cast solid | done |
@@ -57,8 +57,8 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 
 | Rhino workflow | CADCraft | Status |
 |---|---|---|
-| One closed mesh for printing (ShrinkWrap) | STL export writes one merged metal solid | done; surface stepped at the default cap |
-| Sprue, supports, shrinkage allowance | | planned |
+| One closed mesh for printing (ShrinkWrap) | STL export writes one merged metal solid, vertices projected onto the true surface | done; sharp edges (seat rims, a flat band's corners) are still chamfered and slightly ragged at the default cap |
+| Sprue, supports, shrinkage allowance | `stlout {sprue, shrink}`; the 3D view's Sprue and shrink pickers by Download STL | partial (a straight round sprue, refused near a stone or seat; no supports or tree) |
 | 2D blueprint with dimensions and sections | the drawing, layouts, Tech Sheet | done |
 | Photoreal render, turntable | Realistic 3D view; Save Render: stills to 4096 px (studio, light, transparent), turntables as WebM or APNG, a contact sheet | partial (rasterised studio, not ray traced: no caustics, no depth of field, no HDRI) |
 | SubD for organic forms (baskets, wavy and twisted shanks, sculpture) | Catmull–Clark cage, creases, limit mesh, volume and edits in `crates/geom` ([subd.md](subd.md)); not yet a drawing object or in the cast solid | partial |
@@ -116,4 +116,5 @@ own tests — never from Rhino's binaries, code, interface or artwork.
 | 2026-11-14 | minor | Behaviours to match, from the public command reference |
 | 2026-11-14 | minor | Interoperability row for `.3dm` (ADR 0003) |
 | 2026-11-14 | minor | The render row: image, turntable and contact sheet export |
+| 2026-11-14 | minor | Making it: STL surface on the true surface, scallops cut, sprue and shrinkage allowance |
 | 2026-11-14 | new | The feature list against Rhino's jewelry workflow, and the no-code rule |

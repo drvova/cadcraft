@@ -210,6 +210,13 @@ const KEY_PAN = 0.1;
 
 /** The display modes as the bar's list. */
 const MODE_OPTIONS = DISPLAY_MODES.map((entry) => ({ value: entry.mode, label: entry.label }));
+/** The STL's sprue: none, or the engine's default sprue at the bottom of the shank. */
+const SPRUE_OPTIONS = [
+  { value: "none", label: "No sprue" },
+  { value: "bottom", label: "Sprue" },
+];
+/** The STL's casting shrinkage allowance, percent. */
+const SHRINK_OPTIONS = ["0", "1", "1.5", "2", "2.5", "3"].map((value) => ({ value, label: value === "0" ? "No shrink" : `+${value}%` }));
 /** How far from the gizmo's middle an axis end stands, of the gizmo's half width. */
 const GIZMO_REACH = 0.7;
 
@@ -248,6 +255,8 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
   const memory = loadView3d();
   const [mode, setMode] = createSignal<DisplayMode>(memory.mode);
   const [labels, setLabels] = createSignal(memory.labels);
+  const [sprue, setSprue] = createSignal("none");
+  const [shrink, setShrink] = createSignal("0");
   const [compact, setCompact] = createSignal(false);
   const [gizmo, setGizmo] = createSignal<GizmoEnd[]>(gizmoEnds(remembered?.camera ?? standardCamera("three-quarter", { center: [0, 0, 0], radius: 10 }, 1)));
   const [onEnd, setOnEnd] = createSignal<AxisEnd["id"] | null>(null);
@@ -697,7 +706,7 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
       props.onNotice(piece.kind === "error" ? piece.message : piece.kind === "empty" ? "there is no piece to save as STL" : "STL export is not in this build");
       return;
     }
-    const env = await props.execute("stlout", { ...piece.params, stones: true, quality: "fine" });
+    const env = await props.execute("stlout", { ...piece.params, stones: true, quality: "fine", sprue: sprue() === "bottom", shrink: Number(shrink()) });
     if (!env.ok) {
       props.onNotice(isUnknownCommand(env.error) ? "STL export is not in this build" : env.error);
       return;
@@ -1425,6 +1434,8 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
             <Toggle variant="text" size="sm" ariaLabel="Region labels" hint="Name the regions of the ring" placement="top" pressed={labels()} onChange={chooseLabels}>
               Labels
             </Toggle>
+            <Select size="sm" ariaLabel="STL sprue" title="A sprue for casting, merged into the STL at the bottom of the shank" value={sprue()} options={SPRUE_OPTIONS} onChange={setSprue} />
+            <Select size="sm" ariaLabel="STL shrinkage" title="Scale the STL up for the metal's casting shrinkage" value={shrink()} options={SHRINK_OPTIONS} onChange={setShrink} />
             <Button variant="quiet" size="sm" title="Save the piece as a file for printing" onClick={() => void downloadStl()}>
               Download STL
             </Button>

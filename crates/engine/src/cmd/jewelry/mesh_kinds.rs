@@ -181,7 +181,7 @@ pub(super) fn build_half_eternity(s: &Sane, d: &Detail, out: &mut Parts) {
         out.notes.push(format!("A {} of {} mm has no usable girdle outline; the stones are shown as rounds.", cut.name, size_json(m)));
     }
     out.notes.push(
-        "The band and the bead prongs are separate closed shells that pass through each other, and no seat is cut for a stone; the bottom of the shank is plain for sizing."
+        "This view draws the band and the bead prongs as separate closed shells that pass through each other, the stones unseated; STLOUT writes the metal as one merged closed solid with a seat cut for every stone. The bottom of the shank is plain for sizing."
             .to_string(),
     );
 }

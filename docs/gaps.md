@@ -196,7 +196,7 @@ and MCP all reach them, and DESCRIBE reads jewelry out of any drawing.
 | # | Gap | Est. |
 |---|---|---|
 | J1 | Elongated melee in a pavé region: oriented fit is done (PAVE `rotate`, GEMFIT `ratio`/`rotate`, fit by the cut's own outline). Left: `taper` rows (graduated sizes along a row), brick rows of elongated cuts do not nest, the default orientation follows the bounding box and not the region's true axis, `largestFitting` is still a round diameter, and the interactive PAVÉ prompt asks for round stones only | 4–8 |
-| J2 | Settings as solids: a parametric band, solitaire and eternity band are solids now (PIECEMESH, STLOUT, a 3D view). Left: STLOUT now writes one merged shell with seats, but at the default 150,000-triangle cap it is sampled at about 0.2 mm (stepped beads and seat edges) and has no sprue; fancy cuts are their girdle tapered, not faceted; pavé scallops are not cut; channels, baskets and under-galleries are 2D only; a drawing that is not a parametric piece has no solid; STL is the only 3D format | 16–28 |
+| J2 | Settings as solids: a parametric band, solitaire and eternity band are solids now (PIECEMESH, STLOUT, a 3D view). Left: STLOUT writes one merged shell with seats, its vertices on the true surface, a sprue and a shrinkage allowance on request, but at the default 150,000-triangle cap (about 0.2 mm) sharp edges (seat rims, flat corners) are still chamfered and ragged (no feature sharpening or decimation yet); no supports or casting tree; fancy cuts are their girdle tapered, not faceted; channels, baskets and under-galleries are 2D only; a drawing that is not a parametric piece has no solid; STL is the only 3D format | 16–28 |
 | J3 | A bench's own stone library: calibrated sizes, dealer girdle data and a house cut list (GEM takes any outline, but nothing imports a library file) | 6–10 |
 | J4 | RINGSIZES measures a drawn ring from JSON (`handle`: a circle, an arc, a closed outline, a RING insert); there is no pick prompt for it at the command line, and the interface has no control for it | 1–2 |
 | J5 | Settings on a heart: at the cleft a bezel's wall is thinner than asked (0.42 mm for 0.48), a halo stone lands over the centre stone and a channel's rail comes inside its distance. The outward offset of a concave corner is not held at its distance (a first repair of the fold is in `setting.rs`, not enough). Found by property tests, which are set aside until fixed | 3–5 |
@@ -208,6 +208,7 @@ and MCP all reach them, and DESCRIBE reads jewelry out of any drawing.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | patch | Jewelry: STLOUT's vertices projected onto the true surface (mean vertex error 3–7× smaller), scallops cut, `sprue` and `shrink`; J2 narrowed |
 | 2026-11-14 | patch | Jewelry: the merged solid for casting takes bezels, tapered shanks, the signet's face, drawn profiles and pavé and half eternity seats; J2 narrowed |
 | 2026-11-13 | minor | Jewelry: PIECE takes a band profile drawn as a closed curve; a rail for it is the new row J8 |
 | 2026-11-13 | minor | Jewelry: pavé on a parametric piece's band (PIECE `pave`: row, rows, honeycomb, scallop, auto-fit to a span, graduated sizes, a `pave` check), drawn, counted on the bench sheet and built by PIECEMESH. No row closes: the solid still cuts no seat (J2) |

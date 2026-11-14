@@ -430,3 +430,246 @@ fn a_pave_band_s_seats_are_not_reported_as_a_thin_band() {
     assert!(r["seats"].as_u64().unwrap() > 0, "{r}");
     assert!(!r["notes"].to_string().contains("is thin for"), "{}", r["notes"]);
 }
+
+/// How far a point is from the true surface, to first order: the field over its gradient.
+fn surface_distance(csg: &Csg, p: Vec3) -> f64 {
+    let f = |q: Vec3| csg.eval(q);
+    let h = 1e-4;
+    let g = Vec3::new(
+        (f(p + Vec3::new(h, 0.0, 0.0)) - f(p - Vec3::new(h, 0.0, 0.0))) / (2.0 * h),
+        (f(p + Vec3::new(0.0, h, 0.0)) - f(p - Vec3::new(0.0, h, 0.0))) / (2.0 * h),
+        (f(p + Vec3::new(0.0, 0.0, h)) - f(p - Vec3::new(0.0, 0.0, h))) / (2.0 * h),
+    );
+    f(p).abs() / g.len().max(0.5)
+}
+
+/// Mean and max surface distance over the vertices, then over the triangles' centroids.
+fn surface_error(csg: &Csg, s: &Solid) -> (f64, f64, f64, f64) {
+    let v: Vec<f64> = s.positions.iter().map(|p| surface_distance(csg, *p)).collect();
+    let c: Vec<f64> = s
+        .indices
+        .chunks_exact(3)
+        .map(|t| {
+            let [a, b, c] = tri(s, t);
+            surface_distance(csg, (a + b + c) * (1.0 / 3.0))
+        })
+        .collect();
+    let mean = |x: &[f64]| x.iter().sum::<f64>() / x.len().max(1) as f64;
+    let max = |x: &[f64]| x.iter().copied().fold(0.0, f64::max);
+    (mean(&v), max(&v), mean(&c), max(&c))
+}
+
+fn write_stl(path: &std::path::Path, s: &Solid) {
+    let mut out = vec![0u8; 80];
+    out.extend((s.triangles() as u32).to_le_bytes());
+    for t in s.indices.chunks_exact(3) {
+        let [a, b, c] = tri(s, t);
+        let n = (b - a).cross(c - a);
+        for v in [n, a, b, c] {
+            for x in [v.x, v.y, v.z] {
+                out.extend((x as f32).to_le_bytes());
+            }
+        }
+        out.extend([0, 0]);
+    }
+    std::fs::write(path, out).unwrap();
+}
+
+/// The pieces the surface report measures.
+fn report_pieces() -> Vec<(&'static str, Value)> {
+    vec![
+        ("band", json!({"kind": "band"})),
+        ("halo", json!({"kind": "solitaire", "halo": true})),
+        ("bezel", json!({"kind": "solitaire", "head": "bezel"})),
+        ("honeycomb", json!({"kind": "band", "width": 6.0, "wall": 2.0, "pave": {"layout": "honeycomb", "rows": 2, "span": "top-half"}})),
+        ("scallop", json!({"kind": "band", "width": 3.0, "wall": 2.0, "pave": {"layout": "scallop", "span": "top-half"}})),
+        ("signet", json!({"kind": "signet"})),
+        ("eternity", json!({"kind": "eternity"})),
+    ]
+}
+
+/// The surface's distance from the true surface, raw (the grid's piecewise-linear zero set) and
+/// smoothed (vertices projected onto the field's zero set), at STLOUT's default fine step and
+/// triangle cap; with `MAKING_DIR` set, the STLs too (run in release with `--ignored --nocapture`).
+#[test]
+#[ignore = "a report, not a check: run in release with --ignored --nocapture"]
+fn surface_report() {
+    let dir = std::env::var("MAKING_DIR").ok();
+    for (what, v) in report_pieces() {
+        let mesh = piece_mesh(&params(&v), Quality::Fine);
+        for smooth in [false, true] {
+            let t = Instant::now();
+            let (s, _) = solidify_with(&mesh.csg, 0.1, 150_000, smooth).unwrap();
+            let el = t.elapsed();
+            let (vm, vx, cm, cx) = surface_error(&mesh.csg, &s);
+            println!(
+                "{what:10} {}: step {:.3} mm, {} triangles, {el:?}; vertices mean {:.4} max {:.4} mm; centroids mean {:.4} max {:.4} mm",
+                if smooth { "smooth" } else { "raw   " },
+                s.step,
+                s.triangles(),
+                vm,
+                vx,
+                cm,
+                cx
+            );
+            if let Some(d) = &dir {
+                write_stl(&std::path::Path::new(d).join(format!("{what}-{}.stl", if smooth { "smooth" } else { "raw" })), &s);
+            }
+        }
+    }
+}
+
+/// The vertices lie on the true surface: projected onto the field's zero set, they stand far
+/// nearer it than the grid's piecewise-linear surface does, on curved bands, beads and seats, and
+/// the shell stays everything a caster's must be.
+#[test]
+fn the_smoothed_surface_lies_on_the_true_one() {
+    for (what, v) in report_pieces() {
+        let mesh = piece_mesh(&params(&v), Quality::Draft);
+        let raw = solidify_with(&mesh.csg, STEP, TEST_TRIS, false).unwrap().0;
+        let smooth = solid_of(&mesh, STEP, what);
+        assert_castable(&smooth, what);
+        assert_eq!(raw.triangles(), smooth.triangles(), "{what}: the same connectivity");
+        let (rm, rx, _, _) = surface_error(&mesh.csg, &raw);
+        let (sm, sx, _, _) = surface_error(&mesh.csg, &smooth);
+        println!("{what}: vertices mean {rm:.5} → {sm:.5} mm, max {rx:.4} → {sx:.4} mm");
+        assert!(sm < 0.5 * rm, "{what}: mean {sm} vs raw {rm}");
+        assert!(sx <= rx + 1e-9, "{what}: max {sx} vs raw {rx}");
+        // The volume moves little: the projection takes off facets, it does not reshape.
+        assert!((smooth.volume() / raw.volume() - 1.0).abs() < 0.02, "{what}: {} vs {}", smooth.volume(), raw.volume());
+    }
+}
+
+/// A scalloped row's scallops are cut into both sides of the band: the solid is one castable
+/// body, lighter than the same band with the scallops left out, its stones clear of the metal,
+/// and the metal gone where the sheet's arc dips under a stone at the band's side.
+#[test]
+fn a_scalloped_row_is_cut_into_the_band() {
+    let p = json!({"kind": "band", "width": 3.0, "wall": 2.0, "pave": {"layout": "scallop", "span": "top-half"}});
+    let piece = params(&p);
+    let mesh = piece_mesh(&piece, Quality::Draft);
+    let s = solid_of(&mesh, STEP, "scallop");
+    assert_castable(&s, "scallop");
+    assert_eq!(s.bodies, 1);
+    assert!(deepest_stone_vertex(&mesh) >= -STONE_TOL);
+    let plates = mesh.csg.cut.iter().filter(|q| matches!(q, Prim::Plate { .. })).count();
+    assert_eq!(plates, 2 * mesh.stones as usize, "two scallops a stone");
+    let plain = Csg { add: mesh.csg.add.clone(), cut: mesh.csg.cut.iter().filter(|q| !matches!(q, Prim::Plate { .. })).cloned().collect() };
+    let whole = solid_of(&PieceMesh { csg: plain.clone(), ..piece_mesh(&piece, Quality::Draft) }, STEP, "plain");
+    assert!(s.volume() < whole.volume() - 0.5, "the scallops take metal away: {} vs {}", s.volume(), whole.volume());
+    // Under the stone at 12 o'clock, at the band's side, a little below the outside: metal before,
+    // none after.
+    let fit = super::pave_band::fit(&piece).unwrap();
+    let top = fit.stones.iter().min_by(|a, b| a.angle.abs().total_cmp(&b.angle.abs())).unwrap();
+    let out = Vec3::new(top.angle.sin(), top.angle.cos(), 0.0);
+    let probe = out * (top.table.x.hypot(top.table.y) - 0.3 * top.diameter) + Vec3::Z * 1.4;
+    assert!(plain.eval(probe) < 0.0, "metal there without the scallop");
+    assert!(mesh.csg.eval(probe) > 0.0, "no metal there with it");
+    // The notes say the solid cuts them.
+    let r = Session::new()
+        .execute("stlout", &json!({"kind": "band", "width": 3.0, "wall": 2.0, "pave": {"layout": "scallop"}, "quality": "draft"}))
+        .unwrap();
+    assert!(r["notes"].to_string().contains("scallops are cut"), "{}", r["notes"]);
+}
+
+/// Every vertex of a file, read back.
+fn stl_of(r: &Value) -> Solid {
+    weld(&base64_decode(r["base64"].as_str().unwrap()).unwrap())
+}
+
+fn bbox(s: &Solid) -> (Vec3, Vec3) {
+    s.positions.iter().fold((Vec3::new(1e9, 1e9, 1e9), Vec3::new(-1e9, -1e9, -1e9)), |(lo, hi), p| {
+        (Vec3::new(lo.x.min(p.x), lo.y.min(p.y), lo.z.min(p.z)), Vec3::new(hi.x.max(p.x), hi.y.max(p.y), hi.z.max(p.z)))
+    })
+}
+
+/// A sprue: merged into the metal as one body, standing out of the bottom of the shank by its
+/// length (or where `at` puts it), the reply's weight the piece's without it; refused where it
+/// would touch a stone or a seat, and refused when its numbers are out of range.
+#[test]
+fn a_sprue_is_merged_where_it_is_asked() {
+    let mut s = Session::new();
+    for kind in ["band", "solitaire", "threestone", "signet"] {
+        let base = json!({"kind": kind, "quality": "draft"});
+        let plain = s.execute("stlout", &base).unwrap();
+        let mut q = base.clone();
+        q["sprue"] = json!(true);
+        let r = s.execute("stlout", &q).unwrap();
+        let back = stl_of(&r);
+        verify(&back.positions, &back.indices).unwrap_or_else(|e| panic!("{kind}: {e}"));
+        assert_eq!(components(&back), 1, "{kind}: the sprue is merged, one body");
+        assert_eq!(r["sprue"], json!({"diameter": 2.5, "length": 6.0, "at": 180.0}), "{kind}");
+        let piece = params(&base);
+        let bottom = piece.inner() / 2.0 + piece.section().height_at(0.0);
+        let (lo, _) = bbox(&back);
+        assert!((lo.y + bottom + 6.0).abs() < 0.25, "{kind}: the sprue's end at y = {} (the band's bottom at {})", lo.y, -bottom);
+        // The weight is the piece's own, give or take the sprue's root in the band.
+        let (a, b) = (r["metal"]["volumeMm3"].as_f64().unwrap(), plain["metal"]["volumeMm3"].as_f64().unwrap());
+        assert!((a - b).abs() / b < 0.05, "{kind}: {a} vs {b} mm³");
+        assert!(r["notes"].to_string().contains("sprue"), "{kind}");
+    }
+    // Elsewhere round the band, and its own size.
+    let r = s.execute("stlout", &json!({"kind": "band", "quality": "draft", "sprue": {"at": 90, "diameter": 1.5, "length": 3}})).unwrap();
+    let (_, hi) = bbox(&stl_of(&r));
+    let band = params(&json!({"kind": "band"}));
+    let side = band.inner() / 2.0 + band.section().height_at(0.0) + 3.0;
+    assert!((hi.x - side).abs() < 0.25, "the sprue at 3 o'clock ends at x = {} (asked {side})", hi.x);
+    // Under the head, or on a full eternity's stones: refused.
+    for q in [
+        json!({"kind": "solitaire", "sprue": {"at": 0}}),
+        json!({"kind": "eternity", "sprue": true}),
+        json!({"kind": "solitaire", "halo": true, "sprue": {"at": 10}}),
+    ] {
+        let e = s.execute("stlout", &q).unwrap_err().to_string();
+        assert!(e.contains("sprue") && (e.contains("stone") || e.contains("seat")), "{q}: {e}");
+    }
+    for bad in
+        [json!("yes"), json!(3), json!({"diameter": 0}), json!({"diameter": 9}), json!({"length": -1}), json!({"at": 1e9}), json!({"diameter": "x"})]
+    {
+        let e = s.execute("stlout", &json!({"kind": "band", "sprue": bad})).unwrap_err().to_string();
+        assert!(e.contains("sprue"), "{bad}: {e}");
+    }
+    assert!(s.execute("stlout", &json!({"kind": "band", "sprue": false, "quality": "draft"})).unwrap()["sprue"].is_null());
+}
+
+/// Shrinkage: the file is the same solid scaled up about the finger's centre by 1 + shrink/100,
+/// the reply's weight the drawn piece's; out of range is refused.
+#[test]
+fn shrink_scales_the_file_and_not_the_weight() {
+    let mut s = Session::new();
+    let base = json!({"kind": "solitaire", "quality": "draft", "stones": true});
+    let a = s.execute("stlout", &base).unwrap();
+    let mut q = base.clone();
+    q["shrink"] = json!(2.5);
+    let b = s.execute("stlout", &q).unwrap();
+    assert_eq!(a["triangles"], b["triangles"]);
+    assert_eq!(a["metal"], b["metal"], "the weight is the drawn piece's");
+    assert_eq!(b["shrink"], json!(2.5));
+    let (sa, sb) = (stl_of(&a), stl_of(&b));
+    let (la, ha) = bbox(&sa);
+    let (lb, hb) = bbox(&sb);
+    for (x, y) in [(la.x, lb.x), (la.y, lb.y), (la.z, lb.z), (ha.x, hb.x), (ha.y, hb.y), (ha.z, hb.z)] {
+        assert!((y - x * 1.025).abs() < 1e-4, "{x} × 1.025 vs {y}");
+    }
+    assert!((sb.volume() / sa.volume() - 1.025f64.powi(3)).abs() < 1e-4);
+    assert!(b["notes"].to_string().contains("shrinkage"), "{}", b["notes"]);
+    for bad in [json!(-1), json!(10.5), json!("2%"), json!(true)] {
+        let e = s.execute("stlout", &json!({"kind": "band", "shrink": bad})).unwrap_err().to_string();
+        assert!(e.contains("shrink"), "{bad}: {e}");
+    }
+}
+
+/// The display mesh's notes describe the display mesh, and STLOUT's describe the merged solid.
+#[test]
+fn the_notes_say_what_each_mesh_is() {
+    let mut s = Session::new();
+    for kind in ["solitaire", "eternity", "halfeternity"] {
+        let m = s.execute("piecemesh", &json!({"kind": kind})).unwrap();
+        let notes = m["notes"].to_string();
+        assert!(notes.contains("This view draws") && notes.contains("STLOUT writes the metal as one merged closed solid"), "{kind}: {notes}");
+        assert!(!notes.contains("slicer"), "{kind}: {notes}");
+        let r = s.execute("stlout", &json!({"kind": kind, "quality": "draft"})).unwrap();
+        let notes = r["notes"].to_string();
+        assert!(!notes.contains("This view draws") && notes.contains("one closed shell with a seat cut"), "{kind}: {notes}");
+    }
+}
