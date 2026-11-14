@@ -371,3 +371,45 @@ fn mutated_3dm_files_never_panic(tc: TestCase) {
     }
     never_panics(&bytes);
 }
+
+#[test]
+fn export3dm_writes_the_cast_metal_that_import3dm_weighs_back() {
+    let mut s = mm_drawing();
+    let piece = json!({"kind": "band", "size": 7, "width": 3.0, "wall": 1.6, "metal": "gold18", "quality": "draft", "maxTriangles": 40000});
+    let stl = s.execute("stlout", &piece).unwrap();
+    for version in [70u64, 80] {
+        let mut p = piece.clone();
+        p["version"] = json!(version);
+        let r = s.execute("export3dm", &p).unwrap();
+        assert_eq!(r["version"], version);
+        assert_eq!(r["layers"], json!(["Metal", "Profile", "Finger"]));
+        let bytes = super::super::file::base64_decode(r["data"].as_str().unwrap()).unwrap();
+        assert_eq!(bytes.len() as u64, r["bytes"].as_u64().unwrap());
+        // Our own reader reads it back: the mesh closed, of the solid's volume and weight.
+        let back = s.execute("import3dm", &json!({"data": r["data"], "query": true})).unwrap();
+        assert_eq!(back["version"], version);
+        let m = &back["meshes"][0];
+        assert_eq!(m["layer"], "Metal");
+        assert_eq!(m["closed"], true, "{m}");
+        assert_eq!(m["triangles"], r["triangles"]);
+        let v = m["volumeMm3"].as_f64().unwrap();
+        let want = r["volumeMm3"].as_f64().unwrap();
+        assert!((v - want).abs() / want < 1e-4, "{v} vs {want}");
+        // The same solid STLOUT casts.
+        assert!((want - stl["metal"]["volumeMm3"].as_f64().unwrap()).abs() / want < 1e-9);
+        assert!((m["grams"]["gold18"].as_f64().unwrap() - r["grams"].as_f64().unwrap()).abs() < 2e-3);
+        let curves = back["curves"].as_array().unwrap();
+        assert_eq!(curves.len(), 2);
+        assert_eq!(curves[0]["layer"], "Profile");
+        assert_eq!(curves[0]["closed"], true);
+        assert_eq!(curves[1]["kind"], "circle");
+    }
+    for (bad, says) in [
+        (json!({"kind": "band", "version": 4}), "`version`"),
+        (json!({"version": 80}), "kind"),
+        (json!({"kind": "band", "maxTriangles": 5}), "maxTriangles"),
+    ] {
+        let e = s.execute("export3dm", &bad).unwrap_err().to_string();
+        assert!(e.contains(says), "{bad}: {e}");
+    }
+}

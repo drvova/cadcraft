@@ -36,7 +36,86 @@ pub fn specs() -> Vec<CommandSpec> {
             .params(
                 "{path | data: base64, name?: \"x.3dm\", curves?: bool (default true: add the file's lines, arcs, circles, polylines, NURBS curves and joined curves as the drawing's lines, arcs, circles, polylines and splines on the file's layers; a curve off the XY plane is projected onto it), faces?: bool (default false: add each mesh as 3DFACE objects, at most 20000 faces), query?: bool (report only, add nothing)} → {version, units, mmPerUnit, layers: [{name, color}], meshes: [{name, layer, vertices, faces, triangles, closed, volumeMm3 (closed meshes only), grams: {gold24 … wax} (closed only), bounds: {min, max} (mm)}], curves: [{name, layer, kind: line|arc|circle|polyline|nurbs|joined, added: entity type, handle, projected, closed}], skipped: [{kind, count}], added: [handles], notes}. Sizes are reported in millimetres from the file's model units (a file without units is read as millimetres)",
             ),
+        CommandSpec::new("export3dm", "Export Rhino 3DM...", run_export3dm)
+            .params(
+                "{the piece's parameters as STLOUT takes them (kind, size, metal, …; quality?: fine|draft), maxTriangles?: 1000–1000000 (default 150000), version?: 50|60|70|80 (default 80: Rhino 8), path? (else base64 `data`)} → {name, version, bytes, triangles, volumeMm3, grams, layers, notes, data | path}: a Rhino file in millimetres with the merged metal (what is cast, seats cut) as one closed mesh on layer Metal, the band's section as a closed polyline on layer Profile (in the XZ plane at +X, standing on the finger: X outward, Z along the finger) and the finger circle about Z on layer Finger",
+            )
+            .noundo(),
     ]
+}
+
+fn run_export3dm(_s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "export3dm";
+    let version = match p.get("version").filter(|v| !v.is_null()) {
+        None => 80,
+        Some(v) => v
+            .as_u64()
+            .and_then(|v| u32::try_from(v).ok())
+            .filter(|v| rhino3dm::WRITE_VERSIONS.contains(v))
+            .ok_or_else(|| bad(cmd, "`version` is 50, 60, 70 or 80 (Rhino 5 to 8)"))?,
+    };
+    let cap = match p.get("maxTriangles").filter(|v| !v.is_null()) {
+        None => super::mesh::MAX_TRIANGLES,
+        Some(v) => match v.as_f64() {
+            Some(n) if n.is_finite() && (1000.0..=super::mesh::MAX_SOLID_TRIANGLES as f64).contains(&n) => n as usize,
+            _ => return Err(bad(cmd, format!("`maxTriangles` is a number from 1000 to {}", super::mesh::MAX_SOLID_TRIANGLES))),
+        },
+    };
+    let (piece, solid, mut notes) = super::mesh::cast_solid(cmd, p, cap)?;
+    let vertices: Vec<[f64; 3]> = solid.positions.iter().map(|v| [v.x, v.y, v.z]).collect();
+    let faces: Vec<[u32; 4]> = solid.indices.chunks_exact(3).map(|t| [t[0], t[1], t[2], t[2]]).collect();
+    let metal = Mesh { vertices, faces, normals: Vec::new() };
+    let inner = piece.inner() / 2.0;
+    let section: Vec<[f64; 3]> = piece.section().polygon(48).iter().map(|q| [inner + q.y, 0.0, q.x]).collect();
+    let mut objects = vec![rhino3dm::Object { name: format!("{} metal", piece.metal), layer: 0, geometry: Geometry::Mesh(metal) }];
+    if let Some(first) = section.first().copied() {
+        let mut closed = section.clone();
+        closed.push(first);
+        objects.push(rhino3dm::Object { name: "section".into(), layer: 1, geometry: Geometry::Curve(Curve::Polyline(closed)) });
+    }
+    objects.push(rhino3dm::Object {
+        name: "finger".into(),
+        layer: 2,
+        geometry: Geometry::Curve(Curve::Arc { plane: rhino3dm::Plane::xy([0.0; 3]), radius: inner, start: 0.0, end: TAU }),
+    });
+    let layer = |name: &str, color: [u8; 3], index: i32| rhino3dm::Layer { name: name.into(), color, index };
+    let model = Model {
+        units: Some((2, 1.0)),
+        layers: vec![layer("Metal", [212, 175, 55], 0), layer("Profile", [255, 0, 0], 1), layer("Finger", [0, 0, 255], 2)],
+        objects,
+        ..Model::default()
+    };
+    let bytes = rhino3dm::write(&model, version).map_err(|e| bad(cmd, e.to_string()))?;
+    let volume = solid.volume();
+    if solid.bodies > 1 {
+        notes.push(format!("The metal is in {} separate pieces, not one.", solid.bodies));
+    }
+    let name = format!("{}-us{}-{}.3dm", piece.kind.name(), fmt_mm(piece.size.us), piece.metal);
+    let mut reply = json!({
+        "name": name,
+        "version": version,
+        "bytes": bytes.len(),
+        "triangles": solid.triangles(),
+        "volumeMm3": r3(volume),
+        "grams": r3(volume / 1000.0 * piece.density),
+        "metal": piece.metal,
+        "layers": ["Metal", "Profile", "Finger"],
+        "notes": notes,
+    });
+    match str_param(p, "path") {
+        Some(path) => {
+            #[cfg(not(target_arch = "wasm32"))]
+            crate::atomic_write::write_atomic(std::path::Path::new(path), &bytes).map_err(|e| bad(cmd, format!("{path}: {e}")))?;
+            #[cfg(target_arch = "wasm32")]
+            return Err(bad(cmd, format!("files can't be written on the web ({path}); omit `path` to get base64 `data`")));
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                reply["path"] = json!(path);
+            }
+        }
+        None => reply["data"] = json!(super::super::file::base64_encode(&bytes)),
+    }
+    Ok(reply)
 }
 
 fn run_import3dm(s: &mut Session, p: &Value) -> Result<Value> {
