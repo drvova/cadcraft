@@ -1227,3 +1227,18 @@ fn oriented_pave_refuses_hostile_input() {
     let r = s.execute("gemfit", &json!({"handles": [vast], "cut": "marquise"})).unwrap();
     assert!(r["notes"].to_string().contains("stopped early"), "{r}");
 }
+
+/// The bench sheet counts the whole drawing and the piece counts itself: on the solitaire sample
+/// (32 stones of its own) a halo solitaire piece (20) makes 52 on the sheet, and the sheet of the
+/// piece's own objects says 20. Nothing is counted twice.
+#[test]
+fn the_bench_sheet_adds_a_piece_to_the_drawing_s_own_stones() {
+    let mut s = crate::Session::empty();
+    s.open_drawing(crate::sample::solitaire(), "Solitaire", None);
+    let own = s.execute("techsheet", &json!({})).unwrap()["stones"]["count"].as_u64().unwrap();
+    let p = s.execute("piece", &json!({"kind": "solitaire", "halo": true, "at": [0, -60]})).unwrap();
+    let piece = p["piece"]["stones"]["count"].as_u64().unwrap();
+    let all = s.execute("techsheet", &json!({})).unwrap()["stones"]["count"].as_u64().unwrap();
+    let only = s.execute("techsheet", &json!({"handles": p["piece"]["handles"]})).unwrap()["stones"]["count"].as_u64().unwrap();
+    assert_eq!((own, piece, all, only), (32, 20, 52, 20));
+}

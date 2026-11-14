@@ -349,7 +349,7 @@ fn the_stl_reads_back_as_the_same_shell() {
 /// How long the merged solid takes, piece by piece, at both qualities (run with `--ignored
 /// --nocapture` in release to see the figures the docs quote).
 #[test]
-#[ignore]
+#[ignore = "a timing report, not a check: run in release with --ignored --nocapture"]
 fn timing() {
     for (what, v) in [
         ("band", json!({"kind": "band"})),
