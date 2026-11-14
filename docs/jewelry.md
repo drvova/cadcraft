@@ -419,6 +419,45 @@ solid takes each part's signed-distance bound (`BezelBound::distance`, `Taper::d
 `Face::distance`), so a bezel, a dome's or a signet's shank and a signet's face cast as one body
 with the rest.
 
+### Prong styles and channel settings
+
+A prong head's prongs take a **style** (`crates/engine/src/cmd/jewelry/prongs.rs`):
+`prongStyle: round` (the default: a wire to a round bead), `claw` (tapering from the girdle to a
+point 35 % of the wire's radius, leaning in over the crown), `tab` (a flat wall outside the girdle,
+1.5 wires wide and 0.55 thick, folded over the crown as a lip that rests on it), `v` (a chevron of
+two such wings along a pointed corner's edges: a pear's point, a marquise's points, a princess's
+and a trillion's corners; sites that are not on a pointed corner stay round; a cut with no pointed
+corner is refused: "V prongs guard a stone's pointed corners, and a round has none…") and `double`
+(each prong a pair of round wires 1.3 wire diameters apart along the girdle). `prongHeight` (mm,
+0.1–4) is the tip's top over the top of the girdle (default 1.15 wire diameters), `prongTip` (mm,
+0–3) how far the metal reaches in over the crown past the girdle (default 0.925 of the wire: the
+round bead's reach), and `prongWire` (mm, 0.3–2.5) every head's wire (default 15 % of the stone's
+lesser size, 0.8–1.2). These defaults are our approximation of bench practice, not a standard.
+Checks: `prong-tip` (the tip covers at least 0.3 mm, stops short of the table, and stands at least
+0.1 mm over the crown under it) and `prong-wire` (at least 0.6 mm platinum, palladium, steel and
+titanium, 0.7 mm gold and wax, 0.9 mm silver, brass and copper). `metal.prongGrams` (and
+`prongGrams` in the band's `ring:` record, which Bench shows as its own line) weighs the prongs
+and the gallery rail. The sheet's plan draws each style (a circle, a circle with a point, the
+tab's and the V's footprints, two circles); `PIECEMESH` and `STLOUT` build the styled tops as a
+round cone and boxes (`Prim::Prong`), the leg as the round prong's wire, and the stone's seat cuts
+each style's notch.
+
+A **channel** is pavé's single row between two rails (`pave: {layout: "channel"}`, in
+`channel.rs`): the same span, gap, auto-fit and graduated sizes, the stones' tables level with the
+band's outside. Each stone has its own length of both rails (half way to its neighbour, or a
+wall's width past its girdle at the row's ends), from 0.3 mm under the band's outside to 0.3 mm over
+the tables, across from the girdle less `channelLip` (default 0.2 mm, 0–1) to the girdle plus
+`channelWall` (default 0.6 mm, 0.1–2); so a graduated row's rails step with its stones. The cast
+solid adds the rails, cuts the channel between the lips from the girdles' top up, and cuts each
+stone's seat without a bore, so the girdle's groove is cut in the rail walls under the lips. No
+beads. Checks: `channel-lip` (at least 0.15 mm and short of the smallest table) and `channel-wall`
+(at least 0.4 mm, and the rails on the band). `metal.channelGrams` weighs the rails (Bench:
+"Channel rails").
+
+Not built yet: graduated eternity and half eternity rows (a graduated pavé or channel row is),
+a basket or under-gallery under a prong head, and prong styles on the side stones apart from the
+centre's (one style serves every head).
+
 ## In the interface
 
 The interface opens on a jewelry drawing: a size 6 solitaire in 18k gold (Help ▸ Open Sample
@@ -603,6 +642,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | Prong styles (`prongStyle` round, claw, tab, V, double; `prongHeight`, `prongTip`, `prongWire`; checks `prong-tip`, `prong-wire`; `metal.prongGrams`) and channel settings (`pave.layout: "channel"`, `channelWall`, `channelLip`; checks `channel-lip`, `channel-wall`; `metal.channelGrams`), in the sheet, the mesh and the cast solid; the Piece panel's Setting group, Bench lines and four templates |
 | 2026-11-14 | minor | `STLOUT`'s merged solid takes the drawn profile, the bezel collar with its stone's seat, the dome's and signet's tapered shank, the signet's face, and seats and beads for half eternity and pavé stones |
 | 2026-11-13 | minor | The 3D tab's four-view workspace (Top, Front, Right orthographic and flat-shaded at one scale; Perspective in its mode; maximise by double-click, M or the bar; remembered; single view under 560 px) on one scissored context, and drag handles on the piece (centre stone, halo melee, eternity stones, wall, width) that preview at draft quality, show the value and the checks it would break, and commit one `piece` change or, with Alt, a proposal; keyboard sliders |
 | 2026-11-13 | minor | `PIECE {profile: {curve: handle}}`: a band profile drawn as a closed curve of the drawing (polyline with bulges, spline, circle, ellipse, region), kept by value with its frame (box bottom on the finger, centred across), width and wall read from it, weight by Pappus, the wall check at its thinnest, the solid revolved from it; the Piece panel names it "Custom (from drawing)" with Update from curve. Rails are not built yet (J8) |

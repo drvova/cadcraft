@@ -37,10 +37,10 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 | Gem library (round and fancy cuts) | `gem`, `gemlist`; cuts in `gem.rs` | done; a bench's own library planned (J3) |
 | Stones along a curve | `pave` on a region; pavé on the band | partial |
 | Pavé on a surface: rows, honeycomb, scalloped, auto-spacing | `piece {pave}` | done (scallops not cut in the solid) |
-| Prongs: count, shape (round, claw, tab, V), height | `prongs` count | partial |
-| Channel setting | `setting` (2D) | partial (no solid) |
+| Prongs: count, shape (round, claw, tab, V), height | `prongs`, `prongStyle` (round, claw, tab, v, double), `prongHeight`, `prongTip`, `prongWire`; the Setting group | done (baskets planned, J9) |
+| Channel setting | `pave {layout: "channel"}`, `channelWall`, `channelLip` (sheet, mesh, cast solid, checks) | done |
 | Cutters (seats) for every stone | cut automatically in the cast solid | done |
-| Graduated stones along a row | | planned (J1) |
+| Graduated stones along a row | `pave.graduated` on a pavé or channel row | partial (eternity rows planned, J1) |
 
 ## Checks and measures
 
@@ -75,4 +75,5 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | Prong styles and heights done, channel setting done, graduated rows partial (pavé and channel) |
 | 2026-11-14 | new | The feature list against Rhino's jewelry workflow, and the no-code rule |
