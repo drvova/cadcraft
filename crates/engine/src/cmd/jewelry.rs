@@ -31,6 +31,9 @@ mod piece_params;
 #[path = "jewelry/piece_tests.rs"]
 mod piece_tests;
 mod pricing;
+mod profile;
+#[cfg(test)]
+mod profile_tests;
 #[cfg(test)]
 #[path = "jewelry/property_tests.rs"]
 mod property_tests;

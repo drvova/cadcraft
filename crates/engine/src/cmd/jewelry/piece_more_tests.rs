@@ -31,7 +31,7 @@ fn seg(h: f64, s: f64) -> (f64, f64) {
 fn by_hand(profile: Profile, w: f64, t: f64, n: f64) -> (f64, f64) {
     let a = w / 2.0;
     match profile {
-        Profile::Flat => (w * t, w * t * t / 2.0),
+        Profile::Flat | Profile::Custom => (w * t, w * t * t / 2.0),
         Profile::Dome => {
             let r = t.min(a);
             let e = t - r;
@@ -205,7 +205,7 @@ fn the_sheet_draws_each_profiles_exact_outline() {
             // Arcs are arcs: a rounded profile is drawn with bulges, a faceted one without.
             let bulged = poly.vertices.iter().filter(|v| v.bulge != 0.0).count();
             let expected = match profile {
-                Profile::Flat | Profile::Knife | Profile::Bevel => 0,
+                Profile::Flat | Profile::Knife | Profile::Bevel | Profile::Custom => 0,
                 Profile::Dome | Profile::Concave => 1,
                 Profile::Comfort | Profile::Court => 2,
             };
@@ -461,7 +461,7 @@ fn hostile_profile_numbers_never_panic_in_the_section() {
         for wall in nasty {
             for width in nasty {
                 for by in nasty {
-                    let section = Section { width, wall, profile, by };
+                    let section = Section { width, wall, profile, by, custom: None };
                     let _ = (section.area(), section.centroid(), section.thinnest(), section.number(), section.ease(), section.rise());
                     let _ = (section.height_at(by), section.inside_at(by), section.outline(), section.polygon(usize::MAX), section.polygon(0));
                     assert!(section.outside(usize::MAX).len() <= 1100 && section.inside(usize::MAX).len() <= 1100);
