@@ -420,3 +420,13 @@ fn the_newer_parts_are_in_the_merged_solid() {
     let (v, b) = (s.volume(), dome.band_volume());
     assert!(((v - b) / b).abs() < 2.0 * SOLID_AGREEMENT_PER_MM * 0.1, "dome: solid {v} mm³ vs shank {b} mm³");
 }
+
+/// A pavé band's seats take metal away on purpose: STLOUT does not call the band thin for it.
+#[test]
+fn a_pave_band_s_seats_are_not_reported_as_a_thin_band() {
+    let r = Session::new()
+        .execute("stlout", &json!({"kind": "band", "width": 6.0, "wall": 2.0, "pave": {"layout": "honeycomb", "rows": 2}, "quality": "draft"}))
+        .unwrap();
+    assert!(r["seats"].as_u64().unwrap() > 0, "{r}");
+    assert!(!r["notes"].to_string().contains("is thin for"), "{}", r["notes"]);
+}

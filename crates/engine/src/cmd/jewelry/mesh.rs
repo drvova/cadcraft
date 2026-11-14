@@ -1812,7 +1812,8 @@ fn run_stlout(_s: &mut Session, p: &Value) -> Result<Value> {
         ));
     }
     let agreement = SOLID_AGREEMENT_PER_MM * solid.step;
-    if piece.kind == PieceKind::Band && band > 0.0 && ((volume - band) / band).abs() > agreement {
+    // Only a plain band is its section revolved: pavé seats take metal away on purpose.
+    if piece.kind == PieceKind::Band && mesh.seats == 0 && band > 0.0 && ((volume - band) / band).abs() > agreement {
         notes.push(format!(
             "The solid's volume ({volume:.1} mm³) is more than {:.0}% from the band's exact volume ({band:.1} mm³): the band is thin for the {} mm sampling step.",
             agreement * 100.0,
