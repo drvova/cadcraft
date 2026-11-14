@@ -377,10 +377,7 @@ pub(super) fn refusal(p: &PieceParams) -> Option<String> {
             fmt_mm(2.0 * spec.rim() + 0.8)
         ));
     }
-    match Layout::of(p) {
-        Ok(_) => None,
-        Err(e) => Some(e),
-    }
+    Layout::of(p).err()
 }
 
 impl Layout {
@@ -823,6 +820,8 @@ pub(super) fn removed(p: &PieceParams) -> f64 {
 }
 
 /// Why an engraving cannot go on a patterned band (`inside`: the engraving is inside the band).
+/// Kept for the engraving module, which calls it once the branches meet.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn engraving_conflict(p: &PieceParams, inside: bool) -> Option<&'static str> {
     let spec = p.pattern.as_ref()?;
     match (spec.finish, inside) {
