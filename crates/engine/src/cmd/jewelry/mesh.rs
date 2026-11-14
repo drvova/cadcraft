@@ -81,6 +81,8 @@ use serde_json::{Value, json};
 mod channel_mesh;
 #[path = "mesh_findings.rs"]
 mod mesh_findings;
+#[path = "mesh_hoop.rs"]
+mod mesh_hoop;
 #[path = "mesh_kinds.rs"]
 mod mesh_kinds;
 #[path = "mesh_shank.rs"]
@@ -1076,9 +1078,13 @@ fn build_head(s: &Sane, d: &Detail, out: &mut Parts, stone: Standing) -> Stood {
         out.note(format!("No prongs are shown on the {}: {e}.", stone.what));
         Vec::new()
     });
-    // Half-way down the pavilion, just outside it: where the gallery rail runs.
-    let rail_h = -(g / 2.0 + 0.5 * hp);
-    let rail_at = |q: Vec2, outward: Vec2| q.lerp(culet.under(q), 0.5) + outward * (1.2 * rail_r);
+    // Where the rails run, lowest first: the plain head's one gallery rail half-way down the
+    // pavilion, a basket's one or two ([`super::basket`]), each just outside the pavilion.
+    let basket = p.head == super::heads::HeadStyle::Basket;
+    let fractions = super::basket::rail_fractions(basket, p.prong.rails);
+    let rail_h = |f: f64| super::basket::rail_height(g, hp, f);
+    let rail_at = |q: Vec2, outward: Vec2, f: f64| q.lerp(culet.under(q), f) + outward * (1.2 * rail_r);
+    let mut legs: Vec<super::basket::Leg> = Vec::new();
     // The wire's axis ends its own radius under the tips' height.
     let tip_h = head.prong_height() - head.girdle_height() - rp;
     // The style's sites (a double's pairs, a V's corners) and the top every non-round prong ends in.
@@ -1110,8 +1116,18 @@ fn build_head(s: &Sane, d: &Detail, out: &mut Parts, stone: Standing) -> Stood {
         let tip = *site - dir * (top.cover - rp);
         let mut path = vec![foot];
         if !cab {
-            let q = rail_at(*site, dir);
-            path.push(frame.at(q.x, q.y, rail_h));
+            for (i, f) in fractions.iter().enumerate() {
+                let q = rail_at(*site, dir, *f);
+                path.push(frame.at(q.x, q.y, rail_h(*f)));
+                if i == 0 {
+                    let d = foot - frame.o;
+                    legs.push(super::basket::Leg {
+                        foot: Vec3::new(d.dot(frame.u), d.dot(frame.v), d.dot(frame.w)),
+                        rail: Vec3::new(q.x, q.y, rail_h(*f)),
+                        site: *site,
+                    });
+                }
+            }
         }
         path.push(frame.at(site.x, site.y, 0.0));
         if round {
@@ -1127,16 +1143,27 @@ fn build_head(s: &Sane, d: &Detail, out: &mut Parts, stone: Standing) -> Stood {
         out.csg.add.push(Prim::Wire { pts: wire, r: rp, closed: false });
     }
     if !cab {
-        let rail: Vec<Vec3> = poly
-            .iter()
-            .zip(&normals)
-            .map(|(q, n)| {
-                let r = rail_at(*q, *n);
-                frame.at(r.x, r.y, rail_h)
-            })
-            .collect();
-        loop_wire(&mut out.head, &rail, frame.w, rail_r, d.radial);
-        out.csg.add.push(Prim::Wire { pts: rail, r: rail_r, closed: true });
+        for (i, f) in fractions.iter().enumerate() {
+            let local: Vec<Vec3> = poly
+                .iter()
+                .zip(&normals)
+                .map(|(q, n)| {
+                    let r = rail_at(*q, *n, *f);
+                    Vec3::new(r.x, r.y, rail_h(*f))
+                })
+                .collect();
+            let rail: Vec<Vec3> = local.iter().map(|q| frame.at(q.x, q.y, q.z)).collect();
+            loop_wire(&mut out.head, &rail, frame.w, rail_r, d.radial);
+            out.csg.add.push(Prim::Wire { pts: rail, r: rail_r, closed: true });
+            // The under-gallery hangs from (or rises to) the lowest rail.
+            if i == 0 && basket {
+                for wire in super::basket::gallery_wires(p.prong.gallery, &legs, centre, &local, super::basket::DROP * hp, 3.0 * rp) {
+                    let pts: Vec<Vec3> = wire.iter().map(|q| frame.at(q.x, q.y, q.z)).collect();
+                    capsule(&mut out.head, &pts, rail_r, d.radial, d.cap);
+                    out.csg.add.push(Prim::Wire { pts, r: rail_r, closed: false });
+                }
+            }
+        }
     }
     // The seat: the stone's own room in the prongs and the rail (the bearing), and a clearance
     // hole under the culet.
@@ -1561,7 +1588,9 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
     });
     let s = Sane::of(p);
     let mut parts = Parts::default();
-    if s.p.kind.worn() {
+    if s.p.kind == PieceKind::Hoop {
+        mesh_hoop::build(&s.p, &d, &mut parts);
+    } else if s.p.kind.worn() {
         mesh_findings::build_worn(&s.p, &d, &mut parts);
     } else if s.p.tapered() {
         mesh_kinds::build_tapered_band(&mut parts.band, &mut parts.csg, &s, &d);
@@ -1574,7 +1603,7 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
         build_band(&mut parts.band, &mut parts.csg, &s, &d);
     }
     match s.p.kind {
-        PieceKind::Pendant | PieceKind::Stud | PieceKind::Drop => {}
+        PieceKind::Pendant | PieceKind::Stud | PieceKind::Drop | PieceKind::Hoop => {}
         PieceKind::Band | PieceKind::Dome => {}
         PieceKind::Signet => mesh_kinds::build_face(&mut parts.face, &mut parts.csg, &s, &d),
         PieceKind::HalfEternity => mesh_kinds::build_half_eternity(&s, &d, &mut parts),
@@ -1584,8 +1613,10 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
     if let Some(l) = super::pattern::layout(&s.p) {
         build_pattern(&mut parts, l, level);
     }
-    build_pave(&s, &d, &mut parts);
-    build_lettering(&s, &d, &mut parts);
+    if s.p.kind != PieceKind::Hoop {
+        build_pave(&s, &d, &mut parts);
+        build_lettering(&s, &d, &mut parts);
+    }
     let metal = metal_color(&p.metal);
     let stone = stone_color(&p.stone);
     // A halo's melee are diamonds whatever the centre stone is; an eternity band's are the piece's stone.
@@ -1755,7 +1786,7 @@ pub(super) fn stl_ascii(tris: &[[Vec3; 4]], title: &str) -> String {
 // The commands
 // ---------------------------------------------------------------------------------------------
 
-const PIECE_KEYS: &str = "kind: band|solitaire|threestone|eternity|halfeternity|dome|signet|pendant|stud|drop, bail?, bailOpening?, bailWire?, bailWidth?, chain?, drop?, jumpRing?, jumpRingWire?, postDiameter?, postLength?, back?, top?: hook|stud, topStone?, hookWire?, head?: prong|bezel, bezelWall?, bezelHeight?, topWidth?, topWall?, face?: round|oval|cushion|rectangle, faceLength?, faceWidth?, system?, size? (default US 6), wall?: mm (1.8), width?: mm (2.2), \
+const PIECE_KEYS: &str = "kind: band|solitaire|threestone|eternity|halfeternity|dome|signet|pendant|stud|drop|hoop, hoopDiameter?, hoopThickness?, hoopWidth?, hoopSection?: round|square|knife|tube, hoopWall?, hoopGap?, closure?: post|click, bail?, bailOpening?, bailWire?, bailWidth?, chain?, drop?, jumpRing?, jumpRingWire?, postDiameter?, postLength?, back?, top?: hook|stud, topStone?, hookWire?, head?: prong|bezel|basket, basketRails?: 1|2, gallery?: plain|arches|scallop, bezelWall?, bezelHeight?, topWidth?, topWall?, face?: round|oval|cushion|rectangle, faceLength?, faceWidth?, system?, size? (default US 6), wall?: mm (1.8), width?: mm (2.2), \
     profile?: flat|dome|comfort|court|knife|bevel|concave|custom (with profileCurve, as PIECE reports it), comfort?|ridge?|bevel?|hollow?: mm (the profile's own number), metal? (gold18), cut? (round), stoneWidth?: mm (6.5), stoneLength?: mm, stone? (diamond), prongs?: 3–8 (6), halo?: bool | melee mm, \
     sideWidth?: mm, sideLength?: mm, sideCut?, sideProngs?: 3–8 (4), melee?: mm (1.8), count?: stones (default: as many as fit), gap?: mm (0.2), pave?: false|true|{layout, rows, melee, gap, span|from/to, symmetric, graduated} (as PIECE takes it), engrave?: false|text|{text, at, style, font, side, height, stroke, depth}, hallmark?: false|true|{maker, height, depth} (as PIECE takes them)";
 
@@ -1803,7 +1834,7 @@ fn piece_of(cmd: &str, p: &Value) -> Result<PieceParams> {
         return Err(bad(
             cmd,
             format!(
-                "there is no piece to show: give `kind` (band, solitaire, threestone, eternity, halfeternity, dome, signet, pendant, stud or drop) and its parameters ({PIECE_KEYS})"
+                "there is no piece to show: give `kind` (band, solitaire, threestone, eternity, halfeternity, dome, signet, pendant, stud, drop or hoop) and its parameters ({PIECE_KEYS})"
             ),
         ));
     }

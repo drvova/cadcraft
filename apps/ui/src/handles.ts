@@ -10,7 +10,7 @@
  * radius is half the size's diameter; the wall is radial; the width runs along Z.
  *
  * The ranges are those `piece` documents (wall 0.3–10, width 0.5–30, stone 0.5–30, halo melee
- * 0.8–3, eternity melee 0.8–6): a value outside them is never sent. Whether a value inside them
+ * 0.8–3, eternity melee 0.8–6, hoop diameter 6–80): a value outside them is never sent. Whether a value inside them
  * makes a piece the engine accepts (an eternity's stones must fit, a three-stone's side stones
  * must clear the centre) is the engine's to say, and the view says it.
  */
@@ -18,14 +18,14 @@
 import type { PieceMesh, Vec3 } from "./view3d";
 import { projectToView, type Mat4 } from "./view3d";
 
-export type HandleId = "stone" | "width" | "wall" | "halo" | "melee";
+export type HandleId = "stone" | "width" | "wall" | "halo" | "melee" | "hoop";
 
 export interface Handle {
   id: HandleId;
   /** What the handle is read aloud as, and named beside the cursor. */
   label: string;
   /** The parameter it changes, as `piece` names it. */
-  key: "stoneWidth" | "width" | "wall" | "halo" | "melee";
+  key: "stoneWidth" | "width" | "wall" | "halo" | "melee" | "hoopDiameter";
   /** The value now, millimetres. */
   value: number;
   min: number;
@@ -43,6 +43,7 @@ const RANGES: Readonly<Record<HandleId, { min: number; max: number }>> = {
   wall: { min: 0.3, max: 10 },
   halo: { min: 0.8, max: 3 },
   melee: { min: 0.8, max: 6 },
+  hoop: { min: 6, max: 80 },
 };
 
 const num = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) ? value : null);
@@ -91,6 +92,12 @@ export function pieceHandles(params: Readonly<Record<string, unknown>>, diameter
     const halo = num(params["halo"]);
     const ring = (kind === "solitaire" || worn) && halo !== null ? extreme(mesh, "melee", [-1, 0, 0]) : null;
     if (halo !== null && ring !== null) make("halo", "Halo stone size", "halo", halo, ring, [-1, 0, 0], 1);
+  }
+  if (mesh !== null && kind === "hoop") {
+    // The right-hand hoop's outside, along X: dragging it out grows the hoop.
+    const d = num(params["hoopDiameter"]);
+    const out = extreme(mesh, "band", [1, 0, 0]);
+    if (d !== null && out !== null) make("hoop", "Hoop diameter", "hoopDiameter", d, out, [1, 0, 0], 2);
   }
   if (mesh !== null && kind === "eternity") {
     const melee = num(params["melee"]);

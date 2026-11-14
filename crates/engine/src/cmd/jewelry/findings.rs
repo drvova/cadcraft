@@ -241,11 +241,15 @@ impl Worn {
 impl PieceKind {
     /// Whether the piece is worn off the finger (a pendant or earrings): it has no ring size.
     pub(super) fn worn(self) -> bool {
-        matches!(self, PieceKind::Pendant | PieceKind::Stud | PieceKind::Drop)
+        matches!(self, PieceKind::Pendant | PieceKind::Stud | PieceKind::Drop | PieceKind::Hoop)
     }
     /// Whether the piece is made as a pair.
     pub(super) fn pair(self) -> bool {
-        matches!(self, PieceKind::Stud | PieceKind::Drop)
+        matches!(self, PieceKind::Stud | PieceKind::Drop | PieceKind::Hoop)
+    }
+    /// Whether a worn piece holds its stone in a head (a hoop has none: its stones are pavé).
+    pub(super) fn headed(self) -> bool {
+        self.worn() && self != PieceKind::Hoop
     }
 }
 
@@ -505,6 +509,9 @@ pub(super) fn head_volume(p: &PieceParams) -> f64 {
 
 /// One piece's metal, mm³: what is cast and what is bought in.
 pub(super) fn one_volume(p: &PieceParams) -> (f64, f64) {
+    if p.kind == PieceKind::Hoop {
+        return (super::hoop::volume(p), 0.0);
+    }
     let lay = layout(p);
     let mut cast = head_volume(p) + lay.top.as_ref().map_or(0.0, |(t, _)| head_volume(t));
     let mut bought = 0.0;
@@ -682,7 +689,12 @@ pub(super) fn ignored(p: &PieceParams, given: &Map<String, Value>) -> Vec<String
     }
     let what = name(p);
     let mut out = Vec::new();
-    let unused: Vec<&str> = RING_ONLY.iter().copied().filter(|k| given.get(*k).is_some_and(|v| !v.is_null())).collect();
+    let unused: Vec<&str> = RING_ONLY
+        .iter()
+        .copied()
+        .filter(|k| !(p.kind == PieceKind::Hoop && *k == "pave"))
+        .filter(|k| given.get(*k).is_some_and(|v| !v.is_null()))
+        .collect();
     if unused.contains(&"size") || unused.contains(&"system") {
         out.push(format!("{what} has no ring size: `size` and `system` are kept for a ring but not used."));
     }
@@ -695,6 +707,21 @@ pub(super) fn ignored(p: &PieceParams, given: &Map<String, Value>) -> Vec<String
         PieceKind::Stud => {
             &["bail", "bailWire", "bailOpening", "bailWidth", "chain", "drop", "jumpRing", "jumpRingWire", "top", "topStone", "hookWire"]
         }
+        PieceKind::Hoop => &[
+            "bail",
+            "bailWire",
+            "bailOpening",
+            "bailWidth",
+            "chain",
+            "drop",
+            "jumpRing",
+            "jumpRingWire",
+            "top",
+            "topStone",
+            "hookWire",
+            "postLength",
+            "back",
+        ],
         _ => &["bail", "bailWire", "bailOpening", "bailWidth", "chain", "drop"],
     };
     let more: Vec<String> = unused_findings.iter().filter(|k| given.get(**k).is_some_and(|v| !v.is_null())).map(|k| format!("`{k}`")).collect();
@@ -710,6 +737,7 @@ pub(super) fn name(p: &PieceParams) -> &'static str {
         PieceKind::Pendant => "A pendant",
         PieceKind::Stud => "A pair of studs",
         PieceKind::Drop => "A pair of drop earrings",
+        PieceKind::Hoop => "A pair of hoop earrings",
         _ => "A ring",
     }
 }

@@ -26,16 +26,19 @@ import { asBool, asNumber, asString, isRecord } from "./json";
 import { RING_SYSTEMS, metalLabel, paramsOf, readGemChoices, ringChoices, ENGINE_DEFAULT, type Choice, type JewelryEngine } from "./jewelry-dialog";
 import { numberText, readNumber, type DraftVerdict } from "./props";
 
-export type PieceKind = "band" | "solitaire" | "threestone" | "eternity" | "halfeternity" | "dome" | "signet" | "pendant" | "stud" | "drop";
+export type PieceKind = "band" | "solitaire" | "threestone" | "eternity" | "halfeternity" | "dome" | "signet" | "pendant" | "stud" | "drop" | "hoop";
 
 /** The kinds not worn on a finger: no ring size, no band (`findings.rs`). */
-export const WORN_KINDS: readonly PieceKind[] = ["pendant", "stud", "drop"];
+export const WORN_KINDS: readonly PieceKind[] = ["pendant", "stud", "drop", "hoop"];
 
 /** Whether a kind is worn off the finger (a pendant, earrings). */
 export const isWorn = (kind: string): boolean => (WORN_KINDS as readonly string[]).includes(kind);
 
 /** Whether a kind is made as a pair (earrings). */
-export const isPair = (kind: string): boolean => kind === "stud" || kind === "drop";
+export const isPair = (kind: string): boolean => kind === "stud" || kind === "drop" || kind === "hoop";
+
+/** Whether a worn kind holds a stone in a head (a hoop has none: its stones are pavé). */
+export const isHeaded = (kind: string): boolean => isWorn(kind) && kind !== "hoop";
 
 /** The kinds the engine builds, in the order the section offers them. */
 export const PIECE_KINDS: readonly Choice[] = [
@@ -49,6 +52,7 @@ export const PIECE_KINDS: readonly Choice[] = [
   { value: "pendant", label: "Pendant" },
   { value: "stud", label: "Stud earrings" },
   { value: "drop", label: "Drop earrings" },
+  { value: "hoop", label: "Hoop earrings" },
 ];
 
 /** A pendant's bail (`Bail` in `findings.rs`). */
@@ -74,6 +78,28 @@ export const PIECE_BACKS: readonly Choice[] = [
 export const PIECE_HEADS: readonly Choice[] = [
   { value: "prong", label: "Prongs" },
   { value: "bezel", label: "Bezel" },
+  { value: "basket", label: "Basket" },
+];
+
+/** A basket head's under-gallery (`Gallery` in `basket.rs`). */
+export const PIECE_GALLERIES: readonly Choice[] = [
+  { value: "plain", label: "Plain rails" },
+  { value: "arches", label: "Arches" },
+  { value: "scallop", label: "Scallops" },
+];
+
+/** A hoop's wire section (`HoopSection` in `hoop.rs`). */
+export const HOOP_SECTIONS: readonly Choice[] = [
+  { value: "round", label: "Round" },
+  { value: "square", label: "Square" },
+  { value: "knife", label: "Knife edge" },
+  { value: "tube", label: "Tube" },
+];
+
+/** How a hoop closes (`Closure` in `hoop.rs`). */
+export const HOOP_CLOSURES: readonly Choice[] = [
+  { value: "post", label: "Hinged post" },
+  { value: "click", label: "Click-top" },
 ];
 
 /** How a prong head's prongs end over the stone (`prongStyle` in `prongs.rs`). */
@@ -263,6 +289,17 @@ export interface PieceParams {
   prongHeight: number | null;
   prongTip: number | null;
   prongWire: number | null;
+  /** A basket head's rails (null: the engine's two) and under-gallery. */
+  basketRails: number | null;
+  gallery: string;
+  /** Hoop earrings: the hoop's outside diameter, wire thickness and width, section, tube wall, gap and closure (null: the engine's). */
+  hoopDiameter: number | null;
+  hoopThickness: number | null;
+  hoopWidth: number | null;
+  hoopSection: string;
+  hoopWall: number | null;
+  hoopGap: number | null;
+  closure: string;
   /** A channel setting's rail wall and lip (null: the engine's). */
   channelWall: number | null;
   channelLip: number | null;
@@ -433,6 +470,15 @@ function parseParams(value: unknown): PieceParams | null {
     prongHeight: sizeOf(value["prongHeight"]),
     prongTip: sizeOf(value["prongTip"]),
     prongWire: sizeOf(value["prongWire"]),
+    basketRails: wholeOf(value["basketRails"]),
+    gallery: nameOf(value["gallery"]) || "plain",
+    hoopDiameter: sizeOf(value["hoopDiameter"]),
+    hoopThickness: sizeOf(value["hoopThickness"]),
+    hoopWidth: sizeOf(value["hoopWidth"]),
+    hoopSection: nameOf(value["hoopSection"]) || "round",
+    hoopWall: sizeOf(value["hoopWall"]),
+    hoopGap: sizeOf(value["hoopGap"]),
+    closure: nameOf(value["closure"]) || "post",
     channelWall: sizeOf(value["channelWall"]),
     channelLip: sizeOf(value["channelLip"]),
     topWidth: sizeOf(value["topWidth"]),
@@ -925,7 +971,7 @@ function kindRows(piece: Piece, choices: PieceChoices, system: string): PieceRow
       rows.push({ key: "bezelHeight", label: "Bezel height, mm", value: num(p.bezelHeight), kind: "number" });
     } else {
       rows.push({ key: "prongs", label: "Prongs", value: num(p.prongs), kind: "whole" });
-      rows.push(...prongStyleRows(p));
+      rows.push(...prongStyleRows(p), ...basketRows(p));
     }
     if (p.kind === "threestone") {
       // The side stones: empty reads as the engine's own share of the centre stone.
@@ -964,7 +1010,36 @@ function prongStyleRows(p: PieceParams): PieceRow[] {
   ];
 }
 
+/** A basket head's rails and under-gallery, in the Head group (none for another head). */
+function basketRows(p: PieceParams): PieceRow[] {
+  if (p.head !== "basket") return [];
+  return [
+    { key: "basketRails", label: "Basket rails", value: p.basketRails === null ? "2" : numberText(p.basketRails), kind: "whole" },
+    { key: "gallery", label: "Under-gallery", value: p.gallery, kind: "choice", choices: withHeld(PIECE_GALLERIES, p.gallery, capital) },
+  ];
+}
+
+/** A pair of hoops: the hoop, its wire, its closure, and pavé along the front. */
+function hoopRows(p: PieceParams, choices: PieceChoices): PieceRow[] {
+  const rows: PieceRow[] = [
+    { key: "kind", label: "Kind", value: p.kind, kind: "choice", choices: PIECE_KINDS },
+    { key: "metal", label: "Metal", value: p.metal, kind: "choice", choices: withHeld(choices.metals, p.metal, metalLabel) },
+    { key: "hoopDiameter", label: "Hoop diameter, mm", value: num(p.hoopDiameter), kind: "number" },
+    { key: "hoopSection", label: "Wire section", value: p.hoopSection, kind: "choice", choices: withHeld(HOOP_SECTIONS, p.hoopSection, capital) },
+    { key: "hoopThickness", label: "Wire thickness, mm", value: num(p.hoopThickness), kind: "number" },
+  ];
+  if (p.hoopSection === "square" || p.hoopSection === "knife") rows.push({ key: "hoopWidth", label: "Wire width, mm", value: num(p.hoopWidth), kind: "number" });
+  if (p.hoopSection === "tube") rows.push({ key: "hoopWall", label: "Tube wall, mm", value: num(p.hoopWall), kind: "number" });
+  rows.push({ key: "closure", label: "Closure", value: p.closure, kind: "choice", choices: withHeld(HOOP_CLOSURES, p.closure, capital) });
+  if (p.closure === "post") {
+    rows.push({ key: "hoopGap", label: "Gap, mm", value: num(p.hoopGap), kind: "number" });
+    rows.push({ key: "postDiameter", label: "Post diameter, mm", value: num(p.postDiameter), kind: "number" });
+  }
+  return [...rows, ...paveRows(p)];
+}
+
 function wornRows(p: PieceParams, choices: PieceChoices): PieceRow[] {
+  if (p.kind === "hoop") return hoopRows(p, choices);
   const rows: PieceRow[] = [
     { key: "kind", label: "Kind", value: p.kind, kind: "choice", choices: PIECE_KINDS },
     { key: "metal", label: "Metal", value: p.metal, kind: "choice", choices: withHeld(choices.metals, p.metal, metalLabel) },
@@ -983,7 +1058,7 @@ function wornRows(p: PieceParams, choices: PieceChoices): PieceRow[] {
     rows.push({ key: "bezelHeight", label: "Bezel height, mm", value: num(p.bezelHeight), kind: "number" });
   } else {
     rows.push({ key: "prongs", label: "Prongs", value: num(p.prongs), kind: "whole" });
-    rows.push(...prongStyleRows(p));
+    rows.push(...prongStyleRows(p), ...basketRows(p));
   }
   rows.push({ key: "halo", label: "Halo", value: p.halo === null ? "false" : "true", kind: "tick" });
   if (p.halo !== null) {
@@ -1140,11 +1215,12 @@ export function pieceSummary(piece: Piece, system: string): PieceSummary {
     tiles.push({ label: "Stones", value: caratText(piece.stones.carat), detail: `${piece.stones.count.toLocaleString("en-US")} pc` });
   }
   let centre: string | null = null;
-  if ((p.kind === "solitaire" || p.kind === "threestone" || isWorn(p.kind)) && p.stoneWidth !== null) {
+  if ((p.kind === "solitaire" || p.kind === "threestone" || isHeaded(p.kind)) && p.stoneWidth !== null) {
     const long = p.stoneLength !== null && Math.abs(p.stoneLength - p.stoneWidth) > 1e-6 ? `${trim(p.stoneLength, 2)}×` : "";
     const words = [`${long}${trim(p.stoneWidth, 2)} mm`, p.cut, p.stone].filter((w) => w !== "").join(" ");
     const style = p.prongStyle === null || p.prongStyle === "round" ? "" : `${p.prongStyle === "v" ? "V" : p.prongStyle} `;
-    centre = p.head === "bezel" ? `${words}, bezel` : p.prongs === null ? words : `${words}, ${numberText(p.prongs)} ${style}prongs`;
+    const held = p.head === "basket" ? "basket" : "prongs";
+    centre = p.head === "bezel" ? `${words}, bezel` : p.prongs === null ? words : `${words}, ${numberText(p.prongs)} ${style}${held}`;
   }
   return { tiles, centre };
 }
@@ -1159,7 +1235,7 @@ export function passingLine(passing: number, failing: number): string {
 
 /** A group of the parameters, under its name. */
 export interface PieceGroup {
-  name: "Ring" | "Piece" | "Band" | "Shank" | "Stones" | "Head" | "Setting" | "Findings" | "Pavé" | "Pattern" | "Engraving";
+  name: "Ring" | "Piece" | "Hoop" | "Band" | "Shank" | "Stones" | "Head" | "Setting" | "Findings" | "Pavé" | "Pattern" | "Engraving";
   rows: PieceRow[];
 }
 
@@ -1182,7 +1258,18 @@ function groupOf(row: PieceRow, kind: string): PieceGroup["name"] {
     case "top":
     case "topStone":
     case "hookWire":
+    case "closure":
+    case "hoopGap":
       return "Findings";
+    case "hoopDiameter":
+    case "hoopSection":
+    case "hoopThickness":
+    case "hoopWidth":
+    case "hoopWall":
+      return "Hoop";
+    case "basketRails":
+    case "gallery":
+      return "Head";
     case "kind":
     case "system":
     case "size":
@@ -1255,7 +1342,7 @@ function groupOf(row: PieceRow, kind: string): PieceGroup["name"] {
   }
 }
 
-const GROUP_ORDER: readonly PieceGroup["name"][] = ["Ring", "Piece", "Band", "Shank", "Stones", "Head", "Setting", "Findings", "Pavé", "Pattern", "Engraving"];
+const GROUP_ORDER: readonly PieceGroup["name"][] = ["Ring", "Piece", "Hoop", "Band", "Shank", "Stones", "Head", "Setting", "Findings", "Pavé", "Pattern", "Engraving"];
 
 /**
  * The rows in the groups a bench reads them in: the ring (what it is and the finger), the band,

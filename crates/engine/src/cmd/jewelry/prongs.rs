@@ -111,6 +111,10 @@ pub(super) struct ProngSpec {
     pub height: Option<f64>,
     pub tip: Option<f64>,
     pub wire: Option<f64>,
+    /// A basket head's rails (`basketRails`, 1 or 2; `None` for the usual two).
+    pub rails: Option<u32>,
+    /// A basket head's under-gallery (`gallery`).
+    pub gallery: super::basket::Gallery,
 }
 
 impl ProngSpec {
@@ -135,7 +139,14 @@ impl ProngSpec {
                 },
             }
         };
-        Ok(ProngSpec { style, height: mm("prongHeight", 0.1, 4.0)?, tip: mm("prongTip", 0.0, 3.0)?, wire: mm("prongWire", 0.3, 2.5)? })
+        Ok(ProngSpec {
+            style,
+            height: mm("prongHeight", 0.1, 4.0)?,
+            tip: mm("prongTip", 0.0, 3.0)?,
+            wire: mm("prongWire", 0.3, 2.5)?,
+            rails: super::basket::parse_rails(cmd, p.get("basketRails"))?,
+            gallery: super::basket::Gallery::parse(cmd, p.get("gallery"))?,
+        })
     }
 
     /// The keys as JSON, merged into the piece's parameters.
@@ -144,6 +155,8 @@ impl ProngSpec {
         o.insert("prongHeight".into(), json!(self.height));
         o.insert("prongTip".into(), json!(self.tip));
         o.insert("prongWire".into(), json!(self.wire));
+        o.insert("basketRails".into(), json!(self.rails));
+        o.insert("gallery".into(), json!(self.gallery.name()));
     }
 
     /// The tip's top over the girdle's top for this wire.
@@ -744,7 +757,18 @@ impl PieceParams {
         if cut.name != "cabochon" {
             let rail_r = 0.7 * rp;
             let perimeter = if cut.is_circle(length, width) { PI * width } else { PI * (length + width) / 2.0 };
-            v += PI * rail_r * rail_r * (0.5 * perimeter + TAU * 1.2 * rail_r);
+            let basket = self.head == super::heads::HeadStyle::Basket;
+            let fractions = super::basket::rail_fractions(basket, self.rail_count());
+            for f in fractions {
+                v += PI * rail_r * rail_r * ((1.0 - f) * perimeter + TAU * 1.2 * rail_r);
+            }
+            if basket && self.prong.gallery != super::basket::Gallery::Plain && !sites.is_empty() {
+                // One wire between each two prongs, a little longer than the rail between them,
+                // its ends in the legs and the rail.
+                let low = fractions.first().copied().unwrap_or(0.5);
+                let between = (1.0 - low) * perimeter / sites.len().clamp(3, 64) as f64;
+                v += sites.len().clamp(3, 64) as f64 * PI * rail_r * rail_r * (1.15 * between - 2.0 * rp).max(0.0);
+            }
         }
         if v.is_finite() { v.max(0.0) } else { 0.0 }
     }
@@ -765,6 +789,11 @@ impl PieceParams {
             v += 2.0 * self.head_prong_volume(&sides.head, cut, sides.length, sides.width, &sites);
         }
         v
+    }
+
+    /// A basket head's rails as asked for (`None`: the usual two).
+    fn rail_count(&self) -> Option<u32> {
+        self.prong.rails
     }
 
     /// The prongs' and rails' weight in grams.

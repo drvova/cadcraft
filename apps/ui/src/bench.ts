@@ -169,7 +169,7 @@ function stoneLine(group: unknown): BenchLine | null {
 }
 
 /** What a bench line calls a piece not worn on a finger, by the record's `piece`. */
-const WORN_LABELS: Readonly<Record<string, string>> = { pendant: "pendant", stud: "stud earrings", drop: "drop earrings" };
+const WORN_LABELS: Readonly<Record<string, string>> = { pendant: "pendant", stud: "stud earrings", drop: "drop earrings", hoop: "hoop earrings" };
 
 function bandLine(band: unknown): { line: BenchLine; grams: number } | null {
   if (!isRecord(band)) return null;
@@ -183,7 +183,7 @@ function bandLine(band: unknown): { line: BenchLine; grams: number } | null {
   const piece = typeof band["piece"] === "string" ? band["piece"] : "";
   const worn = WORN_LABELS[piece];
   if (worn !== undefined) {
-    const pair = piece === "stud" || piece === "drop";
+    const pair = piece === "stud" || piece === "drop" || piece === "hoop";
     const made = pair ? "pair" : "";
     const value = pair ? `pair · ${weight} (2 pieces)` : weight;
     return { line: { label: `${capital(metal)} ${worn}`, value, part: "metal", cells: [made, weight], note: pair ? "Made as a pair: two of every stone and part" : null, handles: handlesOf([band["handle"]]) }, grams };

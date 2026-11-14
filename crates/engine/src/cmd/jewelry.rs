@@ -12,6 +12,10 @@
 //! description carries the cut data (`gem: cut=round, mm=1.30, depth=0.80, sg=3.52, ct=0.0086`)
 //! and the bench sheet reads it back.
 
+mod basket;
+#[cfg(test)]
+#[path = "jewelry/basket_tests.rs"]
+mod basket_tests;
 mod bench;
 mod cable;
 mod casting;
@@ -37,6 +41,10 @@ mod heads;
 #[cfg(test)]
 #[path = "jewelry/heads_tests.rs"]
 mod heads_tests;
+mod hoop;
+#[cfg(test)]
+#[path = "jewelry/hoop_tests.rs"]
+mod hoop_tests;
 mod kinds;
 #[cfg(test)]
 #[path = "jewelry/kinds_tests.rs"]

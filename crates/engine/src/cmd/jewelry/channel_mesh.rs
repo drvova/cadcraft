@@ -53,7 +53,7 @@ pub(super) fn build(out: &mut Parts, pieces: &[ChannelPiece], radial: usize) {
         for side in [-1.0, 1.0] {
             rail(&mut out.channel, c, side, steps);
         }
-        out.csg.add.push(Prim::Channel(ChannelBound { piece: *c, opening: false }));
-        out.csg.cut.push(Prim::Channel(ChannelBound { piece: *c, opening: true }));
+        out.csg.add.push(Prim::Channel(ChannelBound { piece: *c, opening: false, at: Vec3::ZERO }));
+        out.csg.cut.push(Prim::Channel(ChannelBound { piece: *c, opening: true, at: Vec3::ZERO }));
     }
 }

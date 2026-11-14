@@ -27,7 +27,7 @@ fn world(q: Vec3) -> Vec3 {
 }
 
 /// Append `part`, turned inside out first when it encloses a negative volume.
-fn outward_into(to: &mut Buf, part: Buf) {
+pub(super) fn outward_into(to: &mut Buf, part: Buf) {
     if part.idx.is_empty() {
         return;
     }
@@ -63,11 +63,19 @@ fn shift_prim(p: Prim, by: Vec3) -> Prim {
             Prim::Bezel(b)
         }
         Prim::Prong(prong) => Prim::Prong(prong.shifted(by)),
+        Prim::Hoop(mut h) => {
+            h.c = h.c + by;
+            Prim::Hoop(h)
+        }
+        Prim::Channel(mut c) => {
+            c.at = c.at + by;
+            Prim::Channel(c)
+        }
         other => other,
     }
 }
 
-fn merge(to: &mut Parts, from: Parts, by: Vec3) {
+pub(super) fn merge(to: &mut Parts, from: Parts, by: Vec3) {
     let Parts {
         band,
         head,

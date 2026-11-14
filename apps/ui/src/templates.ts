@@ -36,7 +36,7 @@ export interface Template {
 }
 
 /** The piece kinds the engine builds today; a template on another kind carries `requires`. */
-export const BUILDABLE_KINDS: readonly string[] = ["band", "solitaire", "eternity", "halfeternity", "dome", "signet", "pendant", "stud", "drop"];
+export const BUILDABLE_KINDS: readonly string[] = ["band", "solitaire", "eternity", "halfeternity", "dome", "signet", "pendant", "stud", "drop", "hoop"];
 
 /** An oval rail 20 × 16.8 mm (any size: the engine scales it to the finger), as stored points. */
 const OVAL_RAIL: readonly (readonly [number, number])[] = [[10.0, 0], [9.914, 1.096], [9.659, 2.174], [9.239, 3.215], [8.66, 4.2], [7.934, 5.114], [7.071, 5.94], [6.088, 6.664], [5.0, 7.275], [3.827, 7.761], [2.588, 8.114], [1.305, 8.328], [0, 8.4], [-1.305, 8.328], [-2.588, 8.114], [-3.827, 7.761], [-5.0, 7.275], [-6.088, 6.664], [-7.071, 5.94], [-7.934, 5.114], [-8.66, 4.2], [-9.239, 3.215], [-9.659, 2.174], [-9.914, 1.096], [-10.0, 0], [-9.914, -1.096], [-9.659, -2.174], [-9.239, -3.215], [-8.66, -4.2], [-7.934, -5.114], [-7.071, -5.94], [-6.088, -6.664], [-5.0, -7.275], [-3.827, -7.761], [-2.588, -8.114], [-1.305, -8.328], [0, -8.4], [1.305, -8.328], [2.588, -8.114], [3.827, -7.761], [5.0, -7.275], [6.088, -6.664], [7.071, -5.94], [7.934, -5.114], [8.66, -4.2], [9.239, -3.215], [9.659, -2.174], [9.914, -1.096]];
@@ -220,6 +220,13 @@ export const TEMPLATES: readonly Template[] = [
     requires: "engrave",
   },
   {
+    id: "basket-solitaire",
+    name: "Basket Solitaire",
+    blurb: "A round brilliant in a four-prong basket: two rails and arches under the girdle.",
+    params: { kind: "solitaire", cut: "round", stone: "diamond", stoneWidth: 6.5, stoneLength: 6.5, prongs: 4, head: "basket", basketRails: 2, gallery: "arches", wall: 1.8, width: 2.2, profile: "flat", metal: "platinum" },
+    requires: "basket",
+  },
+  {
     id: "halo-pendant",
     name: "Halo Pendant",
     blurb: "A haloed round stone on a loop bail for a 1.5 mm chain.",
@@ -254,6 +261,20 @@ export const TEMPLATES: readonly Template[] = [
     name: "Stud-top Drops",
     blurb: "A pair of ovals hanging under 3 mm round stud tops.",
     params: { kind: "drop", cut: "oval", stone: "diamond", stoneWidth: 5, stoneLength: 7, top: "stud", topStone: 3, metal: "gold18" },
+  },
+  {
+    id: "hoop-earrings",
+    name: "Hoop Earrings",
+    blurb: "A pair of 20 mm round-wire hoops on hinged posts.",
+    params: { kind: "hoop", hoopDiameter: 20, hoopThickness: 2, hoopSection: "round", closure: "post", hoopGap: 1, postDiameter: 0.8, metal: "gold18" },
+    requires: "hoop",
+  },
+  {
+    id: "pave-hoops",
+    name: "Pavé Hoops",
+    blurb: "A pair of 18 mm click-top hoops, pavé along the front.",
+    params: { kind: "hoop", hoopDiameter: 18, hoopThickness: 2.2, hoopSection: "round", closure: "click", pave: { layout: "row", melee: 1.3, gap: 0.2, from: 0, to: 180, symmetric: false }, metal: "gold18" },
+    requires: "hoop",
   },
 ];
 
@@ -290,9 +311,10 @@ const GROUP_LABELS: Readonly<Record<string, string>> = {
   pendant: "Pendants",
   stud: "Stud earrings",
   drop: "Drop earrings",
+  hoop: "Hoop earrings",
 };
 
-const GROUP_ORDER: readonly string[] = ["solitaire", "band", "eternity", "halfeternity", "dome", "signet", "pendant", "stud", "drop"];
+const GROUP_ORDER: readonly string[] = ["solitaire", "band", "eternity", "halfeternity", "dome", "signet", "pendant", "stud", "drop", "hoop"];
 
 /** A group heading for a kind the table knows, else the kind with a capital and an "s". */
 function groupLabel(kind: string): string {

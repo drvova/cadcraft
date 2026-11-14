@@ -144,14 +144,18 @@ pub(crate) struct ChannelBound {
     pub piece: ChannelPiece,
     /// The channel cut rather than the rails.
     pub opening: bool,
+    /// Where the piece's axis stands (the origin but for the second hoop of a pair).
+    pub at: Vec3,
 }
 
 impl ChannelBound {
     pub(crate) fn distance(&self, p: Vec3) -> f64 {
+        let p = p - self.at;
         if self.opening { self.piece.opening(p) } else { self.piece.rails(p) }
     }
     pub(crate) fn bounds(&self) -> (Vec3, Vec3) {
-        self.piece.bounds()
+        let (lo, hi) = self.piece.bounds();
+        (lo + self.at, hi + self.at)
     }
 }
 
@@ -198,7 +202,7 @@ impl PieceParams {
         } else {
             (true, format!("The channel's lips cover the girdles by {} mm (at least {MIN_CHANNEL_LIP} mm), short of the tables", fmt_mm(lip)))
         };
-        let half = self.section().width / 2.0;
+        let half = pave_band::Surface::of(self).map_or_else(|| self.section().width, |surf| surf.section.width) / 2.0;
         let reach = largest / 2.0 + wall;
         let wall_check = if wall + 1e-9 < MIN_CHANNEL_WALL {
             (

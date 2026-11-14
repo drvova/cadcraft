@@ -457,6 +457,7 @@ fn kind_words(k: PieceKind) -> &'static str {
         PieceKind::Pendant => "pendant",
         PieceKind::Stud => "stud",
         PieceKind::Drop => "drop earring",
+        PieceKind::Hoop => "hoop earring",
     }
 }
 
