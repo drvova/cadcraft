@@ -29,7 +29,7 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 | Split shank, double shank, bypass, cathedral shoulders | `piece {shank:{split:2\|3, gap, from, cathedral, height}}`, the Piece panel's Shank group, templates | split and cathedral done (solitaire); double shank and bypass planned (J10) |
 | Twisted cable, braided bands | `piece {kind:"band", pattern:{twist:{strands, turns, wire}}}`, template Cable Band | twisted cable done (2–3 strands); braids planned (J11) |
 | Text and names on a band; hallmark | `piece {engrave: {text, at: inside|outside, style: cut|raised, font: block|script}, hallmark: true|{maker}}` | done (2026-11-14): CADCraft's own stroke font cut as round-bottomed grooves wrapped round the band; raised names add metal; fineness from the metal; weight, checks, developed view, 3D view and cast solid. Not yet: outline (filled) fonts, text on a dome or signet's outside, several lines |
-| Earrings, pendants, chains, links | other piece kinds | planned |
+| Earrings, pendants, chains, links | `PIECE` kinds `pendant` (the solitaire head, prongs or bezel, halo optional, with a loop or tube bail sized for a chain; a drop on a jump ring), `stud` (a pair: head and post, bought-in butterfly or scroll back) and `drop` (a pair: a hanging head on a jump ring under a French wire or a stud top); checks bail-opening, bail-wire, jump-ring, jump-ring-wire, post, ear-wire; weight, carats, sheet, 3D and cast solid count both of a pair; hoops, chains and links not yet | partial |
 
 ## Stones and settings
 
@@ -119,5 +119,6 @@ own tests — never from Rhino's binaries, code, interface or artwork.
 | 2026-11-14 | minor | Making it: STL surface on the true surface, scallops cut, sprue and shrinkage allowance |
 | 2026-11-14 | minor | Shank shapes: a drawn rail, a split shank, cathedral shoulders and a twisted cable band are done; two-rail sweep, double shank/bypass and braids are rows J9–J11 |
 | 2026-11-14 | minor | Prong styles and heights done, channel setting done, graduated rows partial (pavé and channel) |
+| 2026-11-14 | minor | Earrings and pendants: pendant, stud and drop kinds with bails, posts, jump rings and ear wires (partial; hoops, chains and links planned) |
 | 2026-11-14 | new | The feature list against Rhino's jewelry workflow, and the no-code rule |
 | 2026-11-14 | minor | Text and names on a band, and the hallmark: done |

@@ -92,12 +92,25 @@ impl JewelryFacts {
             if !out.is_empty() {
                 out.push_str("; ");
             }
-            out.push_str(&format!(
-                "a size {} band in {} weighing about {:.2} g",
-                b["size"].as_str().unwrap_or("?"),
-                b["metal"].as_str().unwrap_or("metal"),
-                b["grams"].as_f64().unwrap_or(0.0)
-            ));
+            let worn = match b["piece"].as_str() {
+                Some("pendant") => Some("a pendant"),
+                Some("stud") => Some("a pair of stud earrings"),
+                Some("drop") => Some("a pair of drop earrings"),
+                _ => None,
+            };
+            match worn {
+                Some(what) => out.push_str(&format!(
+                    "{what} in {} weighing about {:.2} g",
+                    b["metal"].as_str().unwrap_or("metal"),
+                    b["grams"].as_f64().unwrap_or(0.0)
+                )),
+                None => out.push_str(&format!(
+                    "a size {} band in {} weighing about {:.2} g",
+                    b["size"].as_str().unwrap_or("?"),
+                    b["metal"].as_str().unwrap_or("metal"),
+                    b["grams"].as_f64().unwrap_or(0.0)
+                )),
+            }
         }
         Some(out)
     }
@@ -245,6 +258,8 @@ fn parse_band(block: &str, desc: &str) -> Option<Value> {
         "prongs": field("prongs"),
         "prongGrams": number("prongGrams"),
         "channelGrams": number("channelGrams"),
+        "pieces": number("pieces").map(|n| n.clamp(1.0, 2.0) as u32).unwrap_or(1),
+        "back": field("back"),
     }))
 }
 
@@ -338,6 +353,16 @@ fn run_techsheet(s: &mut Session, p: &Value) -> Result<Value> {
     }
     // The bands RING drew, each with the weight its block records.
     for b in &facts.bands {
+        let worn = match b["piece"].as_str() {
+            Some("pendant") => Some("pendant"),
+            Some("stud") => Some("stud earrings, a pair (2 of everything)"),
+            Some("drop") => Some("drop earrings, a pair (2 of everything)"),
+            _ => None,
+        };
+        if let Some(what) = worn {
+            lines.push(format!("{what} — {}, {:.2} g", b["metal"].as_str().unwrap_or("?"), b["grams"].as_f64().unwrap_or(0.0)));
+            continue;
+        }
         lines.push(format!(
             "band {} — {}, {:.2} g",
             b["size"].as_str().unwrap_or("?"),

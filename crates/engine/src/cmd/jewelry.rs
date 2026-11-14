@@ -23,6 +23,10 @@ mod engrave;
 #[cfg(test)]
 #[path = "jewelry/engrave_tests.rs"]
 mod engrave_tests;
+mod findings;
+#[cfg(test)]
+#[path = "jewelry/findings_tests.rs"]
+mod findings_tests;
 mod gem;
 mod hallmark;
 mod heads;

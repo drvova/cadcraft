@@ -68,6 +68,11 @@ pub(super) fn record_extra(p: &PieceParams) -> String {
 /// The reply's `metal`: the band's weight, and the bezels' apart when there are any.
 pub(super) fn metal_json(p: &PieceParams, grams: f64) -> Value {
     let mut metal = serde_json::json!({ "name": p.metal, "density": p.density, "grams": (grams * 1000.0).round() / 1000.0 });
+    if p.kind.worn()
+        && let Some(o) = metal.as_object_mut()
+    {
+        super::super::findings::metal_extra(p, o);
+    }
     if p.bezeled()
         && let Some(o) = metal.as_object_mut()
     {

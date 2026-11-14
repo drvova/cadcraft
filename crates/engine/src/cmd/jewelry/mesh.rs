@@ -79,6 +79,8 @@ use serde_json::{Value, json};
 
 #[path = "channel_mesh.rs"]
 mod channel_mesh;
+#[path = "mesh_findings.rs"]
+mod mesh_findings;
 #[path = "mesh_kinds.rs"]
 mod mesh_kinds;
 #[path = "mesh_shank.rs"]
@@ -938,6 +940,10 @@ struct Parts {
     /// Lettering ([`super::engrave`]): raised letters, and the shadow of cut ones.
     lettering: Buf,
     engraving: Buf,
+    /// A worn piece's cast findings (bail, eyes, post, connectors, the heads' bases) and those
+    /// bought in (jump rings, ear wires) ([`super::findings`]).
+    findings: Buf,
+    bought: Buf,
     notes: Vec<String>,
     stones: u32,
     fits: Option<u32>,
@@ -1089,12 +1095,18 @@ fn build_head(s: &Sane, d: &Detail, out: &mut Parts, stone: Standing) -> Stood {
         }
         // The foot, inside the band's metal and clear of the finger: worked out as at 12 o'clock
         // and turned to where the head stands.
-        let zmax = (p.width / 2.0 - rp).max(0.0) * if s.section.profile == Profile::Flat { 1.0 } else { 0.6 };
-        let z = (-site.y * shared::PRONG_FOOT).clamp(-zmax, zmax);
-        let rc = (s.outside_at(z) - 0.5 * rp).max(s.ri + 1.05 * rp);
-        let x = (site.x * shared::PRONG_FOOT).clamp(-0.5 * rc, 0.5 * rc);
-        let y = (rc * rc - x * x).max(0.0).sqrt();
-        let foot = frame.u * x + frame.w * y + Vec3::new(0.0, 0.0, z);
+        let foot = if p.kind.worn() {
+            // Off the finger the feet stand on the head's own base ([`super::findings::foot`]).
+            let (q, h) = super::findings::foot(p, *site);
+            frame.at(q.x, q.y, h)
+        } else {
+            let zmax = (p.width / 2.0 - rp).max(0.0) * if s.section.profile == Profile::Flat { 1.0 } else { 0.6 };
+            let z = (-site.y * shared::PRONG_FOOT).clamp(-zmax, zmax);
+            let rc = (s.outside_at(z) - 0.5 * rp).max(s.ri + 1.05 * rp);
+            let x = (site.x * shared::PRONG_FOOT).clamp(-0.5 * rc, 0.5 * rc);
+            let y = (rc * rc - x * x).max(0.0).sqrt();
+            frame.u * x + frame.w * y + Vec3::new(0.0, 0.0, z)
+        };
         let tip = *site - dir * (top.cover - rp);
         let mut path = vec![foot];
         if !cab {
@@ -1540,7 +1552,9 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
     });
     let s = Sane::of(p);
     let mut parts = Parts::default();
-    if s.p.tapered() {
+    if s.p.kind.worn() {
+        mesh_findings::build_worn(&s.p, &d, &mut parts);
+    } else if s.p.tapered() {
         mesh_kinds::build_tapered_band(&mut parts.band, &mut parts.csg, &s, &d);
     } else if mesh_shank::shaped(&s.p) {
         mesh_shank::build(&mut parts.band, &mut parts.csg, &s, &d);
@@ -1548,6 +1562,7 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
         build_band(&mut parts.band, &mut parts.csg, &s, &d);
     }
     match s.p.kind {
+        PieceKind::Pendant | PieceKind::Stud | PieceKind::Drop => {}
         PieceKind::Band | PieceKind::Dome => {}
         PieceKind::Signet => mesh_kinds::build_face(&mut parts.face, &mut parts.csg, &s, &d),
         PieceKind::HalfEternity => mesh_kinds::build_half_eternity(&s, &d, &mut parts),
@@ -1559,7 +1574,7 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
     let metal = metal_color(&p.metal);
     let stone = stone_color(&p.stone);
     // A halo's melee are diamonds whatever the centre stone is; an eternity band's are the piece's stone.
-    let small = if s.p.kind == PieceKind::Solitaire { stone_color("diamond") } else { stone };
+    let small = if s.p.kind == PieceKind::Solitaire || s.p.kind.worn() { stone_color("diamond") } else { stone };
     let meshes = [
         parts.band.part("metal", "band", metal),
         parts.head.part("metal", "head", metal),
@@ -1571,6 +1586,8 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
         parts.lettering.part("metal", "lettering", metal),
         parts.engraving.part("metal", "engraving", metal.map(|c| c / 3)),
         parts.channel.part("metal", "channel", metal),
+        parts.findings.part("metal", "findings", metal),
+        parts.bought.part("metal", "bought-in findings", metal),
         parts.centre.part("stone", "centre stone", stone),
         parts.sides.part("stone", "side stones", stone),
         parts.melee.part("stone", "melee", small),
@@ -1700,7 +1717,7 @@ pub(super) fn stl_ascii(tris: &[[Vec3; 4]], title: &str) -> String {
 // The commands
 // ---------------------------------------------------------------------------------------------
 
-const PIECE_KEYS: &str = "kind: band|solitaire|threestone|eternity|halfeternity|dome|signet, head?: prong|bezel, bezelWall?, bezelHeight?, topWidth?, topWall?, face?: round|oval|cushion|rectangle, faceLength?, faceWidth?, system?, size? (default US 6), wall?: mm (1.8), width?: mm (2.2), \
+const PIECE_KEYS: &str = "kind: band|solitaire|threestone|eternity|halfeternity|dome|signet|pendant|stud|drop, bail?, bailOpening?, bailWire?, bailWidth?, chain?, drop?, jumpRing?, jumpRingWire?, postDiameter?, postLength?, back?, top?: hook|stud, topStone?, hookWire?, head?: prong|bezel, bezelWall?, bezelHeight?, topWidth?, topWall?, face?: round|oval|cushion|rectangle, faceLength?, faceWidth?, system?, size? (default US 6), wall?: mm (1.8), width?: mm (2.2), \
     profile?: flat|dome|comfort|court|knife|bevel|concave|custom (with profileCurve, as PIECE reports it), comfort?|ridge?|bevel?|hollow?: mm (the profile's own number), metal? (gold18), cut? (round), stoneWidth?: mm (6.5), stoneLength?: mm, stone? (diamond), prongs?: 3–8 (6), halo?: bool | melee mm, \
     sideWidth?: mm, sideLength?: mm, sideCut?, sideProngs?: 3–8 (4), melee?: mm (1.8), count?: stones (default: as many as fit), gap?: mm (0.2), pave?: false|true|{layout, rows, melee, gap, span|from/to, symmetric, graduated} (as PIECE takes it), engrave?: false|text|{text, at, style, font, side, height, stroke, depth}, hallmark?: false|true|{maker, height, depth} (as PIECE takes them)";
 
@@ -1748,7 +1765,7 @@ fn piece_of(cmd: &str, p: &Value) -> Result<PieceParams> {
         return Err(bad(
             cmd,
             format!(
-                "there is no piece to show: give `kind` (band, solitaire, threestone, eternity, halfeternity, dome or signet) and its parameters ({PIECE_KEYS})"
+                "there is no piece to show: give `kind` (band, solitaire, threestone, eternity, halfeternity, dome, signet, pendant, stud or drop) and its parameters ({PIECE_KEYS})"
             ),
         ));
     }

@@ -454,6 +454,9 @@ fn kind_words(k: PieceKind) -> &'static str {
         PieceKind::HalfEternity => "half eternity band",
         PieceKind::Dome => "dome ring",
         PieceKind::Signet => "signet",
+        PieceKind::Pendant => "pendant",
+        PieceKind::Stud => "stud",
+        PieceKind::Drop => "drop earring",
     }
 }
 

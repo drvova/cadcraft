@@ -399,6 +399,18 @@ pub(crate) struct ProngSolid {
 }
 
 impl ProngSolid {
+    /// The same prong moved by `by` (a pair's second earring).
+    pub(crate) fn shifted(self, by: Vec3) -> Self {
+        let parts = self
+            .parts
+            .into_iter()
+            .map(|q| match q {
+                ProngPart::Cone { a, ra, b, rb } => ProngPart::Cone { a: a + by, ra, b: b + by, rb },
+                ProngPart::Bar { c, x, y, z, h } => ProngPart::Bar { c: c + by, x, y, z, h },
+            })
+            .collect();
+        Self { parts }
+    }
     /// The least of the parts' distances: an exact union's bound, 1-Lipschitz.
     pub(crate) fn distance(&self, p: Vec3) -> f64 {
         self.parts.iter().map(|q| q.distance(p)).fold(f64::INFINITY, f64::min)

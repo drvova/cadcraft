@@ -26,7 +26,16 @@ import { asBool, asNumber, asString, isRecord } from "./json";
 import { RING_SYSTEMS, metalLabel, paramsOf, readGemChoices, ringChoices, ENGINE_DEFAULT, type Choice, type JewelryEngine } from "./jewelry-dialog";
 import { numberText, readNumber, type DraftVerdict } from "./props";
 
-export type PieceKind = "band" | "solitaire" | "threestone" | "eternity" | "halfeternity" | "dome" | "signet";
+export type PieceKind = "band" | "solitaire" | "threestone" | "eternity" | "halfeternity" | "dome" | "signet" | "pendant" | "stud" | "drop";
+
+/** The kinds not worn on a finger: no ring size, no band (`findings.rs`). */
+export const WORN_KINDS: readonly PieceKind[] = ["pendant", "stud", "drop"];
+
+/** Whether a kind is worn off the finger (a pendant, earrings). */
+export const isWorn = (kind: string): boolean => (WORN_KINDS as readonly string[]).includes(kind);
+
+/** Whether a kind is made as a pair (earrings). */
+export const isPair = (kind: string): boolean => kind === "stud" || kind === "drop";
 
 /** The kinds the engine builds, in the order the section offers them. */
 export const PIECE_KINDS: readonly Choice[] = [
@@ -37,6 +46,28 @@ export const PIECE_KINDS: readonly Choice[] = [
   { value: "halfeternity", label: "Half eternity" },
   { value: "dome", label: "Dome" },
   { value: "signet", label: "Signet" },
+  { value: "pendant", label: "Pendant" },
+  { value: "stud", label: "Stud earrings" },
+  { value: "drop", label: "Drop earrings" },
+];
+
+/** A pendant's bail (`Bail` in `findings.rs`). */
+export const PIECE_BAILS: readonly Choice[] = [
+  { value: "loop", label: "Loop" },
+  { value: "tube", label: "Tube" },
+];
+
+/** A drop earring's top (`Top` in `findings.rs`). */
+export const PIECE_TOPS: readonly Choice[] = [
+  { value: "hook", label: "French wire" },
+  { value: "stud", label: "Stud" },
+];
+
+/** A stud's bought-in back (`Back` in `findings.rs`). */
+export const PIECE_BACKS: readonly Choice[] = [
+  { value: "butterfly", label: "Butterfly" },
+  { value: "scroll", label: "Scroll" },
+  { value: "none", label: "None" },
 ];
 
 /** How a solitaire's or a three-stone's stones are held (`head` in `heads.rs`). */
@@ -195,6 +226,23 @@ export interface PieceParams {
   face: string;
   faceLength: number | null;
   faceWidth: number | null;
+  /** A pendant's bail and the chain it is sized for; a drop on a jump ring. */
+  bail: string;
+  bailOpening: number | null;
+  bailWire: number | null;
+  bailWidth: number | null;
+  chain: number | null;
+  drop: boolean;
+  jumpRing: number | null;
+  jumpRingWire: number | null;
+  /** A stud's post and its bought-in back. */
+  postDiameter: number | null;
+  postLength: number | null;
+  back: string;
+  /** A drop earring's top: a French wire or a stud with a stone of `topStone`. */
+  top: string;
+  topStone: number | null;
+  hookWire: number | null;
   /** Text on the band and the hallmark: false for none, null when the engine does not offer it. */
   engrave: EngravePart | false | null;
   hallmark: HallmarkPart | false | null;
@@ -241,6 +289,8 @@ export interface Piece {
   metal: { name: string; grams: number | null };
   stones: { count: number | null; carat: number | null };
   checks: PieceCheck[];
+  /** How many are made: 2 for a pair of earrings, else 1. */
+  pieces: number;
 }
 
 /**
@@ -343,6 +393,20 @@ function parseParams(value: unknown): PieceParams | null {
     shank: shankOf(value),
     engrave: engraveOf(value["engrave"]),
     hallmark: hallmarkOf(value["hallmark"]),
+    bail: nameOf(value["bail"]) || "loop",
+    bailOpening: sizeOf(value["bailOpening"]),
+    bailWire: sizeOf(value["bailWire"]),
+    bailWidth: sizeOf(value["bailWidth"]),
+    chain: sizeOf(value["chain"]),
+    drop: asBool(value["drop"]) === true,
+    jumpRing: sizeOf(value["jumpRing"]),
+    jumpRingWire: sizeOf(value["jumpRingWire"]),
+    postDiameter: sizeOf(value["postDiameter"]),
+    postLength: sizeOf(value["postLength"]),
+    back: nameOf(value["back"]) || "butterfly",
+    top: nameOf(value["top"]) || "hook",
+    topStone: sizeOf(value["topStone"]),
+    hookWire: sizeOf(value["hookWire"]),
   };
 }
 
@@ -569,6 +633,8 @@ export function parsePiece(value: unknown): Piece | null {
   const params = parseParams(value["params"]);
   if (params === null) return null;
   const size = isRecord(value["size"]) ? value["size"] : {};
+  // A pendant or earrings have no ring size: nothing of the stored size is shown.
+  if (isWorn(params.kind)) params.sizeText = null;
   const metal = isRecord(value["metal"]) ? value["metal"] : {};
   const stones = isRecord(value["stones"]) ? value["stones"] : {};
   return {
@@ -585,6 +651,7 @@ export function parsePiece(value: unknown): Piece | null {
     metal: { name: nameOf(metal["name"]) || params.metal, grams: sizeOf(metal["grams"]) },
     stones: { count: wholeOf(stones["count"]), carat: sizeOf(stones["carat"]) },
     checks: parseChecks(value["checks"]),
+    pieces: wholeOf(value["pieces"]) === 2 ? 2 : 1,
   };
 }
 
@@ -717,6 +784,7 @@ export function pieceRows(piece: Piece, choices: PieceChoices, system: string): 
 
 function kindRows(piece: Piece, choices: PieceChoices, system: string): PieceRow[] {
   const p = piece.params;
+  if (isWorn(p.kind)) return wornRows(p, choices);
   const shown = systemOf(system);
   const rows: PieceRow[] = [
     { key: "kind", label: "Kind", value: p.kind, kind: "choice", choices: PIECE_KINDS },
@@ -788,6 +856,68 @@ function kindRows(piece: Piece, choices: PieceChoices, system: string): PieceRow
   return rows;
 }
 
+/**
+ * The rows of a pendant or a pair of earrings: no ring size, no band. What it is and its metal,
+ * the stone, the head that holds it, and its findings (the bail and chain, the post and back, the
+ * jump ring, the ear wire or the stud top).
+ */
+function wornRows(p: PieceParams, choices: PieceChoices): PieceRow[] {
+  const rows: PieceRow[] = [
+    { key: "kind", label: "Kind", value: p.kind, kind: "choice", choices: PIECE_KINDS },
+    { key: "metal", label: "Metal", value: p.metal, kind: "choice", choices: withHeld(choices.metals, p.metal, metalLabel) },
+    { key: "cut", label: "Cut", value: p.cut, kind: "choice", choices: withHeld(choices.cuts, p.cut, capital) },
+    { key: "stone", label: "Stone", value: p.stone, kind: "choice", choices: withHeld(choices.stones, p.stone, capital) },
+  ];
+  if (choices.round.includes(p.cut)) {
+    rows.push({ key: "stoneWidth", label: "Stone, mm", value: num(p.stoneWidth), kind: "number", both: true });
+  } else {
+    rows.push({ key: "stoneLength", label: "Stone length, mm", value: num(p.stoneLength), kind: "number" });
+    rows.push({ key: "stoneWidth", label: "Stone width, mm", value: num(p.stoneWidth), kind: "number" });
+  }
+  rows.push({ key: "head", label: "Head", value: p.head, kind: "choice", choices: withHeld(PIECE_HEADS, p.head, capital) });
+  if (p.head === "bezel") {
+    rows.push({ key: "bezelWall", label: "Bezel wall, mm", value: num(p.bezelWall), kind: "number" });
+    rows.push({ key: "bezelHeight", label: "Bezel height, mm", value: num(p.bezelHeight), kind: "number" });
+  } else {
+    rows.push({ key: "prongs", label: "Prongs", value: num(p.prongs), kind: "whole" });
+  }
+  rows.push({ key: "halo", label: "Halo", value: p.halo === null ? "false" : "true", kind: "tick" });
+  if (p.halo !== null) {
+    rows.push({ key: "haloWidth", label: "Halo stones, mm", value: num(p.halo), kind: "number" });
+    rows.push({ key: "gap", label: "Gap, mm", value: num(p.gap), kind: "number" });
+  }
+  const jump = (): void => {
+    rows.push({ key: "jumpRing", label: "Jump ring inside, mm", value: num(p.jumpRing), kind: "number" });
+    rows.push({ key: "jumpRingWire", label: "Jump ring wire, mm", value: num(p.jumpRingWire), kind: "number" });
+  };
+  const post = (): void => {
+    rows.push({ key: "postDiameter", label: "Post diameter, mm", value: num(p.postDiameter), kind: "number" });
+    rows.push({ key: "postLength", label: "Post length, mm", value: num(p.postLength), kind: "number" });
+    rows.push({ key: "back", label: "Back (bought in)", value: p.back, kind: "choice", choices: withHeld(PIECE_BACKS, p.back, capital) });
+  };
+  if (p.kind === "pendant") {
+    rows.push({ key: "bail", label: "Bail", value: p.bail, kind: "choice", choices: withHeld(PIECE_BAILS, p.bail, capital) });
+    rows.push({ key: "bailOpening", label: "Bail opening, mm", value: num(p.bailOpening), kind: "number" });
+    rows.push({ key: "bailWire", label: p.bail === "tube" ? "Tube wall, mm" : "Bail wire, mm", value: num(p.bailWire), kind: "number" });
+    if (p.bail === "tube") rows.push({ key: "bailWidth", label: "Tube length, mm", value: num(p.bailWidth), kind: "number" });
+    rows.push({ key: "chain", label: "Chain, mm", value: num(p.chain), kind: "number" });
+    rows.push({ key: "drop", label: "Drop on a jump ring", value: p.drop ? "true" : "false", kind: "tick" });
+    if (p.drop) jump();
+  } else if (p.kind === "stud") {
+    post();
+  } else {
+    rows.push({ key: "top", label: "Top", value: p.top, kind: "choice", choices: withHeld(PIECE_TOPS, p.top, capital) });
+    if (p.top === "stud") {
+      rows.push({ key: "topStone", label: "Top stone, mm", value: num(p.topStone), kind: "number" });
+      post();
+    } else {
+      rows.push({ key: "hookWire", label: "Ear wire, mm", value: num(p.hookWire), kind: "number" });
+    }
+    jump();
+  }
+  return rows;
+}
+
 /** The heading's summary: what the piece is and its size ("Solitaire · US 6½"). */
 export function pieceHeading(state: PieceState, system?: string): string {
   if (state.kind !== "piece") return "";
@@ -795,6 +925,7 @@ export function pieceHeading(state: PieceState, system?: string): string {
   const shown = systemOf(system ?? p.sizeSystem);
   const size = sizeIn(state.piece, shown);
   const kind = PIECE_KINDS.find((k) => k.value === p.kind)?.label ?? capital(p.kind);
+  if (isWorn(p.kind)) return isPair(p.kind) ? `${kind} · pair` : kind;
   return size === "" ? kind : `${kind} · ${systemLabel(shown)} ${size}`;
 }
 
@@ -823,6 +954,7 @@ export function pieceFacts(piece: Piece, system: string): PieceFact[] {
     const carat = piece.stones.carat === null ? "" : ` · ${caratText(piece.stones.carat)}`;
     facts.push({ label: "Stones", value: `${piece.stones.count.toLocaleString("en-US")} pc${carat}` });
   }
+  if (isPair(piece.params.kind)) facts.push({ label: "Made as", value: "a pair: two of everything, weights and carats for both" });
   if (piece.size.diameter !== null) facts.push({ label: "Inside diameter", value: `${trim(piece.size.diameter, 2)} mm` });
   const others: string[] = [];
   for (const s of RING_SYSTEMS) {
@@ -865,12 +997,13 @@ export function pieceSummary(piece: Piece, system: string): PieceSummary {
   const tiles: PieceTile[] = [];
   const size = sizeIn(piece, shown);
   if (size !== "") tiles.push({ label: "Size", value: `${systemLabel(shown)} ${size}`, detail: piece.size.diameter === null ? "" : `${trim(piece.size.diameter, 2)} mm` });
+  if (isPair(p.kind)) tiles.push({ label: "Made as", value: "Pair", detail: "2 of everything" });
   if (piece.metal.grams !== null) tiles.push({ label: "Metal", value: `${trim(piece.metal.grams, 2)} g`, detail: piece.metal.name === "" ? "" : metalLabel(piece.metal.name) });
   if (piece.stones.count !== null && piece.stones.count > 0 && piece.stones.carat !== null) {
     tiles.push({ label: "Stones", value: caratText(piece.stones.carat), detail: `${piece.stones.count.toLocaleString("en-US")} pc` });
   }
   let centre: string | null = null;
-  if ((p.kind === "solitaire" || p.kind === "threestone") && p.stoneWidth !== null) {
+  if ((p.kind === "solitaire" || p.kind === "threestone" || isWorn(p.kind)) && p.stoneWidth !== null) {
     const long = p.stoneLength !== null && Math.abs(p.stoneLength - p.stoneWidth) > 1e-6 ? `${trim(p.stoneLength, 2)}×` : "";
     const words = [`${long}${trim(p.stoneWidth, 2)} mm`, p.cut, p.stone].filter((w) => w !== "").join(" ");
     const style = p.prongStyle === null || p.prongStyle === "round" ? "" : `${p.prongStyle === "v" ? "V" : p.prongStyle} `;
@@ -889,14 +1022,30 @@ export function passingLine(passing: number, failing: number): string {
 
 /** A group of the parameters, under its name. */
 export interface PieceGroup {
-  name: "Ring" | "Band" | "Shank" | "Stones" | "Head" | "Setting" | "Pavé" | "Engraving";
+  name: "Ring" | "Piece" | "Band" | "Shank" | "Stones" | "Head" | "Setting" | "Findings" | "Pavé" | "Engraving";
   rows: PieceRow[];
 }
 
 /** The group each parameter is read in; the gap is the stones' on an eternity and the head's
  *  (the halo's) otherwise. */
 function groupOf(row: PieceRow, kind: string): PieceGroup["name"] {
+  if (isWorn(kind) && (row.key === "kind" || row.key === "metal")) return "Piece";
   switch (row.key) {
+    case "bail":
+    case "bailOpening":
+    case "bailWire":
+    case "bailWidth":
+    case "chain":
+    case "drop":
+    case "jumpRing":
+    case "jumpRingWire":
+    case "postDiameter":
+    case "postLength":
+    case "back":
+    case "top":
+    case "topStone":
+    case "hookWire":
+      return "Findings";
     case "kind":
     case "system":
     case "size":
@@ -962,7 +1111,7 @@ function groupOf(row: PieceRow, kind: string): PieceGroup["name"] {
   }
 }
 
-const GROUP_ORDER: readonly PieceGroup["name"][] = ["Ring", "Band", "Shank", "Stones", "Head", "Setting", "Pavé", "Engraving"];
+const GROUP_ORDER: readonly PieceGroup["name"][] = ["Ring", "Piece", "Band", "Shank", "Stones", "Head", "Setting", "Findings", "Pavé", "Engraving"];
 
 /**
  * The rows in the groups a bench reads them in: the ring (what it is and the finger), the band,
@@ -1044,7 +1193,7 @@ export function judgePieceDraft(row: PieceRow, draft: string, system = "us"): Dr
       if (row.key === "cathedral" || row.key === "twist") return { kind: "send", patch: shankPatch(row.key, draft === "true") ?? {} };
       if (row.key === "engrave") return { kind: "send", patch: { engrave: draft === "true" ? { text: ENGRAVE_START } : false } };
       if (row.key === "hallmark") return { kind: "send", patch: { hallmark: draft === "true" } };
-      return { kind: "send", patch: { [row.key === "pave" ? "pave" : "halo"]: draft === "true" } };
+      return { kind: "send", patch: { [row.key === "pave" || row.key === "drop" ? row.key : "halo"]: draft === "true" } };
     case "words": {
       const text = draft.normalize("NFC").replace(/\s+/g, " ").trim();
       if (text === row.value.trim()) return { kind: "keep" };
