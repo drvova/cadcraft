@@ -74,6 +74,7 @@ use cadcraft_geom::{PolyVertex, Vec2, Vec3};
 use serde_json::{Map, Value, json};
 
 use super::super::*;
+use super::pattern;
 use super::pave_band;
 use super::piece_params::{self as shared, MIN_CAST_WALL, PieceKind, PieceParams, Row, Section, carat_of, least_spacing};
 use super::sizes::RingSize;
@@ -176,6 +177,8 @@ struct Design {
     /// Pavé on the band, when asked for, and its stones placed in the layout.
     pave: Option<pave_band::PaveFit>,
     pave_stones: Vec<(Vec2, gem::Stone)>,
+    /// A generative pattern on the band, when asked for.
+    pattern: Option<pattern::Layout>,
 }
 
 /// A closed outline of straight edges.
@@ -690,10 +693,24 @@ fn design(p: &PieceParams) -> Result<Design> {
             pave_stones.push((layout_at + *at, pave_band::melee_stone(CMD, *d)?));
         }
     }
+    // A generative pattern: its check, and the band developed with the pattern under the plan.
+    let pattern = match pattern::refusal(p) {
+        Some(why) => return Err(bad(CMD, why)),
+        None => pattern::layout(p),
+    };
+    if let Some(l) = &pattern {
+        let (ok, message) = pattern::judge(l);
+        checks.push(check("pattern", ok, message));
+        let (length, polys) = l.sheet();
+        let below = if pave_sheet.is_some() || unrolled.is_some() { 2.0 * (p.width + VIEW_GAP) } else { 0.0 };
+        let at = plan_at + Vec2::new(0.0, -(plan_reach + VIEW_GAP + p.width / 2.0 + below));
+        shapes.push((On::Metal, rect(at, length, p.width)));
+        shapes.extend(polys.into_iter().map(|q| (On::Metal, Shape::Poly { v: q.into_iter().map(|v| (at + v, 0.0)).collect(), closed: true })));
+    }
     if !(grams.is_finite() && carat.is_finite()) {
         return Err(bad(CMD, "the piece has no weight"));
     }
-    Ok(Design { params: p.clone(), centre, melee, shapes, placed, grams, carat, fits, checks, notes, pave, pave_stones })
+    Ok(Design { params: p.clone(), centre, melee, shapes, placed, grams, carat, fits, checks, notes, pave, pave_stones, pattern })
 }
 
 /// A shape moved by `by`.
@@ -743,6 +760,7 @@ impl Design {
             "metal": piece_kinds::metal_json(p, self.grams),
             "stones": stones,
             "checks": self.checks,
+            "pattern": self.pattern.as_ref().map(pattern::json),
             "at": [at.x, at.y],
         })
     }
@@ -801,6 +819,13 @@ impl Design {
                 if f.rows.len() > 1 { format!(", {} rows", f.rows.len()) } else { String::new() },
                 carat,
                 fmt_mm(f.gap.unwrap_or(f.spec.gap).max(0.0))
+            ));
+        }
+        if let Some(l) = &self.pattern {
+            out.push_str(&format!(
+                "; a {} pattern{}",
+                l.spec.motif.name(),
+                if matches!(l.spec.finish, pattern::Finish::Pierced) { ", pierced" } else { " in relief" }
             ));
         }
         let failed: Vec<&str> = self.checks.iter().filter(|c| c["ok"] == json!(false)).filter_map(|c| c["message"].as_str()).collect();
@@ -968,6 +993,10 @@ fn run_build(s: &mut Session, p: &Value) -> Result<Value> {
         if key == "pave" {
             // A pavé change merges over the stored pavé, key by key.
             let next = pave_band::merge(merged.get("pave"), value);
+            merged.insert(key.clone(), next);
+        } else if key == "pattern" {
+            // A pattern change merges over the stored one, key by key (a new seed reshuffles).
+            let next = pattern::merge(merged.get("pattern"), value);
             merged.insert(key.clone(), next);
         } else if !matches!(key.as_str(), "query" | "remove" | "at") {
             merged.insert(key.clone(), value.clone());

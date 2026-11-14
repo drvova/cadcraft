@@ -294,6 +294,8 @@ pub(super) enum Prim {
         face: Face,
         outline: Vec<Vec2>,
     },
+    /// A band's generative pattern cut ([`super::pattern::PatternCut::distance`]).
+    Pattern(Box<super::pattern::PatternCut>),
 }
 
 /// Edges of a section taken together for [`Section::dist`].
@@ -405,6 +407,7 @@ impl Prim {
             Prim::Taper { taper, section, ri } => taper.distance_by(*ri, p, |q| section.dist(q)),
             Prim::Bezel(b) => b.distance(p),
             Prim::Face { face, outline } => face.distance(p, outline),
+            Prim::Pattern(c) => c.distance(p),
         };
         if v.is_nan() { f64::INFINITY } else { v }
     }
@@ -462,6 +465,7 @@ impl Prim {
                 }
                 bx
             }
+            Prim::Pattern(c) => c.bounds(),
         }
     }
 }

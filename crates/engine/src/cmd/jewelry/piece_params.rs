@@ -280,6 +280,8 @@ pub(super) struct PieceParams {
     pub gap: f64,
     /// Band, solitaire, three-stone: pavé on the band's outside ([`super::pave_band`]), or none.
     pub pave: Option<super::pave_band::PaveSpec>,
+    /// A generative pattern on the band (pierced or relief), when asked for.
+    pub pattern: Option<super::pattern::PatternSpec>,
     /// Solitaire and three-stone: how every stone is held (`head`: prong or bezel).
     pub head: HeadStyle,
     /// Bezel: the collar's wall, or `None` for [`super::heads::BEZEL_WALL`].
@@ -457,6 +459,7 @@ impl PieceParams {
             count,
             gap: mm_in(cmd, p, "gap", 0.2, 0.0, 5.0)?,
             pave: super::pave_band::PaveSpec::parse(cmd, p)?,
+            pattern: super::pattern::PatternSpec::parse(cmd, p)?,
         })
     }
 
@@ -504,6 +507,7 @@ impl PieceParams {
             "count": self.count,
             "gap": self.gap,
             "pave": self.pave.as_ref().map_or(Value::Bool(false), super::pave_band::PaveSpec::json),
+            "pattern": self.pattern.as_ref().map(super::pattern::PatternSpec::json),
             "head": self.head.name(),
             "bezelWall": self.bezel_wall,
             "bezelHeight": self.bezel_height,
@@ -913,7 +917,7 @@ impl PieceParams {
         let section = self.section();
         match self.kind {
             PieceKind::Dome | PieceKind::Signet => self.taper_volume(),
-            _ => TAU * (self.inner() / 2.0 + section.centroid()) * section.area(),
+            _ => TAU * (self.inner() / 2.0 + section.centroid()) * section.area() - super::pattern::removed(self),
         }
     }
 
