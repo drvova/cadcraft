@@ -14,6 +14,8 @@ mod dxf_write;
 mod dxf_xref;
 pub mod pdf;
 pub mod plotter;
+/// Rhino `.3dm` files: layers, names, meshes and curves (`docs/formats/3dm.md`).
+pub mod rhino3dm;
 pub mod svg;
 mod svg_read;
 

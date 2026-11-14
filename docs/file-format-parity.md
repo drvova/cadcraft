@@ -1,6 +1,6 @@
 # File-format parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-22 · **Change:** minor (DIMASSOC objects for angular, diametric and radial dimensions) · **Target:** Autodesk AutoCAD 2027
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-11-14 · **Change:** minor (Rhino `.3dm` read and write) · **Target:** Autodesk AutoCAD 2027
 
 Every format AutoCAD 2027 reads or writes, with CADCraft's support, fidelity and tests. Work
 items are in [gaps.md](gaps.md#file-formats); the weighted score feeds
@@ -117,7 +117,7 @@ on read with a note, so such files no longer exceed the DXF limit (#1482). **DWG
 | DWF/DWFx export, DWF underlay | yes | no | 10–15 |
 | DGN import/export/underlay | yes | no (needs a public spec; owner decision) | 25–40 |
 | WMF, EPS, ACIS SAT, STL, FBX, IGES/STEP (Windows), 3DS | various | no; most are 3D and wait for M11 | 20–40 |
-| Rhino `.3dm` | no | no; no public specification (only the openNURBS source); reader waits on an owner decision, ADR 0003 | 50–80 (meshes, curves, layers, export) |
+| Rhino `.3dm` | no | **read**: archive versions 2–4 and 50–80 (Rhino 5–8): layers (name, colour), object names and layers, model units, meshes (quads split; volume and weight when closed) and curves (lines, arcs/circles, polylines, NURBS, joined curves) through IMPORT3DM and File ▸ Import; **written** by EXPORT3DM (the cast piece's mesh, its section and finger circle, archive 50–80). Own reader and writer from [formats/3dm.md](formats/3dm.md) (ADR 0003). Surfaces, breps, extrusions, SubD, blocks, annotation not read; the writer's output is checked only by CADCraft's reader (not yet opened in Rhino or openNURBS) | 90–170 (breps: evaluator, trims, tessellation) + 4–8 (check against Rhino) |
 | SHX fonts (`.shx`, big fonts) | read | **not parsed**: our stroke font or FONTALT stands in, so text metrics differ from AutoCAD | 8–12 |
 | Linetype (`.lin`) and hatch pattern (`.pat`) files | load user files | user files load (#552); linetype shape (SHX) elements are skipped | 1–2 |
 | Plot styles (`.ctb`, `.stb`), plotter configs (`.pc3`), `.pmp` | yes | plot style tables in our own JSON format ([plot-styles.md](plot-styles.md)) and kept in the drawing; plotter devices with papers and printable areas in our own JSON format ([plotters.md](plotters.md), #564); binary `.ctb`/`.stb`/`.pc3`/`.pmp` not read (no public spec) | 4–8 |
@@ -141,6 +141,7 @@ our output in AutoCAD black-box.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | Rhino `.3dm` read (layers, names, units, meshes, curves) and written (EXPORT3DM), from our own format note (ADR 0003 accepted) |
 | 2026-11-14 | minor | Rhino `.3dm` row (ADR 0003) |
 | 2026-10-25 | minor | Raster images attach, draw and trace: IMAGEATTACH (path or base64, sizing, rotation, clips, brightness/contrast/fade, IMAGEFRAME), the picture drawn in the app and in PNG exports, IMAGETRACE (Otsu threshold, marching squares, Douglas–Peucker simplification, sized to a measurement), and MCP `attach_image`/`trace_image`/`describe_drawing`; IMAGE row narrowed to TIFF/BMP |
 | 2026-10-22 | minor | DXF/DWG save: angular, diametric and radial dimensions get standard DIMASSOC objects (one centre reference to the circle for radial/diametric, the definition points for angular), so AutoCAD follows their geometry; the standard objects of those kinds are read back too, without CADCraft's xdata (#1651) |

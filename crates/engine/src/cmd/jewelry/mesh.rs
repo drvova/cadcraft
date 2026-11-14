@@ -1895,6 +1895,18 @@ pub(super) fn solid_stl(mesh: &PieceMesh, quality: Quality, max_tris: usize) -> 
     Ok((tris, solid, notes))
 }
 
+/// The piece `p` describes (as STLOUT takes it) and its merged metal solid, at `quality`, within
+/// `max_tris` triangles, with the notes of its making. For EXPORT3DM.
+pub(super) fn cast_solid(cmd: &str, p: &Value, max_tris: usize) -> Result<(PieceParams, Solid, Vec<String>)> {
+    let piece = piece_of(cmd, p)?;
+    let quality = Quality::parse(cmd, p, Quality::Fine)?;
+    let mesh = piece_mesh_within(&piece, quality, Budget { triangles: max_tris / 2, json: None, stones: false });
+    let (_, solid, mut notes) = solid_stl(&mesh, quality, max_tris.max(1)).map_err(|e| bad(cmd, e))?;
+    let mut all = mesh.notes;
+    all.append(&mut notes);
+    Ok((piece, solid, all))
+}
+
 fn run_stlout(_s: &mut Session, p: &Value) -> Result<Value> {
     let cmd = "stlout";
     let piece = piece_of(cmd, p)?;
