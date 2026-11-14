@@ -293,6 +293,8 @@ pub(super) struct PieceParams {
     pub face: FaceShape,
     pub face_length: f64,
     pub face_width: f64,
+    /// The shank's shape past the round band: a rail, a split, cathedral arches, a cable ([`super::shank`]).
+    pub shape: super::shank::ShankShape,
 }
 
 /// The most stones an eternity band may be asked for.
@@ -421,7 +423,8 @@ impl PieceParams {
         let face = FaceShape::parse(cmd, p.get("face"))?;
         let face_length = mm_in(cmd, p, "faceLength", 12.0, 4.0, 30.0)?;
         let face_width = mm_in(cmd, p, "faceWidth", 10.0, 4.0, 30.0)?;
-        Ok(PieceParams {
+        let mut params = PieceParams {
+            shape: super::shank::parse(cmd, p)?,
             head,
             bezel_wall,
             bezel_height,
@@ -457,7 +460,9 @@ impl PieceParams {
             count,
             gap: mm_in(cmd, p, "gap", 0.2, 0.0, 5.0)?,
             pave: super::pave_band::PaveSpec::parse(cmd, p)?,
-        })
+        };
+        super::shank::settle(cmd, &mut params)?;
+        Ok(params)
     }
 
     /// The finger's inside diameter.
@@ -475,7 +480,7 @@ impl PieceParams {
     /// float noise its formula leaves (`5.999999999999997` reads `6`), and `sizeSystem` is the
     /// system the piece was given in.
     pub(super) fn json(&self) -> Value {
-        json!({
+        let mut v = json!({
             "kind": self.kind.name(),
             "system": "us",
             "size": round_us(self.size.us),
@@ -512,7 +517,11 @@ impl PieceParams {
             "face": self.face.name(),
             "faceLength": self.face_length,
             "faceWidth": self.face_width,
-        })
+        });
+        if let Some(o) = v.as_object_mut() {
+            self.shape.json_into(o);
+        }
+        v
     }
 }
 
@@ -904,12 +913,16 @@ impl PieceParams {
     /// outside radius, less the hollow on a concave band.
     pub(super) fn crown(&self) -> f64 {
         let sunk = self.wall - self.section().height_at(0.0);
-        self.outer() / 2.0 - if sunk.is_finite() { sunk.max(0.0) } else { 0.0 }
+        let sunk = if sunk.is_finite() { sunk.max(0.0) } else { 0.0 };
+        self.outer() / 2.0 - sunk + self.shape.lift()
     }
 
     /// The band's volume in cubic millimetres: its section swept around the finger at the
     /// section's centroid. The stones' seats are not taken off and no head is added.
     pub(super) fn band_volume(&self) -> f64 {
+        if let Some(v) = super::shank::volume(self) {
+            return v;
+        }
         let section = self.section();
         match self.kind {
             PieceKind::Dome | PieceKind::Signet => self.taper_volume(),

@@ -430,6 +430,57 @@ solitaire, bezel, eternity, half eternity, three-stone. The numbers live in
   outside it (column integration over the face). Check `face`: at least 1.2 mm thick (a 0.4 mm
   engraving over a 0.8 mm cast wall). A flush-set stone in the face (signet cocktail) is not built yet.
 
+### Shank shapes: a rail, a split shank, cathedral shoulders, a cable
+
+What a Rhino jeweller sweeps or scripts is a parameter here. The numbers are in
+`crates/engine/src/cmd/jewelry/shank.rs`, `sweep.rs` and `cable.rs`; the sheet draws them
+(`piece_shank.rs`), `PIECEMESH` builds them (`mesh_shank.rs`), and the cast solid takes each as a
+signed-distance bound.
+
+- **Rail** — `rail: {curve: handle}` (kind band): a closed polyline, spline, circle, ellipse or
+  region drawn as the band seen from the front (X across, Y up, 12 o'clock up) is the **inside** of
+  the band. It is centred on its centroid and **scaled so its length is the finger's inside
+  circumference** (`π·d`), and the profile (named or drawn) is swept along it, kept square to it,
+  standing outward. It is kept by value as `rail: {curve, points}` (at most 400 points, to the
+  micrometre), so the piece survives the curve; the same handle again ("Update rail from curve" in
+  the Piece panel) reads it again; `rail: null` takes it off. The weight is `A·L + M·Στ` on the
+  scaled polygon (area, first moment about the finger line, the rail's length, its turning angles)
+  — the round band's Pappus whenever the band does not fold, so an oval band weighs exactly what a
+  round band of the same profile and circumference weighs. The front view is the rail and its
+  outside; the plan is as wide as the rail. Check `rail`: at its narrowest the rail is at least
+  80 % of the finger's diameter across. Refused: a rail that bends inward more tightly than the
+  wall (the band would fold), one under half the finger across, an open or self-crossing curve, a
+  rail on a kind with a head, a rail with pavé or with a twist. The solid's bound is the profile's
+  signed distance at (distance along the finger, signed distance to the rail), both 1-Lipschitz
+  and square to each other.
+- **Split shank** — `shank: {split: 2 | 3, gap, from}` (solitaire): the section is cut across its
+  width into equal strips (the arms); within `from` (default 50°, 20–90) of 12 o'clock arm `i` moves
+  along the finger by `(i − (n−1)/2)·gap·s(θ)` with `s = t²(3 − 2t)`, `t = 1 − |θ|/from`, so the arms
+  stand `gap` (default 1.2 mm, 0.3–5) apart under the head and are one band again past `from`. The
+  weight is the band's exactly (every half-plane through the finger's axis cuts the same strips).
+  Check `split`: every arm at least 0.9 mm wide and 0.8 mm thick (at its middle). Refused: arms
+  under 0.4 mm, a drawn profile that folds back across its width, pavé on it, any kind but
+  solitaire. The section view shows the arms under the head; the plan shows them parting.
+- **Cathedral shoulders** — `shank: {cathedral: true, height, from}` (solitaire): within `from` of
+  12 o'clock the band's section is lifted off the finger by `height·s(θ)` (default 2 mm, 0.3–6), so
+  the shoulders rise in arches and the head stands `height` higher (the stone, its prongs and the
+  front view follow). The weight is exact: `2π(r·A + M) + A·height·from`. Check `cathedral`: the
+  lift within three walls. A split and cathedral arches go together. The merged `shank` key is
+  an object merged key by key; `shank: null` is the plain shank.
+- **Twisted cable** — `kind: "band"`, `pattern: {twist: {strands: 2 | 3, turns, wire}}` (`twist:
+  true` is three strands of 1 mm at the usual lay): round wires (`wire`, default 1 mm, 0.5–2.5)
+  twisted `turns` whole times in one turn round the finger (default: a lay of 3.5 bundle diameters,
+  2–120). The strands are set apart just enough never to meet anywhere (checked against the
+  helices' least distance at the pitch they have on the inside of the ring, plus 4 %), rest on the
+  finger, and the bundle is the band's `width` and `wall` (a different one is refused). The weight
+  is each strand's wire area times its axis's measured length (Pappus–Guldin for a tube; exact
+  because the strands do not overlap and no axis bends more tightly than the wire's radius,
+  which is refused). Check `cable`: wire at least 0.8 mm. Refused: too many twists for the
+  strands to clear (the message says how many fit), any kind but band, a drawn profile, a rail, pavé.
+
+These are our approximations of bench practice: a split is equal strips of the band's own section,
+an arch is a smooth lift, a cable is ideal round wire.
+
 `PIECEMESH` shows a closed shell per part (`bezel`, `face`, the tapered `band`); `STLOUT`'s merged
 solid takes each part's signed-distance bound (`BezelBound::distance`, `Taper::distance_by`,
 `Face::distance`), so a bezel, a dome's or a signet's shank and a signet's face cast as one body
@@ -642,6 +693,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 |---|---|---|
 | 2026-11-14 | minor | Save Render in the 3D tab: a still PNG (to 4096 px, square or 16:9, studio, light or transparent, held to the GPU's limits), a turntable (WebM via MediaRecorder, or an animated PNG of our own writing) and a contact sheet with the Tech Sheet's facts |
 | 2026-11-14 | minor | `STLOUT`: vertices projected onto the true surface; scallops cut; `sprue` and `shrink`; display-mesh notes made accurate |
+| 2026-11-14 | minor | Shank shapes: `PIECE {rail: {curve}}` (a drawn closed rail scaled to the finger's circumference, any profile swept square to it, kept by value, check `rail`), `shank: {split, gap, from, cathedral, height}` (a solitaire's split arms and cathedral arches, exact weights, checks `split` and `cathedral`) and `pattern: {twist: {strands, turns, wire}}` (a twisted cable band, weight by strand length, check `cable`); sheet, `PIECEMESH`, merged solid, proposals, templates and the Piece panel's Shank group |
 | 2026-11-14 | minor | `STLOUT`'s merged solid takes the drawn profile, the bezel collar with its stone's seat, the dome's and signet's tapered shank, the signet's face, and seats and beads for half eternity and pavé stones |
 | 2026-11-13 | minor | The 3D tab's four-view workspace (Top, Front, Right orthographic and flat-shaded at one scale; Perspective in its mode; maximise by double-click, M or the bar; remembered; single view under 560 px) on one scissored context, and drag handles on the piece (centre stone, halo melee, eternity stones, wall, width) that preview at draft quality, show the value and the checks it would break, and commit one `piece` change or, with Alt, a proposal; keyboard sliders |
 | 2026-11-13 | minor | `PIECE {profile: {curve: handle}}`: a band profile drawn as a closed curve of the drawing (polyline with bulges, spline, circle, ellipse, region), kept by value with its frame (box bottom on the finger, centred across), width and wall read from it, weight by Pappus, the wall check at its thinnest, the solid revolved from it; the Piece panel names it "Custom (from drawing)" with Update from curve. Rails are not built yet (J8) |

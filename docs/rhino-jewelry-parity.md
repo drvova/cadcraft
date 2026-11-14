@@ -19,15 +19,15 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 |---|---|---|
 | Band from a circle and a profile; dome, comfort, court, knife, bevel, concave sections | `piece {kind:"band", profile}`, the Piece panel | done |
 | Band from a profile curve you draw | `piece {profile:{curve}}`, "Update from curve" | done |
-| Profile swept along a rail (oval, shaped shank); two-rail sweep | rail on `piece` | planned (J8); the kernel's one-rail sweep (rotation-minimising and upright frames) exists in `crates/geom` |
 | Free-form NURBS surfaces (loft, revolve, sweep, extrude, ruled), area and volume | `NurbsSurface` in `crates/geom` ([nurbs-surfaces.md](nurbs-surfaces.md)) | partial: kernel only, no surface entity, commands, trims or 3dm surfaces yet |
+| Profile swept along a rail (oval, shaped shank); two-rail sweep | `piece {rail:{curve}}` (any profile, drawn or named, swept square to a drawn closed rail scaled to the finger), "Update rail from curve", template Oval Band | done for one rail; two-rail sweep planned (J9) |
 | Dome ring, tapered shank | `kind:"dome"` | done |
 | Signet (flat face for engraving) | `kind:"signet"` | done; flush stone in the face partial |
 | Solitaire, three-stone, halo | `kind:"solitaire"`, `"threestone"`, `halo` | done |
 | Bezel head | `head:"bezel"` | done |
 | Eternity, half eternity | `kind:"eternity"`, `"halfeternity"` | done |
-| Split shank, double shank, bypass, cathedral shoulders | shank options on `piece` | planned |
-| Twisted cable, braided bands | band pattern on `piece` | planned |
+| Split shank, double shank, bypass, cathedral shoulders | `piece {shank:{split:2\|3, gap, from, cathedral, height}}`, the Piece panel's Shank group, templates | split and cathedral done (solitaire); double shank and bypass planned (J10) |
+| Twisted cable, braided bands | `piece {kind:"band", pattern:{twist:{strands, turns, wire}}}`, template Cable Band | twisted cable done (2–3 strands); braids planned (J11) |
 | Text and names on a band; hallmark | engraving/text on `piece` | planned |
 | Earrings, pendants, chains, links | other piece kinds | planned |
 
@@ -117,4 +117,5 @@ own tests — never from Rhino's binaries, code, interface or artwork.
 | 2026-11-14 | minor | Interoperability row for `.3dm` (ADR 0003) |
 | 2026-11-14 | minor | The render row: image, turntable and contact sheet export |
 | 2026-11-14 | minor | Making it: STL surface on the true surface, scallops cut, sprue and shrinkage allowance |
+| 2026-11-14 | minor | Shank shapes: a drawn rail, a split shank, cathedral shoulders and a twisted cable band are done; two-rail sweep, double shank/bypass and braids are rows J9–J11 |
 | 2026-11-14 | new | The feature list against Rhino's jewelry workflow, and the no-code rule |

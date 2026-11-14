@@ -79,6 +79,8 @@ use serde_json::{Value, json};
 
 #[path = "mesh_kinds.rs"]
 mod mesh_kinds;
+#[path = "mesh_shank.rs"]
+mod mesh_shank;
 
 use super::super::*;
 use super::casting::{self, Sprue};
@@ -579,7 +581,7 @@ impl Sane {
         }
         let ri = fin(q.inner() / 2.0, 1.0, 50.0, 8.255);
         let section = q.section();
-        let top = fin(ri + section.height_at(0.0), ri, ri + q.wall, ri + q.wall);
+        let top = fin(ri + section.height_at(0.0), ri, ri + q.wall, ri + q.wall) + q.shape.lift();
         Sane { ri, top, section, p: q }
     }
     /// The band's outside radius at `z` along the finger.
@@ -1495,6 +1497,8 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
     let mut parts = Parts::default();
     if s.p.tapered() {
         mesh_kinds::build_tapered_band(&mut parts.band, &mut parts.csg, &s, &d);
+    } else if mesh_shank::shaped(&s.p) {
+        mesh_shank::build(&mut parts.band, &mut parts.csg, &s, &d);
     } else {
         build_band(&mut parts.band, &mut parts.csg, &s, &d);
     }

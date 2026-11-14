@@ -30,7 +30,7 @@
  */
 
 import { createEffect, createMemo, createSignal, For, Index, Match, onCleanup, Show, Switch, untrack, type Accessor, type JSX } from "solid-js";
-import { passingLine, pieceGroups, pieceHeading, pieceSummary, PIECE_KINDS, profileUpdate, rowShownName, rowUnit, type PieceChoices, type PieceRow, type PieceState } from "../piece";
+import { passingLine, pieceGroups, pieceHeading, pieceSummary, PIECE_KINDS, profileUpdate, railUpdate, rowShownName, rowUnit, type PieceChoices, type PieceRow, type PieceState } from "../piece";
 import { createPieceSection, createRowEdit, type Refused } from "../piece-edit";
 import { sizeExample } from "../jewelry-dialog";
 import { ToolIcon } from "../icons";
@@ -238,6 +238,13 @@ export function PiecePanel(props: PiecePanelProps): JSX.Element {
                 {(patch) => (
                   <Button variant="quiet" size="sm" title="Read the profile again from the curve it was drawn as" onClick={() => run(patch())}>
                     Update from curve
+                  </Button>
+                )}
+              </Show>
+              <Show when={props.state.kind === "piece" ? railUpdate(props.state.piece) : null}>
+                {(patch) => (
+                  <Button variant="quiet" size="sm" title="Read the rail again from the curve it was drawn as" onClick={() => run(patch())}>
+                    Update rail from curve
                   </Button>
                 )}
               </Show>

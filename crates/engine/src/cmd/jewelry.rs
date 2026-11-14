@@ -14,6 +14,7 @@
 
 mod bench;
 mod casting;
+mod cable;
 mod gem;
 mod heads;
 #[cfg(test)]
@@ -51,11 +52,16 @@ mod profile_tests;
 #[path = "jewelry/property_tests.rs"]
 mod property_tests;
 mod setting;
+mod shank;
+#[cfg(test)]
+#[path = "jewelry/shank_tests.rs"]
+mod shank_tests;
 mod sizes;
 mod solid;
 #[cfg(test)]
 #[path = "jewelry/solid_tests.rs"]
 mod solid_tests;
+mod sweep;
 #[cfg(test)]
 #[path = "jewelry/tests.rs"]
 mod tests;

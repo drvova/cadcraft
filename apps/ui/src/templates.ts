@@ -38,6 +38,9 @@ export interface Template {
 /** The piece kinds the engine builds today; a template on another kind carries `requires`. */
 export const BUILDABLE_KINDS: readonly string[] = ["band", "solitaire", "eternity", "halfeternity", "dome", "signet"];
 
+/** An oval rail 20 × 16.8 mm (any size: the engine scales it to the finger), as stored points. */
+const OVAL_RAIL: readonly (readonly [number, number])[] = [[10.0, 0], [9.914, 1.096], [9.659, 2.174], [9.239, 3.215], [8.66, 4.2], [7.934, 5.114], [7.071, 5.94], [6.088, 6.664], [5.0, 7.275], [3.827, 7.761], [2.588, 8.114], [1.305, 8.328], [0, 8.4], [-1.305, 8.328], [-2.588, 8.114], [-3.827, 7.761], [-5.0, 7.275], [-6.088, 6.664], [-7.071, 5.94], [-7.934, 5.114], [-8.66, 4.2], [-9.239, 3.215], [-9.659, 2.174], [-9.914, 1.096], [-10.0, 0], [-9.914, -1.096], [-9.659, -2.174], [-9.239, -3.215], [-8.66, -4.2], [-7.934, -5.114], [-7.071, -5.94], [-6.088, -6.664], [-5.0, -7.275], [-3.827, -7.761], [-2.588, -8.114], [-1.305, -8.328], [0, -8.4], [1.305, -8.328], [2.588, -8.114], [3.827, -7.761], [5.0, -7.275], [6.088, -6.664], [7.071, -5.94], [7.934, -5.114], [8.66, -4.2], [9.239, -3.215], [9.659, -2.174], [9.914, -1.096]];
+
 /**
  * The preset pieces, in the order the gallery reads them: the solitaires, the bands, the eternity
  * band, then the ones a newer engine adds. Each `params` is a full, valid-looking `piece` parameter
@@ -131,7 +134,36 @@ export const TEMPLATES: readonly Template[] = [
     blurb: "A broad flat band with a bold face to engrave.",
     params: { kind: "band", wall: 1.6, width: 9, profile: "flat", metal: "gold14" },
   },
+  {
+    id: "oval-rail-band",
+    name: "Oval Band",
+    blurb: "A comfort band that follows an oval rail, kinder to a wide knuckle.",
+    params: { kind: "band", wall: 1.7, width: 3, profile: "comfort", metal: "gold18", rail: { points: OVAL_RAIL } },
+    requires: "shank rails",
+  },
+  {
+    id: "split-shank-solitaire",
+    name: "Split-Shank Solitaire",
+    blurb: "A round brilliant over a shank that parts into two arms under the head.",
+    params: { kind: "solitaire", cut: "round", stone: "diamond", stoneWidth: 6.5, stoneLength: 6.5, prongs: 6, wall: 1.8, width: 2.8, profile: "dome", metal: "gold18", shank: { split: 2, gap: 1.4, from: 55 } },
+    requires: "split shanks",
+  },
+  {
+    id: "cathedral-solitaire",
+    name: "Cathedral Solitaire",
+    blurb: "Shoulders that rise in arches to hold the stone high.",
+    params: { kind: "solitaire", cut: "round", stone: "diamond", stoneWidth: 6.5, stoneLength: 6.5, prongs: 4, wall: 1.8, width: 2.4, profile: "comfort", metal: "platinum", shank: { cathedral: true, height: 2.2, from: 45 } },
+    requires: "cathedral shoulders",
+  },
+  {
+    id: "cable-band",
+    name: "Cable Band",
+    blurb: "Three round wires twisted round the finger like a rope.",
+    params: { kind: "band", metal: "gold18", pattern: { twist: { strands: 3, wire: 1.1, turns: null } } },
+    requires: "cable bands",
+  },
 ];
+
 
 /** The parameters a template sends to `piece`, as a fresh object (never the shared literal). */
 export function templateParams(template: Template): Record<string, unknown> {
