@@ -90,10 +90,24 @@ versions behave as a jeweller expects. Our implementations are our own.
 | ShrinkWrap | One closed mesh around many parts: a target edge length, an offset, smoothing | The merged cast solid: sampling step (≈ edge length), a shrink allowance, smoothing in progress |
 | Volume, centroid | Volume and centroid of closed objects; no density built in | Grams by alloy, carats, cost, built in |
 
+## Roadmap to a Rhino replacement for jewellers
+
+Built clean-room: from published mathematics, public documentation, black-box observation and our
+own tests — never from Rhino's binaries, code, interface or artwork.
+
+1. **Now**: the jewelry wave (shanks, settings, engraving, earrings and pendants, patterns, render
+   export, `.3dm` meshes and curves) and the NURBS surface foundation (`crates/geom`).
+2. **Next**: surfaces as drawing objects (seen, snapped to, measured); `.3dm` surfaces; flow along a
+   surface; pavé on free-form surfaces.
+3. **Then**: trimmed surfaces and joined solids (B-rep) with Booleans that print; SubD for organic work.
+4. **Later**: offsets, fillets and shells on solids; a node editor for power users; general modelling
+   beyond jewelry.
+
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | Roadmap to a Rhino replacement for jewellers |
 | 2026-11-14 | minor | Behaviours to match, from the public command reference |
 | 2026-11-14 | minor | Interoperability row for `.3dm` (ADR 0003) |
 | 2026-11-14 | new | The feature list against Rhino's jewelry workflow, and the no-code rule |
