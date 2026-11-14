@@ -29,6 +29,7 @@ fn a_channel_is_one_row_with_rails_either_side() {
     let fit = pave_band::fit(&p).unwrap();
     assert_eq!(fit.rows.len(), 1);
     let pieces = p.channel_pieces();
+    assert!(fit.stones.len() > 10, "{} stones", fit.stones.len());
     assert_eq!(pieces.len(), fit.stones.len());
     for (c, s) in pieces.iter().zip(&fit.stones) {
         let r = s.diameter / 2.0;
@@ -182,4 +183,32 @@ fn any_channel_keeps_its_stones_apart_and_its_lips_on_them(tc: TestCase) {
     if let Err(e) = s.execute("piece", &build) {
         assert!(!matches!(e, crate::EngineError::Internal(..)), "{build} panicked: {e}");
     }
+}
+
+#[test]
+fn a_graduated_channel_steps_its_rails_with_its_stones_and_bench_groups_them() {
+    let v = json!({"kind": "band", "width": 4.0, "wall": 2.0, "pave": {"layout": "channel", "gap": 0.1, "span": "top-half", "graduated": {"from": 2.2, "to": 1.4}}});
+    let p = params(v.clone());
+    let fit = pave_band::fit(&p).unwrap();
+    let pieces = p.channel_pieces();
+    // Larger at 12 o'clock, smaller toward the ends; each rail is sized to its own stone.
+    let centre = fit.stones.iter().min_by(|a, b| a.angle.cos().total_cmp(&b.angle.cos()).reverse()).unwrap();
+    let end = fit.stones.iter().min_by(|a, b| a.angle.cos().total_cmp(&b.angle.cos())).unwrap();
+    assert!(
+        centre.diameter > end.diameter,
+        "{} vs {}: {:?}",
+        centre.diameter,
+        end.diameter,
+        fit.stones.iter().map(|s| (s.angle.to_degrees().round(), s.diameter)).collect::<Vec<_>>()
+    );
+    for (c, s) in pieces.iter().zip(&fit.stones) {
+        assert!((c.outer - (s.diameter / 2.0 + CHANNEL_WALL)).abs() < 1e-12);
+    }
+    // Auto-fit keeps at least the gap between every pair of different sizes.
+    assert!(pave_band::least_metal(&fit.stones).unwrap() + 1e-9 >= 0.1);
+    let mut s = Session::new();
+    s.execute("piece", &v).unwrap();
+    let sheet = s.execute("techsheet", &json!({})).unwrap();
+    let groups = sheet["stones"]["groups"].as_array().unwrap();
+    assert!(groups.len() >= 3, "one group per size: {groups:?}");
 }
