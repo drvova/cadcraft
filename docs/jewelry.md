@@ -300,7 +300,7 @@ dropped. `stones: true` appends the stones as shells of their own.
   `maxTriangles` (default 150,000, what the interface downloads; up to 1,000,000); a piece that
   needs more is sampled more coarsely and `step` and `notes` say so. At the default cap a usual
   piece comes out at about 0.19–0.29 mm. Every vertex is found on the true surface: where the
-  field itself is zero along its own grid edge (bracketed false position, at most eight field
+  field itself is zero along its own grid edge (bracketed false position, at most sixteen field
   evaluations, kept a thousandth of the edge from either end), not where its linear interpolant
   is. A vertex never leaves its edge, so each triangle stays in its own tetrahedron and the shell
   is closed, manifold, wound outward and free of self-intersections by construction, with nothing
@@ -310,9 +310,21 @@ dropped. `stones: true` appends the stones as shells of their own.
   gradient instead; on a pierced pattern's sharp walls that made about a fifth of the triangles
   cross, which were put back on the grid's facets: the patchwork showed as speckle in the 3D view
   and made a Voronoi band's solid about 3.5× slower (5.6 s, now 1.6 s). Sharp edges (seat rims, a
-  flat band's corners, a pierced opening's walls) are still
-  chamfered by up to about half a step and look ragged close up; ask for `maxTriangles: 1000000`
-  for the 0.1 mm solid. Times (release, native): 0.9–2.1 s at the default cap. In the 3D view a
+  flat band's corners, a bezel's rim, a pierced opening's walls) are then made crisp
+  (`solid_sharp.rs`): where the true normals round a vertex part by more than about 30°, it moves
+  to the point that best meets their tangent planes (the quadric error function of Ju et al.,
+  *Dual Contouring of Hermite Data*, 2002, solved with a truncated eigen-decomposition, at most
+  0.75 step), no triangle getting more than two corners moved, and edges are flipped where the two
+  triangles across them then lie nearer the true surface, so the crease's vertices are joined
+  along it (feature-edge recovery as in Kobbelt et al. 2001); three rounds. Moves and flips keep
+  every edge used once each way, so closed, manifold and wound outward still hold; a move that
+  turns a triangle over, leaves a sliver or makes two triangles cross is put back, a flip that
+  would is not made, and if anything still crosses at the end the unsharpened shell is kept. The
+  grid is also set off its box by 0.38 step so a flat side never lies on a plane of grid nodes.
+  Measured: a flat band's corner circles lie on the shell to 0.0013 mm on average at 0.2 mm (was
+  0.045 mm, a chamfer) and 0.0005 mm at 0.1 mm; a tilted box's edges 0.0009 mm at 0.1 mm (was
+  0.020); a flat band's volume within 0.02 % of the analytic one (was 0.2–0.6 %); the triangle
+  count is unchanged. Times (release, native): 0.9–2.1 s at the default cap. In the 3D view a
   sliver triangle (left where the surface passes by a grid node, and turned any way by the reply's
   micrometre rounding) is shaded as the surface round it, and faces are weighed by area.
 - *Scallops.* A scalloped pavé row's scallops — the arcs the sheet draws — are cut into both sides
@@ -943,6 +955,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | patch | The cast solid's creases are crisp: vertices next to a crease moved onto it by a QEF on the true normals (Ju et al. 2002) and edges flipped along it (Kobbelt et al. 2001), checked for crossings; the grid set off its box by 0.38 step. A flat band's corner circles lie 0.0013 mm off the true corner at 0.2 mm (0.045 before), its volume within 0.02 % (0.2–0.6 % before); same triangle count, about 1.5–3× the extraction time |
 | 2026-11-14 | minor | `PIECE` kind `hoop`: a pair of hoop earrings (round, square, knife or tube wire; a hinged post or a click-top; pavé or a channel along the front kept clear of the closure), weighed exactly and within 10 % of the cast solid, checks `hoop-wall`, `post`, `click-seam`, the sheet, the solid, the Piece panel's Hoop group, a hoop-diameter handle, templates, the bench's pair. `head: basket`: one or two rails under the girdle and an under-gallery (plain, arches, scallop) on rings, pendants and earrings, drawn, built, weighed (within 10 % of the cast solid off the finger), a Basket Solitaire template |
 | 2026-11-14 | patch | The cast solid's vertices are found on the true surface along their own grid edges instead of by Newton steps, so no triangle crosses another by construction: a pierced Voronoi band's solid is 3.5× faster (the `a_patterned_band_casts_as_one_watertight_body` property had failed its time budget), its 3D view no longer a patchwork of projected and put-back vertices, and the mean vertex error under 0.0001 mm; the 3D view shades slivers as the surface round them |
 | 2026-11-14 | patch | A worn piece's prong head is weighed from its parts (seat, overlaps, styled tops; `head_metal.rs`): within 10 % of the cast solid where it read 37–53 % heavy, checked on every run; the Piece panel's metal weight is the whole piece's as the Bench sheet's (band, prongs and rail, channel rails), said so; the Twisted cable row is not offered on a band with pavé or a channel; a pendant's or earrings' ring-only keys (`rail`, `shank`, `pattern`, `engrave`, `hallmark`, `pave`) are kept, unused, and come back with a ring |

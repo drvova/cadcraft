@@ -58,7 +58,7 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 
 | Rhino workflow | CADCraft | Status |
 |---|---|---|
-| One closed mesh for printing (ShrinkWrap) | STL export writes one merged metal solid, vertices projected onto the true surface | done; sharp edges (seat rims, a flat band's corners) are still chamfered and slightly ragged at the default cap |
+| One closed mesh for printing (ShrinkWrap) | STL export writes one merged metal solid, vertices on the true surface, creases sharpened | done; sharp edges (seat rims, a bezel's rim, a flat band's corners) are kept crisp: vertices moved onto the crease by a QEF and edges flipped along it, about 0.001 mm off the true corner at 0.2 mm |
 | Sprue, supports, shrinkage allowance | `stlout {sprue, shrink}`; the 3D view's Sprue and shrink pickers by Download STL | partial (a straight round sprue, refused near a stone or seat; no supports or tree) |
 | 2D blueprint with dimensions and sections | the drawing, layouts, Tech Sheet | done |
 | Photoreal render, turntable | Realistic 3D view; Save Render: stills to 4096 px (studio, light, transparent), turntables as WebM or APNG, a contact sheet | partial (rasterised studio, not ray traced: no caustics, no depth of field, no HDRI) |
@@ -111,6 +111,7 @@ own tests — never from Rhino's binaries, code, interface or artwork.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | patch | One closed mesh for printing: sharp edges kept crisp |
 | 2026-11-14 | minor | Hoop earrings (`kind: hoop`) and basket heads with an under-gallery (`head: basket`) |
 | 2026-11-14 | patch | Earrings and pendants: a prong head's weight within 10 % of the cast solid; ring-only keys kept while worn |
 | 2026-11-14 | minor | `.3dm` read (meshes weighed, curves as profiles) and written (EXPORT3DM) |

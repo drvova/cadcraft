@@ -94,6 +94,10 @@ mod shank;
 mod shank_tests;
 mod sizes;
 mod solid;
+mod solid_sharp;
+#[cfg(test)]
+#[path = "jewelry/solid_sharp_tests.rs"]
+mod solid_sharp_tests;
 #[cfg(test)]
 #[path = "jewelry/solid_tests.rs"]
 mod solid_tests;
