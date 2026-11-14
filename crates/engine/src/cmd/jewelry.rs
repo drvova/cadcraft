@@ -49,6 +49,10 @@ mod profile_tests;
 #[cfg(test)]
 #[path = "jewelry/property_tests.rs"]
 mod property_tests;
+mod rhino;
+#[cfg(test)]
+#[path = "jewelry/rhino_tests.rs"]
+mod rhino_tests;
 mod setting;
 mod sizes;
 mod solid;
@@ -77,7 +81,19 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(pricing::specs());
     v.extend(piece::specs());
     v.extend(mesh::specs());
+    v.extend(rhino::specs());
     v
+}
+
+/// IMPORT of a Rhino `.3dm` file: IMPORT3DM with the bytes already read.
+pub(crate) fn import_3dm(s: &mut Session, p: &Value, bytes: &[u8]) -> Result<Value> {
+    let model = cadcraft_io::rhino3dm::read(bytes).map_err(|e| bad("import", e.to_string()))?;
+    rhino::import_model(s, &model, p)
+}
+
+/// Whether `bytes` start like a Rhino `.3dm` file.
+pub(crate) fn is_3dm(bytes: &[u8]) -> bool {
+    rhino::is_3dm(bytes)
 }
 
 /// Calibrated melee diameters in millimetres: the sizes a bench actually buys (0.8–3.0 in 0.1
