@@ -376,32 +376,3 @@ fn timing() {
         }
     }
 }
-
-#[test]
-#[ignore]
-fn diag() {
-    for v in [
-        json!({"count":9,"gap":0.32,"kind":"threestone","melee":1.53,"metal":"copper","profile":"dome","prongs":7,"size":4,"stone":"citrine","stoneLength":17.17,"stoneWidth":17.17,"system":"jp","wall":2.02,"width":24.168526213125524}),
-        json!({"cut":"cabochon","gap":0.38,"halo":true,"kind":"solitaire","melee":1.72,"profile":"dome","size":67,"stone":"aquamarine","stoneLength":1.16,"stoneWidth":5.12,"system":"eu","wall":2.52,"width":4.8}),
-    ] {
-        let p = params(&v);
-        let mesh = piece_mesh(&p, Quality::Draft);
-        let sizes: Vec<String> = mesh
-            .csg
-            .add
-            .iter()
-            .chain(&mesh.csg.cut)
-            .map(|q| match q {
-                Prim::Revolve(s) => format!("rev{}", s.pts.len()),
-                Prim::Wire { pts, .. } => format!("w{}", pts.len()),
-                _ => "o".into(),
-            })
-            .collect();
-        eprintln!("{} adds {} cuts: {}", mesh.csg.add.len(), mesh.csg.cut.len(), sizes.join(" "));
-        for (step, cap) in [(0.2, TEST_TRIS), (0.1, MAX_TRIANGLES)] {
-            let t = Instant::now();
-            let r = solidify(&mesh.csg, step, cap);
-            eprintln!("step {step} cap {cap}: {:?} {:?}", r.as_ref().map(|(s, c)| (s.triangles(), s.step, *c)).map_err(|e| e.clone()), t.elapsed());
-        }
-    }
-}

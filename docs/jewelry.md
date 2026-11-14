@@ -26,7 +26,7 @@ millimetres.
 | `TECHSHEET` | The bench sheet: stones by cut and size with carats, and the metal in grams. |
 | `PIECE` | A parametric ring (a band, a solitaire or an eternity band) drawn as a sheet from a handful of numbers, and rebuilt when one of them changes. |
 | `PIECEMESH` | The same piece as closed shells of triangles, for a 3D view. |
-| `STLOUT` | The same solid as a binary or ASCII STL in millimetres, the metal only unless `stones` is set. |
+| `STLOUT` | The metal as one closed shell with every stone's seat cut, as a binary or ASCII STL in millimetres; the stones as separate shells when `stones` is set. |
 
 `DESCRIBE` reads any drawing that holds jewelry the same way, and the MCP `bench_sheet` tool does
 it for an agent in one call.
@@ -246,11 +246,41 @@ thousand pieces both ways to hold them to it:
 **The solid.** `PIECEMESH` and `STLOUT` take the piece's parameters directly and change nothing in
 the drawing. The finger's axis is Z, the ring lies in the XY plane about the origin and the head
 is at +Y. The band is its section revolved; a round stone is a brilliant; every other cut is its
-girdle outline tapered to a table and to a culet or keel, not its real facet pattern. Each part is
-a closed shell wound counter-clockwise from outside; shells pass through each other where they
-join and no seats are cut, which a slicer unions. A reply holds at most 150,000 triangles; a
-larger piece is tessellated more coarsely and `notes` says so. `STLOUT` defaults to fine quality,
-binary, metal only; an ASCII STL is limited to 30,000 triangles.
+girdle outline tapered to a table and to a culet or keel, not its real facet pattern. For the 3D
+view (`PIECEMESH`) each part is a closed shell wound counter-clockwise from outside; those shells
+pass through each other where they join. A reply holds at most 150,000 triangles; a larger piece
+is tessellated more coarsely and `notes` says so.
+
+**For the caster (`STLOUT`).** The metal is written as **one** closed, manifold, outward-facing,
+non-self-intersecting shell with a seat cut for every stone (decision: `docs/adr/0002-mesh-booleans.md`).
+Each part is an analytic signed-distance bound; the metal is `max(min(adds), −min(cuts))`, sampled
+on a sparse grid and extracted by marching tetrahedra, so the shell is closed and manifold by
+construction and is checked edge by edge before it is written (a broken one is refused, never
+written). Shells smaller than 0.1 % of the volume (a grid node of metal left between two seats) are
+dropped. `stones: true` appends the stones as shells of their own.
+
+- *Seats.* A prong head gets its stone's own room cut into the prongs and gallery rail — the
+  bearing notch at girdle height — and a clearance hole under the culet (30 % of the girdle's
+  inradius, reaching 0.25 mm past the culet's clearance). Halo and eternity melee get a cone seat
+  from their own pavilion, a girdle-sized bore to set them through, and a through-hole of half the
+  stone's diameter. A seat is the concave hull of the stone's own vertices (at the shown and the
+  finest tessellation) grown by a 0.05 mm clearance, so the stone never touches the metal. These
+  figures are this project's approximation of usual bench practice, not a cited standard.
+- *Resolution.* Fine quality samples at 0.1 mm, draft at 0.2 mm. A file holds at most
+  `maxTriangles` (default 150,000, what the interface downloads; up to 1,000,000); a piece that
+  needs more is sampled more coarsely and `step` and `notes` say so. At the default cap a usual
+  piece comes out at about 0.18–0.25 mm, which leaves small beads and seat edges visibly stepped;
+  ask for `maxTriangles: 1000000` (about 25–30 MB) for the 0.1 mm solid. Times on this machine
+  (release, native): 0.3–0.5 s at the default cap, 1.0–1.7 s at 0.1 mm for a solitaire, halo,
+  three-stone or eternity.
+- *Weight.* The reply's `metal.grams` is the merged solid's (band, head, beads, less the seats):
+  the metal that is cast. `metal.band` is the band alone, exactly, which is what `PIECE` and the
+  bench sheet keep reporting, since it does not depend on sampling. On a plain band the two agree
+  within 0.1 × the step in mm (1 % at 0.1 mm, 2 % at 0.2 mm; measured 0.1–0.3 % and up to 1.3 %),
+  the solid slightly light because a sampled surface cuts convex corners; a band outside that says so.
+- *Not one body.* When stones crowd each other (a seat cuts a neighbour's prong through), the solid
+  is in more than one piece; `bodies` counts them and `notes` says so.
+- An ASCII STL is limited to 30,000 triangles.
 
 `OBJECTS` (an inquiry command) lists what a space holds for the interface's Objects section: each
 object's handle, kind, layer, block, first words, one telling size and its groups, capped at
@@ -402,6 +432,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-13 | minor | `STLOUT` writes the metal as one closed, manifold shell (implicit CSG, marching tetrahedra) with stone seats cut: prong bearings and culet holes, cone seats with bores and through-holes for halo and eternity melee; reports the cast weight beside the band's; `maxTriangles`, `step`, `seats`, `bodies` |
 | 2026-11-13 | patch | Realistic studio: gradient strips round the lens, tall side strips and low cards, a smaller dark lens spot, so broad polished faces carry a bright highlight band beside a dark one instead of reading as flat bronze |
 | 2026-11-13 | patch | Realistic gold reads warm: metal keeps its hue through the tone curve, and a coloured alloy's dim reflections take its deeper tint; platinum, silver and the stones unchanged |
 | 2026-11-13 | minor | A Realistic display mode, the 3D tab's default and the stills': physically based metal under a procedural studio, faceted stones with Fresnel, a faked internal return and fire, a backdrop and a contact shadow, tone mapping, supersampled stills |
