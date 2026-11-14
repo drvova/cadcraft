@@ -381,6 +381,22 @@ fn region_fill_keeps_stones_clear_of_the_edge() {
     assert!(max_inscribed(&region) - 2.0 < 1e-6, "the inscribed circle of a 4×4 square is 2 mm");
 }
 
+#[test]
+fn a_strip_turned_a_hair_off_an_axis_has_its_whole_width_inscribed() {
+    // Found by the property test: a 1.2 × 8.37 mm strip turned 2 µrad read 1.192 mm across,
+    // because the climb crept along the ridge until its budget ran out.
+    let v = vec![
+        Vec2::new(-0.5999920177448803, -4.185001144401567),
+        Vec2::new(0.6000079822529369, -4.184998855583207),
+        Vec2::new(0.5999920177448803, 4.185001144401567),
+        Vec2::new(-0.6000079822529369, 4.184998855583207),
+    ];
+    let bounds = cadcraft_geom::Bounds2::from_points(v.iter().copied());
+    let region = Region { loops: vec![v], bounds };
+    let r = max_inscribed(&region);
+    assert!((r - 0.6).abs() < 2e-5, "the strip's inscribed radius is 0.6 mm, read {r}");
+}
+
 // ---------------------------------------------------------------- settings
 
 #[test]

@@ -854,10 +854,17 @@ fn fit_with(p: &PieceParams, spec: &PaveSpec, surf: &Surface, gap: f64) -> PaveF
     let mut rows = vec![0.0];
     if k > 1 {
         let reach = 4.0 * (d + gap) + 2.0 * edge;
+        // The outer two rows of three keep the gap from each other too: on a narrow, strongly
+        // curved band they wrap round toward each other and can meet though each keeps it from
+        // the middle one.
+        let outer_clear = |r: &[f64]| match (k, r.first(), r.get(2)) {
+            (3, Some(a), Some(b)) => metal_between(&surf.stone(0.0, *a, 0, d), &surf.stone(0.0, *b, 2, d)) >= gap,
+            _ => true,
+        };
         let apart = |c: f64| {
             let r = row_positions(k, c);
             let (a, b) = (r.first().copied().unwrap_or(0.0), r.get(1).copied().unwrap_or(0.0));
-            metal_between(&surf.stone(0.0, a, 0, d), &surf.stone(0.0, b, 1, d)) >= gap
+            metal_between(&surf.stone(0.0, a, 0, d), &surf.stone(0.0, b, 1, d)) >= gap && outer_clear(&r)
         };
         let aligned = least(0.0, reach, apart);
         rows = row_positions(k, aligned);
@@ -869,7 +876,7 @@ fn fit_with(p: &PieceParams, spec: &PaveSpec, surf: &Surface, gap: f64) -> PaveF
             let offset = |c: f64| {
                 let r = row_positions(k, c);
                 let (a, b) = if k == 3 { (0.0, c) } else { (r.first().copied().unwrap_or(0.0), r.get(1).copied().unwrap_or(0.0)) };
-                metal_between(&surf.stone(0.0, a, 0, d), &surf.stone(half_step, b, 1, d)) >= gap
+                metal_between(&surf.stone(0.0, a, 0, d), &surf.stone(half_step, b, 1, d)) >= gap && outer_clear(&r)
             };
             rows = row_positions(k, least(lo, aligned, offset));
         }

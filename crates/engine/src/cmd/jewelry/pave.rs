@@ -713,16 +713,19 @@ pub(super) fn max_inscribed(region: &Region) -> f64 {
         if step <= fine {
             break;
         }
-        let mut moved = false;
+        // A move that gains next to nothing for its step is creeping along a ridge (a long
+        // strip turned a hair off an axis is all ridge): it is taken, but the step still halves,
+        // or the climb's budget is spent walking the ridge and never closes in across it.
+        let start = best;
         for k in 0..DIRECTIONS {
             let a = cadcraft_geom::TAU * f64::from(k) / f64::from(DIRECTIONS);
             let p = at + Vec2::new(a.cos(), a.sin()) * step;
             let d = depth(p);
             if d > best {
-                (at, best, moved) = (p, d, true);
+                (at, best) = (p, d);
             }
         }
-        if !moved {
+        if best - start < 1e-3 * step {
             step /= 2.0;
         }
     }

@@ -627,3 +627,12 @@ fn hostile_pave_values_never_panic(tc: TestCase) {
     let m = s.execute("piecemesh", &p);
     assert!(!matches!(m, Err(EngineError::Internal(..))));
 }
+
+#[test]
+fn three_honeycomb_rows_on_a_narrow_dome_keep_the_outer_rows_apart() {
+    // Found by the property test: on a 1.5 mm dome the outer rows of three wrapped round toward
+    // each other and overlapped by 0.01 mm, though each kept the gap from the middle row.
+    let (_p, f) = fitted(json!({"kind": "band", "profile": "dome", "size": 3, "wall": 1.2, "width": 1.5,
+        "pave": {"gap": 0.0, "layout": "honeycomb", "melee": 1.51, "rows": 3, "span": "shoulders", "symmetric": false}}));
+    assert!(least(&f) > -1e-9, "stones overlap: {}", least(&f));
+}
