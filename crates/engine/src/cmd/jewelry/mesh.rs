@@ -76,6 +76,9 @@ use cadcraft_doc::EntityKind;
 use cadcraft_geom::{PI, TAU, Vec2, Vec3};
 use serde_json::{Value, json};
 
+#[path = "mesh_kinds.rs"]
+mod mesh_kinds;
+
 use super::super::*;
 use super::piece_params::{self as shared, Head, MAX_PIECE_STONES, MIN_CAST_WALL, PieceKind, PieceParams, Profile, Row, Section, proportions};
 use super::sizes::RingSize;
@@ -535,6 +538,12 @@ impl Sane {
         q.side_length = p.side_length.filter(|x| x.is_finite()).map(|x| x.clamp(0.1, 60.0));
         q.side_prongs = p.side_prongs.clamp(2, 12);
         q.side_cut = p.side_cut.clone().filter(|name| gem::cut_of(name).is_some());
+        q.bezel_wall = p.bezel_wall.filter(|x| x.is_finite()).map(|x| x.clamp(0.05, 5.0));
+        q.bezel_height = p.bezel_height.filter(|x| x.is_finite()).map(|x| x.clamp(0.0, 10.0));
+        q.top_width = p.top_width.filter(|x| x.is_finite()).map(|x| x.clamp(0.1, 60.0));
+        q.top_wall = p.top_wall.filter(|x| x.is_finite()).map(|x| x.clamp(0.05, 20.0));
+        q.face_length = fin(p.face_length, 1.0, 60.0, 12.0);
+        q.face_width = fin(p.face_width, 1.0, 60.0, 10.0);
         if gem::cut_of(&q.cut).is_none() {
             q.cut = "round".to_string();
         }
@@ -836,6 +845,8 @@ struct Parts {
     prongs: Buf,
     seat: Buf,
     beads: Buf,
+    bezel: Buf,
+    face: Buf,
     centre: Buf,
     sides: Buf,
     melee: Buf,
@@ -945,6 +956,11 @@ fn build_head(s: &Sane, d: &Detail, out: &mut Parts, stone: Standing) -> Stood {
     let frame = Frame { o: w * (s.top + head.girdle_height()), u: Vec3::new(stone.out.y, -stone.out.x, 0.0), v: Vec3::new(0.0, 0.0, -1.0), w };
     shape.build(if stone.side { &mut out.sides } else { &mut out.centre }, &frame, d.centre, d.dome / 2);
     out.stones += 1;
+    if let Some(bezel) = head.bezel {
+        // A bezel's collar takes the prongs' and the rail's place.
+        mesh_kinds::build_bezel(&mut out.bezel, &frame, &shape.poly, &normals, &bezel);
+        return Stood { shape, frame, normals };
+    }
 
     // The prongs: on the girdle where the sheet draws them.
     let rp = head.prong / 2.0;
@@ -1260,9 +1276,15 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
     });
     let s = Sane::of(p);
     let mut parts = Parts::default();
-    build_band(&mut parts.band, &s, &d);
+    if s.p.tapered() {
+        mesh_kinds::build_tapered_band(&mut parts.band, &s, &d);
+    } else {
+        build_band(&mut parts.band, &s, &d);
+    }
     match s.p.kind {
-        PieceKind::Band => {}
+        PieceKind::Band | PieceKind::Dome => {}
+        PieceKind::Signet => mesh_kinds::build_face(&mut parts.face, &s, &d),
+        PieceKind::HalfEternity => mesh_kinds::build_half_eternity(&s, &d, &mut parts),
         PieceKind::Solitaire | PieceKind::ThreeStone => build_solitaire(&s, &d, &mut parts),
         PieceKind::Eternity => build_eternity(&s, &d, &mut parts),
     }
@@ -1276,6 +1298,8 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
         parts.prongs.part("metal", "prongs", metal),
         parts.seat.part("metal", "halo seat", metal),
         parts.beads.part("metal", "beads", metal),
+        parts.bezel.part("metal", "bezel", metal),
+        parts.face.part("metal", "face", metal),
         parts.centre.part("stone", "centre stone", stone),
         parts.sides.part("stone", "side stones", stone),
         parts.melee.part("stone", "melee", small),
@@ -1384,7 +1408,7 @@ pub(super) fn stl_ascii(tris: &[[Vec3; 4]], title: &str) -> String {
 // The commands
 // ---------------------------------------------------------------------------------------------
 
-const PIECE_KEYS: &str = "kind: band|solitaire|threestone|eternity, system?, size? (default US 6), wall?: mm (1.8), width?: mm (2.2), \
+const PIECE_KEYS: &str = "kind: band|solitaire|threestone|eternity|halfeternity|dome|signet, head?: prong|bezel, bezelWall?, bezelHeight?, topWidth?, topWall?, face?: round|oval|cushion|rectangle, faceLength?, faceWidth?, system?, size? (default US 6), wall?: mm (1.8), width?: mm (2.2), \
     profile?: flat|dome|comfort|court|knife|bevel|concave, comfort?|ridge?|bevel?|hollow?: mm (the profile's own number), metal? (gold18), cut? (round), stoneWidth?: mm (6.5), stoneLength?: mm, stone? (diamond), prongs?: 3–8 (6), halo?: bool | melee mm, \
     sideWidth?: mm, sideLength?: mm, sideCut?, sideProngs?: 3–8 (4), melee?: mm (1.8), count?: stones (default: as many as fit), gap?: mm (0.2)";
 
@@ -1392,7 +1416,7 @@ pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("piecemesh", "Piece as a Solid", run_piecemesh)
             .params(
-                "{kind: band|solitaire|threestone|eternity, …the piece's parameters as PIECE takes them (size, wall, width, profile: flat|dome|comfort|court|knife|bevel|concave with its comfort, ridge, bevel or hollow, metal, cut, stoneWidth, \
+                "{kind: band|solitaire|threestone|eternity|halfeternity|dome|signet, …the piece's parameters as PIECE takes them (head: prong|bezel with bezelWall, bezelHeight; topWidth, topWall; face, faceLength, faceWidth; size, wall, width, profile: flat|dome|comfort|court|knife|bevel|concave with its comfort, ridge, bevel or hollow, metal, cut, stoneWidth, \
                  stoneLength, stone, prongs, halo, sideWidth, sideLength, sideCut, sideProngs, melee, count, gap), quality?: draft|fine (default draft)} → {meshes: [{part: metal|stone, name, \
                  color: [r,g,b], positions: [x,y,z,…] mm, indices: [i,j,k,…]}], bounds: {min, max}, triangles, size, kind, params (as PIECE \
                  reports them), quality, level, stones (centre + side + halo + eternity stones: the count PIECE reports), fits? (eternity: the most \
@@ -1421,7 +1445,7 @@ fn piece_of(cmd: &str, p: &Value) -> Result<PieceParams> {
     if str_param(p, "kind").is_none() {
         return Err(bad(
             cmd,
-            format!("there is no piece to show: give `kind` (band, solitaire, threestone or eternity) and its parameters ({PIECE_KEYS})"),
+            format!("there is no piece to show: give `kind` (band, solitaire, threestone, eternity, halfeternity, dome or signet) and its parameters ({PIECE_KEYS})"),
         ));
     }
     PieceParams::parse(cmd, p)
@@ -1458,6 +1482,7 @@ fn run_piecemesh(_s: &mut Session, p: &Value) -> Result<Value> {
             "density": piece.density,
             "volumeMm3": r3(band),
             "grams": r3(piece.band_grams()),
+            "bezelGrams": if piece.bezeled() { json!(r3(piece.bezel_grams())) } else { Value::Null },
             "shells": { "volumeMm3": r3(shells), "grams": r3(shells / 1000.0 * piece.density) },
         },
         "notes": mesh.notes,

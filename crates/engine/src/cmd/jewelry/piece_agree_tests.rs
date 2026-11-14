@@ -682,7 +682,7 @@ fn every_profile_is_one_band_in_every_kind() {
                 let what = build.to_string();
                 agree(&b, &what);
                 match b.params.kind {
-                    PieceKind::Band => {}
+                    PieceKind::Band | PieceKind::HalfEternity | PieceKind::Dome | PieceKind::Signet => {}
                     PieceKind::Solitaire => agree_solitaire(&b, &what),
                     PieceKind::ThreeStone => agree_threestone(&b, &what),
                     PieceKind::Eternity => {

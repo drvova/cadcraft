@@ -14,6 +14,14 @@
 
 mod bench;
 mod gem;
+mod heads;
+#[cfg(test)]
+#[path = "jewelry/heads_tests.rs"]
+mod heads_tests;
+mod kinds;
+#[cfg(test)]
+#[path = "jewelry/kinds_tests.rs"]
+mod kinds_tests;
 mod mesh;
 #[cfg(test)]
 #[path = "jewelry/mesh_tests.rs"]
