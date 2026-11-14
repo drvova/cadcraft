@@ -637,6 +637,11 @@ fn design(p: &PieceParams) -> Result<Design> {
         checks.extend(piece_kinds::bezel_checks(p));
     }
     checks.push(size_check(p));
+    // Lettering: an engraving and a hallmark, refused when it cannot go on the band.
+    let lettering = super::engrave::lettering(p).map_err(|e| bad(CMD, e))?;
+    if let Some(l) = &lettering {
+        checks.extend(l.checks.iter().map(|(id, ok, message)| check(id, *ok, message.clone())));
+    }
     // Pavé on the band: its own check, and its stones in the front view, the plan and the layout.
     let pave = pave_band::fit(p);
     let pave_sheet = pave.as_ref().zip(pave_band::Surface::of(p)).map(|(f, surf)| pave_band::sheet(f, &surf));
@@ -690,10 +695,35 @@ fn design(p: &PieceParams) -> Result<Design> {
             pave_stones.push((layout_at + *at, pave_band::melee_stone(CMD, *d)?));
         }
     }
+    // The lettering's developed views, under everything else: the band unrolled with its text.
+    if let Some(l) = &lettering {
+        let mut below = lowest(&shapes).min(plan_at.y - plan_reach) - VIEW_GAP;
+        for strip in super::engrave::strips(p, l) {
+            let at = Vec2::new(0.0, below - strip.width / 2.0);
+            shapes.push((On::Metal, rect(at, strip.length, strip.width)));
+            for line in strip.lines {
+                shapes.push((On::Metal, Shape::Poly { v: line.into_iter().map(|q| (at + q, 0.0)).collect(), closed: false }));
+            }
+            below -= strip.width + VIEW_GAP;
+        }
+    }
     if !(grams.is_finite() && carat.is_finite()) {
         return Err(bad(CMD, "the piece has no weight"));
     }
     Ok(Design { params: p.clone(), centre, melee, shapes, placed, grams, carat, fits, checks, notes, pave, pave_stones })
+}
+
+/// The lowest point of the shapes drawn so far.
+fn lowest(shapes: &[(On, Shape)]) -> f64 {
+    let low = shapes
+        .iter()
+        .map(|(_, s)| match s {
+            Shape::Circle { c, r } => c.y - r,
+            Shape::Poly { v, .. } => v.iter().map(|(q, _)| q.y).fold(f64::INFINITY, f64::min),
+            Shape::Ellipse { c, major, ratio } => c.y - major.len().max(major.len() * ratio),
+        })
+        .fold(f64::INFINITY, f64::min);
+    if low.is_finite() { low } else { 0.0 }
 }
 
 /// A shape moved by `by`.
@@ -802,6 +832,12 @@ impl Design {
                 carat,
                 fmt_mm(f.gap.unwrap_or(f.spec.gap).max(0.0))
             ));
+        }
+        if let Some(e) = &p.engrave {
+            out.push_str(&format!("; “{}” {} {}", e.text, if e.style == super::engrave::Style::Raised { "raised" } else { "cut" }, e.place.name()));
+        }
+        if let Some(text) = p.hallmark.as_ref().and_then(|h| h.text(p)) {
+            out.push_str(&format!("; hallmarked {text}"));
         }
         let failed: Vec<&str> = self.checks.iter().filter(|c| c["ok"] == json!(false)).filter_map(|c| c["message"].as_str()).collect();
         for message in failed {
@@ -968,6 +1004,10 @@ fn run_build(s: &mut Session, p: &Value) -> Result<Value> {
         if key == "pave" {
             // A pavé change merges over the stored pavé, key by key.
             let next = pave_band::merge(merged.get("pave"), value);
+            merged.insert(key.clone(), next);
+        } else if key == "engrave" || key == "hallmark" {
+            // So is a change to the lettering: a new depth keeps the text.
+            let next = super::engrave::merge(merged.get(key.as_str()), value);
             merged.insert(key.clone(), next);
         } else if !matches!(key.as_str(), "query" | "remove" | "at") {
             merged.insert(key.clone(), value.clone());

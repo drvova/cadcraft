@@ -13,7 +13,12 @@
 //! and the bench sheet reads it back.
 
 mod bench;
+mod engrave;
+#[cfg(test)]
+#[path = "jewelry/engrave_tests.rs"]
+mod engrave_tests;
 mod gem;
+mod hallmark;
 mod heads;
 #[cfg(test)]
 #[path = "jewelry/heads_tests.rs"]
