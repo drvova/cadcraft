@@ -25,7 +25,7 @@ import { asBool, asNumber, asString, isRecord } from "./json";
 import { RING_SYSTEMS, metalLabel, paramsOf, readGemChoices, ringChoices, ENGINE_DEFAULT, type Choice, type JewelryEngine } from "./jewelry-dialog";
 import { numberText, readNumber, type DraftVerdict } from "./props";
 
-export type PieceKind = "band" | "solitaire" | "threestone" | "eternity";
+export type PieceKind = "band" | "solitaire" | "threestone" | "eternity" | "halfeternity" | "dome" | "signet";
 
 /** The kinds the engine builds, in the order the section offers them. */
 export const PIECE_KINDS: readonly Choice[] = [
@@ -33,6 +33,23 @@ export const PIECE_KINDS: readonly Choice[] = [
   { value: "solitaire", label: "Solitaire" },
   { value: "threestone", label: "Three-stone" },
   { value: "eternity", label: "Eternity" },
+  { value: "halfeternity", label: "Half eternity" },
+  { value: "dome", label: "Dome" },
+  { value: "signet", label: "Signet" },
+];
+
+/** How a solitaire's or a three-stone's stones are held (`head` in `heads.rs`). */
+export const PIECE_HEADS: readonly Choice[] = [
+  { value: "prong", label: "Prongs" },
+  { value: "bezel", label: "Bezel" },
+];
+
+/** A signet's face (`face` in `kinds.rs`). */
+export const PIECE_FACES: readonly Choice[] = [
+  { value: "oval", label: "Oval" },
+  { value: "round", label: "Round" },
+  { value: "cushion", label: "Cushion" },
+  { value: "rectangle", label: "Rectangle" },
 ];
 
 /** The band's outside shapes (`Profile` in `piece_params.rs`). */
@@ -82,6 +99,17 @@ export interface PieceParams {
   /** A three-stone ring's side stones: their width (null: the engine's share of the centre's) and prongs. */
   sideWidth: number | null;
   sideProngs: number | null;
+  /** How the stones are held (prong or bezel), and a bezel's wall and height over the girdle (null: the engine's). */
+  head: string;
+  bezelWall: number | null;
+  bezelHeight: number | null;
+  /** A dome ring's or a signet's top (null: the engine's share of the bottom). */
+  topWidth: number | null;
+  topWall: number | null;
+  /** A signet's face and its size. */
+  face: string;
+  faceLength: number | null;
+  faceWidth: number | null;
 }
 
 /** The finger in every system, each as it is shown; null where the engine gave none. */
@@ -149,7 +177,7 @@ const wholeOf = (value: unknown): number | null => {
 
 function kindOf(value: unknown): PieceKind | null {
   const name = nameOf(value);
-  return name === "band" || name === "solitaire" || name === "threestone" || name === "eternity" ? name : null;
+  return PIECE_KINDS.some((k) => k.value === name) ? (name as PieceKind) : null;
 }
 
 /** A size in a system that numbers its sizes, as it is shown. */
@@ -183,6 +211,14 @@ function parseParams(value: unknown): PieceParams | null {
     gap: sizeOf(value["gap"]),
     sideWidth: sizeOf(value["sideWidth"]),
     sideProngs: wholeOf(value["sideProngs"]),
+    head: nameOf(value["head"]) || "prong",
+    bezelWall: sizeOf(value["bezelWall"]),
+    bezelHeight: sizeOf(value["bezelHeight"]),
+    topWidth: sizeOf(value["topWidth"]),
+    topWall: sizeOf(value["topWall"]),
+    face: nameOf(value["face"]) || "oval",
+    faceLength: sizeOf(value["faceLength"]),
+    faceWidth: sizeOf(value["faceWidth"]),
   };
 }
 
@@ -357,6 +393,19 @@ export function pieceRows(piece: Piece, choices: PieceChoices, system: string): 
     { key: "metal", label: "Metal", value: p.metal, kind: "choice", choices: withHeld(choices.metals, p.metal, metalLabel) },
   ];
   if (p.kind === "band") return rows;
+  if (p.kind === "dome" || p.kind === "signet") {
+    // The top of a tapered shank: empty reads as the engine's own share of the bottom.
+    rows.push({ key: "topWidth", label: "Top width, mm", value: num(p.topWidth), kind: "number" });
+    if (p.kind === "dome") {
+      rows.push({ key: "topWall", label: "Top wall, mm", value: num(p.topWall), kind: "number" });
+      return rows;
+    }
+    rows.push({ key: "face", label: "Face", value: p.face, kind: "choice", choices: withHeld(PIECE_FACES, p.face, capital) });
+    rows.push({ key: "faceLength", label: "Face length, mm", value: num(p.faceLength), kind: "number" });
+    rows.push({ key: "faceWidth", label: "Face width, mm", value: num(p.faceWidth), kind: "number" });
+    rows.push({ key: "topWall", label: "Face height, mm", value: num(p.topWall), kind: "number" });
+    return rows;
+  }
   rows.push({ key: "cut", label: "Cut", value: p.cut, kind: "choice", choices: withHeld(choices.cuts, p.cut, capital) });
   rows.push({ key: "stone", label: "Stone", value: p.stone, kind: "choice", choices: withHeld(choices.stones, p.stone, capital) });
   if (p.kind === "solitaire" || p.kind === "threestone") {
@@ -366,11 +415,18 @@ export function pieceRows(piece: Piece, choices: PieceChoices, system: string): 
       rows.push({ key: "stoneLength", label: "Stone length, mm", value: num(p.stoneLength), kind: "number" });
       rows.push({ key: "stoneWidth", label: "Stone width, mm", value: num(p.stoneWidth), kind: "number" });
     }
-    rows.push({ key: "prongs", label: "Prongs", value: num(p.prongs), kind: "whole" });
+    rows.push({ key: "head", label: "Head", value: p.head, kind: "choice", choices: withHeld(PIECE_HEADS, p.head, capital) });
+    const bezel = p.head === "bezel";
+    if (bezel) {
+      rows.push({ key: "bezelWall", label: "Bezel wall, mm", value: num(p.bezelWall), kind: "number" });
+      rows.push({ key: "bezelHeight", label: "Bezel height, mm", value: num(p.bezelHeight), kind: "number" });
+    } else {
+      rows.push({ key: "prongs", label: "Prongs", value: num(p.prongs), kind: "whole" });
+    }
     if (p.kind === "threestone") {
       // The side stones: empty reads as the engine's own share of the centre stone.
       rows.push({ key: "sideWidth", label: "Side stones, mm", value: num(p.sideWidth), kind: "number" });
-      rows.push({ key: "sideProngs", label: "Side prongs", value: num(p.sideProngs), kind: "whole" });
+      if (!bezel) rows.push({ key: "sideProngs", label: "Side prongs", value: num(p.sideProngs), kind: "whole" });
       return rows;
     }
     rows.push({ key: "halo", label: "Halo", value: p.halo === null ? "false" : "true", kind: "tick" });
@@ -471,7 +527,7 @@ export function pieceSummary(piece: Piece, system: string): PieceSummary {
   if ((p.kind === "solitaire" || p.kind === "threestone") && p.stoneWidth !== null) {
     const long = p.stoneLength !== null && Math.abs(p.stoneLength - p.stoneWidth) > 1e-6 ? `${trim(p.stoneLength, 2)}×` : "";
     const words = [`${long}${trim(p.stoneWidth, 2)} mm`, p.cut, p.stone].filter((w) => w !== "").join(" ");
-    centre = p.prongs === null ? words : `${words}, ${numberText(p.prongs)} prongs`;
+    centre = p.head === "bezel" ? `${words}, bezel` : p.prongs === null ? words : `${words}, ${numberText(p.prongs)} prongs`;
   }
   return { tiles, centre };
 }
@@ -503,13 +559,22 @@ function groupOf(row: PieceRow, kind: string): PieceGroup["name"] {
     case "profile":
     case "metal":
       return "Band";
+    case "topWidth":
+    case "topWall":
+    case "face":
+    case "faceLength":
+    case "faceWidth":
+      return "Band";
+    case "head":
+    case "bezelWall":
+    case "bezelHeight":
     case "prongs":
     case "sideProngs":
     case "halo":
     case "haloWidth":
       return "Head";
     case "gap":
-      return kind === "eternity" ? "Stones" : "Head";
+      return kind === "eternity" || kind === "halfeternity" ? "Stones" : "Head";
     default:
       return "Stones";
   }
