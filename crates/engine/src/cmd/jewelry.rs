@@ -19,6 +19,9 @@ mod channel;
 #[cfg(test)]
 #[path = "jewelry/channel_tests.rs"]
 mod channel_tests;
+#[cfg(test)]
+#[path = "jewelry/cross_tests.rs"]
+mod cross_tests;
 mod engrave;
 #[cfg(test)]
 #[path = "jewelry/engrave_tests.rs"]

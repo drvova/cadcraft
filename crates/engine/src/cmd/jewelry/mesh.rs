@@ -1465,10 +1465,13 @@ fn build_pave(s: &Sane, d: &Detail, out: &mut Parts) {
             "The pavé's scallops are cut into both sides of the band in STLOUT's merged solid; this display mesh draws the band whole.".to_string(),
         );
     }
-    out.notes.push(
+    out.notes.push(if channel {
+        "Channel stones sit in a row between two rails, tables level with the band's outside; this view draws the rails as their own shells over the band, and STLOUT unions them, cuts the channel between the lips and each stone's seat."
+            .to_string()
+    } else {
         "Pavé stones sit on the band's outside, tables level with it, and the beads pass through the band; STLOUT cuts each stone's seat."
-            .to_string(),
-    );
+            .to_string()
+    });
 }
 
 /// The alloy's colour.
@@ -1529,6 +1532,12 @@ fn build_lettering(s: &Sane, d: &Detail, out: &mut Parts) {
         return;
     }
     let (add, cut) = super::engrave::grooves(&s.p);
+    if !(add.is_empty() && cut.is_empty()) {
+        out.note(
+            "Cut letters are drawn as dark strokes sunk in the band and raised letters as metal strokes on it; STLOUT cuts the grooves from (and adds the raised letters to) its merged solid."
+                .to_string(),
+        );
+    }
     out.csg.add.extend(add.into_iter().map(Prim::Groove));
     out.csg.cut.extend(cut.into_iter().map(Prim::Groove));
     for path in super::engrave::view_paths(&s.p) {
@@ -1558,6 +1567,9 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
         mesh_kinds::build_tapered_band(&mut parts.band, &mut parts.csg, &s, &d);
     } else if mesh_shank::shaped(&s.p) {
         mesh_shank::build(&mut parts.band, &mut parts.csg, &s, &d);
+        if s.p.shape.twist.is_some() {
+            parts.note("The cable's strands are drawn as one closed shell each, passing through each other where they touch; STLOUT unions them into one solid.".to_string());
+        }
     } else {
         build_band(&mut parts.band, &mut parts.csg, &s, &d);
     }
@@ -1614,7 +1626,13 @@ fn build_pattern(parts: &mut Parts, layout: super::pattern::Layout, level: usize
     let shell = Csg { add: vec![band], cut: vec![cut] };
     let cap = PATTERN_TRIANGLES.get(level).or(PATTERN_TRIANGLES.last()).copied().unwrap_or(20_000);
     match solidify(&shell, 0.1, cap) {
-        Ok((solid, _)) => parts.band = Buf { pos: solid.positions, idx: solid.indices },
+        Ok((solid, _)) => {
+            parts.band = Buf { pos: solid.positions, idx: solid.indices };
+            parts.notes.push(
+                "The patterned band is drawn as it casts, from the solid sampled at 0.1 mm; STLOUT cuts the same pattern in its merged solid."
+                    .to_string(),
+            );
+        }
         Err(e) => parts.notes.push(format!("The pattern could not be shown in 3D ({e}); the band is drawn plain.")),
     }
 }

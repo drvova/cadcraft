@@ -576,6 +576,22 @@ against the merged solid: measured at the draft step, a bezel pendant or stud wi
 prong head 30–50 % over (the head is most of a small piece's metal). `castGrams` is what is cast,
 `boughtGrams` the jump rings and French wires.
 
+Measured again at the integration (cast solid at a 0.1 mm step against `castGrams`' volume, the
+ignored test `cross_tests::measure_prong_head_estimate_against_the_cast_solid`): a 6.5 mm
+four-prong pendant 1.37× (head estimate 33.8 mm³ where the solid's head is about 21.6), six
+prongs 1.42×, with a halo 1.37×, a 4 mm four-prong stud pair 1.37×, a 6 mm six-prong pair 1.43×,
+a pear drop pair on three prongs 1.53×, an 8 mm claw pendant 1.51×. The head alone reads 50–60 %
+heavy. **Not fixed yet**, because no small change closes it: the wire-length estimate in
+`findings::head_volume` would have to subtract (a) each prong's length inside the stone (the seat
+cuts every prong from the girdle up to the tip's cover, about half its section), (b) the rail
+and the feet loop where they pass through each prong (about `π r_rail² · 2r` and `π r² · 2r` per
+prong), (c) the cross's bars inside the loop and each other at the middle, and (d) a styled tip's
+own volume in place of the round bead's `r` of wire; or `head_volume` would take the cast
+solid's volume of the head (a voxel count of the head's CSG at about 0.2 mm costs about 1.5
+million distance evaluations, too slow for every PIECE rebuild and its property tests in a debug
+build). Until then the Bench weight of a prong pendant or earring pair reads heavy by the figures
+above; the STL's volume is right.
+
 **The solid.** `PIECEMESH` adds the parts `findings` (bail, eyes, connectors, posts, the bases)
 and `bought-in findings` (jump rings, ear wires). `STLOUT` casts the head, its base and the cast
 findings as one shell per body; the bought-in parts are not in it. A drop pendant's head and bail,

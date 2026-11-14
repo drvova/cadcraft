@@ -298,7 +298,7 @@ fn a_cable_refuses_what_cannot_be_made() {
     refused(&mut s, json!({"kind": "band", "pattern": {"twist": {"turns": 2.5}}}), "whole number");
     refused(&mut s, json!({"kind": "band", "pattern": {"twist": {"wire": 9}}}), "`wire` is");
     refused(&mut s, json!({"kind": "band", "pattern": {"twist": true}, "width": 7}), "comes from its strands");
-    refused(&mut s, json!({"kind": "band", "pattern": {"weave": 1}}), "takes `twist`");
+    refused(&mut s, json!({"kind": "band", "pattern": {"weave": {}}}), "or a cable's twist");
     refused(&mut s, json!({"kind": "band", "pattern": {"twist": {"strands": 3, "wire": 1.4, "turns": 30}}}), "too many for 3 strands");
 }
 

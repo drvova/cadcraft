@@ -132,7 +132,8 @@ fn head(p: &PieceParams, d: &Detail, out: &mut Parts) {
     s.ri = 0.0;
     s.top = 0.0;
     build_solitaire(&s, d, out);
-    out.notes.retain(|n| !n.starts_with("The band, the gallery rail"));
+    // The solitaire's own note speaks of a band; a worn piece's head has its own note.
+    out.notes.retain(|n| !(n.starts_with("The band, the gallery rail") || n.starts_with("This view draws the band")));
     let h = p.head();
     let y = findings::base_of(p);
     let middle = Vec3::new(0.0, y, 0.0);
