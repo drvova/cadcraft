@@ -333,7 +333,9 @@ export interface Piece {
   params: PieceParams;
   handles: string[];
   size: PieceSize;
-  metal: { name: string; grams: number | null };
+  /** `grams` is the band's alone; `prongGrams` and `channelGrams` the head's prongs and rail and a
+   *  channel's rails the engine weighs apart (null when the piece has none). */
+  metal: { name: string; grams: number | null; prongGrams?: number | null; channelGrams?: number | null };
   stones: { count: number | null; carat: number | null };
   checks: PieceCheck[];
   /** How many are made: 2 for a pair of earrings, else 1. */
@@ -563,7 +565,8 @@ function shankRows(p: PieceParams): PieceRow[] {
   if (p.kind === "band") {
     if (sh.rail !== null) {
       rows.push({ key: "rail", label: "Rail", value: "Drawn curve", kind: "readonly" });
-    } else if (p.pattern === null || p.pattern === false) {
+    } else if ((p.pattern === null || p.pattern === false) && (sh.twist !== null || p.pave === null || p.pave === false)) {
+      // The engine refuses a twist under pavé (a channel too): the row is not offered there.
       rows.push({ key: "twist", label: "Twisted cable", value: sh.twist === null ? "false" : "true", kind: "tick" });
       if (sh.twist !== null) {
         rows.push({ key: "strands", label: "Strands", value: num(sh.twist.strands), kind: "whole" });
@@ -736,7 +739,7 @@ export function parsePiece(value: unknown): Piece | null {
       jp: sizeNumber(size["jp"]),
       cn: sizeNumber(size["cn"]),
     },
-    metal: { name: nameOf(metal["name"]) || params.metal, grams: sizeOf(metal["grams"]) },
+    metal: { name: nameOf(metal["name"]) || params.metal, grams: sizeOf(metal["grams"]), prongGrams: sizeOf(metal["prongGrams"]), channelGrams: sizeOf(metal["channelGrams"]) },
     stones: { count: wholeOf(stones["count"]), carat: sizeOf(stones["carat"]) },
     checks: parseChecks(value["checks"]),
     pieces: wholeOf(value["pieces"]) === 2 ? 2 : 1,
@@ -1034,6 +1037,29 @@ export function pieceHeading(state: PieceState, system?: string): string {
 // The engine's results
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * The piece's metal as the Bench sheet weighs it: the band's grams and, when the engine weighs
+ * them apart, the prongs and rail (`prongGrams`) and a channel's rails (`channelGrams`), with the
+ * parts said in words ("band 3.2 g", "prongs and rail 0.21 g"); null without the band's figure.
+ */
+export function wholeMetal(piece: Piece): { grams: number; parts: string[] } | null {
+  const band = piece.metal.grams;
+  if (band === null) return null;
+  const extra: [string, number | null | undefined][] = [
+    ["prongs and rail", piece.metal.prongGrams],
+    ["channel rails", piece.metal.channelGrams],
+  ];
+  const parts: string[] = [];
+  let grams = band;
+  for (const [what, g] of extra) {
+    if (g === null || g === undefined || !(g > 0)) continue;
+    grams += g;
+    parts.push(`${what} ${trim(g, 2)} g`);
+  }
+  if (parts.length > 0) parts.unshift(`band ${trim(band, 2)} g`);
+  return { grams, parts };
+}
+
 export interface PieceFact {
   label: string;
   value: string;
@@ -1047,9 +1073,14 @@ export interface PieceFact {
 export function pieceFacts(piece: Piece, system: string): PieceFact[] {
   const facts: PieceFact[] = [];
   const shown = systemOf(system);
-  if (piece.metal.grams !== null) {
+  const metal = wholeMetal(piece);
+  if (metal !== null) {
     const alloy = piece.metal.name === "" ? "" : ` ${metalLabel(piece.metal.name).toLowerCase()}`;
-    facts.push({ label: "Metal weight", value: `${trim(piece.metal.grams, 2)} g${alloy}` });
+    if (metal.parts.length === 0) facts.push({ label: "Metal weight", value: `${trim(metal.grams, 2)} g${alloy}` });
+    else {
+      facts.push({ label: "Metal weight (whole piece)", value: `${trim(metal.grams, 2)} g${alloy}` });
+      facts.push({ label: "Of which", value: metal.parts.join(" · ") });
+    }
   }
   if (piece.stones.count !== null && piece.stones.count > 0) {
     const carat = piece.stones.carat === null ? "" : ` · ${caratText(piece.stones.carat)}`;
@@ -1099,7 +1130,12 @@ export function pieceSummary(piece: Piece, system: string): PieceSummary {
   const size = sizeIn(piece, shown);
   if (size !== "") tiles.push({ label: "Size", value: `${systemLabel(shown)} ${size}`, detail: piece.size.diameter === null ? "" : `${trim(piece.size.diameter, 2)} mm` });
   if (isPair(p.kind)) tiles.push({ label: "Made as", value: "Pair", detail: "2 of everything" });
-  if (piece.metal.grams !== null) tiles.push({ label: "Metal", value: `${trim(piece.metal.grams, 2)} g`, detail: piece.metal.name === "" ? "" : metalLabel(piece.metal.name) });
+  const metal = wholeMetal(piece);
+  if (metal !== null) {
+    const alloy = piece.metal.name === "" ? "" : metalLabel(piece.metal.name);
+    const detail = metal.parts.length === 0 ? alloy : [alloy, "whole piece"].filter((w) => w !== "").join(" · ");
+    tiles.push({ label: metal.parts.length === 0 ? "Metal" : "Metal (whole piece)", value: `${trim(metal.grams, 2)} g`, detail });
+  }
   if (piece.stones.count !== null && piece.stones.count > 0 && piece.stones.carat !== null) {
     tiles.push({ label: "Stones", value: caratText(piece.stones.carat), detail: `${piece.stones.count.toLocaleString("en-US")} pc` });
   }

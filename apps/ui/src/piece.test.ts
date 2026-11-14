@@ -118,7 +118,7 @@ describe("parsePiece", () => {
     expect(p.params.halo).toBeNull();
     expect(p.params.count).toBeNull();
     expect(p.size).toEqual({ diameter: 16.92, us: "6½", uk: "M½", eu: "53", jp: "13", cn: "13" });
-    expect(p.metal).toEqual({ name: "gold18", grams: 3.4567 });
+    expect(p.metal).toEqual({ name: "gold18", grams: 3.4567, prongGrams: null, channelGrams: null });
     expect(p.stones).toEqual({ count: 1, carat: 1.034 });
     expect(p.checks.map((c) => c.ok)).toEqual([true, false]);
     expect(failedChecks(p)).toBe(1);
@@ -710,5 +710,32 @@ describe("where the features meet", () => {
     expect(keys(patterned)).not.toContain("twist");
     const bare = pieceRows(piece("band", plain), CHOICES, "us");
     expect(keys(bare)).toEqual(expect.arrayContaining(["twist", "pattern", "engrave"]));
+  });
+
+  test("a band with pavé or a channel offers no twisted cable (the engine refuses one)", () => {
+    const pave = { layout: "row", rows: 1, melee: 1.3, gap: 0.2, span: "shoulders", from: null, to: null, symmetric: true, graduated: null };
+    for (const layout of ["row", "channel"]) {
+      const rows = pieceRows(piece("band", { ...plain, pave: { ...pave, layout } }), CHOICES, "us");
+      expect(keys(rows)).toContain("pave");
+      expect(keys(rows)).not.toContain("twist");
+    }
+  });
+});
+
+describe("the metal weight is the whole piece's, as the Bench sheet's", () => {
+  test("a prong head's and a channel's grams are added to the band's, and said", () => {
+    const pronged = piece("solitaire", {}, { metal: { name: "gold18", density: 15.5, grams: 3.2, prongGrams: 0.214 } });
+    expect(pieceFacts(pronged, "us").slice(0, 2)).toEqual([
+      { label: "Metal weight (whole piece)", value: "3.41 g 18k gold" },
+      { label: "Of which", value: "band 3.2 g · prongs and rail 0.21 g" },
+    ]);
+    expect(pieceSummary(pronged, "us").tiles.find((t) => t.label.startsWith("Metal"))).toEqual({ label: "Metal (whole piece)", value: "3.41 g", detail: "18k gold · whole piece" });
+    const channel = piece("band", {}, { metal: { name: "gold18", grams: 2, channelGrams: 0.5 } });
+    expect(pieceFacts(channel, "us")[0]).toEqual({ label: "Metal weight (whole piece)", value: "2.5 g 18k gold" });
+  });
+
+  test("hostile part weights are not added", () => {
+    const p = piece("solitaire", {}, { metal: { name: "gold18", grams: 3, prongGrams: -1, channelGrams: "0.4" } });
+    expect(pieceFacts(p, "us")[0]).toEqual({ label: "Metal weight", value: "3 g 18k gold" });
   });
 });

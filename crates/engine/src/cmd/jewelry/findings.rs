@@ -479,8 +479,8 @@ fn post(p: &PieceParams, base: f64, z: f64) -> Finding {
 // Weight
 // ---------------------------------------------------------------------------------------------
 
-/// One head's metal, mm³: the collar exactly, or the prongs, the gallery rail and the base as
-/// wires along their paths; a halo's seat as its plate; the cross to the base's middle.
+/// One head's metal, mm³: the collar exactly, or the prongs, the gallery rail and the base
+/// ([`prong_head_volume`]); a halo's seat as its plate; the cross to the base's middle.
 pub(super) fn head_volume(p: &PieceParams) -> f64 {
     let head = p.head();
     let (l, wd) = (p.stone_length, p.stone_width);
@@ -491,33 +491,14 @@ pub(super) fn head_volume(p: &PieceParams) -> f64 {
             // The cross under the collar: four bars from its wall to the middle.
             v += PI * BAR * BAR * (wd + l + 2.0 * b.wall);
         }
-        None => {
-            let r = head.prong / 2.0;
-            let sites = p.prong_sites().unwrap_or_default();
-            let (girdle, _, pavilion) = super::piece_params::proportions(head.depth);
-            let rail_h = -(girdle / 2.0 + 0.5 * pavilion);
-            let tip_h = head.prong_height() - head.girdle_height() - r;
-            let (_, foot_h) = foot(p, Vec2::ZERO);
-            let mut prongs = 0.0;
-            for s in sites.iter().filter(|s| s.is_finite()) {
-                let f = Vec3::new(s.x * PRONG_FOOT, s.y * PRONG_FOOT, foot_h);
-                let rail = Vec3::new(s.x * 0.5, s.y * 0.5, rail_h);
-                let g = Vec3::new(s.x, s.y, 0.0);
-                let tip = Vec3::new(s.x, s.y, tip_h);
-                prongs += (rail - f).len() + (g - rail).len() + (tip - g).len() + r;
-            }
-            let rail_r = 0.7 * r;
-            let rail_len = PI * (l + wd) / 2.0 * 0.5 + TAU * 1.2 * rail_r;
-            let feet_loop = PI * (l + wd) / 2.0 * PRONG_FOOT;
-            let cross = PRONG_FOOT * (l + wd) / 2.0 * sites.len().min(16) as f64 / 2.0;
-            v += PI * r * r * (prongs + feet_loop + cross) + PI * rail_r * rail_r * rail_len;
-        }
+        None => v += super::head_metal::prong_head_volume(p),
     }
-    if let (Some(seat), Some(_)) = (head.halo, p.halo_sites()) {
+    if let (Some(seat), Some(melee)) = (head.halo, p.halo_sites()) {
         let near = seat.offset - seat.melee / 2.0;
         let (inner, outer) = ((near - 0.1).max(0.02), near + seat.melee + 0.2);
         let mid = PI * (l + wd) / 2.0 + PI * (inner + outer);
         v += mid * (outer - inner) * (seat.under - 0.04 * seat.melee);
+        v -= super::head_metal::halo_seats(&seat, melee.len());
     }
     if v.is_finite() { v.max(0.0) } else { 0.0 }
 }
@@ -528,9 +509,28 @@ pub(super) fn one_volume(p: &PieceParams) -> (f64, f64) {
     let mut cast = head_volume(p) + lay.top.as_ref().map_or(0.0, |(t, _)| head_volume(t));
     let mut bought = 0.0;
     for f in &lay.findings {
-        if f.cast { cast += f.shape.volume() } else { bought += f.shape.volume() }
+        if f.cast { cast += f.shape.volume() - in_base(p, f) } else { bought += f.shape.volume() }
     }
-    (cast, bought)
+    (cast.max(0.0), bought)
+}
+
+/// What of a connector or a post standing from a head's middle the head's base already holds:
+/// its run through the ball where the spokes (or a collar's cross) meet, and where it crosses the
+/// ring through the prongs' feet.
+fn in_base(p: &PieceParams, f: &Finding) -> f64 {
+    let Shape::Wire { pts, wire } = &f.shape else { return 0.0 };
+    if !matches!(f.what, "connector" | "post") {
+        return 0.0;
+    }
+    let (Some(a), Some(b)) = (pts.first(), pts.get(1)) else { return 0.0 };
+    let head = p.head();
+    let rc = wire / 2.0;
+    let (rr, ring) = match head.bezel {
+        Some(_) => (BAR, false),
+        None => (head.prong / 2.0, f.what == "connector"),
+    };
+    let v = PI * rc * rc * (*b - *a).len().min(rr) + if ring { super::head_metal::crossing(rc, rr) } else { 0.0 };
+    if v.is_finite() { v.max(0.0) } else { 0.0 }
 }
 
 /// Every metal part of the piece (both of a pair), mm³: `band_volume` for a worn piece.

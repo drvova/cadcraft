@@ -513,7 +513,7 @@ fn bead(buf: &mut Buf, centre: Vec3, up: Vec3, radius: f64, radial: usize, lat: 
 }
 
 /// A smooth curve through `pts` (Catmull–Rom), `sub` steps to a span.
-fn smooth_path(pts: &[Vec3], sub: usize) -> Vec<Vec3> {
+pub(super) fn smooth_path(pts: &[Vec3], sub: usize) -> Vec<Vec3> {
     let n = pts.len();
     let sub = sub.clamp(1, 16);
     let at = |i: isize| -> Vec3 {
@@ -2035,4 +2035,15 @@ fn run_stlout(_s: &mut Session, p: &Value) -> Result<Value> {
         reply["text"] = json!(text);
     }
     Ok(reply)
+}
+
+/// One worn piece's head and its base alone (no findings), as the solid adds and cuts them: what
+/// [`super::findings::head_volume`] estimates.
+#[cfg(test)]
+pub(super) fn head_only_csg(p: &PieceParams, level: usize) -> Csg {
+    let mut out = Parts::default();
+    if let Some(d) = DETAILS.get(level) {
+        mesh_findings::head(p, d, &mut out);
+    }
+    out.csg
 }

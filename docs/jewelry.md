@@ -558,8 +558,10 @@ apart (mean radii, wires). A loop (bail, eye) lies in the plane across the piece
 jump ring square to it, as a chain's links do.
 
 **No ring size.** A pendant or earrings have no finger and no band: `size`, `system`, `wall`,
-`width`, `profile`, the profile's own number and `pave` are kept in the stored parameters (so a
-change back to a ring finds them) but not used, and a request that gives one says so in the
+`width`, `profile`, the profile's own number, and the ring's `rail`, `shank`, `pattern`,
+`engrave`, `hallmark` and `pave` are kept in the stored parameters (so a change back to a ring
+finds them; a rebuild of the worn piece keeps them, a pavé change merges over the kept pavé, and
+`false` or `null` takes one off) but not used; one that does not read is not kept, and a request that gives one says so in the
 reply's message ("A pendant has no ring size…"). The reply's `size` is null and `pieces` is 1 or 2.
 
 **A pair counts two of everything.** The sheet draws both earrings' front views, so every stone of
@@ -569,28 +571,27 @@ the pair is a `GEM` insert the bench sheet counts; `stones.count`, `stones.carat
 Bench line reads "pair". The solid builds both earrings side by side along X, `6 mm` apart.
 
 **Weight.** `metal.grams` is every metal part: the findings exactly (a loop as a torus
-`2π²·R·(w/2)²`, a tube `π(R²−r²)·L`, a post, connector or wire `π(w/2)²·L`), a bezel's collar
-exactly, and a prong head's prongs, gallery rail and base as wires along their paths — an
-estimate that counts their overlaps twice and does not take the seats off, so it reads heavy
-against the merged solid: measured at the draft step, a bezel pendant or stud within 5 % and a
-prong head 30–50 % over (the head is most of a small piece's metal). `castGrams` is what is cast,
-`boughtGrams` the jump rings and French wires.
+`2π²·R·(w/2)²`, a tube `π(R²−r²)·L`, a post, connector or wire `π(w/2)²·L`, less a connector's or
+post's run through the head's base), a bezel's collar exactly, and a prong head worked out from its
+parts (`head_metal.rs`): each prong as a wire along the mesh's own path (foot, gallery rail,
+girdle, tip, smoothed as the mesh smooths it) less the circular segment of its section inside the
+stone's seat at every step, a styled prong's top (a claw's cone, a tab's or a V's bars, each
+counted once and clear of the leg) less its part in the seat, the gallery rail less its share in
+the seat, the base's ring and spokes, and the metal counted twice taken off where parts meet
+(each prong through the rail, each prong's and spoke's end in the ring, the spokes by the middle,
+the prongs through a halo's plate); a halo's plate loses each melee's seat and hole.
+`castGrams` is what is cast, `boughtGrams` the jump rings and French wires.
 
-Measured again at the integration (cast solid at a 0.1 mm step against `castGrams`' volume, the
-ignored test `cross_tests::measure_prong_head_estimate_against_the_cast_solid`): a 6.5 mm
-four-prong pendant 1.37× (head estimate 33.8 mm³ where the solid's head is about 21.6), six
-prongs 1.42×, with a halo 1.37×, a 4 mm four-prong stud pair 1.37×, a 6 mm six-prong pair 1.43×,
-a pear drop pair on three prongs 1.53×, an 8 mm claw pendant 1.51×. The head alone reads 50–60 %
-heavy. **Not fixed yet**, because no small change closes it: the wire-length estimate in
-`findings::head_volume` would have to subtract (a) each prong's length inside the stone (the seat
-cuts every prong from the girdle up to the tip's cover, about half its section), (b) the rail
-and the feet loop where they pass through each prong (about `π r_rail² · 2r` and `π r² · 2r` per
-prong), (c) the cross's bars inside the loop and each other at the middle, and (d) a styled tip's
-own volume in place of the round bead's `r` of wire; or `head_volume` would take the cast
-solid's volume of the head (a voxel count of the head's CSG at about 0.2 mm costs about 1.5
-million distance evaluations, too slow for every PIECE rebuild and its property tests in a debug
-build). Until then the Bench weight of a prong pendant or earring pair reads heavy by the figures
-above; the STL's volume is right.
+Measured against the cast solid (`STLOUT`'s at a 0.1 mm step against `castGrams`' volume, the
+ignored test `cross_tests::measure_prong_head_estimate_against_the_cast_solid`; the head alone
+against the head's own solid in brackets): a 6.5 mm four-prong pendant 1.00× (0.99×), six prongs
+0.98× (0.96×), with a halo 0.99× (0.98×), a 4 mm four-prong stud pair 0.97× (0.96×), a 6 mm
+six-prong pair 0.96× (0.96×), a pear drop pair on three prongs 1.09× (1.07×), an 8 mm claw
+pendant 1.00× (0.99×), a 7 mm tab pendant 0.99× (0.98×), double prongs 1.00× (0.99×), a 6 mm
+princess stud pair with V prongs 0.94× (0.94×), an oval pendant 1.02× (1.00×), a cabochon pendant
+1.03× (0.99×). Before, the head counted every wire whole and read 1.37–1.53× heavy.
+`cross_tests::the_prong_head_estimate_is_within_ten_percent_of_the_cast_solid` holds four of these
+(halo, stud, claw, V) to 10 % at a 0.15 mm step on every test run.
 
 **The solid.** `PIECEMESH` adds the parts `findings` (bail, eyes, connectors, posts, the bases)
 and `bought-in findings` (jump rings, ear wires). `STLOUT` casts the head, its base and the cast
@@ -837,6 +838,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | patch | A worn piece's prong head is weighed from its parts (seat, overlaps, styled tops; `head_metal.rs`): within 10 % of the cast solid where it read 37–53 % heavy, checked on every run; the Piece panel's metal weight is the whole piece's as the Bench sheet's (band, prongs and rail, channel rails), said so; the Twisted cable row is not offered on a band with pavé or a channel; a pendant's or earrings' ring-only keys (`rail`, `shank`, `pattern`, `engrave`, `hallmark`, `pave`) are kept, unused, and come back with a ring |
 | 2026-11-14 | minor | Save Render in the 3D tab: a still PNG (to 4096 px, square or 16:9, studio, light or transparent, held to the GPU's limits), a turntable (WebM via MediaRecorder, or an animated PNG of our own writing) and a contact sheet with the Tech Sheet's facts |
 | 2026-11-14 | minor | `STLOUT`: vertices projected onto the true surface; scallops cut; `sprue` and `shrink`; display-mesh notes made accurate |
 | 2026-11-14 | minor | Shank shapes: `PIECE {rail: {curve}}` (a drawn closed rail scaled to the finger's circumference, any profile swept square to it, kept by value, check `rail`), `shank: {split, gap, from, cathedral, height}` (a solitaire's split arms and cathedral arches, exact weights, checks `split` and `cathedral`) and `pattern: {twist: {strands, turns, wire}}` (a twisted cable band, weight by strand length, check `cable`); sheet, `PIECEMESH`, merged solid, proposals, templates and the Piece panel's Shank group |

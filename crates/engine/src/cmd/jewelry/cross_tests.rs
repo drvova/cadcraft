@@ -194,6 +194,30 @@ fn prong_styles_apply_to_pendants_and_both_earrings_of_a_pair() {
     }
 }
 
+/// The weight `METAL` gives a worn prong piece is the cast solid's within 10 % (it read 37–53 %
+/// heavy when the head counted every wire whole). The full table is
+/// `measure_prong_head_estimate_against_the_cast_solid`.
+#[test]
+fn the_prong_head_estimate_is_within_ten_percent_of_the_cast_solid() {
+    use super::solid::solidify;
+    for (kind, w, prongs, extra) in [
+        ("pendant", 6.5, 6, json!({"halo": 1.3, "gap": 0.15})),
+        ("stud", 4.0, 4, json!({})),
+        ("pendant", 8.0, 4, json!({"prongStyle": "claw"})),
+        ("stud", 5.0, 4, json!({"cut": "princess", "prongStyle": "v"})),
+    ] {
+        let mut v = json!({"kind": kind, "stoneWidth": w, "stoneLength": w, "prongs": prongs, "metal": "gold18"});
+        for (k, x) in extra.as_object().unwrap() {
+            v[k] = x.clone();
+        }
+        let p = PieceParams::parse("t", &v).unwrap();
+        let est = super::findings::one_volume(&p).0 * f64::from(super::findings::pieces(&p));
+        let (solid, _) = solidify(&piece_mesh(&p, Quality::Draft).csg, 0.15, 2_000_000).unwrap();
+        let ratio = est / solid.volume();
+        assert!((0.9..=1.1).contains(&ratio), "{v}: estimate {est:.2} mm³ against the solid's {:.2} mm³ ({ratio:.3})", solid.volume());
+    }
+}
+
 #[test]
 #[ignore = "measurement"]
 fn measure_prong_head_estimate_against_the_cast_solid() {
@@ -206,6 +230,11 @@ fn measure_prong_head_estimate_against_the_cast_solid() {
         ("stud", 6.0, 6, json!({})),
         ("drop", 5.0, 3, json!({"cut": "pear", "stoneLength": 7})),
         ("pendant", 8.0, 4, json!({"prongStyle": "claw"})),
+        ("pendant", 7.0, 4, json!({"prongStyle": "tab"})),
+        ("pendant", 7.0, 4, json!({"prongStyle": "double"})),
+        ("stud", 6.0, 4, json!({"cut": "princess", "prongStyle": "v"})),
+        ("pendant", 6.0, 4, json!({"cut": "oval", "stoneLength": 8})),
+        ("pendant", 8.0, 4, json!({"cut": "cabochon", "stoneLength": 10})),
     ] {
         let mut v = json!({"kind": kind, "stoneWidth": w, "stoneLength": w, "prongs": prongs, "metal": "gold18"});
         for (k, x) in extra.as_object().unwrap() {
@@ -215,11 +244,14 @@ fn measure_prong_head_estimate_against_the_cast_solid() {
         let est_cast = super::findings::one_volume(&p).0 * f64::from(super::findings::pieces(&p));
         let mesh = piece_mesh(&p, Quality::Draft);
         let (solid, _) = solidify(&mesh.csg, 0.1, 2_000_000).unwrap();
-        let head = super::findings::head_volume(&p) * f64::from(super::findings::pieces(&p));
+        let head = super::findings::head_volume(&p);
+        let (hs, _) = solidify(&super::mesh::head_only_csg(&p, 1), 0.1, 2_000_000).unwrap();
         println!(
-            "MEASURE {kind} {w} {prongs} {extra}: estimate cast {est_cast:.2} mm3 (head {head:.2}), solid {:.2} mm3, ratio {:.3}",
+            "MEASURE {kind} {w} {prongs} {extra}: estimate cast {est_cast:.2} mm3, solid {:.2} mm3, ratio {:.3}; head {head:.2} vs {:.2}, ratio {:.3}",
             solid.volume(),
-            est_cast / solid.volume()
+            est_cast / solid.volume(),
+            hs.volume(),
+            head / hs.volume()
         );
     }
 }

@@ -29,7 +29,7 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 | Split shank, double shank, bypass, cathedral shoulders | `piece {shank:{split:2\|3, gap, from, cathedral, height}}`, the Piece panel's Shank group, templates | split and cathedral done (solitaire); double shank and bypass planned (J10) |
 | Twisted cable, braided bands | `piece {kind:"band", pattern:{twist:{strands, turns, wire}}}`, template Cable Band | twisted cable done (2–3 strands); braids planned (J11) |
 | Text and names on a band; hallmark | `piece {engrave: {text, at: inside|outside, style: cut|raised, font: block|script}, hallmark: true|{maker}}` | done (2026-11-14): CADCraft's own stroke font cut as round-bottomed grooves wrapped round the band; raised names add metal; fineness from the metal; weight, checks, developed view, 3D view and cast solid. Not yet: outline (filled) fonts, text on a dome or signet's outside, several lines |
-| Earrings, pendants, chains, links | `PIECE` kinds `pendant` (the solitaire head, prongs or bezel, halo optional, with a loop or tube bail sized for a chain; a drop on a jump ring), `stud` (a pair: head and post, bought-in butterfly or scroll back) and `drop` (a pair: a hanging head on a jump ring under a French wire or a stud top); checks bail-opening, bail-wire, jump-ring, jump-ring-wire, post, ear-wire; weight, carats, sheet, 3D and cast solid count both of a pair; hoops, chains and links not yet | partial |
+| Earrings, pendants, chains, links | `PIECE` kinds `pendant` (the solitaire head, prongs or bezel, halo optional, with a loop or tube bail sized for a chain; a drop on a jump ring), `stud` (a pair: head and post, bought-in butterfly or scroll back) and `drop` (a pair: a hanging head on a jump ring under a French wire or a stud top); checks bail-opening, bail-wire, jump-ring, jump-ring-wire, post, ear-wire; weight (a prong head within 10 % of the cast solid), carats, sheet, 3D and cast solid count both of a pair; a ring's own keys are kept while worn and come back with a ring; hoops, chains and links not yet | partial |
 
 ## Stones and settings
 
@@ -110,6 +110,7 @@ own tests — never from Rhino's binaries, code, interface or artwork.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | patch | Earrings and pendants: a prong head's weight within 10 % of the cast solid; ring-only keys kept while worn |
 | 2026-11-14 | minor | `.3dm` read (meshes weighed, curves as profiles) and written (EXPORT3DM) |
 | 2026-11-14 | minor | SubD row: the subdivision-surface foundation landed in `crates/geom` |
 | 2026-11-14 | minor | Roadmap to a Rhino replacement for jewellers |

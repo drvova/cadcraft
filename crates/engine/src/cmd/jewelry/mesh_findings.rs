@@ -127,7 +127,7 @@ fn rod(buf: &mut Buf, csg: &mut Csg, a: Vec3, b: Vec3, r: f64, d: &Detail) {
 }
 
 /// One head and its base, the band's outside being the plane Y = 0.
-fn head(p: &PieceParams, d: &Detail, out: &mut Parts) {
+pub(super) fn head(p: &PieceParams, d: &Detail, out: &mut Parts) {
     let mut s = Sane::of(p);
     s.ri = 0.0;
     s.top = 0.0;

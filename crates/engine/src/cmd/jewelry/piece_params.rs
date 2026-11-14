@@ -235,6 +235,35 @@ impl Profile {
     }
 }
 
+/// The ring-only keys a worn piece keeps but does not use, each read as a ring reads it and
+/// written back in its own JSON; a key that does not read (or reads as none) is not kept, as
+/// before, so a worn piece never refuses what it does not use.
+fn held_ring_keys(cmd: &str, p: &Value) -> Map<String, Value> {
+    let mut out = Map::new();
+    if let Ok(Some(s)) = super::pave_band::PaveSpec::parse(cmd, p) {
+        out.insert("pave".into(), s.json());
+    }
+    if let Ok(Some(s)) = super::pattern::PatternSpec::parse(cmd, p) {
+        out.insert("pattern".into(), s.json());
+    }
+    if let Ok(Some(s)) = super::engrave::EngraveSpec::parse(cmd, p) {
+        out.insert("engrave".into(), s.json());
+    }
+    if let Ok(Some(s)) = super::hallmark::HallmarkSpec::parse(cmd, p) {
+        out.insert("hallmark".into(), s.json());
+    }
+    if let Ok(shape) = super::shank::parse(cmd, p) {
+        let mut o = Map::new();
+        shape.json_into(&mut o);
+        for (k, v) in o {
+            if !v.is_null() {
+                out.insert(k, v);
+            }
+        }
+    }
+    out
+}
+
 /// A piece's parameters, complete and checked.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct PieceParams {
@@ -313,6 +342,10 @@ pub(super) struct PieceParams {
     pub engrave: Option<super::engrave::EngraveSpec>,
     /// The hallmark inside the shank ([`super::hallmark`]), or none.
     pub hallmark: Option<super::hallmark::HallmarkSpec>,
+    /// A worn piece's ring-only keys (`rail`, `shank`, `pattern`, `engrave`, `hallmark`, `pave`)
+    /// as given, read and written back in their own JSON: not used off the finger, but stored, so
+    /// a change of `kind` back to a ring finds them again ([`held_ring_keys`]). Empty for a ring.
+    pub held: Map<String, Value>,
     /// Prong heads: the prongs' style, height, tip and wire ([`super::prongs`]).
     pub prong: super::prongs::ProngSpec,
     /// A channel setting's wall and lip ([`super::channel`]).
@@ -496,6 +529,7 @@ impl PieceParams {
             pattern: if ring { super::pattern::PatternSpec::parse(cmd, p)? } else { None },
             engrave: if ring { super::engrave::EngraveSpec::parse(cmd, p)? } else { None },
             hallmark: if ring { super::hallmark::HallmarkSpec::parse(cmd, p)? } else { None },
+            held: if ring { Map::new() } else { held_ring_keys(cmd, p) },
         };
         super::shank::settle(cmd, &mut params)?;
         Ok(params)
@@ -562,6 +596,9 @@ impl PieceParams {
             self.prong.json_into(o);
             self.channel.json_into(o);
             self.worn.json(o);
+            for (k, v) in &self.held {
+                o.insert(k.clone(), v.clone());
+            }
         }
         v
     }

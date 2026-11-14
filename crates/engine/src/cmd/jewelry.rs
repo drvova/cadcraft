@@ -32,6 +32,7 @@ mod findings;
 mod findings_tests;
 mod gem;
 mod hallmark;
+mod head_metal;
 mod heads;
 #[cfg(test)]
 #[path = "jewelry/heads_tests.rs"]

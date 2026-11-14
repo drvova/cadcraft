@@ -144,11 +144,70 @@ fn ring_only_keys_are_noted_and_not_used() {
     let m = r["message"].as_str().unwrap();
     assert!(m.contains("has no ring size") && m.contains("has no band"), "{m}");
     let b = &r["piece"];
-    assert_eq!(b["params"]["pave"], json!(false));
+    // Kept for a ring, not used: no pavé stones, the weight unchanged.
+    assert!(b["params"]["pave"].is_object(), "{}", b["params"]["pave"]);
+    assert_eq!(b["stones"]["pave"], Value::Null);
     assert!((grams(&a) - grams(b)).abs() < 1e-9, "the size and wall change nothing");
     // Back to a ring, the ring's own keys are there.
     let ring = piece(&mut s, json!({"kind": "solitaire"}));
     assert_eq!(ring["size"]["us"], json!(9.0));
+    assert!(ring["stones"]["pave"]["count"].as_u64().is_some_and(|n| n > 0), "the pavé is back: {}", ring["stones"]);
+}
+
+/// A band's pattern, lettering and hallmark, and a solitaire's shank and pavé, survive a stop as
+/// a pendant or earrings: kept (unused) while worn, and back when the kind is a ring again.
+#[test]
+fn ring_only_keys_survive_a_worn_kind_and_come_back() {
+    let mut s = mm_drawing();
+    let band = piece(&mut s, json!({"kind": "band", "width": 6, "pattern": {"hex": {"depth": 0.3}}, "engrave": "Anna", "hallmark": {"maker": "CC"}}));
+    let keys = ["pattern", "engrave", "hallmark"];
+    let before: Vec<Value> = keys.iter().map(|k| band["params"][*k].clone()).collect();
+    for kind in ["pendant", "stud", "drop"] {
+        let worn = piece(&mut s, json!({"kind": kind}));
+        for (k, was) in keys.iter().zip(&before) {
+            assert_eq!(&worn["params"][*k], was, "{kind} keeps `{k}`");
+        }
+        // A rebuild of the worn piece keeps them too.
+        let again = piece(&mut s, json!({"stoneWidth": 5}));
+        assert_eq!(again["params"]["engrave"], before[1], "{kind}: a rebuild keeps them");
+        assert_eq!(query(&mut s)["params"]["hallmark"], before[2], "{kind}: stored");
+    }
+    let back = piece(&mut s, json!({"kind": "band"}));
+    for (k, was) in keys.iter().zip(&before) {
+        assert_eq!(&back["params"][*k], was, "the band's `{k}` is back");
+    }
+    assert!(back["pattern"].is_object(), "the pattern is cut again: {back}");
+
+    let mut s = mm_drawing();
+    let ring = piece(&mut s, json!({"kind": "solitaire", "pave": {"melee": 1.5}}));
+    let worn = piece(&mut s, json!({"kind": "pendant"}));
+    assert_eq!(worn["params"]["pave"], ring["params"]["pave"]);
+    assert_eq!(worn["stones"]["count"], json!(1), "a pendant's one stone, no pavé: {}", worn["stones"]);
+    // A pavé change while worn merges over the kept pavé, as on a ring.
+    let worn = piece(&mut s, json!({"pave": {"gap": 0.3}}));
+    assert_eq!(worn["params"]["pave"]["melee"], ring["params"]["pave"]["melee"]);
+    let back = piece(&mut s, json!({"kind": "solitaire"}));
+    assert_eq!(back["params"]["pave"]["gap"], json!(0.3));
+    assert_eq!(back["params"]["pave"]["melee"], ring["params"]["pave"]["melee"]);
+    // Taking a kept key off while worn takes it off for good; one given while worn is kept.
+    piece(&mut s, json!({"kind": "stud"}));
+    let off = piece(&mut s, json!({"pave": false, "shank": {"split": 2}}));
+    assert_eq!(off["params"]["pave"], json!(false));
+    let split = off["params"]["shank"].clone();
+    assert_eq!(split["split"], json!(2), "{split}");
+    let back = piece(&mut s, json!({"kind": "solitaire"}));
+    assert_eq!(back["params"]["pave"], json!(false));
+    assert_eq!(back["params"]["shank"], split, "the split shank is the solitaire's now");
+}
+
+/// A ring-only key a worn piece cannot read is not kept and not refused (it is not used).
+#[test]
+fn a_worn_piece_drops_an_unreadable_ring_key() {
+    let p = params(&json!({"kind": "pendant", "pave": {"layout": "nonsense"}, "engrave": 7, "pattern": "x"}));
+    assert!(p.held.is_empty(), "{:?}", p.held);
+    let p = params(&json!({"kind": "pendant", "engrave": "Ok"}));
+    let again = params(&p.json());
+    assert_eq!(p, again, "the kept keys read back the same");
 }
 
 #[test]
