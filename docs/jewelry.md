@@ -310,6 +310,72 @@ dropped. `stones: true` appends the stones as shells of their own.
   is in more than one piece; `bodies` counts them and `notes` says so.
 - An ASCII STL is limited to 30,000 triangles.
 
+### Pavé on the band
+
+`PIECE {pave: …}` lays melee on the band's outside, as a bench's pavé plug-ins do, on a plain band,
+a solitaire or a three-stone ring (an eternity band's stones are its own row; it ignores `pave`
+and says so). `pave: true` is one row of 1.3 mm on the shoulders at 0.2 mm; an object takes:
+
+| Key | Values | Default |
+|---|---|---|
+| `layout` | `row` (one row in the middle of the width), `rows` (rows side by side, every row's stones at the same angles), `honeycomb` (every other row offset half a stone, the rows closed up), `scallop` (one row, each stone in a scallop cut into the band's side) | `row` |
+| `rows` | 1–3 (`rows` and `honeycomb`; `row` and `scallop` are one row) | 2 |
+| `melee` | mm 0.8–3, round diamonds | 1.3 |
+| `gap` | mm 0–2, the least metal between two stones | 0.2 |
+| `span` | `shoulders` (60° each side of 12 o'clock), `top-half` (90°), `full` (all round) | `shoulders` |
+| `from`, `to` | degrees clockwise from 12 o'clock, −360–360, `to` more than `from` and at most 360° beyond it; giving them drops `span` | 0, 60 |
+| `symmetric` | mirror `from`–`to` the other side of 12 o'clock | true |
+| `graduated` | `{from: mm, to: mm}`: sizes from the end nearest 12 o'clock (an asymmetric span: from `from`) to the far end, linear, rounded to the calibrated 0.1 mm | none |
+
+A `pave` object merges over the stored one key by key (`PIECE {pave: {gap: 0.3}}` changes the gap
+alone); `false` takes the pavé away. The reply's `stones.pave` gives the count, carats, layout,
+rows, the actual least gap, the least rim, the angle the pavé starts at beside a head, the arcs
+fitted and the stones by size; `stones.count` and `stones.carat` include them.
+
+**Where a stone sits.** On the outside's surface for every profile: at angle θ and arc length `u`
+across the section from the middle (the width point `x(u)` that arc length reaches), the surface
+point is `(rᵢ + h(x))·(sin θ, cos θ) + x·Z` and its normal leans by the section's slope `h′(x)`.
+The table lies on the surface square to that normal, the girdle 0.28 of the depth under it — the
+seat the eternity row uses, tilted with the surface. On a dome the outer rows lean out; on a
+concave band the row sits in the hollow.
+
+**Auto-fit.** A span is filled from the end nearest 12 o'clock: the first girdle at the span's end
+(or, through 12 o'clock with no head, one stone centred at 12), each next stone at the least angle
+that keeps `gap` in every row (the metal between girdles measured edge to edge, bisected), until
+the next would leave the span; the angle left over is shared equally between the gaps, so the
+stones fill the span and the actual gap is at least the asked one. All round a plain band it takes
+the most `n` that keep the gap and stands them 360°/n apart. Numbers: a size 6 band 3 × 1.8 mm
+takes 36 stones of 1.5 mm at 0.2 mm all round (0.21 mm actual); a 2.6 × 2 mm solitaire's shoulders
+take 10 of 1.3 mm, 5 a side, with 0.5 mm between them (the residual of the 60° span shared out);
+a 6.5 mm comfort band takes 68 of 1.2 mm in a three-row honeycomb over the top half at 0.15 mm.
+
+**The `pave` check** (only when pavé is asked for): every girdle at least 0.3 mm (`PAVE_RIM`) from
+the band's edge, measured across the outside's surface; the least gap kept; at least one stone in
+the span; no culet through to the finger; the cap of 400 stones (`MAX_PIECE_STONES`). A band too
+narrow fails in words: "The band is too narrow for 1.5 mm pavé: a stone needs 2.1 mm across the
+band's outside (0.3 mm of rim each side); this band's outside is 1.6 mm across."
+
+**Beside a head.** A solitaire's or a three-stone ring's pavé starts at the least angle at which a
+stone at the crown, seen along the finger, clears the head's outline (stone, prongs and their feet)
+by half the prong wire and the larger of `gap` and 0.2 mm; a three-stone ring's starts beyond its
+side stones.
+
+**Downstream.** The sheet draws each stone's side profile in the front view (with the scallops
+under a scalloped row), one stone per row in the section, the visible stones foreshortened in the
+plan, and the outside unrolled under the plan with every stone a `GEM` insert — the stones the
+bench sheet counts and groups by size. `PIECEMESH` builds each as a round brilliant on its frame
+and bead prongs between neighbours, the eternity row's beads (the halo has a seat plate, not
+beads). `propose` reads a pavé change (each `pave` key a line, and the pavé count). In the
+interface the Piece section has a Pavé group: the tick, layout, rows, stone size, gap and span.
+
+**Approximations.** The metal between two stones is measured between the girdles' nearest points
+along the line joining their centres, projected into each girdle's plane: exact for one row on a
+level band (it is the eternity formula), an approximation of the least distance between two
+tilted girdle circles. The rim is arc length across the outside to the edge. The head's clearance
+is judged in the ring's plane at the crown. The solid cuts no seats and no scallops: the seat
+cutter reads each stone's frame from `pave_band::stone_frames` (girdle centre, normal, the
+direction round the band, girdle diameter, depth, scallop).
+
 `OBJECTS` (an inquiry command) lists what a space holds for the interface's Objects section: each
 object's handle, kind, layer, block, first words, one telling size and its groups, capped at
 5,000, and it changes nothing.
@@ -500,6 +566,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 |---|---|---|
 | 2026-11-13 | minor | The 3D tab's four-view workspace (Top, Front, Right orthographic and flat-shaded at one scale; Perspective in its mode; maximise by double-click, M or the bar; remembered; single view under 560 px) on one scissored context, and drag handles on the piece (centre stone, halo melee, eternity stones, wall, width) that preview at draft quality, show the value and the checks it would break, and commit one `piece` change or, with Alt, a proposal; keyboard sliders |
 | 2026-11-13 | minor | `PIECE {profile: {curve: handle}}`: a band profile drawn as a closed curve of the drawing (polyline with bulges, spline, circle, ellipse, region), kept by value with its frame (box bottom on the finger, centred across), width and wall read from it, weight by Pappus, the wall check at its thinnest, the solid revolved from it; the Piece panel names it "Custom (from drawing)" with Update from curve. Rails are not built yet (J8) |
+| 2026-11-13 | minor | Pavé on the band: `PIECE {pave}` (row, rows, honeycomb, scallop; 1–3 rows; a named span or angles, mirrored; graduated sizes) placed on the outside of every profile with tables square to the surface, auto-fitted to the span with the residual shared, clear of the head and the rim; a `pave` check; the sheet, the bench sheet, `PIECEMESH`, `propose` and the Piece section's Pavé group read it |
 | 2026-11-13 | patch | Realistic studio: concentric gradient rings round the lens replace the front strips and low cards, so flat faces carry a band from the front, top, side and through an orbit and the side view is calm; the lights are eased toward a ceiling and strips mirror coloured alloys a shade deeper (gold18 lit-pixel median saturation 0.53 → 0.59, silver near-white pixels 19% → 0%); coloured stones return a deeper body colour and mirror the rings dimmed; the derivatives variant of the shader compiles again; the stage stays dark in the light theme by design |
 | 2026-11-13 | minor | `STLOUT` writes the metal as one closed, manifold shell (implicit CSG, marching tetrahedra) with stone seats cut: prong bearings and culet holes, cone seats with bores and through-holes for halo and eternity melee; reports the cast weight beside the band's; `maxTriangles`, `step`, `seats`, `bodies` |
 | 2026-11-13 | patch | Realistic studio: gradient strips round the lens, tall side strips and low cards, a smaller dark lens spot, so broad polished faces carry a bright highlight band beside a dark one instead of reading as flat bronze |

@@ -311,6 +311,17 @@ const PARAMS: &[(&str, &str, Option<&str>)] = &[
     ("sideProngs", "Side prongs", None),
 ];
 
+/// Pavé's parameters a card names.
+const PAVE_PARAMS: &[(&str, &str, Option<&str>)] = &[
+    ("layout", "Pavé layout", None),
+    ("rows", "Pavé rows", None),
+    ("melee", "Pavé stone size", Some("mm")),
+    ("gap", "Pavé gap", Some("mm")),
+    ("span", "Pavé span", None),
+    ("from", "Pavé from", Some("°")),
+    ("to", "Pavé to", Some("°")),
+];
+
 fn at<'a>(v: &'a Value, path: &[&str]) -> &'a Value {
     let mut cur = v;
     for key in path {
@@ -327,6 +338,19 @@ fn changes(before: &Value, after: &Value) -> Vec<Value> {
     for (key, label, unit) in PARAMS {
         rows.extend(change(&format!("piece.{key}"), label, at(before, &["piece", "params", key]), at(after, &["piece", "params", key]), *unit));
     }
+    // Pavé is an object: each of its numbers is a line of its own (nothing before or after reads
+    // as no pavé).
+    for (key, label, unit) in PAVE_PARAMS {
+        let path = |v: &'static str| ["piece", "params", "pave", v];
+        rows.extend(change(&format!("piece.pave.{key}"), label, at(before, &path(key)), at(after, &path(key)), *unit));
+    }
+    rows.extend(change(
+        "piece.stones.pave.count",
+        "Pavé stones",
+        at(before, &["piece", "stones", "pave", "count"]),
+        at(after, &["piece", "stones", "pave", "count"]),
+        Some("pc"),
+    ));
     rows.extend(change("grams", "Metal weight", at(before, &["grams"]), at(after, &["grams"]), Some("g")));
     rows.extend(change("stones.count", "Stones", at(before, &["stones", "count"]), at(after, &["stones", "count"]), Some("pc")));
     rows.extend(change("stones.carat", "Stone weight", at(before, &["stones", "carat"]), at(after, &["stones", "carat"]), Some("ct")));

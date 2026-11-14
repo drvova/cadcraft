@@ -15,7 +15,8 @@
  * call builds or rebuilds with the given keys merged over the stored parameters. `P` carries
  * `params` (`kind`, `size` as a US number with `sizeText`, `sizeSystem`, `wall`, `width`,
  * `profile`, `metal`, `cut`, `stoneLength`, `stoneWidth`, `stone`, `prongs`, `halo` false or a
- * melee width, `melee`, `count` null or a number, `gap`), `size` (the finger in every system),
+ * melee width, `melee`, `count` null or a number, `gap`, and `pave` false or the pavé on the band:
+ * `layout`, `rows`, `melee`, `gap`, `span` or null for angles), `size` (the finger in every system),
  * `metal` (`name`, `density`, `grams`), `stones` (`count`, `carat`), `checks` and `handles`.
  */
 
@@ -48,6 +49,33 @@ export const PIECE_PROFILES: readonly Choice[] = [
 
 /** How the section names a profile the jeweller drew (`profile: "custom"`). */
 export const CUSTOM_PROFILE_LABEL = "Custom (from drawing)";
+/** How pavé is laid on the band (`Layout` in `pave_band.rs`). */
+export const PAVE_LAYOUTS: readonly Choice[] = [
+  { value: "row", label: "Single row" },
+  { value: "rows", label: "Rows" },
+  { value: "honeycomb", label: "Honeycomb" },
+  { value: "scallop", label: "Scalloped" },
+];
+
+/** The spans pavé is fitted to (`Span` in `pave_band.rs`); angles given instead read "custom". */
+export const PAVE_SPANS: readonly Choice[] = [
+  { value: "shoulders", label: "Shoulders" },
+  { value: "top-half", label: "Top half" },
+  { value: "full", label: "All round" },
+];
+
+/** What the span row reads when the pavé was given angles rather than a named span. */
+export const PAVE_CUSTOM = "custom";
+
+/** Pavé on the band, as the section shows it. */
+export interface PavePart {
+  layout: string;
+  rows: number | null;
+  melee: number | null;
+  gap: number | null;
+  /** A named span, or `custom` when angles were given. */
+  span: string;
+}
 
 /** What a count reads, and what is typed, when the engine fits as many stones as go around. */
 export const AUTO = "auto";
@@ -87,6 +115,8 @@ export interface PieceParams {
   /** A three-stone ring's side stones: their width (null: the engine's share of the centre's) and prongs. */
   sideWidth: number | null;
   sideProngs: number | null;
+  /** Pavé on the band: false for none, null when the engine does not offer it. */
+  pave: PavePart | false | null;
 }
 
 /** The finger in every system, each as it is shown; null where the engine gave none. */
@@ -196,7 +226,45 @@ function parseParams(value: unknown): PieceParams | null {
     gap: sizeOf(value["gap"]),
     sideWidth: sizeOf(value["sideWidth"]),
     sideProngs: wholeOf(value["sideProngs"]),
+    pave: paveOf(value["pave"]),
   };
+}
+
+function paveOf(value: unknown): PavePart | false | null {
+  if (value === false) return false;
+  if (!isRecord(value)) return null;
+  const layout = nameOf(value["layout"]);
+  const span = nameOf(value["span"]);
+  return {
+    layout: layout === "" ? "row" : layout,
+    rows: wholeOf(value["rows"]),
+    melee: sizeOf(value["melee"]),
+    gap: sizeOf(value["gap"]),
+    span: span === "" ? PAVE_CUSTOM : span,
+  };
+}
+
+/** The pavé field each row edits. */
+const PAVE_FIELDS: Readonly<Record<string, string>> = {
+  paveLayout: "layout",
+  paveRows: "rows",
+  paveMelee: "melee",
+  paveGap: "gap",
+  paveSpan: "span",
+};
+
+/** The pavé rows: a tick, and when it is on, the layout, rows, stone size, gap and span. */
+function paveRows(p: PieceParams): PieceRow[] {
+  if (p.pave === null || p.kind === "eternity") return [];
+  const rows: PieceRow[] = [{ key: "pave", label: "Pavé", value: p.pave === false ? "false" : "true", kind: "tick" }];
+  if (p.pave === false) return rows;
+  const pave = p.pave;
+  rows.push({ key: "paveLayout", label: "Layout", value: pave.layout, kind: "choice", choices: withHeld(PAVE_LAYOUTS, pave.layout, capital) });
+  if (pave.layout === "rows" || pave.layout === "honeycomb") rows.push({ key: "paveRows", label: "Rows", value: num(pave.rows), kind: "whole" });
+  rows.push({ key: "paveMelee", label: "Pavé stones, mm", value: num(pave.melee), kind: "number" });
+  rows.push({ key: "paveGap", label: "Pavé gap, mm", value: num(pave.gap), kind: "number" });
+  rows.push({ key: "paveSpan", label: "Span", value: pave.span, kind: "choice", choices: withHeld(PAVE_SPANS, pave.span, () => "Custom angles") });
+  return rows;
 }
 
 function parseChecks(value: unknown): PieceCheck[] {
@@ -385,7 +453,7 @@ export function pieceRows(piece: Piece, choices: PieceChoices, system: string): 
     { key: "profile", label: "Profile", value: p.profile, kind: "choice", choices: profileChoices(p.profile) },
     { key: "metal", label: "Metal", value: p.metal, kind: "choice", choices: withHeld(choices.metals, p.metal, metalLabel) },
   ];
-  if (p.kind === "band") return rows;
+  if (p.kind === "band") return [...rows, ...paveRows(p)];
   rows.push({ key: "cut", label: "Cut", value: p.cut, kind: "choice", choices: withHeld(choices.cuts, p.cut, capital) });
   rows.push({ key: "stone", label: "Stone", value: p.stone, kind: "choice", choices: withHeld(choices.stones, p.stone, capital) });
   if (p.kind === "solitaire" || p.kind === "threestone") {
@@ -400,6 +468,7 @@ export function pieceRows(piece: Piece, choices: PieceChoices, system: string): 
       // The side stones: empty reads as the engine's own share of the centre stone.
       rows.push({ key: "sideWidth", label: "Side stones, mm", value: num(p.sideWidth), kind: "number" });
       rows.push({ key: "sideProngs", label: "Side prongs", value: num(p.sideProngs), kind: "whole" });
+      rows.push(...paveRows(p));
       return rows;
     }
     rows.push({ key: "halo", label: "Halo", value: p.halo === null ? "false" : "true", kind: "tick" });
@@ -407,6 +476,7 @@ export function pieceRows(piece: Piece, choices: PieceChoices, system: string): 
       rows.push({ key: "haloWidth", label: "Halo stones, mm", value: num(p.halo), kind: "number" });
       rows.push({ key: "gap", label: "Gap, mm", value: num(p.gap), kind: "number" });
     }
+    rows.push(...paveRows(p));
     return rows;
   }
   rows.push({ key: "melee", label: "Stones, mm", value: num(p.melee), kind: "number" });
@@ -515,7 +585,7 @@ export function passingLine(passing: number, failing: number): string {
 
 /** A group of the parameters, under its name. */
 export interface PieceGroup {
-  name: "Ring" | "Band" | "Stones" | "Head";
+  name: "Ring" | "Band" | "Stones" | "Head" | "Pavé";
   rows: PieceRow[];
 }
 
@@ -539,12 +609,19 @@ function groupOf(row: PieceRow, kind: string): PieceGroup["name"] {
       return "Head";
     case "gap":
       return kind === "eternity" ? "Stones" : "Head";
+    case "pave":
+    case "paveLayout":
+    case "paveRows":
+    case "paveMelee":
+    case "paveGap":
+    case "paveSpan":
+      return "Pavé";
     default:
       return "Stones";
   }
 }
 
-const GROUP_ORDER: readonly PieceGroup["name"][] = ["Ring", "Band", "Stones", "Head"];
+const GROUP_ORDER: readonly PieceGroup["name"][] = ["Ring", "Band", "Stones", "Head", "Pavé"];
 
 /**
  * The rows in the groups a bench reads them in: the ring (what it is and the finger), the band,
@@ -622,10 +699,14 @@ export function judgePieceDraft(row: PieceRow, draft: string, system = "us"): Dr
     case "size":
       return judgeSize(row, draft, system);
     case "tick":
-      return draft === "true" || draft === "false" ? { kind: "send", patch: { halo: draft === "true" } } : { kind: "keep" };
-    case "choice":
+      if (draft !== "true" && draft !== "false") return { kind: "keep" };
+      return { kind: "send", patch: { [row.key === "pave" ? "pave" : "halo"]: draft === "true" } };
+    case "choice": {
       if (row.key === "system" || draft.trim() === "") return { kind: "keep" };
+      const field = PAVE_FIELDS[row.key];
+      if (field !== undefined) return draft === PAVE_CUSTOM ? { kind: "keep" } : { kind: "send", patch: { pave: { [field]: draft } } };
       return { kind: "send", patch: { [row.key]: draft } };
+    }
     case "count": {
       const text = draft.trim().toLowerCase();
       if (text === "" || text === AUTO) return row.value === AUTO ? { kind: "keep" } : { kind: "send", patch: { count: null } };
@@ -647,6 +728,8 @@ export function judgePieceDraft(row: PieceRow, draft: string, system = "us"): Dr
       const held = readNumber(row.value);
       if (held.ok && held.value === read.value) return { kind: "keep" };
       if (row.key === "haloWidth") return { kind: "send", patch: { halo: read.value } };
+      const field = PAVE_FIELDS[row.key];
+      if (field !== undefined) return { kind: "send", patch: { pave: { [field]: read.value } } };
       if (row.both === true) return { kind: "send", patch: { stoneWidth: read.value, stoneLength: read.value } };
       return { kind: "send", patch: { [row.key]: read.value } };
     }
@@ -677,6 +760,12 @@ export function refusalRow(error: unknown, rows: readonly PieceRow[]): string | 
   if (/is not a metal\b/i.test(text)) return first("metal");
   if (/is not a cut\b/i.test(text)) return first("cut");
   if (/is not a stone\b/i.test(text)) return first("stone");
+  // Pavé's own keys: `pave.melee` is the pavé stones' row.
+  const pave = /`pave\.([a-z]{1,12})/.exec(text);
+  if (pave !== null) {
+    const row = Object.entries(PAVE_FIELDS).find(([, field]) => field === pave[1])?.[0];
+    return first(row ?? "pave", "pave");
+  }
   for (const found of text.matchAll(/`([a-zA-Z]{1,24})`/g)) {
     const key = found[1] ?? "";
     let row: string | null;
