@@ -5,7 +5,7 @@
  * and no drawing logic.
  *
  * Invocation contract (PLAN.md, phase 2): engine ids go through `facade.start(id)` exactly as a
- * menu click does on the desktop; the file ids the browser must handle itself (open/qsave/saveas/
+ * menu click does on the desktop; the file ids the browser must handle itself (open/import/qsave/saveas/
  * new, and their `ui.*` twins) are intercepted here; `ui.*` visibility/theme/animation ids act on
  * local signals; anything else classified "none" does nothing.
  */
@@ -22,6 +22,7 @@ import { chordCommand, classify, isMacPlatform, pressShortcut, shortcutLabel, UI
 import { paletteItems, rememberCommand } from "./palette";
 import { drawingMenu, gripMenu, layerMenu, layoutMenu, rightClickAction, type ContextAction, type ContextMenuModel } from "./context";
 import { defaultFileName, downloadBytes, pickFile } from "./files";
+import { IMPORT_ACCEPT, importParams, importSummary } from "./import-report";
 import { TopBar } from "./components/TopBar";
 import { MenuBar } from "./components/MenuBar";
 import { ToolStrip } from "./components/ToolStrip";
@@ -64,9 +65,10 @@ type ThemeChoice = "dark" | "light" | "system";
 type AnimChoice = "on" | "off" | "system";
 
 /** The engine's file ids (and their `ui.*` twins) the browser handles itself. */
-const FILE_IDS: Readonly<Record<string, "open" | "save" | "new" | "sample" | "bracket">> = {
+const FILE_IDS: Readonly<Record<string, "open" | "import" | "save" | "new" | "sample" | "bracket">> = {
   open: "open",
   "ui.open": "open",
+  import: "import",
   qsave: "save",
   saveas: "save",
   "ui.saveas": "save",
@@ -909,6 +911,20 @@ export function App(props: AppProps): JSX.Element {
     refresh();
   };
 
+  /** File ▸ Import: a DXF, DWG or Rhino file's objects into this drawing, and the report. */
+  const importDrawing = async (): Promise<void> => {
+    setNotice(null);
+    const file = await pickFile(IMPORT_ACCEPT);
+    if (file === null) return;
+    const env = props.facade.execute("import", importParams(file.name, file.bytes));
+    if (!env.ok) {
+      setNotice(env.error);
+      return;
+    }
+    setNotice(importSummary(file.name, env.result));
+    refresh();
+  };
+
   const saveDrawing = (): void => {
     setNotice(null);
     const bytes = props.facade.saveBytes();
@@ -980,6 +996,10 @@ export function App(props: AppProps): JSX.Element {
     const file = FILE_IDS[id];
     if (file === "open") {
       void openDrawing();
+      return;
+    }
+    if (file === "import") {
+      void importDrawing();
       return;
     }
     if (file === "save") {
