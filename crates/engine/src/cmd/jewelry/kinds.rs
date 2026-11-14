@@ -172,7 +172,8 @@ impl Taper {
         let q = Vec2::new(p.z / sx, (rho - ri) / sy);
         let d = polygon_distance(q, polygon) * sx.min(sy);
         // How far the section's boundary moves per millimetre round the ring.
-        let speed = (self.top_width - self.width).abs().max((self.top_wall - self.wall).abs()) / ri.max(1.0);
+        // Promised anywhere at least half the finger's radius from the axis.
+        let speed = (self.top_width - self.width).abs().max((self.top_wall - self.wall).abs()) / (ri / 2.0).max(0.5);
         d / (1.0 + speed * speed).sqrt()
     }
 }

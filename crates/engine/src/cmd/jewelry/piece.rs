@@ -1057,7 +1057,9 @@ impl Interactive for PieceM {
     }
     fn prompt(&self, _s: &Session) -> Prompt {
         if self.kind.is_none() {
-            Prompt::new("Kind of piece", Accept::TEXT).kw(&["Band", "Solitaire", "Threestone", "Eternity", "Halfeternity", "Dome", "siGnet"]).default("Band")
+            Prompt::new("Kind of piece", Accept::TEXT)
+                .kw(&["Band", "Solitaire", "Threestone", "Eternity", "Halfeternity", "Dome", "siGnet"])
+                .default("Band")
         } else {
             Prompt::new("Specify the centre of the front view", Accept::POINT)
         }

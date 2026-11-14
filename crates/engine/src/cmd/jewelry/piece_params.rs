@@ -1347,8 +1347,7 @@ impl PieceParams {
             let (up, across) = (Vec2::new(angle.sin(), angle.cos()), Vec2::new(angle.cos(), -angle.sin()));
             polygon.iter().map(|q| up * (top + clear + q.y) + across * q.x).collect()
         };
-        let middle =
-            stand(&self.cut_data().map_or_else(Vec::new, |c| self.head_outline(c, self.stone_width, &centre)), centre.clear, 0.0);
+        let middle = stand(&self.cut_data().map_or_else(Vec::new, |c| self.head_outline(c, self.stone_width, &centre)), centre.clear, 0.0);
         let beside = self.side_cut_data().map_or_else(Vec::new, |c| self.head_outline(c, width, &head));
         // The metal each stone carries beyond its girdle: half its prong wire.
         let metal = (centre.prong + head.prong) / 2.0;

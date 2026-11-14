@@ -4,7 +4,7 @@
 
 use cadcraft_geom::{PI, TAU, Vec2, Vec3};
 use hegel::TestCase;
-use hegel::generators::{self as gs, Generator};
+use hegel::generators as gs;
 use serde_json::{Value, json};
 
 use super::heads::{BEZEL_WALL, MIN_BEZEL_LIP, MIN_BEZEL_WALL};
@@ -201,7 +201,10 @@ fn the_sheet_and_the_solid_agree_on_a_bezel() {
 
 #[test]
 fn the_bezel_bound_is_negative_in_the_collar_and_never_over_the_distance() {
-    for build in [json!({"kind": "solitaire", "head": "bezel"}), json!({"kind": "threestone", "head": "bezel", "cut": "oval", "stoneLength": 6, "stoneWidth": 4.5})] {
+    for build in [
+        json!({"kind": "solitaire", "head": "bezel"}),
+        json!({"kind": "threestone", "head": "bezel", "cut": "oval", "stoneLength": 6, "stoneWidth": 4.5}),
+    ] {
         let p = params(build.clone());
         let bounds = p.bezel_bounds();
         assert_eq!(bounds.len(), if p.kind.name() == "threestone" { 3 } else { 1 }, "{build}");
@@ -277,7 +280,11 @@ fn drawn_bezel(tc: &TestCase) -> Value {
     let cuts = ["round", "oval", "princess", "emerald", "pear", "cushion", "marquise", "cabochon", "heart"];
     let cut = cuts[tc.draw(gs::integers::<usize>().min_value(0).max_value(cuts.len() - 1))];
     let width = tc.draw(gs::floats::<f64>().min_value(2.0).max_value(10.0));
-    let long = if cut == "round" || cut == "princess" || cut == "heart" { width } else { width * tc.draw(gs::floats::<f64>().min_value(1.0).max_value(1.6)) };
+    let long = if cut == "round" || cut == "princess" || cut == "heart" {
+        width
+    } else {
+        width * tc.draw(gs::floats::<f64>().min_value(1.0).max_value(1.6))
+    };
     let mut p = json!({"kind": if tc.draw(gs::booleans()) { "solitaire" } else { "threestone" }, "head": "bezel", "cut": cut, "stoneWidth": width, "stoneLength": long.min(30.0)});
     if tc.draw(gs::booleans()) {
         p["bezelWall"] = json!(tc.draw(gs::floats::<f64>().min_value(0.2).max_value(2.0)));
@@ -286,7 +293,8 @@ fn drawn_bezel(tc: &TestCase) -> Value {
         p["bezelHeight"] = json!(tc.draw(gs::floats::<f64>().min_value(0.0).max_value(5.0)));
     }
     if tc.draw(gs::booleans()) {
-        p["profile"] = json!(["flat", "dome", "comfort", "court", "knife", "bevel", "concave"][tc.draw(gs::integers::<usize>().min_value(0).max_value(6))]);
+        p["profile"] =
+            json!(["flat", "dome", "comfort", "court", "knife", "bevel", "concave"][tc.draw(gs::integers::<usize>().min_value(0).max_value(6))]);
     }
     p
 }

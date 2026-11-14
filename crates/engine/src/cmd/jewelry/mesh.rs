@@ -1445,7 +1445,9 @@ fn piece_of(cmd: &str, p: &Value) -> Result<PieceParams> {
     if str_param(p, "kind").is_none() {
         return Err(bad(
             cmd,
-            format!("there is no piece to show: give `kind` (band, solitaire, threestone, eternity, halfeternity, dome or signet) and its parameters ({PIECE_KEYS})"),
+            format!(
+                "there is no piece to show: give `kind` (band, solitaire, threestone, eternity, halfeternity, dome or signet) and its parameters ({PIECE_KEYS})"
+            ),
         ));
     }
     PieceParams::parse(cmd, p)

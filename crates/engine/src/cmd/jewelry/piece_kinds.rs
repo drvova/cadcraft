@@ -78,7 +78,14 @@ pub(super) fn metal_json(p: &PieceParams, grams: f64) -> Value {
 /// sides in section (the wall, the seat ledge under the girdle, the opening below); in the plan
 /// the collar's outside and its seat's opening around the girdle. Answers with how far it reaches
 /// to either side of the front view's middle.
-pub(super) fn draw_bezel(shapes: &mut Vec<(On, Shape)>, plan: &mut Vec<(On, Shape)>, stone: &gem::Stone, head: &shared::Head, b: &Bezel, at: &Standing) -> f64 {
+pub(super) fn draw_bezel(
+    shapes: &mut Vec<(On, Shape)>,
+    plan: &mut Vec<(On, Shape)>,
+    stone: &gem::Stone,
+    head: &shared::Head,
+    b: &Bezel,
+    at: &Standing,
+) -> f64 {
     let local = |x: f64, y: f64| at.across * x + at.up * y;
     let side = shared::side_profile(stone.cut, stone.width, head.depth);
     shapes.push((On::Stones, place_profile(&side, at.up * (at.top + head.clear), at.across, at.up)));
@@ -86,16 +93,11 @@ pub(super) fn draw_bezel(shapes: &mut Vec<(On, Shape)>, plan: &mut Vec<(On, Shap
     let mut reach = 0.0f64;
     for sign in [-1.0, 1.0] {
         // The collar's section, from the inside of the seat round to the outside.
-        let pts: Vec<Vec2> =
-            b.profile().iter().map(|q| local(sign * (half + q.x), girdle + q.y)).collect();
+        let pts: Vec<Vec2> = b.profile().iter().map(|q| local(sign * (half + q.x), girdle + q.y)).collect();
         reach = pts.iter().fold(reach, |far, q| far.max(q.x.abs()));
         shapes.push((On::Settings, closed(&pts)));
     }
-    let outline = if stone.cut.is_circle(stone.length, stone.width) {
-        None
-    } else {
-        shared::girdle_outline(stone.cut, stone.length, stone.width)
-    };
+    let outline = if stone.cut.is_circle(stone.length, stone.width) { None } else { shared::girdle_outline(stone.cut, stone.length, stone.width) };
     match outline {
         None => {
             plan.push((On::Settings, Shape::Circle { c: at.plan_at, r: half + b.wall }));
@@ -153,13 +155,22 @@ fn half_eternity(p: &PieceParams, section: &Section) -> Result<KindSheet> {
     if let Some(n) = p.count.filter(|n| *n > most) {
         return Err(bad(
             CMD,
-            format!("{n} stones of {} mm do not fit across the top half of a size {} band at a {} mm gap: {most} fit", fmt_mm(m), p.size.us_text(), fmt_mm(p.gap)),
+            format!(
+                "{n} stones of {} mm do not fit across the top half of a size {} band at a {} mm gap: {most} fit",
+                fmt_mm(m),
+                p.size.us_text(),
+                fmt_mm(p.gap)
+            ),
         ));
     }
     let n = half.count(p.count);
     k.fits = Some(most);
     let side = shared::side_profile(stone.cut, m, depth);
-    let outline = if stone.cut.is_circle(m, m) { None } else { Some(shared::girdle_outline(stone.cut, m, m).ok_or_else(|| bad(CMD, "the stone has no outline"))?) };
+    let outline = if stone.cut.is_circle(m, m) {
+        None
+    } else {
+        Some(shared::girdle_outline(stone.cut, m, m).ok_or_else(|| bad(CMD, "the stone has no outline"))?)
+    };
     let length = TAU * rg;
     for i in 0..n {
         let phi = half.angle(i, n);
@@ -230,7 +241,11 @@ fn half_eternity(p: &PieceParams, section: &Section) -> Result<KindSheet> {
         "resize",
         plain + 1e-9 >= RESIZE_PLAIN,
         if plain + 1e-9 >= RESIZE_PLAIN {
-            format!("{} mm of plain shank at the bottom: room to size the ring by about {} sizes either way", fmt_mm(plain), fmt_mm((sizes * 10.0).floor() / 10.0))
+            format!(
+                "{} mm of plain shank at the bottom: room to size the ring by about {} sizes either way",
+                fmt_mm(plain),
+                fmt_mm((sizes * 10.0).floor() / 10.0)
+            )
         } else {
             format!("Only {} mm of plain shank at the bottom, under the {RESIZE_PLAIN} mm a bench cuts to size a ring", fmt_mm(plain))
         },
@@ -308,9 +323,16 @@ fn tapered(p: &PieceParams, section: &Section) -> Result<KindSheet> {
             "face",
             thick + 1e-9 >= need,
             if thick + 1e-9 >= need {
-                format!("The face is {} mm thick: room to engrave {ENGRAVE_DEPTH} mm deep and keep the {MIN_CAST_WALL} mm a bench casts", fmt_mm(thick))
+                format!(
+                    "The face is {} mm thick: room to engrave {ENGRAVE_DEPTH} mm deep and keep the {MIN_CAST_WALL} mm a bench casts",
+                    fmt_mm(thick)
+                )
             } else {
-                format!("The face is {} mm thick, under the {} mm it takes to engrave {ENGRAVE_DEPTH} mm deep over a {MIN_CAST_WALL} mm cast wall", fmt_mm(thick), fmt_mm(need))
+                format!(
+                    "The face is {} mm thick, under the {} mm it takes to engrave {ENGRAVE_DEPTH} mm deep over a {MIN_CAST_WALL} mm cast wall",
+                    fmt_mm(thick),
+                    fmt_mm(need)
+                )
             },
         ));
     }

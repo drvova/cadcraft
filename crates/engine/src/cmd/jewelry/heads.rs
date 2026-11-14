@@ -116,14 +116,7 @@ impl Bezel {
     /// the order the solid sweeps it in.
     pub(super) fn profile(&self) -> [Vec2; 6] {
         let (b, s, t) = (self.bottom, self.seat(), self.top());
-        [
-            Vec2::new(-self.ledge, b),
-            Vec2::new(-self.ledge, s),
-            Vec2::new(0.0, s),
-            Vec2::new(0.0, t),
-            Vec2::new(self.wall, t),
-            Vec2::new(self.wall, b),
-        ]
+        [Vec2::new(-self.ledge, b), Vec2::new(-self.ledge, s), Vec2::new(0.0, s), Vec2::new(0.0, t), Vec2::new(self.wall, t), Vec2::new(self.wall, b)]
     }
     /// The section's area and its first moment about the girdle (`d = 0`).
     pub(super) fn area_and_moment(&self) -> (f64, f64) {
@@ -162,13 +155,20 @@ impl Bezel {
         if self.lip + 1e-9 < MIN_BEZEL_LIP {
             return (
                 false,
-                format!("The bezel stands {} mm over the girdle, under the {MIN_BEZEL_LIP} mm of collar it takes to hold the stone", fmt_mm(self.lip)),
+                format!(
+                    "The bezel stands {} mm over the girdle, under the {MIN_BEZEL_LIP} mm of collar it takes to hold the stone",
+                    fmt_mm(self.lip)
+                ),
             );
         }
         if self.lip >= self.crown - 1e-9 {
             return (
                 false,
-                format!("The bezel stands {} mm over the girdle and the crown is {} mm high: the collar reaches the table", fmt_mm(self.lip), fmt_mm(self.crown)),
+                format!(
+                    "The bezel stands {} mm over the girdle and the crown is {} mm high: the collar reaches the table",
+                    fmt_mm(self.lip),
+                    fmt_mm(self.crown)
+                ),
             );
         }
         (

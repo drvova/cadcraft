@@ -31,7 +31,26 @@ pub(super) fn build_bezel(to: &mut Buf, frame: &Frame, poly: &[Vec2], normals: &
     let profile = bezel.profile();
     let mut first: Option<Ring> = None;
     let mut prev: Option<Ring> = None;
-    for (q, n) in poly.iter().zip(normals) {
+    // Each corner moves along its mitre, so the wall keeps its thickness round a sharp corner (a
+    // princess's, an emerald's), not only along the straight runs.
+    let count = poly.len();
+    let mitred: Vec<Vec2> = (0..count)
+        .map(|i| {
+            let (Some(prev_q), Some(q), Some(next_q), Some(n)) =
+                (poly.get((i + count - 1) % count), poly.get(i), poly.get((i + 1) % count), normals.get(i))
+            else {
+                return Vec2::ZERO;
+            };
+            let edge = |a: Vec2, b: Vec2| {
+                let p = (b - a).perp().normalized();
+                if p.dot(*n) < 0.0 { p * -1.0 } else { p }
+            };
+            let (e1, e2) = (edge(*prev_q, *q), edge(*q, *next_q));
+            let denom = 1.0 + e1.dot(e2);
+            if denom > 0.3 && e1.is_finite() && e2.is_finite() { (e1 + e2) * (1.0 / denom) } else { *n }
+        })
+        .collect();
+    for (q, n) in poly.iter().zip(&mitred) {
         let ring = part.ring(profile.iter().map(|s| {
             let at = *q + *n * s.x;
             frame.at(at.x, at.y, s.y)
