@@ -77,10 +77,14 @@ use cadcraft_doc::EntityKind;
 use cadcraft_geom::{PI, TAU, Vec2, Vec3};
 use serde_json::{Value, json};
 
+#[path = "channel_mesh.rs"]
+mod channel_mesh;
 #[path = "mesh_kinds.rs"]
 mod mesh_kinds;
 #[path = "mesh_shank.rs"]
 mod mesh_shank;
+#[path = "prongs_mesh.rs"]
+mod prongs_mesh;
 
 use super::super::*;
 use super::casting::{self, Sprue};
@@ -924,6 +928,8 @@ struct Parts {
     beads: Buf,
     bezel: Buf,
     face: Buf,
+    /// A channel setting's rails ([`super::channel`]).
+    channel: Buf,
     centre: Buf,
     sides: Buf,
     melee: Buf,
@@ -1069,7 +1075,14 @@ fn build_head(s: &Sane, d: &Detail, out: &mut Parts, stone: Standing) -> Stood {
     let rail_at = |q: Vec2, outward: Vec2| q.lerp(culet.under(q), 0.5) + outward * (1.2 * rail_r);
     // The wire's axis ends its own radius under the tips' height.
     let tip_h = head.prong_height() - head.girdle_height() - rp;
-    for site in sites.iter().filter(|q| q.is_finite()) {
+    // The style's sites (a double's pairs, a V's corners) and the top every non-round prong ends in.
+    let style = p.prong.style;
+    let styled = super::prongs::styled_sites(cut, stone.length, stone.width, &sites, style, head.prong);
+    let top = p.top_spec(&head, stone.length.min(stone.width), cut);
+    let plane = super::prongs::Plane { o: frame.o, u: frame.u, v: frame.v, w: frame.w };
+    for styled_site in &styled {
+        let site = &styled_site.at;
+        let round = super::prongs::is_round(style, styled_site);
         let dir = (*site - centre).normalized();
         if dir.len() < 0.5 {
             continue;
@@ -1082,14 +1095,21 @@ fn build_head(s: &Sane, d: &Detail, out: &mut Parts, stone: Standing) -> Stood {
         let x = (site.x * shared::PRONG_FOOT).clamp(-0.5 * rc, 0.5 * rc);
         let y = (rc * rc - x * x).max(0.0).sqrt();
         let foot = frame.u * x + frame.w * y + Vec3::new(0.0, 0.0, z);
-        let tip = *site - dir * (0.85 * rp);
+        let tip = *site - dir * (top.cover - rp);
         let mut path = vec![foot];
         if !cab {
             let q = rail_at(*site, dir);
             path.push(frame.at(q.x, q.y, rail_h));
         }
         path.push(frame.at(site.x, site.y, 0.0));
-        path.push(frame.at(tip.x, tip.y, tip_h));
+        if round {
+            path.push(frame.at(tip.x, tip.y, tip_h));
+        } else {
+            // The leg runs to the girdle; the style's own top stands on it.
+            let parts = super::prongs::top_parts(&plane, styled_site, &top);
+            prongs_mesh::build_parts(&mut out.prongs, &parts, d.radial, d.cap);
+            out.csg.add.push(Prim::Prong(super::prongs::ProngSolid { parts }));
+        }
         let wire = smooth_path(&path, d.sub);
         capsule(&mut out.prongs, &wire, rp, d.radial, d.cap);
         out.csg.add.push(Prim::Wire { pts: wire, r: rp, closed: false });
@@ -1380,6 +1400,8 @@ fn build_pave(s: &Sane, d: &Detail, out: &mut Parts) {
         return;
     };
     let table = gem::CUTS.first().map_or(0.57, shared::table_ratio);
+    // A channel keeps its lips: its stones' seats have no bore, its rails no beads ([`super::channel`]).
+    let channel = fit.spec.layout == pave_band::Layout::Channel;
     for st in &fit.stones {
         // u × v = w: the girdle's plane, its table along the normal.
         let (w, u) = (st.normal, -st.around);
@@ -1390,7 +1412,8 @@ fn build_pave(s: &Sane, d: &Detail, out: &mut Parts) {
         if let Some(cut) = gem::CUTS.first() {
             let shape = StoneShape::of(cut, st.diameter, st.diameter, st.depth, 16 * d.melee.clamp(1, 8));
             let (girdle, crown, pavilion) = proportions(st.depth);
-            let mut envelope = seat_envelope(&shape, &f, girdle, crown, pavilion, Some(girdle / 2.0 + crown + SEAT_CLEARANCE + BORE_OVER));
+            let bore = (!channel).then_some(girdle / 2.0 + crown + SEAT_CLEARANCE + BORE_OVER);
+            let mut envelope = seat_envelope(&shape, &f, girdle, crown, pavilion, bore);
             fit_seat(&mut envelope, d, &|b, dd| round_brilliant(b, &f, st.diameter / 2.0, st.depth, table, dd.melee));
             let through = (Vec2::new(st.girdle.x, st.girdle.y).len() - s.ri + BORE_OVER).max(BORE_OVER);
             out.csg.cut.push(Prim::Cylinder { axes: axes_of(&f), r: PAVE_HOLE * envelope.reach, lo: -through, hi: 0.0 });
@@ -1399,7 +1422,10 @@ fn build_pave(s: &Sane, d: &Detail, out: &mut Parts) {
         }
     }
     out.stones = out.stones.saturating_add(u32::try_from(fit.stones.len()).unwrap_or(u32::MAX));
-    if let Some(surf) = pave_band::Surface::of(&s.p) {
+    if channel {
+        channel_mesh::build(out, &s.p.channel_pieces(), d.radial);
+    }
+    if let Some(surf) = pave_band::Surface::of(&s.p).filter(|_| !channel) {
         for (c, up, rb) in pave_band::beads(&fit, &surf) {
             bead(&mut out.beads, c, up, rb, d.bead_radial, d.bead_lat);
             out.csg.add.push(Prim::Sphere { c, r: rb });
@@ -1544,6 +1570,7 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
         parts.face.part("metal", "face", metal),
         parts.lettering.part("metal", "lettering", metal),
         parts.engraving.part("metal", "engraving", metal.map(|c| c / 3)),
+        parts.channel.part("metal", "channel", metal),
         parts.centre.part("stone", "centre stone", stone),
         parts.sides.part("stone", "side stones", stone),
         parts.melee.part("stone", "melee", small),
@@ -1760,6 +1787,8 @@ fn run_piecemesh(_s: &mut Session, p: &Value) -> Result<Value> {
             "volumeMm3": r3(band),
             "grams": r3(piece.band_grams()),
             "bezelGrams": if piece.bezeled() { json!(r3(piece.bezel_grams())) } else { Value::Null },
+            "prongGrams": if piece.pronged() { json!(r3(piece.prong_grams())) } else { Value::Null },
+            "channelGrams": if piece.channeled() { json!(r3(piece.channel_grams())) } else { Value::Null },
             "shells": { "volumeMm3": r3(shells), "grams": r3(shells / 1000.0 * piece.density) },
         },
         "notes": mesh.notes,

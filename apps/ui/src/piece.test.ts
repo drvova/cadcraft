@@ -667,3 +667,21 @@ describe("shank shapes", () => {
     }
   });
 });
+
+describe("the Setting group: prong styles", () => {
+  test("an engine that offers prong styles shows them in their own group, and a pick sends the key", () => {
+    const rows = pieceRows(piece("solitaire", { prongStyle: "claw", prongHeight: null, prongTip: 0.6, prongWire: null }), CHOICES, "us");
+    const setting = pieceGroups(rows, "solitaire").find((g) => g.name === "Setting");
+    expect(setting?.rows.map((r) => r.key)).toEqual(["prongStyle", "prongHeight", "prongTip", "prongWire"]);
+    expect(rows.find((r) => r.key === "prongTip")?.value).toBe("0.6");
+    const style = rows.find((r) => r.key === "prongStyle")!;
+    expect(style.choices?.map((c) => c.value)).toEqual(["round", "claw", "tab", "v", "double"]);
+    expect(judgePieceDraft(style, "v")).toEqual({ kind: "send", patch: { prongStyle: "v" } });
+    expect(judgePieceDraft(rows.find((r) => r.key === "prongHeight")!, "1.3")).toEqual({ kind: "send", patch: { prongHeight: 1.3 } });
+    expect(refusalRow("V prongs guard a stone's pointed corners, and a round has none", rows)).toBe("prongStyle");
+  });
+  test("a bezel and an engine without styles show no Setting group", () => {
+    expect(keys(pieceRows(piece("solitaire", { head: "bezel", prongStyle: "claw" }), CHOICES, "us"))).not.toContain("prongStyle");
+    expect(keys(pieceRows(piece("solitaire"), CHOICES, "us"))).not.toContain("prongStyle");
+  });
+});

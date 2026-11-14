@@ -15,6 +15,10 @@
 mod bench;
 mod cable;
 mod casting;
+mod channel;
+#[cfg(test)]
+#[path = "jewelry/channel_tests.rs"]
+mod channel_tests;
 mod engrave;
 #[cfg(test)]
 #[path = "jewelry/engrave_tests.rs"]
@@ -53,6 +57,10 @@ mod pricing;
 mod profile;
 #[cfg(test)]
 mod profile_tests;
+mod prongs;
+#[cfg(test)]
+#[path = "jewelry/prongs_tests.rs"]
+mod prongs_tests;
 #[cfg(test)]
 #[path = "jewelry/property_tests.rs"]
 mod property_tests;

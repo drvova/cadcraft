@@ -1376,7 +1376,9 @@ fn a_pieces_parameters_read_back_as_the_same_piece(tc: TestCase) {
     // A number that was not finite would have become a null.
     let nulls = j.as_object().unwrap().iter().filter(|(_, v)| v.is_null()).map(|(k, _)| k.as_str()).collect::<Vec<_>>();
     // The parameters that are "none" by default say so with a null; no other key may.
-    const OPTIONAL: [&str; 16] = [
+    const OPTIONAL: [&str; 21] = [
+        "channelLip",
+        "channelWall",
         "bevel",
         "bezelHeight",
         "bezelWall",
@@ -1385,6 +1387,9 @@ fn a_pieces_parameters_read_back_as_the_same_piece(tc: TestCase) {
         "hollow",
         "pattern",
         "profileCurve",
+        "prongHeight",
+        "prongTip",
+        "prongWire",
         "rail",
         "ridge",
         "shank",

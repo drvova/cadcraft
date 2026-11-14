@@ -300,6 +300,10 @@ pub(super) enum Prim {
     Shank(super::shank::ShankBound),
     /// A letter's stroke cut in or raised ([`super::engrave::Groove`]).
     Groove(super::engrave::Groove),
+    /// A styled prong's top: a claw's cone, a tab's or V's bars ([`super::prongs::ProngSolid`]).
+    Prong(super::prongs::ProngSolid),
+    /// A channel setting's rails, or the channel cut between them ([`super::channel::ChannelBound`]).
+    Channel(super::channel::ChannelBound),
 }
 
 /// Edges of a section taken together for [`Section::dist`].
@@ -414,6 +418,8 @@ impl Prim {
             Prim::Rail(b) => b.distance(p),
             Prim::Shank(b) => b.distance(p),
             Prim::Groove(g) => g.distance(p),
+            Prim::Prong(prong) => prong.distance(p),
+            Prim::Channel(c) => c.distance(p),
         };
         if v.is_nan() { f64::INFINITY } else { v }
     }
@@ -474,6 +480,8 @@ impl Prim {
                 bx
             }
             Prim::Groove(g) => g.bounds(),
+            Prim::Prong(prong) => prong.bounds(),
+            Prim::Channel(c) => c.bounds(),
         }
     }
 }

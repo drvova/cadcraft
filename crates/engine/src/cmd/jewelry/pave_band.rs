@@ -104,6 +104,8 @@ pub(super) enum Layout {
     Rows,
     Honeycomb,
     Scallop,
+    /// One row between two rails whose lips cover the girdles ([`super::channel`]).
+    Channel,
 }
 
 impl Layout {
@@ -113,6 +115,7 @@ impl Layout {
             Layout::Rows => "rows",
             Layout::Honeycomb => "honeycomb",
             Layout::Scallop => "scallop",
+            Layout::Channel => "channel",
         }
     }
     fn of(name: &str) -> Option<Layout> {
@@ -121,12 +124,13 @@ impl Layout {
             "rows" => Some(Layout::Rows),
             "honeycomb" | "offset" => Some(Layout::Honeycomb),
             "scallop" | "scalloped" => Some(Layout::Scallop),
+            "channel" => Some(Layout::Channel),
             _ => None,
         }
     }
     /// One row only.
     fn single(self) -> bool {
-        matches!(self, Layout::Row | Layout::Scallop)
+        matches!(self, Layout::Row | Layout::Scallop | Layout::Channel)
     }
 }
 
@@ -220,7 +224,7 @@ impl PaveSpec {
         }
         let layout = match o.get("layout").filter(|v| !v.is_null()) {
             None => Layout::Row,
-            Some(v) => v.as_str().and_then(Layout::of).ok_or_else(|| bad(cmd, "`pave.layout` must be row, rows, honeycomb or scallop"))?,
+            Some(v) => v.as_str().and_then(Layout::of).ok_or_else(|| bad(cmd, "`pave.layout` must be row, rows, honeycomb, scallop or channel"))?,
         };
         let rows = match o.get("rows").filter(|v| !v.is_null()) {
             None => {

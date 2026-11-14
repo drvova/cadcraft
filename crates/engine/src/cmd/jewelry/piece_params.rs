@@ -299,6 +299,10 @@ pub(super) struct PieceParams {
     pub engrave: Option<super::engrave::EngraveSpec>,
     /// The hallmark inside the shank ([`super::hallmark`]), or none.
     pub hallmark: Option<super::hallmark::HallmarkSpec>,
+    /// Prong heads: the prongs' style, height, tip and wire ([`super::prongs`]).
+    pub prong: super::prongs::ProngSpec,
+    /// A channel setting's wall and lip ([`super::channel`]).
+    pub channel: super::channel::ChannelSpec,
 }
 
 /// The most stones an eternity band may be asked for.
@@ -429,6 +433,8 @@ impl PieceParams {
         let face_width = mm_in(cmd, p, "faceWidth", 10.0, 4.0, 30.0)?;
         let mut params = PieceParams {
             shape: super::shank::parse(cmd, p)?,
+            prong: super::prongs::ProngSpec::parse(cmd, p)?,
+            channel: super::channel::ChannelSpec::parse(cmd, p)?,
             head,
             bezel_wall,
             bezel_height,
@@ -528,6 +534,8 @@ impl PieceParams {
         });
         if let Some(o) = v.as_object_mut() {
             self.shape.json_into(o);
+            self.prong.json_into(o);
+            self.channel.json_into(o);
         }
         v
     }
@@ -1312,6 +1320,8 @@ pub(super) struct Head {
     pub halo: Option<HaloSeat>,
     /// A bezel's collar, when the stone is held by one rather than by prongs.
     pub bezel: Option<Bezel>,
+    /// How far the prongs' tips stand over the top of the girdle (`prongHeight`).
+    pub over: f64,
 }
 
 impl Head {
@@ -1323,7 +1333,7 @@ impl Head {
     pub(super) fn prong_height(&self) -> f64 {
         match self.bezel {
             Some(b) => self.girdle_height() + b.top(),
-            None => self.girdle_height() + self.girdle / 2.0 + PRONG_OVER * self.prong,
+            None => self.girdle_height() + self.girdle / 2.0 + self.over,
         }
     }
 }
@@ -1356,14 +1366,23 @@ impl PieceParams {
         let below = if cab { 0.0 } else { girdle_rise(depth) };
         let bezel = self.bezel_of(cut, length, width, depth);
         // A bezel's metal beyond the girdle is its wall: it stands in for the prong wire's diameter.
-        let prong = bezel.map_or_else(|| prong_wire(length, width), |b| 2.0 * b.wall);
+        let prong = bezel.map_or_else(|| self.prong.wire.unwrap_or_else(|| prong_wire(length, width)), |b| 2.0 * b.wall);
         let halo = halo.map(|h| {
             let melee_depth = gem::CUTS.first().map_or(0.6 * h, |c| stone_depth(c, h));
             HaloSeat { melee: h, depth: melee_depth, offset: halo_offset(prong, self.gap, h), under: girdle_rise(melee_depth) + HALO_UNDER }
         });
         // A halo's seat under a shallow stone would foul the band: the head stands that much higher.
         let lift = halo.map_or(0.0, |h| (h.under - below).max(0.0));
-        let mut head = Head { depth, prong, clear: CULET_CLEAR + lift, below, girdle: if cab { 0.0 } else { GIRDLE * depth }, halo, bezel };
+        let mut head = Head {
+            depth,
+            prong,
+            clear: CULET_CLEAR + lift,
+            below,
+            girdle: if cab { 0.0 } else { GIRDLE * depth },
+            halo,
+            bezel,
+            over: self.prong.over(prong),
+        };
         if let Some(b) = head.bezel.as_mut() {
             b.bottom -= lift;
         }
