@@ -208,7 +208,7 @@ and MCP all reach them, and DESCRIBE reads jewelry out of any drawing.
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-11-14 | patch | Jewelry: STLOUT's vertices projected onto the true surface (mean error about 10× smaller), scallops cut, `sprue` and `shrink`; J2 narrowed |
+| 2026-11-14 | patch | Jewelry: STLOUT's vertices projected onto the true surface (mean vertex error 3–7× smaller), scallops cut, `sprue` and `shrink`; J2 narrowed |
 | 2026-11-14 | patch | Jewelry: the merged solid for casting takes bezels, tapered shanks, the signet's face, drawn profiles and pavé and half eternity seats; J2 narrowed |
 | 2026-11-13 | minor | Jewelry: PIECE takes a band profile drawn as a closed curve; a rail for it is the new row J8 |
 | 2026-11-13 | minor | Jewelry: pavé on a parametric piece's band (PIECE `pave`: row, rows, honeycomb, scallop, auto-fit to a span, graduated sizes, a `pave` check), drawn, counted on the bench sheet and built by PIECEMESH. No row closes: the solid still cuts no seat (J2) |

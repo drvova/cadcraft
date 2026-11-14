@@ -63,8 +63,9 @@ and the tests check the four properties and self-intersection independently.
 - Since 2026-11-14 each vertex is projected onto the field's own zero set (Newton steps along a
   central-difference gradient, at most 0.6 step, undone where a triangle would turn over). The
   connectivity is unchanged, so closed, manifold and oriented still hold by construction;
-  non-self-intersection is no longer guaranteed by construction and rests on the bounded move
-  and the tests' independent check.
+  non-self-intersection is no longer by construction: the extractor checks every nearby pair of
+  triangles after the move and puts back the vertices (and the ring round them) of any pair that
+  crosses, round by round, falling back to the unmoved shell; the tests check it independently.
 - Triangle count grows with surface area over the step squared; the step coarsens until the
   solid is under `MAX_TRIANGLES`, and `notes` says so.
 - Work is bounded: candidates per grid block come from a binned index, block count and field

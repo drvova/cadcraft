@@ -303,10 +303,11 @@ dropped. `stones: true` appends the stones as shells of their own.
   four Newton steps along the field's gradient, by central differences, at most 0.6 of a step;
   a move that would turn a triangle over is undone), so curved metal — beads, the band, a dome —
   is no longer the grid's facets: measured at the default cap, the mean vertex distance from the
-  true surface falls from 0.0014–0.0061 mm to 0.0002–0.0005 mm and the mean at triangle centres
-  by about 40 %, for 40–650 ms more. Sharp edges (seat rims, a flat band's corners) are still
+  true surface falls from 0.0014–0.0061 mm to 0.0004–0.0021 mm (3–7×) and the mean at triangle
+  centres by about 25–35 %; vertices whose move would make two triangles cross are put back with
+  the ring round them, so seat rims and tight gaps keep the grid's surface. It costs 0.7–1.9 s more. Sharp edges (seat rims, a flat band's corners) are still
   chamfered by up to about half a step and look ragged close up; ask for `maxTriangles: 1000000`
-  for the 0.1 mm solid. Times (release, native): 0.15–0.9 s at the default cap.
+  for the 0.1 mm solid. Times (release, native): 0.9–2.1 s at the default cap.
 - *Scallops.* A scalloped pavé row's scallops — the arcs the sheet draws — are cut into both sides
   of the band, from the side in to a girdle's width plus 0.1 mm from the row's middle.
 - *Sprue.* `sprue: true | {diameter (2.5), length (6), at (180)}` merges a round sprue standing
