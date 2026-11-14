@@ -160,11 +160,11 @@ fn inside_text_is_centred_at_the_bottom_and_reads_from_the_finger() {
     let m = &l.marks[0];
     assert_eq!(m.place, Place::Inside);
     assert!((m.angle(0.0) + PI / 2.0).abs() < 1e-12, "the middle is at the bottom");
-    // Seen from the finger (looking down −Y, the band's axis up), the text runs to −X.
+    // As the 3D view shows the inside, the text runs to +X.
     let section = p.section();
     let start = engrave::wrap(&p, &section, m, Vec2::new(-m.length / 2.0, 0.0), 0.0);
     let end = engrave::wrap(&p, &section, m, Vec2::new(m.length / 2.0, 0.0), 0.0);
-    assert!(start.x > 0.0 && end.x < 0.0, "{start:?} → {end:?}");
+    assert!(start.x < 0.0 && end.x > 0.0, "{start:?} → {end:?}");
     // On the inside surface, within the band's width.
     let ri = p.inner() / 2.0;
     for s in &m.features[0].strokes {
@@ -187,11 +187,11 @@ fn outside_text_on_a_name_ring_is_at_the_top_reading_from_outside() {
     let l = lettering(&p).unwrap().unwrap();
     let m = &l.marks[0];
     assert!((m.angle(0.0) - PI / 2.0).abs() < 1e-12);
-    // Seen from above (looking down −Y), the text runs to −X.
-    assert!(m.angle(1.0) > m.angle(0.0));
+    // Seen from above in the 3D view's top view, the text runs to +X.
+    assert!(m.angle(1.0) < m.angle(0.0));
     let s = p.section();
     let a = engrave::wrap(&p, &s, m, Vec2::new(-1.0, 0.0), 0.0);
-    assert!(a.x > 0.0 && a.y > 0.0);
+    assert!(a.x < 0.0 && a.y > 0.0);
     // On a solitaire it goes to the bottom.
     let q = params(json!({"kind": "solitaire", "engrave": {"text": "ANNA", "at": "outside"}}));
     assert!((lettering(&q).unwrap().unwrap().marks[0].angle(0.0) + PI / 2.0).abs() < 1e-12);

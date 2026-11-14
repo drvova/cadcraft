@@ -27,7 +27,7 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 | Eternity, half eternity | `kind:"eternity"`, `"halfeternity"` | done |
 | Split shank, double shank, bypass, cathedral shoulders | shank options on `piece` | planned |
 | Twisted cable, braided bands | band pattern on `piece` | planned |
-| Text and names on a band; hallmark | engraving/text on `piece` | planned |
+| Text and names on a band; hallmark | `piece {engrave: {text, at: inside|outside, style: cut|raised, font: block|script}, hallmark: true|{maker}}` | done (2026-11-14): CADCraft's own stroke font cut as round-bottomed grooves wrapped round the band; raised names add metal; fineness from the metal; weight, checks, developed view, 3D view and cast solid. Not yet: outline (filled) fonts, text on a dome or signet's outside, several lines |
 | Earrings, pendants, chains, links | other piece kinds | planned |
 
 ## Stones and settings
@@ -76,3 +76,4 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 | Date | Change | Summary |
 |---|---|---|
 | 2026-11-14 | new | The feature list against Rhino's jewelry workflow, and the no-code rule |
+| 2026-11-14 | minor | Text and names on a band, and the hallmark: done |

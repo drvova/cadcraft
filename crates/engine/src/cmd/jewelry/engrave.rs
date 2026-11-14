@@ -250,9 +250,11 @@ impl EngraveSpec {
     /// The capital height: inside, half the band's width up to 1.2 mm; outside, 60 % of it up to
     /// 3 mm; never under 0.5 mm.
     pub(super) fn height_on(&self, p: &PieceParams) -> f64 {
+        // Letters reaching under the line (g, j, p, q, y) take a third more room across the band.
+        let reach = if self.text.chars().any(|c| "gjpqyQ,;()[]{}|_".contains(c)) { 0.7 } else { 1.0 };
         self.height.unwrap_or(match self.place {
-            Place::Inside => (0.5 * p.width).clamp(0.5, 1.2),
-            Place::Outside => (0.6 * p.width).clamp(0.5, 3.0),
+            Place::Inside => (0.5 * p.width * reach).clamp(0.5, 1.2),
+            Place::Outside => (0.6 * p.width * reach).clamp(0.5, 3.0),
         })
     }
     /// The stroke: 15 % of the height for a cut (at least [`MIN_FEATURE`]), 18 % for raised
@@ -340,8 +342,8 @@ impl Mark {
     pub(super) fn angle(&self, u: f64) -> f64 {
         let r = self.r_ref.max(1e-6);
         match self.place {
-            Place::Inside => self.centre - u / r,
-            Place::Outside => self.centre + u / r,
+            Place::Inside => self.centre + u / r,
+            Place::Outside => self.centre - u / r,
         }
     }
 }
@@ -648,13 +650,13 @@ fn surface(p: &PieceParams, section: &Section, place: Place, v: f64) -> f64 {
 
 /// A layout point of a mark on the band, `into` millimetres into the metal (negative: out of it).
 pub(super) fn wrap(p: &PieceParams, section: &Section, m: &Mark, q: Vec2, into: f64) -> Vec3 {
-    let rs = surface(p, section, m.place, q.y);
+    let rs = surface(p, section, m.place, -q.y);
     let r = match m.place {
         Place::Inside => rs + into,
         Place::Outside => rs - into,
     };
     let a = m.angle(q.x);
-    Vec3::new(r * a.cos(), r * a.sin(), q.y)
+    Vec3::new(r * a.cos(), r * a.sin(), -q.y)
 }
 
 /// The way out of the metal at a point of the band's surface.
@@ -860,8 +862,8 @@ pub(super) fn strips(p: &PieceParams, l: &Lettering) -> Vec<Strip> {
         for m in &marks {
             // The mark's `u = 0` along the strip, read the way the mark reads.
             let shift = match place {
-                Place::Inside => (middle - m.centre) * r_ref,
-                Place::Outside => (m.centre - middle) * r_ref,
+                Place::Inside => (m.centre - middle) * r_ref,
+                Place::Outside => (middle - m.centre) * r_ref,
             };
             for f in &m.features {
                 for s in &f.strokes {

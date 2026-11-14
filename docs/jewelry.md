@@ -419,6 +419,18 @@ solid takes each part's signed-distance bound (`BezelBound::distance`, `Taper::d
 `Face::distance`), so a bezel, a dome's or a signet's shank and a signet's face cast as one body
 with the rest.
 
+## Text on the band and the hallmark
+
+`PIECE {engrave: {text, at?: inside|outside, style?: cut|raised, font?: block|script, side?: bottom|top, height?, stroke?, depth?}}` puts text on the band: a Rhino jeweller orients text on the surface (often with Grasshopper); here it is a parameter. The letters are CADCraft's own single-stroke drafting font (`crates/fonts`), so every stroke is a centreline; each is a groove of round section (a ball swept along it and run out past the surface; `engrave.rs`, `Prim::Groove` in the cast solid). No font file is in the repository and the optional craft-fonts outlines are not used.
+
+- **Defaults (approximations):** inside, letters half the band's width high (0.5–1.2 mm), a 0.2 mm groove (15 % of the height, at least 0.2), cut a fifth of the wall deep (0.1–0.3 mm), centred at the bottom; outside, 60 % of the width (0.5–3 mm), at the top of a plain band, else at the bottom; raised letters a 0.3 mm wire (18 %) standing 0.4 mm. Text with descenders gets 70 % of the default height.
+- **Checks:** `engrave-fit` (0.3 mm to each edge), `engrave-depth` (a cut at most a third of the wall), `engrave-stroke` (at least 0.2 mm cut / 0.3 mm raised, at most 30 % of the height).
+- **Refusals, in sentences:** text over 48 characters, a character the font lacks (listed; the font takes printable ASCII and the Latin-1 letters), text over 92 % of the way round, raised text inside, outside on an eternity, a dome or a signet.
+- **Weight:** the groove volume is integrated over the flat layout (union of the strokes, depth at each point) and taken off the band's grams (raised letters add). The merged solid agrees with it: 18 characters inside plus a hallmark take 2.76 mm³ analytically, 2.82 mm³ in the 0.1 mm solid; a raised "ANNA" adds 2.34 / 2.36 mm³.
+- **Sheet:** the band developed (unrolled) under the views with the text's centrelines on it. **3D view:** cut letters as dark wires sunk in the surface, raised ones as metal.
+- **Hallmark:** `hallmark: true | {maker?, height?, depth?}` punches the metal's fineness (750, 585, 375, 417, 916, 999, PT950, PD950, 925) and a maker's mark flat-bottomed in a 0.08 mm stadium cartouche inside, at the bottom or just past an inside engraving. Refused for a metal with no fineness.
+- **Interface:** the Piece panel's Engraving group (text, placement, style, letters, height, depth, hallmark, maker's mark); a Name Ring in the template gallery.
+
 ## In the interface
 
 The interface opens on a jewelry drawing: a size 6 solitaire in 18k gold (Help ▸ Open Sample
@@ -603,6 +615,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-14 | minor | Text on the band (`engrave`: inside, raised or cut outside) and the hallmark, with weight, checks, sheet, 3D view, solid and the Piece panel's Engraving group |
 | 2026-11-14 | minor | `STLOUT`'s merged solid takes the drawn profile, the bezel collar with its stone's seat, the dome's and signet's tapered shank, the signet's face, and seats and beads for half eternity and pavé stones |
 | 2026-11-13 | minor | The 3D tab's four-view workspace (Top, Front, Right orthographic and flat-shaded at one scale; Perspective in its mode; maximise by double-click, M or the bar; remembered; single view under 560 px) on one scissored context, and drag handles on the piece (centre stone, halo melee, eternity stones, wall, width) that preview at draft quality, show the value and the checks it would break, and commit one `piece` change or, with Alt, a proposal; keyboard sliders |
 | 2026-11-13 | minor | `PIECE {profile: {curve: handle}}`: a band profile drawn as a closed curve of the drawing (polyline with bulges, spline, circle, ellipse, region), kept by value with its frame (box bottom on the finger, centred across), width and wall read from it, weight by Pappus, the wall check at its thinnest, the solid revolved from it; the Piece panel names it "Custom (from drawing)" with Update from curve. Rails are not built yet (J8) |
