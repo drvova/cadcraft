@@ -190,7 +190,7 @@ export const MENU_GROUPS: Readonly<Record<string, readonly (readonly string[])[]
     ["point", "centermark", "centerline"],
     ["hatch", "gradient", "boundary", "region", "wipeout"],
     ["block", "table", "text"],
-    ["piece", "ring", "gem", "pave", "setting"],
+    ["piece", "flow", "ring", "gem", "pave", "setting"],
   ],
   // The general commands; lengths and positions; circles and angles; chains; leaders and
   // tolerances; changes to a placed dimension; the style.

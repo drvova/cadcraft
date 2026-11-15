@@ -258,6 +258,9 @@ fn held_ring_keys(cmd: &str, p: &Value, hoop: bool) -> Map<String, Value> {
     if let Ok(Some(s)) = super::hallmark::HallmarkSpec::parse(cmd, p) {
         out.insert("hallmark".into(), s.json());
     }
+    if let Ok(Some(s)) = super::flow::FlowSpec::parse(cmd, p) {
+        out.insert("flow".into(), s.json());
+    }
     if let Ok(shape) = super::shank::parse(cmd, p) {
         let mut o = Map::new();
         shape.json_into(&mut o);
@@ -346,6 +349,11 @@ pub(super) struct PieceParams {
     pub shape: super::shank::ShankShape,
     /// Text on the band ([`super::engrave`]), or none.
     pub engrave: Option<super::engrave::EngraveSpec>,
+    /// A drawing flowed onto the band ([`super::flow`]), or none.
+    pub flow: Option<super::flow::FlowSpec>,
+    /// Eternity and half eternity: stones graduated from `melee` at the centre to an end size
+    /// ([`super::graduate`]), or none.
+    pub graduate: Option<super::graduate::GradeSpec>,
     /// The hallmark inside the shank ([`super::hallmark`]), or none.
     pub hallmark: Option<super::hallmark::HallmarkSpec>,
     /// A worn piece's ring-only keys (`rail`, `shank`, `pattern`, `engrave`, `hallmark`, `pave`)
@@ -537,6 +545,8 @@ impl PieceParams {
             pave,
             pattern: if ring { super::pattern::PatternSpec::parse(cmd, p)? } else { None },
             engrave: if ring { super::engrave::EngraveSpec::parse(cmd, p)? } else { None },
+            flow: if ring { super::flow::FlowSpec::parse(cmd, p)? } else { None },
+            graduate: super::graduate::GradeSpec::parse(cmd, p, mm_in(cmd, p, "melee", 1.8, 0.8, 6.0)?)?,
             hallmark: if ring { super::hallmark::HallmarkSpec::parse(cmd, p)? } else { None },
             held: if ring { Map::new() } else { held_ring_keys(cmd, p, kind == PieceKind::Hoop) },
             hoop: super::hoop::HoopSpec::parse(cmd, p)?,
@@ -603,6 +613,8 @@ impl PieceParams {
             "faceWidth": self.face_width,
             "engrave": self.engrave.as_ref().map_or(Value::Bool(false), super::engrave::EngraveSpec::json),
             "hallmark": self.hallmark.as_ref().map_or(Value::Bool(false), super::hallmark::HallmarkSpec::json),
+            "flow": self.flow.as_ref().map_or(Value::Bool(false), super::flow::FlowSpec::json),
+            "graduate": self.graduate.as_ref().map_or(Value::Bool(false), super::graduate::GradeSpec::json),
         });
         if let Some(o) = v.as_object_mut() {
             self.shape.json_into(o);
@@ -1430,6 +1442,11 @@ impl PieceParams {
     /// A halo's melee: round diamonds of the `halo` width.
     pub(super) fn halo_stone(&self, cmd: &str) -> Result<Option<gem::Stone>> {
         self.halo.map(|h| stone_of(cmd, "round", h, h, "diamond")).transpose()
+    }
+
+    /// A stone of the piece's cut and material, `size` long and wide (a graduated row's).
+    pub(super) fn stone_sized(&self, cmd: &str, size: f64) -> Result<gem::Stone> {
+        stone_of(cmd, &self.cut, size, size, &self.stone)
     }
 
     /// An eternity band's stone: the piece's cut and material, as long as it is wide.

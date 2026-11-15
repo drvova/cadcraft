@@ -185,3 +185,83 @@ pub(super) fn build_half_eternity(s: &Sane, d: &Detail, out: &mut Parts) {
             .to_string(),
     );
 }
+
+/// A graduated eternity or half eternity row ([`super::super::graduate`]): every stone at its own
+/// size on its own girdle circle, its seat cut as an ungraduated row's, and two bead prongs
+/// between neighbours close enough to share them, sized from the smaller of the two.
+pub(super) fn build_graded(s: &Sane, d: &Detail, out: &mut Parts, row: &super::super::graduate::GradedRow) {
+    let p = &s.p;
+    let Some(cut) = p.cut_data() else { return };
+    out.fits = Some(row.most);
+    let n = row.stones.len();
+    if n == 0 {
+        out.notes.push(format!(
+            "No graduated row from {} mm to {} mm fits this band at a {} mm gap (PIECE refuses it); no stones are shown.",
+            size_json(p.melee),
+            size_json(row.spec.end),
+            size_json(p.gap)
+        ));
+        return;
+    }
+    let mut stand_in = false;
+    for g in &row.stones {
+        let (m, depth) = (g.size, g.depth);
+        let shape = StoneShape::of(cut, m, m, depth, 16 * d.melee.clamp(1, 8));
+        stand_in |= shape.stand_in;
+        let seat_r = if shape.cab { row.top - depth } else { g.radius };
+        let (girdle, crown, pavilion) = if shape.cab { (0.0, depth, 0.0) } else { proportions(depth) };
+        let bore = (s.ri + p.wall + BORE_OVER - seat_r).max(girdle / 2.0 + crown + SEAT_CLEARANCE);
+        let through = seat_r - s.ri + BORE_OVER;
+        let o = g.out();
+        let w = Vec3::new(o.x, o.y, 0.0);
+        let f = Frame { o: w * seat_r, u: Vec3::new(-w.y, w.x, 0.0), v: Vec3::Z, w };
+        shape.build(&mut out.melee, &f, d.melee, 2);
+        let mut envelope = seat_envelope(&shape, &f, girdle, crown, pavilion, Some(bore));
+        fit_seat(&mut envelope, d, &|b, dd| StoneShape::of(cut, m, m, depth, 16 * dd.melee.clamp(1, 8)).build(b, &f, dd.melee, 2));
+        out.csg.cut.push(Prim::Cylinder { axes: axes_of(&f), r: PAVE_HOLE * envelope.reach, lo: -through, hi: 0.0 });
+        out.csg.cut.push(Prim::Seat(envelope));
+        out.seats += 1;
+    }
+    out.stones += u32::try_from(n).unwrap_or(u32::MAX);
+    // Shared bead prongs between each pair of neighbours (round the bottom too on a closed row).
+    let pairs = if row.closed && n >= 2 { n } else { n.saturating_sub(1) };
+    let mut shared = 0usize;
+    for i in 0..pairs {
+        let (Some(a), Some(b)) = (row.stones.get(i), row.stones.get((i + 1) % n)) else { continue };
+        let mut delta = b.angle - a.angle;
+        if delta <= 0.0 {
+            delta += TAU;
+        }
+        let small = a.size.min(b.size);
+        let rb = (0.16 * small).clamp(0.2, 0.5);
+        let radius = (a.radius + b.radius) / 2.0;
+        let half_pitch = radius * (delta / 2.0).sin();
+        let reach = small / 2.0 + 0.6 * rb;
+        if half_pitch > a.size.max(b.size) / 2.0 + 0.8 * rb {
+            continue;
+        }
+        shared += 1;
+        let z0 = (reach * reach - half_pitch * half_pitch).max(0.0).sqrt().min((p.width / 2.0 - rb).max(0.0));
+        let zs: &[f64] = if z0 < 0.6 * rb { &[0.0] } else { &[-1.0, 1.0] };
+        let phi = a.angle + delta / 2.0;
+        let w = Vec3::new(phi.sin(), phi.cos(), 0.0);
+        for sign in zs {
+            let z = sign * z0;
+            let r = (s.outside_at(z) - 0.2 * rb).max(s.ri + rb + 0.02);
+            bead(&mut out.beads, w * r + Vec3::Z * z, w, rb, d.bead_radial, d.bead_lat);
+            out.csg.add.push(Prim::Sphere { c: w * r + Vec3::Z * z, r: rb });
+        }
+    }
+    if pairs > 0 && shared < pairs {
+        out.notes.push(format!("{} of the {pairs} pairs of graduated stones stand too far apart to share bead prongs.", pairs - shared));
+    }
+    if stand_in {
+        out.notes.push(format!("A {} has no usable girdle outline at some sizes; those stones are shown as rounds.", cut.name));
+    }
+    out.notes.push(format!(
+        "A graduated row of {n} from {} mm at the centre to {} mm at the ends ({}). STLOUT writes the metal as one merged closed solid with a seat cut for every stone.",
+        size_json(p.melee),
+        size_json(row.spec.end),
+        row.spec.curve.name()
+    ));
+}

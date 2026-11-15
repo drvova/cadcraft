@@ -140,6 +140,7 @@ pub(super) fn design(p: &PieceParams) -> Result<Design> {
         pave: fit,
         pattern: None,
         pave_stones,
+        graded: None,
     })
 }
 

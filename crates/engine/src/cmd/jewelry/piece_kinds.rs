@@ -30,10 +30,18 @@ pub(super) struct KindSheet {
     pub row: Vec<f64>,
     /// The section view, base centred on the origin, and how wide it is; `None` for the band's own.
     pub sections: Option<(Vec<(On, Shape)>, f64)>,
+    /// A graduated row's stones in the layout: each one's distance along the unrolled band and
+    /// its own `GEM` stone (one block per size).
+    pub inserts: Vec<(f64, gem::Stone)>,
+    /// A graduated row's reply (`stones.graduated`).
+    pub graded: Option<Value>,
 }
 
 /// The sheet of a half eternity, a dome ring or a signet.
 pub(super) fn draw_kind(p: &PieceParams, section: &Section) -> Result<KindSheet> {
+    if let Some(row) = super::super::graduate::row(p) {
+        return graduated(p, section, &row);
+    }
     match p.kind {
         PieceKind::HalfEternity => half_eternity(p, section),
         PieceKind::Dome | PieceKind::Signet => tapered(p, section),
@@ -273,6 +281,90 @@ fn half_eternity(p: &PieceParams, section: &Section) -> Result<KindSheet> {
     ));
     k.carat = carat_of(&stone) * f64::from(n);
     k.melee = Some(stone);
+    Ok(k)
+}
+
+// ---------------------------------------------------------------------------------------------
+// A graduated eternity or half eternity row
+// ---------------------------------------------------------------------------------------------
+
+fn graduated(p: &PieceParams, section: &Section, row: &super::super::graduate::GradedRow) -> Result<KindSheet> {
+    let mut k = KindSheet::default();
+    let m = p.melee;
+    let where_ = if row.closed { "around this band" } else { "across the top of this band" };
+    if row.most == 0 {
+        return Err(bad(
+            CMD,
+            format!("no graduated row from {} mm to {} mm fits {where_} at a {} mm gap", fmt_mm(m), fmt_mm(row.spec.end), fmt_mm(p.gap)),
+        ));
+    }
+    if let Some(n) = p.count.filter(|n| *n > row.most) {
+        return Err(bad(
+            CMD,
+            format!(
+                "{n} stones graduated from {} mm to {} mm do not fit {where_} (size {}) at a {} mm gap: {} fit",
+                fmt_mm(m),
+                fmt_mm(row.spec.end),
+                p.size.us_text(),
+                fmt_mm(p.gap),
+                row.most
+            ),
+        ));
+    }
+    if row.stones.is_empty() {
+        return Err(bad(CMD, format!("the graduated row does not fit {where_}")));
+    }
+    k.fits = Some(row.most);
+    let centre = p.row_stone(CMD)?;
+    let centre_depth = row.stones.iter().find(|s| (s.size - m).abs() < 1e-9).map_or(p.eternity_row().depth, |s| s.depth);
+    let length = TAU * row.stones.iter().map(|s| s.radius).fold(f64::INFINITY, f64::min).min(row.top);
+    for g in &row.stones {
+        let stone = p.stone_sized(CMD, g.size)?;
+        let out = g.out();
+        let along = Vec2::new(-out.y, out.x);
+        let side = shared::side_profile(stone.cut, g.size, g.depth);
+        k.shapes.push((On::Stones, place_profile(&side, out * (row.top - g.depth), along, out)));
+        // Plan: the upper half, foreshortened.
+        let phi = g.angle.sin().atan2(g.angle.cos());
+        let squeeze = phi.cos();
+        if squeeze > 0.05 {
+            let c = Vec2::new(g.radius * phi.sin(), 0.0);
+            let outline = if stone.cut.is_circle(g.size, g.size) { None } else { shared::girdle_outline(stone.cut, g.size, g.size) };
+            k.plan.push((
+                On::Stones,
+                match &outline {
+                    None => Shape::Ellipse { c, major: Vec2::new(0.0, g.size / 2.0), ratio: squeeze },
+                    Some(pts) => closed(&pts.iter().map(|q| c + Vec2::new(q.x * squeeze, q.y)).collect::<Vec<_>>()),
+                },
+            ));
+        }
+        // The layout: 12 o'clock in the middle of the unrolled band.
+        k.carat += carat_of(&stone);
+        k.inserts.push(((phi / TAU + 0.5) * length, stone));
+    }
+    k.seated = Some(shared::side_profile(centre.cut, m, centre_depth));
+    k.unrolled = Some(length);
+    k.checks.extend(super::super::graduate::checks(p, row).into_iter().map(|(id, ok, words)| check(id, ok, words)));
+    if !row.closed {
+        let plain = row.plain(p.inner() / 2.0);
+        let sizes = (plain - RESIZE_PLAIN).max(0.0) / US_STEP_CIRCUMFERENCE;
+        k.checks.push(check(
+            "resize",
+            plain + 1e-9 >= RESIZE_PLAIN,
+            if plain + 1e-9 >= RESIZE_PLAIN {
+                format!(
+                    "{} mm of plain shank at the bottom: room to size the ring by about {} sizes either way",
+                    fmt_mm(plain),
+                    fmt_mm((sizes * 10.0).floor() / 10.0)
+                )
+            } else {
+                format!("Only {} mm of plain shank at the bottom, under the {RESIZE_PLAIN} mm a bench cuts to size a ring", fmt_mm(plain))
+            },
+        ));
+    }
+    let _ = section;
+    k.graded = Some(super::super::graduate::json(p, row));
+    k.melee = Some(centre);
     Ok(k)
 }
 

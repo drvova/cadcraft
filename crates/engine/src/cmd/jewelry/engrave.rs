@@ -473,7 +473,7 @@ pub(super) struct Lettering {
 /// The piece's lettering, or `None` when it has neither an engraving nor a hallmark; refused
 /// (`Err`, a sentence) when it cannot go on the band.
 pub(super) fn lettering(p: &PieceParams) -> std::result::Result<Option<Lettering>, String> {
-    if p.engrave.is_none() && p.hallmark.is_none() {
+    if p.engrave.is_none() && p.hallmark.is_none() && p.flow.is_none() {
         return Ok(None);
     }
     // A cable is strands, not a surface; a patterned band may have none to take the text.
@@ -487,6 +487,12 @@ pub(super) fn lettering(p: &PieceParams) -> std::result::Result<Option<Lettering
         }
         let mark = engraving_mark(p, e)?;
         out.checks.extend(engraving_checks(p, e, &mark));
+        out.marks.push(mark);
+    }
+    // A drawing flowed onto the band ([`super::flow`]): one more mark, cut or raised the same way.
+    if let Some(f) = &p.flow {
+        let mark = super::flow::mark(p, f)?;
+        out.checks.extend(super::flow::checks(p, f, &mark));
         out.marks.push(mark);
     }
     if let Some(h) = &p.hallmark {

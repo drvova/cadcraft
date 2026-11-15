@@ -552,9 +552,75 @@ beads. Checks: `channel-lip` (at least 0.15 mm and short of the smallest table) 
 (at least 0.4 mm, and the rails on the band). `metal.channelGrams` weighs the rails (Bench:
 "Channel rails").
 
-Not built yet: graduated eternity and half eternity rows (a graduated pavé or channel row is),
-a basket or under-gallery under a prong head, and prong styles on the side stones apart from the
-centre's (one style serves every head).
+Not built yet: prong styles on the side stones apart from the centre's (one style serves every
+head).
+
+### Graduated stones
+
+`PIECE {graduate: {end, curve?}}` grades an eternity or half eternity row (`graduate.rs`): the
+stone at 12 o'clock is `melee`, and the stones grade, the same each side, to `end` (0.8–6 mm) at
+the row's ends — 6 o'clock round an eternity band, 3 and 9 o'clock across a half eternity's top.
+A stone `t` of the way out is `melee + (end − melee) × f(t)` with `f(t) = t` (`curve: linear`,
+the default) or `3t² − 2t³` (`smooth`: the centre size held longer, eased into the end), rounded
+to the 0.1 mm a bench buys melee in. `graduate: true` grades linearly to 60 % of `melee`; a bare
+number is the end size; `false` takes it off. A change merges key by key (`{graduate: {curve:
+"smooth"}}` keeps the end size).
+
+Every stone is seated with its table level with the band's outside, so its girdle lies on its own
+circle; the gap between neighbours is the arc between their girdles' nearest edges at the mean of
+the two girdle radii (`Δ = lean_i + lean_j + gap / R̄`, `lean = atan(d / 2R)`). An eternity band
+takes the most stones that go round and shares what is left equally between every gap, so the row
+stays symmetric; a half eternity packs them at the gap with every centre within 90° of the top.
+`count` sets the number (refused, with the most that fit, when it does not fit). The setting
+follows each pair: the shared bead prongs between two stones are sized from the smaller and stand
+on their mean radius; every stone's seat (cone, bore and through-hole) is cut at its own size in
+the cast solid. A pavé or channel row graduates with `pave.graduated` (above).
+
+Checks: `stone-seat` (0.3 mm of metal each side of the largest stone, and the band level under its
+girdle), `seat-wall` (at least 0.3 mm of wall under the deepest culet), `spacing` (the least metal
+between girdles), `calibrated` (every size listed) and, on a half eternity, `resize`. The sheet
+draws every stone at its size in the front view and the plan, and the layout puts a `GEM` insert of
+each size (one block per size), so the Bench sheet counts and weighs the carats per size; the reply
+carries `stones.graduated` (`end`, `curve`, `centre`, `most`, `least`, `sizes: [{mm, count,
+caratEach, carat}]`) and the message lists the sizes. The Piece panel's Stones group has Graduated,
+End stones and Grading; the gallery's Graduated Eternity template is one.
+
+Stated approximation: the gap is measured along the arc at the mean girdle radius, not as the 3D
+chord (within 1 % for stones under a third of the radius).
+
+### A drawing flowed onto the band
+
+`FLOW` (Draw ▸ Flow onto Band), or `PIECE {flow: {...}}`, lays 2D objects of the drawing
+on the developed band and cuts them in or raises them (`flow.rs`). The objects come from the
+selection, from `handles`, or from a `layer`: lines, arcs, circles, ellipses, polylines (bulges
+too), splines, text and MText (in CADCraft's stroke font) and hatches (outlined, and the area
+inside cleared by strokes a stroke's width apart, so it is recessed or raised as a field). They are
+flattened to centrelines in millimetres and kept in the piece by value (`flow.strokes`, with
+`flow.source` saying where they came from), so moving or erasing them leaves the band as it is;
+giving objects again replaces them.
+
+| Key | What | Default |
+|---|---|---|
+| `at` | `inside` or `outside` | outside |
+| `style` | `cut` (a round-bottomed groove) or `raised` (a round-topped wire; outside only) | cut |
+| `side` | `bottom` or `top`, as an engraving's | outside the top of a plain band, else the bottom |
+| `turn` | degrees more round the band | 0 |
+| `fit` | `rigid` (proportions kept; refused when it would run round into itself) or `stretch` (stretched along the band to run the whole way round, less a stroke) | rigid |
+| `scale` | drawing millimetres to band millimetres | the motif's height fits the width, 0.3 mm to each edge |
+| `depth` | cut: the groove's depth; raised: the height | a fifth of the wall (0.1–0.3); 0.4 |
+| `stroke` | the groove's or wire's width | 0.3 cut, 0.35 raised |
+| `across` | millimetres off the middle of the width | 0 |
+
+The motif's +X runs along the band and +Y across it, wrapped onto the surface as an engraving's
+strokes are; the grooves (or raised wires) are cut from (or added to) the cast solid through the
+implicit CSG, drawn in the 3D view and on the sheet's developed band, and their volume taken off
+(or added to) the grams. Checks: `flow-fit`, `flow-depth` (a cut at most a third of the wall) and
+`flow-stroke` (at least 0.2 mm cut, 0.3 mm raised). The engraving's rules hold: no flow on a cable,
+on a surface a pierced pattern takes (a relief pattern refuses one outside), outside an eternity
+band or a tapered shank, or at the top of a piece with stones there; one surface carries one of an
+engraving and a flowed motif; a hallmark inside goes past the motif. The Piece panel's Engraving
+group has Flowed motif (ticking it flows the selection), Surface, Made, Fit, Scale and Depth; the
+gallery's Flowed Motif Band template carries a drawn double wave.
 
 ### Pendants and earrings
 
@@ -955,6 +1021,7 @@ band takes 3 mm melee; a size 6 band of 1.8 × 2.0 mm cross-section in 18k gold 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-15 | minor | Graduated eternity and half eternity rows (`graduate: {end, curve}`: linear or smooth, spaced by arc length between girdles, symmetric, shared beads and seats per size; checks `stone-seat`, `seat-wall`, `spacing`, `calibrated`; carats per size on the reply and the Bench sheet) and `FLOW` / `PIECE {flow}` (the selection, handles or a layer flowed onto the developed band, rigid or stretched, cut or raised in the cast solid; checks `flow-fit`, `flow-depth`, `flow-stroke`); the Piece panel's rows and two templates |
 | 2026-11-14 | patch | The cast solid's creases are crisp: vertices next to a crease moved onto it by a QEF on the true normals (Ju et al. 2002) and edges flipped along it (Kobbelt et al. 2001), checked for crossings; the grid set off its box by 0.38 step. A flat band's corner circles lie 0.0013 mm off the true corner at 0.2 mm (0.045 before), its volume within 0.02 % (0.2–0.6 % before); same triangle count, about 1.5–3× the extraction time |
 | 2026-11-14 | minor | `PIECE` kind `hoop`: a pair of hoop earrings (round, square, knife or tube wire; a hinged post or a click-top; pavé or a channel along the front kept clear of the closure), weighed exactly and within 10 % of the cast solid, checks `hoop-wall`, `post`, `click-seam`, the sheet, the solid, the Piece panel's Hoop group, a hoop-diameter handle, templates, the bench's pair. `head: basket`: one or two rails under the girdle and an under-gallery (plain, arches, scallop) on rings, pendants and earrings, drawn, built, weighed (within 10 % of the cast solid off the finger), a Basket Solitaire template |
 | 2026-11-14 | patch | The cast solid's vertices are found on the true surface along their own grid edges instead of by Newton steps, so no triangle crosses another by construction: a pierced Voronoi band's solid is 3.5× faster (the `a_patterned_band_casts_as_one_watertight_body` property had failed its time budget), its 3D view no longer a patchwork of projected and put-back vertices, and the mean vertex error under 0.0001 mm; the 3D view shades slivers as the surface round them |

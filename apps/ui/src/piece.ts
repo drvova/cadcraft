@@ -233,6 +233,36 @@ export interface EngravePart {
   height: number | null;
 }
 
+/** How a graduated row's sizes go from the centre to the ends (`graduate.rs`). */
+export const GRADE_CURVES: readonly Choice[] = [
+  { value: "linear", label: "Linear" },
+  { value: "smooth", label: "Smooth" },
+];
+
+/** A graduated eternity row: the end size and the curve. */
+export interface GradePart {
+  end: number | null;
+  curve: string;
+}
+
+/** Where a flowed motif goes on the band, and how it is fitted (`flow.rs`). */
+export const FLOW_FITS: readonly Choice[] = [
+  { value: "rigid", label: "Rigid" },
+  { value: "stretch", label: "Stretch round" },
+];
+
+/** A drawing flowed onto the band: where it came from, where it goes and how it is made. */
+export interface FlowPart {
+  source: string;
+  at: string;
+  style: string;
+  fit: string;
+  scale: number | null;
+  depth: number | null;
+  /** How many strokes the engine keeps for it. */
+  strokes: number;
+}
+
 /** The hallmark inside the shank: the maker's mark ("" for none). */
 export interface HallmarkPart {
   maker: string;
@@ -330,6 +360,10 @@ export interface PieceParams {
   /** Text on the band and the hallmark: false for none, null when the engine does not offer it. */
   engrave: EngravePart | false | null;
   hallmark: HallmarkPart | false | null;
+  /** Graduated stones on an eternity row: false for none, null when the engine does not offer it. */
+  graduate: GradePart | false | null;
+  /** A drawing flowed onto the band: false for none, null when the engine does not offer it. */
+  flow: FlowPart | false | null;
   /** The shank's shape: a drawn rail, a split, cathedral arches, a twisted cable. */
   shank: ShankPart;
 }
@@ -489,6 +523,8 @@ function parseParams(value: unknown): PieceParams | null {
     shank: shankOf(value),
     engrave: engraveOf(value["engrave"]),
     hallmark: hallmarkOf(value["hallmark"]),
+    graduate: gradeOf(value["graduate"]),
+    flow: flowOf(value["flow"]),
     bail: nameOf(value["bail"]) || "loop",
     bailOpening: sizeOf(value["bailOpening"]),
     bailWire: sizeOf(value["bailWire"]),
@@ -523,6 +559,58 @@ function engraveOf(value: unknown): EngravePart | false | null {
     depth: sizeOf(value["depth"]),
     height: sizeOf(value["height"]),
   };
+}
+
+function gradeOf(value: unknown): GradePart | false | null {
+  if (value === false) return false;
+  if (!isRecord(value)) return null;
+  return { end: sizeOf(value["end"]), curve: nameOf(value["curve"]) || "linear" };
+}
+
+function flowOf(value: unknown): FlowPart | false | null {
+  if (value === false) return false;
+  if (!isRecord(value)) return null;
+  const strokes = value["strokes"];
+  return {
+    source: textOf(value["source"], 64),
+    at: nameOf(value["at"]) || "outside",
+    style: nameOf(value["style"]) || "cut",
+    fit: nameOf(value["fit"]) || "rigid",
+    scale: sizeOf(value["scale"]),
+    depth: sizeOf(value["depth"]),
+    strokes: Array.isArray(strokes) ? Math.min(strokes.length, 100000) : 0,
+  };
+}
+
+/** The flowed motif's field each row edits. */
+const FLOW_FIELDS: Readonly<Record<string, string>> = {
+  flowAt: "at",
+  flowStyle: "style",
+  flowFit: "fit",
+  flowScale: "scale",
+  flowDepth: "depth",
+};
+
+/** The graduated row's field each row edits. */
+const GRADE_FIELDS: Readonly<Record<string, string>> = {
+  gradeEnd: "end",
+  gradeCurve: "curve",
+};
+
+/** The flowed motif's rows: a tick (on: the selection is flowed), then where and how. */
+function flowRows(p: PieceParams): PieceRow[] {
+  const rows: PieceRow[] = [];
+  if (p.flow === null) return rows;
+  rows.push({ key: "flow", label: "Flowed motif", value: p.flow === false ? "false" : "true", kind: "tick" });
+  if (p.flow === false) return rows;
+  const f = p.flow;
+  rows.push({ key: "flowSource", label: "From", value: `${f.source} (${f.strokes} strokes)`, kind: "readonly" });
+  rows.push({ key: "flowAt", label: "Surface", value: f.at, kind: "choice", choices: withHeld(ENGRAVE_PLACES, f.at, capital) });
+  if (f.at === "outside") rows.push({ key: "flowStyle", label: "Made", value: f.style, kind: "choice", choices: withHeld(ENGRAVE_STYLES, f.style, capital) });
+  rows.push({ key: "flowFit", label: "Fit", value: f.fit, kind: "choice", choices: withHeld(FLOW_FITS, f.fit, capital) });
+  rows.push({ key: "flowScale", label: "Scale", value: num(f.scale), kind: "number" });
+  rows.push({ key: "flowDepth", label: f.style === "raised" ? "Height, mm" : "Depth, mm", value: num(f.depth), kind: "number" });
+  return rows;
 }
 
 function hallmarkOf(value: unknown): HallmarkPart | false | null {
@@ -916,7 +1004,7 @@ export function profileUpdate(piece: Piece): { profile: { curve: string } } | nu
  * size system the section shows.
  */
 export function pieceRows(piece: Piece, choices: PieceChoices, system: string): PieceRow[] {
-  return [...kindRows(piece, choices, system), ...(isWorn(piece.params.kind) ? [] : engraveRows(piece.params))];
+  return [...kindRows(piece, choices, system), ...(isWorn(piece.params.kind) ? [] : [...engraveRows(piece.params), ...flowRows(piece.params)])];
 }
 
 function kindRows(piece: Piece, choices: PieceChoices, system: string): PieceRow[] {
@@ -991,6 +1079,13 @@ function kindRows(piece: Piece, choices: PieceChoices, system: string): PieceRow
   rows.push({ key: "melee", label: "Stones, mm", value: num(p.melee), kind: "number" });
   rows.push({ key: "count", label: "Count", value: p.count === null ? AUTO : numberText(p.count), kind: "count" });
   rows.push({ key: "gap", label: "Gap, mm", value: num(p.gap), kind: "number" });
+  if ((p.kind === "eternity" || p.kind === "halfeternity") && p.graduate !== null) {
+    rows.push({ key: "graduate", label: "Graduated", value: p.graduate === false ? "false" : "true", kind: "tick" });
+    if (p.graduate !== false) {
+      rows.push({ key: "gradeEnd", label: "End stones, mm", value: num(p.graduate.end), kind: "number" });
+      rows.push({ key: "gradeCurve", label: "Grading", value: p.graduate.curve, kind: "choice", choices: withHeld(GRADE_CURVES, p.graduate.curve, capital) });
+    }
+  }
   return rows;
 }
 
@@ -1329,6 +1424,13 @@ function groupOf(row: PieceRow, kind: string): PieceGroup["name"] {
     case "engraveDepth":
     case "hallmark":
     case "hallmarkMaker":
+    case "flow":
+    case "flowSource":
+    case "flowAt":
+    case "flowStyle":
+    case "flowFit":
+    case "flowScale":
+    case "flowDepth":
       return "Engraving";
     case "pattern":
     case "patternAmount":
@@ -1448,6 +1550,8 @@ export function judgePieceDraft(row: PieceRow, draft: string, system = "us", hel
       if (row.key === "cathedral" || row.key === "twist") return { kind: "send", patch: shankPatch(row.key, draft === "true") ?? {} };
       if (row.key === "engrave") return { kind: "send", patch: { engrave: draft === "true" ? { text: ENGRAVE_START } : false } };
       if (row.key === "hallmark") return { kind: "send", patch: { hallmark: draft === "true" } };
+      if (row.key === "graduate") return { kind: "send", patch: { graduate: draft === "true" } };
+      if (row.key === "flow") return { kind: "send", patch: { flow: draft === "true" ? { selection: true } : false } };
       return { kind: "send", patch: { [row.key === "pave" || row.key === "drop" ? row.key : "halo"]: draft === "true" } };
     case "words": {
       const text = draft.normalize("NFC").replace(/\s+/g, " ").trim();
@@ -1467,6 +1571,10 @@ export function judgePieceDraft(row: PieceRow, draft: string, system = "us", hel
       if (field !== undefined) return draft === PAVE_CUSTOM ? { kind: "keep" } : { kind: "send", patch: { pave: { [field]: draft } } };
       const engraved = ENGRAVE_FIELDS[row.key];
       if (engraved !== undefined) return { kind: "send", patch: { engrave: { [engraved]: draft } } };
+      const flowed = FLOW_FIELDS[row.key];
+      if (flowed !== undefined) return { kind: "send", patch: { flow: { [flowed]: draft } } };
+      const graded = GRADE_FIELDS[row.key];
+      if (graded !== undefined) return { kind: "send", patch: { graduate: { [graded]: draft } } };
       return { kind: "send", patch: { [row.key]: draft } };
     }
     case "count": {
@@ -1501,6 +1609,10 @@ export function judgePieceDraft(row: PieceRow, draft: string, system = "us", hel
       if (field !== undefined) return { kind: "send", patch: { pave: { [field]: read.value } } };
       const engraved = ENGRAVE_FIELDS[row.key];
       if (engraved !== undefined) return { kind: "send", patch: { engrave: { [engraved]: read.value } } };
+      const flowed = FLOW_FIELDS[row.key];
+      if (flowed !== undefined) return { kind: "send", patch: { flow: { [flowed]: read.value } } };
+      const graded = GRADE_FIELDS[row.key];
+      if (graded !== undefined) return { kind: "send", patch: { graduate: { [graded]: read.value } } };
       if (row.both === true) return { kind: "send", patch: { stoneWidth: read.value, stoneLength: read.value } };
       return { kind: "send", patch: { [row.key]: read.value } };
     }
@@ -1538,6 +1650,14 @@ export function refusalRow(error: unknown, rows: readonly PieceRow[]): string | 
     return first(row ?? "engraveText", "engrave");
   }
   if (/`hallmark\.maker`/.test(text)) return first("hallmarkMaker", "hallmark");
+  const flowed = /`flow\.([a-z]{1,12})/.exec(text);
+  if (flowed !== null) {
+    const row = Object.entries(FLOW_FIELDS).find(([, field]) => field === flowed[1])?.[0];
+    return first(row ?? "flow", "flow");
+  }
+  if (/`graduate\.end`/.test(text)) return first("gradeEnd", "graduate");
+  if (/`graduate/.test(text) || /graduated row/.test(text)) return first("graduate", "melee");
+  if (/flowed motif|flow the motif|the motif\b/i.test(text)) return first("flow");
   if (/engraving font|too long for the band|no room inside/i.test(text)) return first("engraveText", "engrave");
   if (/fineness|hallmark/i.test(text)) return first("hallmark");
   if (/^V prongs\b/.test(text)) return first("prongStyle", "cut");
