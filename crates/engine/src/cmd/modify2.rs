@@ -1369,7 +1369,13 @@ pub(crate) fn flatten_kind(k: &mut EntityKind) {
             z(&mut t.insert);
             t.dir.z = 0.0;
         }
-        EntityKind::Spline(_) | EntityKind::Viewport(_) | EntityKind::Wipeout(_) | EntityKind::Unknown(_) => {}
+        // A free-form object keeps its shape: flattening it would collapse it.
+        EntityKind::Spline(_)
+        | EntityKind::Viewport(_)
+        | EntityKind::Wipeout(_)
+        | EntityKind::Surface(_)
+        | EntityKind::SubD(_)
+        | EntityKind::Unknown(_) => {}
     }
 }
 

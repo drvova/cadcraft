@@ -1,6 +1,6 @@
 # SubD (subdivision surfaces)
 
-> **Status:** 2026-11-14 · foundation in `crates/geom` (L0, pure maths); not yet a drawing object.
+> **Status:** 2026-11-15 · foundation in `crates/geom` (L0, pure maths); a drawing object with commands since 2026-11-15.
 
 Rhino's SubD is how jewellers model organic forms: baskets, wavy and twisted shanks, sculpted
 pieces, finished with ShrinkWrap for printing. CADCraft's SubD is Catmull–Clark subdivision,
@@ -64,9 +64,23 @@ force, O(triangles) per query.
 - No exact evaluation at arbitrary parameters near extraordinary vertices (Stam's eigen-basis
   method); use more levels or the regular patches.
 
+## SubD in the drawing
+
+`EntityKind::SubD` (`crates/doc/src/entity/surface.rs`): the cage (positions, faces), creases (edge, sharpness; sharp stored as 1e6 since JSON has no infinity), corner tags and a display level (1–4), serialised with the drawing and its undo; rebuilt and validated into `SubdCage` when evaluated. Drawn in 2D as the once-subdivided cage at its limit positions (the control cage past 5 000 faces); snaps to the limit points of its vertices (endpoint) and of its edges (midpoint); transformed by MOVE, ROTATE, SCALE, MIRROR (a mirror reverses the faces so the cage stays outward) and grips; MASSPROP gives area, volume when closed and grams in every metal (limit mesh at 4 levels); shown shaded in the 3D view in metal.
+
+| Command | |
+|---|---|
+| `subdbox {center?, width?, depth?, height?, level?, creased?}` | Box cage, optionally every edge sharp |
+| `subdcylinder {center?, radius?, height?, segments?, level?}` | Cylinder with n-gon caps |
+| `subdfromcage {positions, faces, creases?, corners?, level?}` or `{handles: 3D faces}` | Any valid cage (3D faces welded where their corners meet) |
+| `subdcrease {handles, edges?, sharpness?}` | Crease some or all edges (`"sharp"`, a number, or 0 to remove) |
+| `tosubd {handles, delete?, level?}` | A surface's control net as a cage (seams and poles welded) |
+| `tonurbs {handles, levels?, delete?}` (alias `convtonurbs`) | Each **regular** quad of the cage subdivided `levels` times becomes an exact bicubic Bézier surface (uniform B-spline → Bézier); faces next to extraordinary vertices are left open and counted (`gaps`). A torus cage converts with no gaps; creased objects are refused for now |
+| `mesh {handles}` | The limit mesh's triangles (read-only) |
+
 ## What is next (estimates in Opus 5.5 hours)
 
-1. **SubD object in `crates/doc`** (cage, creases, display level; DXF/own-format round trip): 6–10 h.
+1. Done 2026-11-15: the SubD object, primitives, crease, conversions, DXF (CADCraft's record). Left: G1 patches at extraordinary vertices for TONURBS, creased conversion: 10–20 h (item 5).
 2. **Editing commands and a gumball in the interface** (select vertices/edges/faces, move, extrude,
    inset, loop cut, crease, primitives; the engine commands plus `apps/ui` tools): 15–25 h.
 3. **SubD in the cast solid** (`crates/engine/src/cmd/jewelry/solid.rs`): a BVH over the limit
@@ -76,3 +90,10 @@ force, O(triangles) per query.
    knots −3…4, domain [0,1]²); hand them to the NURBS surface type being built in `crates/geom`,
    and fill extraordinary regions with approximating G1 patches: 10–20 h.
 6. Split normals at creases, Chaikin sharpness, exact limit evaluation (Stam): 6–10 h.
+
+## Revision history
+
+| Date | Change | Summary |
+|---|---|---|
+| 2026-11-15 | minor | SubD as a drawing object: SUBDBOX, SUBDCYLINDER, SUBDFROMCAGE, SUBDCREASE, TOSUBD, TONURBS, MESH, MASSPROP, 3D view |
+| 2026-11-14 | new | Catmull–Clark foundation in `crates/geom` |

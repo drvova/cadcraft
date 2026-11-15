@@ -203,6 +203,8 @@ fn bounds_in<'a>(d: &'a Drawing, e: &Entity, depth: usize, blocks: &mut HashMap<
             Bounds2::new(t.insert.xy(), t.insert.xy() + Vec2::new(w, -h))
         }
         // Text widths estimated like `text_box`; the renderer measures the font.
+        EntityKind::Surface(f) => f.bounds3().map(|(a, b)| Bounds2::from_points([a.xy(), b.xy()])).unwrap_or(Bounds2::EMPTY),
+        EntityKind::SubD(f) => f.bounds3().map(|(a, b)| Bounds2::from_points([a.xy(), b.xy()])).unwrap_or(Bounds2::EMPTY),
         EntityKind::Tolerance(t) => t.layout(d, &|s, h| h * 0.9 * s.chars().count() as f64).bounds,
         EntityKind::Image(i) => {
             let o = i.insert.xy();

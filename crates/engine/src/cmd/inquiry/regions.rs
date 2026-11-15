@@ -253,6 +253,10 @@ impl Interactive for SubtractM {
 /// implausible.
 fn run_massprop(s: &mut Session, p: &Value) -> Result<Value> {
     let hs = targets(s, p)?;
+    // Surfaces and SubD objects: area, volume when closed and the weight in every metal.
+    if let Some(v) = crate::cmd::surfaces::massprop(s, &hs)? {
+        return Ok(v);
+    }
     let rs = regions(s, &hs)?;
     if rs.is_empty() {
         return Err(other("Select one or more regions."));

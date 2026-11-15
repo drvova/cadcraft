@@ -23,6 +23,7 @@ pub mod subd_edit;
 mod subd_limit;
 mod surface_build;
 mod surface_project;
+pub mod surface_trim;
 mod sweep_frame;
 mod tessellate;
 mod vec;
@@ -44,6 +45,7 @@ pub use subd_cage::{MAX_CAGE_FACES, MAX_CAGE_VERTICES, MAX_FACE_SIDES, SHARP, Su
 pub use subd_limit::{BicubicPatch, LimitOptions, SubdMesh, limit_mesh, limit_positions, regular_patch, regular_patches};
 pub use surface_build::{MAX_LOFT_SECTIONS, make_compatible};
 pub use surface_project::ClosestPoint;
+pub use surface_trim::{MAX_TRIM_LOOPS, MAX_TRIM_POINTS, point_in_trims, tessellate_trimmed, trimmed_area};
 pub use sweep_frame::{Frame, FrameMode, MAX_SWEEP_STATIONS, rail_frames};
 pub use tessellate::{MAX_TESS_TRIANGLES, SurfaceMesh, TessOptions, tessellate};
 pub use vec::{Vec2, Vec3};

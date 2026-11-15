@@ -107,7 +107,8 @@ pub fn stretch_grip(kind: &EntityKind, index: usize, to: Vec2) -> Option<EntityK
         EntityKind::Point(_) | EntityKind::Text(_) | EntityKind::MText(_) | EntityKind::AttDef(_) | EntityKind::Image(_) | EntityKind::Table(_) => {
             return Some(translated(kind, delta));
         }
-        EntityKind::Hatch(_) | EntityKind::Tolerance(_) => return Some(translated(kind, delta)),
+        // Any grip of a free-form object moves the whole object.
+        EntityKind::Hatch(_) | EntityKind::Tolerance(_) | EntityKind::Surface(_) | EntityKind::SubD(_) => return Some(translated(kind, delta)),
         EntityKind::Circle(c) => {
             if index == 0 {
                 return Some(translated(kind, delta));

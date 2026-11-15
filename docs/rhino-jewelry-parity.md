@@ -19,7 +19,7 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 |---|---|---|
 | Band from a circle and a profile; dome, comfort, court, knife, bevel, concave sections | `piece {kind:"band", profile}`, the Piece panel | done |
 | Band from a profile curve you draw | `piece {profile:{curve}}`, "Update from curve" | done |
-| Free-form NURBS surfaces (loft, revolve, sweep, extrude, ruled), area and volume | `NurbsSurface` in `crates/geom` ([nurbs-surfaces.md](nurbs-surfaces.md)) | partial: kernel only, no surface entity, commands, trims or 3dm surfaces yet |
+| Free-form NURBS surfaces (loft, revolve, sweep, extrude, ruled), area and volume | `LOFT`, `REVOLVE`, `EXTRUDE`, `SWEEP` (one rail), `PLANESRF`, `SURFTRIM`/`SPLIT` by a projected closed curve, `MESH`; surfaces are drawing objects (drawn as isocurves, snapped, moved, measured by `MASSPROP` with grams, shaded in the 3D view) ([nurbs-surfaces.md](nurbs-surfaces.md)) | partial: no ruled/network/two-rail surfaces as commands, no open-curve trims, no 3dm surfaces, no joins or Booleans |
 | Profile swept along a rail (oval, shaped shank); two-rail sweep | `piece {rail:{curve}}` (any profile, drawn or named, swept square to a drawn closed rail scaled to the finger), "Update rail from curve", template Oval Band | done for one rail; two-rail sweep planned (J9) |
 | Dome ring, tapered shank | `kind:"dome"` | done |
 | Signet (flat face for engraving) | `kind:"signet"` | done; flush stone in the face partial |
@@ -62,7 +62,7 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 | Sprue, supports, shrinkage allowance | `stlout {sprue, shrink}`; the 3D view's Sprue and shrink pickers by Download STL | partial (a straight round sprue, refused near a stone or seat; no supports or tree) |
 | 2D blueprint with dimensions and sections | the drawing, layouts, Tech Sheet | done |
 | Photoreal render, turntable | Realistic 3D view; Save Render: stills to 4096 px (studio, light, transparent), turntables as WebM or APNG, a contact sheet | partial (rasterised studio, not ray traced: no caustics, no depth of field, no HDRI) |
-| SubD for organic forms (baskets, wavy and twisted shanks, sculpture) | Catmull–Clark cage, creases, limit mesh, volume and edits in `crates/geom` ([subd.md](subd.md)); not yet a drawing object or in the cast solid | partial |
+| SubD for organic forms (baskets, wavy and twisted shanks, sculpture) | `SUBDBOX`, `SUBDCYLINDER`, `SUBDFROMCAGE`, `SUBDCREASE`, `TOSUBD`, `TONURBS`; SubD objects drawn, snapped, transformed, weighed and shaded in the 3D view ([subd.md](subd.md)); no interactive cage editing (gumball, extrude/inset in the interface) and not in the cast solid yet | partial |
 | Photoreal render, turntable | Realistic 3D view; stills | partial (no turntable or image export) |
 
 ## Working
@@ -115,6 +115,7 @@ own tests — never from Rhino's binaries, code, interface or artwork.
 | 2026-11-14 | minor | Hoop earrings (`kind: hoop`) and basket heads with an under-gallery (`head: basket`) |
 | 2026-11-14 | patch | Earrings and pendants: a prong head's weight within 10 % of the cast solid; ring-only keys kept while worn |
 | 2026-11-14 | minor | `.3dm` read (meshes weighed, curves as profiles) and written (EXPORT3DM) |
+| 2026-11-15 | minor | Surface and SubD rows: drawing objects and their commands |
 | 2026-11-14 | minor | SubD row: the subdivision-surface foundation landed in `crates/geom` |
 | 2026-11-14 | minor | Roadmap to a Rhino replacement for jewellers |
 | 2026-11-14 | minor | NURBS surface kernel row (crates/geom) |

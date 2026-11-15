@@ -445,6 +445,38 @@ fn gather_in(
                 _ => {}
             }
         }
+        // A free-form object snaps to its corners and edge midpoints (a surface's middle as a
+        // node), not to every sample of its wireframe.
+        match &e.kind {
+            EntityKind::Surface(f) => {
+                let pts = f.snap_points();
+                let last = pts.len().saturating_sub(1);
+                for (i, q) in pts.iter().enumerate() {
+                    let m = if f.keeps_middle() && i == last {
+                        mode::NOD
+                    } else if !f.is_trimmed() && (4..8).contains(&i) {
+                        mode::MID
+                    } else {
+                        mode::END
+                    };
+                    if osmode & m != 0 && probe.contains(q.xy()) {
+                        cands.push((m, q.xy()));
+                    }
+                }
+                continue;
+            }
+            EntityKind::SubD(f) => {
+                let verts = f.positions.len();
+                for (i, q) in f.snap_points().iter().enumerate() {
+                    let m = if i < verts { mode::END } else { mode::MID };
+                    if osmode & m != 0 && probe.contains(q.xy()) {
+                        cands.push((m, q.xy()));
+                    }
+                }
+                continue;
+            }
+            _ => {}
+        }
         let mut sink = Sink { osmode, aperture, probe, cands: &mut cands, near: &mut near_prims };
         sink.object(&e.kind, None);
         // A block reference snaps to the objects inside it, placed by its transform.
