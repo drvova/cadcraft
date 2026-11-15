@@ -185,6 +185,8 @@ struct Design {
     pave_stones: Vec<(Vec2, gem::Stone)>,
     /// A generative pattern on the band, when asked for.
     pattern: Option<pattern::Layout>,
+    /// A graduated row's sizes and carats (`stones.graduated`).
+    graded: Option<Value>,
 }
 
 /// A closed outline of straight edges.
@@ -385,6 +387,9 @@ fn design(p: &PieceParams) -> Result<Design> {
     let mut plan_stones: Vec<Placed> = Vec::new();
     // Stones of the layout, by their distance along it.
     let mut row: Vec<f64> = Vec::new();
+    // A graduated row's layout stones (along the unrolled band, each its own size) and its reply.
+    let mut graded_inserts: Vec<(f64, gem::Stone)> = Vec::new();
+    let mut graded: Option<Value> = None;
     // A tapered band's own sections, and how wide they are together.
     let mut own_sections: Option<(Vec<(On, Shape)>, f64)> = None;
 
@@ -547,7 +552,7 @@ fn design(p: &PieceParams) -> Result<Design> {
             plan_reach = plan_reach.max(reach);
             centre = Some(stone);
         }
-        PieceKind::Eternity => {
+        PieceKind::Eternity if p.graduate.is_none() => {
             let m = p.melee;
             let stone = p.row_stone(CMD)?;
             // The girdles' circle (the tables are level with the band's outside) and the count.
@@ -659,8 +664,10 @@ fn design(p: &PieceParams) -> Result<Design> {
             melee = Some(stone);
         }
         PieceKind::Pendant | PieceKind::Stud | PieceKind::Drop | PieceKind::Hoop => {}
-        PieceKind::HalfEternity | PieceKind::Dome | PieceKind::Signet => {
+        PieceKind::Eternity | PieceKind::HalfEternity | PieceKind::Dome | PieceKind::Signet => {
             let k = piece_kinds::draw_kind(p, &section)?;
+            graded_inserts = k.inserts;
+            graded = k.graded;
             if k.own_plan {
                 plan.clear();
             }
@@ -736,14 +743,17 @@ fn design(p: &PieceParams) -> Result<Design> {
     }
     placed.extend(plan_stones.into_iter().map(|s| Placed { melee: s.melee, at: plan_at + s.at }));
     // The layout, under the plan: the band unrolled at the girdles' circle.
+    let mut layout_stones: Vec<(Vec2, gem::Stone)> = Vec::new();
     if let Some(length) = unrolled {
         let layout_at = plan_at + Vec2::new(0.0, -(plan_reach + VIEW_GAP + p.width / 2.0));
         shapes.push((On::Metal, rect(layout_at, length, p.width)));
         placed.extend(row.into_iter().map(|d| Placed { melee: true, at: layout_at + Vec2::new(d - length / 2.0, 0.0) }));
+        layout_stones.extend(graded_inserts.drain(..).map(|(d, st)| (layout_at + Vec2::new(d - length / 2.0, 0.0), st)));
     }
     // The pavé's layout, under the plan (and under an eternity's layout, which never has pavé):
     // the outside unrolled at the crown, every stone a `GEM` insert. The stones are counted here.
-    let mut pave_stones: Vec<(Vec2, gem::Stone)> = Vec::new();
+    // A graduated row's stones are `GEM` inserts of their own sizes, placed with the pavé's.
+    let mut pave_stones: Vec<(Vec2, gem::Stone)> = layout_stones;
     if let Some(sh) = &pave_sheet {
         let (length, height) = sh.layout;
         let layout_at = plan_at + Vec2::new(0.0, -(plan_reach + VIEW_GAP + height / 2.0));
@@ -785,7 +795,10 @@ fn design(p: &PieceParams) -> Result<Design> {
     if !(grams.is_finite() && carat.is_finite()) {
         return Err(bad(CMD, "the piece has no weight"));
     }
-    Ok(Design { params: p.clone(), centre, melee, shapes, placed, grams, carat, fits, checks, notes, pave, pave_stones, pattern })
+    if p.graduate.is_some() && !matches!(p.kind, PieceKind::Eternity | PieceKind::HalfEternity) {
+        notes.push("Graduated stones (`graduate`) are an eternity or half eternity row's; this piece does not use them (a pavé row graduates with `pave.graduated`).".to_string());
+    }
+    Ok(Design { params: p.clone(), centre, melee, shapes, placed, grams, carat, fits, checks, notes, pave, pave_stones, pattern, graded })
 }
 
 /// The lowest point of the shapes drawn so far.
@@ -843,6 +856,9 @@ impl Design {
         }
         if let (Some(f), Some(o)) = (&self.pave, stones.as_object_mut()) {
             o.insert("pave".into(), f.json());
+        }
+        if let (Some(g), Some(o)) = (&self.graded, stones.as_object_mut()) {
+            o.insert("graduated".into(), g.clone());
         }
         json!({
             "params": p.json(),
@@ -911,6 +927,12 @@ impl Design {
                 },
                 carat_of(m) * small as f64
             ));
+        }
+        if let Some(sizes) = self.graded.as_ref().and_then(|g| g["sizes"].as_array()) {
+            let words: Vec<String> = sizes.iter().map(|z| format!("{} × {} mm", z["count"], fmt_mm(z["mm"].as_f64().unwrap_or(0.0)))).collect();
+            let n: u64 = sizes.iter().filter_map(|z| z["count"].as_u64()).sum();
+            let ct: f64 = sizes.iter().filter_map(|z| z["carat"].as_f64()).sum();
+            out.push_str(&format!("; {n} graduated {} ({}), {:.3} ct", p.cut, words.join(", "), ct));
         }
         if let Some(f) = self.pave.as_ref().filter(|f| !f.stones.is_empty()) {
             let carat: f64 = f.stones.iter().map(|s| pave_band::stone_carat(s.diameter)).sum();
@@ -1003,7 +1025,7 @@ fn switch(p: &Value, key: &str) -> Result<bool> {
     }
 }
 
-fn run_piece(s: &mut Session, p: &Value) -> Result<Value> {
+pub(super) fn run_piece(s: &mut Session, p: &Value) -> Result<Value> {
     let (query, remove) = (switch(p, "query")?, switch(p, "remove")?);
     if query && remove {
         return Err(bad(CMD, "give `query` or `remove`, not both"));
@@ -1092,6 +1114,8 @@ fn run_build(s: &mut Session, p: &Value) -> Result<Value> {
         Kept::Unreadable { members, .. } => (None, None, members),
         Kept::Piece { params, at, members } => (Some(*params), Some(at), members),
     };
+    // A flowed motif's objects are read from the drawing here (never the piece's own) and go on by value.
+    super::flow::resolve(s, CMD, &mut given, &members)?;
     // The given keys over the stored piece. The stored size is kept as a US number, so a new
     // `size` without a `system` is read in the system the piece was given in, and a new `system`
     // without a `size` renames the size without changing the finger.
@@ -1110,6 +1134,12 @@ fn run_build(s: &mut Session, p: &Value) -> Result<Value> {
             merged.insert(key.clone(), next);
         } else if key == "shank" {
             let next = super::shank::merge(merged.get(key.as_str()), value);
+            merged.insert(key.clone(), next);
+        } else if key == "flow" {
+            let next = super::flow::merge(merged.get("flow"), value);
+            merged.insert(key.clone(), next);
+        } else if key == "graduate" {
+            let next = super::graduate::merge(merged.get("graduate"), value);
             merged.insert(key.clone(), next);
         } else if key == "engrave" || key == "hallmark" {
             // So is a change to the lettering: a new depth keeps the text.

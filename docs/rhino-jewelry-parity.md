@@ -1,6 +1,6 @@
 # Jewelry parity with Rhino and its jewelry plugins, without code
 
-Status: 2026-11-14. The jeweller's standard is Rhino 3D with a jewelry plugin (MatrixGold,
+Status: 2026-11-15. The jeweller's standard is Rhino 3D with a jewelry plugin (MatrixGold,
 CrossGems, RhinoArtisan, Pro-J) and Grasshopper for parametric work. CADCraft aims at the same
 reach **with no code**: what a Rhino jeweller builds by writing a Grasshopper definition is, here,
 a command with named parameters, a panel, a template, a drag handle, a proposal or a request to
@@ -42,7 +42,7 @@ Legend: **done**, **partial**, **planned** (with the gap row in [gaps.md](gaps.m
 | Basket heads and under-galleries | `head: basket`, `basketRails` (1 or 2), `gallery` (plain, arches, scallop) on rings, pendants and earrings: sheet, mesh, cast solid, weight (within 10 % off the finger) | done |
 | Channel setting | `pave {layout: "channel"}`, `channelWall`, `channelLip` (sheet, mesh, cast solid, checks) | done |
 | Cutters (seats) for every stone | cut automatically in the cast solid | done |
-| Graduated stones along a row | `pave.graduated` on a pavé or channel row | partial (eternity rows planned, J1) |
+| Graduated stones along a row | `pave.graduated` on a pavé or channel row; `graduate: {end, curve}` on eternity and half eternity rows (linear or smooth, spaced by arc length, beads and seats per size, carats per size) | done |
 
 ## Checks and measures
 
@@ -87,7 +87,7 @@ versions behave as a jeweller expects. Our implementations are our own.
 | Sweep along two rails | Height can scale with width or stay fixed | Two-rail band: planned |
 | Pipe | Round wire with a start and end radius, a taper blended either evenly or held at the ends; flat or round caps; a hollow wall option | Prongs, beads, cable strands are pipes; tapered prongs (claw) done |
 | Array along a curve / on a surface | Count or spacing; copies oriented by the curve's frame, kept upright, or by the surface normal; even spacing by length rather than by parameter | Pavé on the band places by arc length and orients to the surface normal; auto-fit by gap |
-| Flow along a curve or surface | Wraps flat decoration onto a band, rigid (move only) or deforming, with optional stretch | Engraving and generative patterns are laid out on the developed band and wrapped; a general "flow a drawing onto the band" is planned |
+| Flow along a curve or surface | Wraps flat decoration onto a band, rigid (move only) or deforming, with optional stretch | `FLOW`: curves, text and hatches from the selection or a layer laid on the developed band, rigid or stretched round it, cut or raised in the cast solid (done); flow onto a free-form surface waits for surfaces as drawing objects |
 | Offset surface / shell | Wall thickness with sharp or round corners; a closed solid from inside and outside | The band's wall and the hollow options are parametric |
 | Twist, bend, cage edit | Deform with a falloff: twist over an axis, bend along a spine, a lattice with local influence | Cable twist done; general deformers planned |
 | Booleans | Need closed solids with outward normals; coincident faces and poles are where they fail | The cast solid avoids general Booleans (implicit CSG, ADR 0002) |
@@ -101,8 +101,8 @@ own tests — never from Rhino's binaries, code, interface or artwork.
 
 1. **Now**: the jewelry wave (shanks, settings, engraving, earrings and pendants, patterns, render
    export, `.3dm` meshes and curves) and the NURBS surface foundation (`crates/geom`).
-2. **Next**: surfaces as drawing objects (seen, snapped to, measured); `.3dm` surfaces; flow along a
-   surface; pavé on free-form surfaces.
+2. **Next**: surfaces as drawing objects (seen, snapped to, measured); `.3dm` surfaces; flow onto a
+   free-form surface (flow onto the band is done); pavé on free-form surfaces.
 3. **Then**: trimmed surfaces and joined solids (B-rep) with Booleans that print; SubD for organic work.
 4. **Later**: offsets, fillets and shells on solids; a node editor for power users; general modelling
    beyond jewelry.
@@ -111,6 +111,7 @@ own tests — never from Rhino's binaries, code, interface or artwork.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-15 | minor | Graduated eternity and half eternity rows done; flow a drawing onto the band done (`FLOW`) |
 | 2026-11-14 | patch | One closed mesh for printing: sharp edges kept crisp |
 | 2026-11-14 | minor | Hoop earrings (`kind: hoop`) and basket heads with an under-gallery (`head: basket`) |
 | 2026-11-14 | patch | Earrings and pendants: a prong head's weight within 10 % of the cast solid; ring-only keys kept while worn |

@@ -572,6 +572,7 @@ impl Sane {
         q.prongs = p.prongs.clamp(2, 12);
         q.halo = p.halo.filter(|h| h.is_finite()).map(|h| h.clamp(0.1, 10.0));
         q.melee = fin(p.melee, 0.1, 20.0, 1.8);
+        q.graduate = p.graduate.filter(|g| g.end.is_finite()).map(|g| super::graduate::GradeSpec { end: g.end.clamp(0.1, 20.0), curve: g.curve });
         q.gap = fin(p.gap, 0.0, 20.0, 0.2);
         q.count = p.count.map(|n| n.clamp(1, MAX_PIECE_STONES));
         q.side_width = p.side_width.filter(|x| x.is_finite()).map(|x| x.clamp(0.1, 60.0));
@@ -1606,6 +1607,10 @@ fn build(p: &PieceParams, level: usize) -> PieceMesh {
         PieceKind::Pendant | PieceKind::Stud | PieceKind::Drop | PieceKind::Hoop => {}
         PieceKind::Band | PieceKind::Dome => {}
         PieceKind::Signet => mesh_kinds::build_face(&mut parts.face, &mut parts.csg, &s, &d),
+        PieceKind::Eternity | PieceKind::HalfEternity if s.p.graduate.is_some() => match super::graduate::row(&s.p) {
+            Some(row) => mesh_kinds::build_graded(&s, &d, &mut parts, &row),
+            None => parts.note("The graduated row cannot be laid on this band.".to_string()),
+        },
         PieceKind::HalfEternity => mesh_kinds::build_half_eternity(&s, &d, &mut parts),
         PieceKind::Solitaire | PieceKind::ThreeStone => build_solitaire(&s, &d, &mut parts),
         PieceKind::Eternity => build_eternity(&s, &d, &mut parts),

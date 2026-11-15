@@ -254,6 +254,7 @@ pub(super) fn design(p: &PieceParams) -> Result<Design> {
         pave: None,
         pattern: None,
         pave_stones: extra,
+        graded: None,
     })
 }
 

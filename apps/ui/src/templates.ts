@@ -41,6 +41,9 @@ export const BUILDABLE_KINDS: readonly string[] = ["band", "solitaire", "eternit
 /** An oval rail 20 × 16.8 mm (any size: the engine scales it to the finger), as stored points. */
 const OVAL_RAIL: readonly (readonly [number, number])[] = [[10.0, 0], [9.914, 1.096], [9.659, 2.174], [9.239, 3.215], [8.66, 4.2], [7.934, 5.114], [7.071, 5.94], [6.088, 6.664], [5.0, 7.275], [3.827, 7.761], [2.588, 8.114], [1.305, 8.328], [0, 8.4], [-1.305, 8.328], [-2.588, 8.114], [-3.827, 7.761], [-5.0, 7.275], [-6.088, 6.664], [-7.071, 5.94], [-7.934, 5.114], [-8.66, 4.2], [-9.239, 3.215], [-9.659, 2.174], [-9.914, 1.096], [-10.0, 0], [-9.914, -1.096], [-9.659, -2.174], [-9.239, -3.215], [-8.66, -4.2], [-7.934, -5.114], [-7.071, -5.94], [-6.088, -6.664], [-5.0, -7.275], [-3.827, -7.761], [-2.588, -8.114], [-1.305, -8.328], [0, -8.4], [1.305, -8.328], [2.588, -8.114], [3.827, -7.761], [5.0, -7.275], [6.088, -6.664], [7.071, -5.94], [7.934, -5.114], [8.66, -4.2], [9.239, -3.215], [9.659, -2.174], [9.914, -1.096]];
 
+/** A double wave 20 mm long, as stored strokes: the motif the flowed band carries. */
+const WAVE_MOTIF: readonly (readonly (readonly [number, number])[])[] = [[[0.0, 0.0], [0.5, 0.882], [1.0, 1.427], [1.5, 1.427], [2.0, 0.882], [2.5, 0.0], [3.0, -0.882], [3.5, -1.427], [4.0, -1.427], [4.5, -0.882], [5.0, -0.0], [5.5, 0.882], [6.0, 1.427], [6.5, 1.427], [7.0, 0.882], [7.5, 0.0], [8.0, -0.882], [8.5, -1.427], [9.0, -1.427], [9.5, -0.882], [10.0, -0.0], [10.5, 0.882], [11.0, 1.427], [11.5, 1.427], [12.0, 0.882], [12.5, 0.0], [13.0, -0.882], [13.5, -1.427], [14.0, -1.427], [14.5, -0.882], [15.0, -0.0], [15.5, 0.882], [16.0, 1.427], [16.5, 1.427], [17.0, 0.882], [17.5, 0.0], [18.0, -0.882], [18.5, -1.427], [19.0, -1.427], [19.5, -0.882], [20.0, -0.0]], [[0.0, -0.0], [0.5, -0.882], [1.0, -1.427], [1.5, -1.427], [2.0, -0.882], [2.5, -0.0], [3.0, 0.882], [3.5, 1.427], [4.0, 1.427], [4.5, 0.882], [5.0, 0.0], [5.5, -0.882], [6.0, -1.427], [6.5, -1.427], [7.0, -0.882], [7.5, -0.0], [8.0, 0.882], [8.5, 1.427], [9.0, 1.427], [9.5, 0.882], [10.0, 0.0], [10.5, -0.882], [11.0, -1.427], [11.5, -1.427], [12.0, -0.882], [12.5, -0.0], [13.0, 0.882], [13.5, 1.427], [14.0, 1.427], [14.5, 0.882], [15.0, 0.0], [15.5, -0.882], [16.0, -1.427], [16.5, -1.427], [17.0, -0.882], [17.5, -0.0], [18.0, 0.882], [18.5, 1.427], [19.0, 1.427], [19.5, 0.882], [20.0, 0.0]]];
+
 /**
  * The preset pieces, in the order the gallery reads them: the solitaires, the bands, the eternity
  * band, then the ones a newer engine adds. Each `params` is a full, valid-looking `piece` parameter
@@ -151,6 +154,20 @@ export const TEMPLATES: readonly Template[] = [
     name: "Half Eternity",
     blurb: "Diamonds across the top half; the plain bottom can be resized.",
     params: { kind: "halfeternity", cut: "round", stone: "diamond", melee: 2.0, count: null, gap: 0.2, wall: 1.8, width: 2.6, profile: "flat", metal: "gold18" },
+  },
+  {
+    id: "graduated-eternity",
+    name: "Graduated Eternity",
+    blurb: "Diamonds from 2.4 mm at the top easing to 1.4 mm at the back.",
+    params: { kind: "eternity", cut: "round", stone: "diamond", melee: 2.4, count: null, gap: 0.2, wall: 2.2, width: 3.2, profile: "flat", metal: "platinum", graduate: { end: 1.4, curve: "smooth" } },
+    requires: "graduated stones",
+  },
+  {
+    id: "flowed-motif-band",
+    name: "Flowed Motif Band",
+    blurb: "A drawn double wave stretched round a wide band and cut in.",
+    params: { kind: "band", wall: 1.8, width: 5, profile: "flat", metal: "gold18", flow: { strokes: WAVE_MOTIF, fit: "stretch", style: "cut", source: "the wave motif" } },
+    requires: "flow",
   },
   {
     id: "dome-ring",

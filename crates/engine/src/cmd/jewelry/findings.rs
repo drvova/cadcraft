@@ -102,9 +102,9 @@ const HOOK_LOOP: f64 = 1.2;
 pub(super) const PAIR_GAP: f64 = 6.0;
 
 /// The ring-only keys a piece not worn on a finger does not use.
-pub(super) const RING_ONLY: [&str; 19] = [
+pub(super) const RING_ONLY: [&str; 20] = [
     "size", "system", "wall", "width", "profile", "comfort", "ridge", "bevel", "hollow", "topWidth", "topWall", "pave", "count", "melee", "rail",
-    "shank", "pattern", "engrave", "hallmark",
+    "shank", "pattern", "engrave", "hallmark", "flow",
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

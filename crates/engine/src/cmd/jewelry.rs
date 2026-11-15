@@ -34,7 +34,15 @@ mod findings;
 #[cfg(test)]
 #[path = "jewelry/findings_tests.rs"]
 mod findings_tests;
+mod flow;
+#[cfg(test)]
+#[path = "jewelry/flow_tests.rs"]
+mod flow_tests;
 mod gem;
+mod graduate;
+#[cfg(test)]
+#[path = "jewelry/graduate_tests.rs"]
+mod graduate_tests;
 mod hallmark;
 mod head_metal;
 mod heads;
@@ -124,6 +132,7 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(bench::specs());
     v.extend(pricing::specs());
     v.extend(piece::specs());
+    v.push(flow::spec());
     v.extend(mesh::specs());
     v.extend(rhino::specs());
     v
