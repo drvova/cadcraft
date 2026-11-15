@@ -45,6 +45,9 @@ mod qselect;
 mod selecttools;
 mod settings;
 mod spline_opts;
+pub(crate) mod surfaces;
+#[cfg(test)]
+mod surfaces_tests;
 mod table;
 mod tolerance;
 mod trimextend;
@@ -209,6 +212,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(inquiry::specs());
         v.extend(jewelry::specs());
         v.extend(flow_surface::specs());
+        v.extend(surfaces::specs());
         v.extend(proposal::specs());
         v.extend(settings::specs());
         v.extend(options::specs());

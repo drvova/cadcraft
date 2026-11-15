@@ -588,11 +588,45 @@ fn save_reporting(s: &mut Session, p: &Value, run: fn(&mut Session, &Value) -> R
     let path = str_param(p, "path").map(str::to_string).or_else(|| s.state().ok().and_then(|st| st.path.clone())).unwrap_or_default();
     let version = save_options("save", p).ok().and_then(|o| o.version).unwrap_or_else(|| drawing_version(s, &path));
     let lost = s.doc().map(|d| not_saved_as(d, version)).unwrap_or_default();
+    let freeform = s.doc().map(freeform_counts).unwrap_or_default();
     let mut r = run(s, p)?;
     if r.get("path").and_then(Value::as_str).is_some_and(drops_unknown) {
         report_not_saved(s, &mut r, &lost);
     }
+    if let Some(path) = r.get("path").and_then(Value::as_str).map(str::to_string)
+        && is_drawing_file(&path)
+        && !freeform.is_empty()
+    {
+        report_not_exported(s, &mut r, &freeform, is_dxf(&path));
+    }
     Ok(r)
+}
+
+/// Free-form objects (surfaces, SubD) by type name: no DXF or DWG entity carries them.
+pub fn freeform_counts(d: &Drawing) -> std::collections::BTreeMap<String, usize> {
+    let mut out = std::collections::BTreeMap::new();
+    let stores = std::iter::once(&d.model).chain(d.layouts.iter().map(|l| &l.entities)).chain(d.blocks.values().map(|b| &b.entities));
+    for e in stores.flat_map(|s| s.iter()) {
+        if matches!(e.kind, cadcraft_doc::EntityKind::Surface(_) | cadcraft_doc::EntityKind::SubD(_)) {
+            *out.entry(e.kind.type_name().to_string()).or_insert(0usize) += 1;
+        }
+    }
+    out
+}
+
+/// Report free-form objects as not exported to other programs (a DXF keeps model space's in
+/// CADCraft's own record, so CADCraft reopens them).
+pub(crate) fn report_not_exported(s: &mut Session, r: &mut Value, counts: &std::collections::BTreeMap<String, usize>, dxf: bool) {
+    let list: Vec<String> = counts.iter().map(|(t, n)| format!("{n} {t}")).collect();
+    let how = if dxf {
+        "other programs won't see them; CADCraft keeps model space's in its own data in the file"
+    } else {
+        "they are not in the DWG file; save as DXF to keep them"
+    };
+    s.echo(format!("Not exported as DXF/DWG objects ({how}): {}", list.join(", ")));
+    if let Some(o) = r.as_object_mut() {
+        o.insert("notExported".into(), json!(counts));
+    }
 }
 
 fn run_qsave_reporting(s: &mut Session, p: &Value) -> Result<Value> {

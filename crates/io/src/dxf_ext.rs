@@ -32,6 +32,10 @@ pub(crate) const ANNOTATION_KEY: &str = "CADCRAFT_ANNOTATION";
 /// name `ACDBPLACEHOLDER` objects, and layers and objects point at them with group 390.
 pub(crate) const PLOT_STYLE_NAMES_KEY: &str = "ACAD_PLOTSTYLENAME";
 /// Named-object-dictionary key of the XRECORD holding the drawing's next entity handle (hex).
+/// Free-form objects (NURBS surfaces, SubD) of model space, as JSON: no DXF entity carries them.
+pub(crate) const FREEFORM_KEY: &str = "CADCRAFT_FREEFORM";
+/// Most free-form objects read back.
+pub(crate) const MAX_FREEFORM: usize = 100_000;
 pub(crate) const HANDSEED_KEY: &str = "CADCRAFT_HANDSEED";
 /// Named-object-dictionary key of the XRECORD holding the current multileader style.
 pub(crate) const MLEADER_STYLE_KEY: &str = "CADCRAFT_MLEADERSTYLE";
@@ -653,6 +657,43 @@ pub(crate) fn constraint_chunks(constraints: &[Constraint], parametric: &Paramet
     Some(json_chunks(&json))
 }
 
+/// Model space's free-form objects as XRECORD chunks (none: `None`).
+pub(crate) fn freeform_chunks(d: &cadcraft_doc::Drawing) -> Option<Vec<String>> {
+    let objs: Vec<&cadcraft_doc::Entity> = d
+        .model
+        .iter()
+        .map(|e| e.as_ref())
+        .filter(|e| matches!(e.kind, cadcraft_doc::EntityKind::Surface(_) | cadcraft_doc::EntityKind::SubD(_)))
+        .collect();
+    if objs.is_empty() {
+        return None;
+    }
+    let json = serde_json::to_string(&serde_json::json!({ "version": 1, "objects": objs })).ok()?;
+    Some(json_chunks(&json))
+}
+
+/// The free-form objects of a [`freeform_chunks`] record (only surfaces and SubD objects are taken).
+pub(crate) fn parse_freeform(text: &str) -> Vec<cadcraft_doc::Entity> {
+    #[derive(serde::Deserialize)]
+    struct P {
+        version: u32,
+        objects: Vec<serde_json::Value>,
+    }
+    if text.len() > MAX_PAYLOAD {
+        return Vec::new();
+    }
+    let Ok(p) = serde_json::from_str::<P>(text) else { return Vec::new() };
+    if p.version != 1 {
+        return Vec::new();
+    }
+    p.objects
+        .into_iter()
+        .take(MAX_FREEFORM)
+        .filter_map(|v| serde_json::from_value::<cadcraft_doc::Entity>(v).ok())
+        .filter(|e| matches!(e.kind, cadcraft_doc::EntityKind::Surface(_) | cadcraft_doc::EntityKind::SubD(_)))
+        .collect()
+}
+
 /// JSON text split into XRECORD strings of at most 250 characters. Backslashes are written as
 /// `\u005c` so no chunk contains a DXF `\U+` escape.
 fn json_chunks(json: &str) -> Vec<String> {
@@ -884,6 +925,19 @@ pub(crate) fn parse_constraints(text: &str) -> Option<(Vec<Constraint>, Parametr
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hostile_freeform_records_read_as_nothing() {
+        for t in [
+            "",
+            "{",
+            "[]",
+            "{\"version\":1,\"objects\":[{\"handle\":1,\"kind\":{\"surface\":{\"degreeU\":1e300}}}]}",
+            "{\"version\":9,\"objects\":[]}",
+        ] {
+            assert!(parse_freeform(t).is_empty(), "{t}");
+        }
+    }
 
     #[test]
     fn every_dimvar_has_a_code() {

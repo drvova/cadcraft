@@ -110,15 +110,14 @@ fn net_surface(cmd: &str, v: &Value) -> Result<NurbsSurface> {
     s.map_err(|e| bad(cmd, format!("the control net is not a valid surface: {e}")))
 }
 
-/// HOOK: a surface entity of the drawing as a NURBS surface. Surface entities are being added
-/// separately; once `EntityKind` has one, convert it here and FLOWALONGSRF takes it by handle.
+/// A surface entity of the drawing as a NURBS surface (its trims are not used by the flow).
 fn surface_entity(cmd: &str, s: &Session, h: Handle) -> Result<NurbsSurface> {
     let d = s.doc()?;
     let e = d.entity(h).ok_or_else(|| bad(cmd, format!("no object with handle {}", h.hex())))?;
-    Err(bad(
-        cmd,
-        format!("{} is a {}, not a surface; surface objects are not available yet — give `target` as a control net", h.hex(), e.kind.type_name()),
-    ))
+    match &e.kind {
+        cadcraft_doc::EntityKind::Surface(srf) => srf.nurbs().map_err(|err| bad(cmd, format!("{} is not a valid surface: {err}", h.hex()))),
+        other => Err(bad(cmd, format!("{} is a {}, not a surface; give a surface object or a control net as `target`", h.hex(), other.type_name()))),
+    }
 }
 
 fn surface_spec(cmd: &str, s: &Session, v: &Value) -> Result<NurbsSurface> {

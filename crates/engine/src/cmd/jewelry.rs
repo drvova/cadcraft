@@ -123,6 +123,19 @@ use serde_json::Value;
 
 use super::*;
 
+/// The named metals (for weights of free-form objects, `cmd::surfaces`).
+pub(crate) fn metal_names() -> &'static [&'static str] {
+    &rhino::METALS
+}
+/// A named metal's density in g/cm³.
+pub(crate) fn metal_density(name: &str) -> Option<f64> {
+    sizes::density_of(name)
+}
+/// A named metal's display colour.
+pub(crate) fn metal_rgb(name: &str) -> [u8; 3] {
+    mesh::metal_color(name)
+}
+
 pub fn specs() -> Vec<CommandSpec> {
     let mut v = Vec::new();
     v.extend(sizes::specs());

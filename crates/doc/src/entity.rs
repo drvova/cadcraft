@@ -257,6 +257,8 @@ fn standard() -> String {
 
 mod helix;
 pub use helix::*;
+mod surface;
+pub use surface::*;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MText {
@@ -1009,6 +1011,10 @@ pub enum EntityKind {
     Wipeout(Wipeout),
     Table(Table),
     Tolerance(crate::Tolerance),
+    /// A NURBS surface (optionally trimmed).
+    Surface(Surface),
+    /// A SubD (subdivision surface) object.
+    SubD(SubD),
     Unknown(Unknown),
 }
 
@@ -1063,6 +1069,8 @@ impl EntityKind {
             EntityKind::Wipeout(_) => "Wipeout",
             EntityKind::Table(_) => "Table",
             EntityKind::Tolerance(_) => "Tolerance",
+            EntityKind::Surface(_) => "Surface",
+            EntityKind::SubD(_) => "SubD",
             EntityKind::Unknown(_) => "Proxy",
         }
     }
@@ -1098,6 +1106,8 @@ impl EntityKind {
             EntityKind::Wipeout(_) => "WIPEOUT",
             EntityKind::Table(_) => "ACAD_TABLE",
             EntityKind::Tolerance(_) => "TOLERANCE",
+            EntityKind::Surface(_) => "SURFACE",
+            EntityKind::SubD(_) => "CADCRAFT_SUBD",
             EntityKind::Unknown(u) => u.dxf_type.as_str(),
         }
     }
@@ -1175,6 +1185,8 @@ impl EntityKind {
             EntityKind::Image(i) => vec![Prim::Point(i.insert.xy())],
             EntityKind::Table(t) => vec![Prim::Point(t.insert.xy())],
             EntityKind::Tolerance(t) => vec![Prim::Point(t.insert.xy())],
+            EntityKind::Surface(f) => wire_prims(&f.wires()),
+            EntityKind::SubD(f) => wire_prims(&f.wires()),
             EntityKind::Unknown(_) => Vec::new(),
         }
     }
@@ -1376,6 +1388,8 @@ impl EntityKind {
                 t.row_heights.iter_mut().for_each(|h| *h *= s);
                 t.text_height *= s;
             }
+            EntityKind::Surface(f) => f.transform(m),
+            EntityKind::SubD(f) => f.transform(m),
             EntityKind::Tolerance(t) => {
                 t3(&mut t.insert);
                 // Like text with MIRRTEXT = 0: a mirrored frame keeps reading left to right.
@@ -1457,9 +1471,16 @@ impl EntityKind {
             EntityKind::Wipeout(w) => w.boundary.clone(),
             EntityKind::Table(t) => vec![t.insert.xy()],
             EntityKind::Tolerance(t) => vec![t.insert.xy()],
+            EntityKind::Surface(f) => f.snap_points().iter().map(|p| p.xy()).collect(),
+            EntityKind::SubD(f) => f.snap_points().iter().map(|p| p.xy()).collect(),
             EntityKind::Unknown(_) => Vec::new(),
         }
     }
+}
+
+/// Line segments of 3D polylines, seen from above.
+fn wire_prims(wires: &[Vec<Vec3>]) -> Vec<Prim> {
+    wires.iter().flat_map(|w| w.windows(2).filter_map(|p| Some(Prim::Seg(Segment::Line(GLine::new(p.first()?.xy(), p.get(1)?.xy())))))).collect()
 }
 
 fn transform_text(t: &mut Text, m: &Mat3, s: f64, rot: f64, mirror: bool) {

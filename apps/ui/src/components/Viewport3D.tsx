@@ -628,6 +628,35 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
     renderer?.upload(buffers, ground, edges, shadow);
   };
 
+  /**
+   * Show the drawing's surfaces and SubD objects (`surfmesh`, read-only) when there is no piece.
+   * Whether it showed them: `false` leaves the empty stage to the caller.
+   */
+  const showFreeform = async (quality: "draft" | "fine", stale: () => boolean, keepGl: (next: Status) => void): Promise<boolean> => {
+    const env = await props.execute("surfmesh", { quality });
+    if (stale()) return true;
+    if (!env.ok) return false;
+    const reply = parseMeshReply(env.result);
+    if (!reply.ok) return false;
+    if (edit() !== null) return true;
+    pieceParams = null;
+    diameter = null;
+    takeMesh(reply.mesh);
+    handles = [];
+    setReadout({ triangles: formatTriangles(reply.mesh.triangles), size: formatSize(reply.mesh.bounds), notes: reply.mesh.notes });
+    keepGl({ kind: "ready" });
+    extent = reply.mesh.extent;
+    scene = sceneOf(reply.mesh.extent);
+    settle();
+    if (quality === "draft") {
+      fineTimer = window.setTimeout(() => {
+        fineTimer = 0;
+        void load("fine");
+      }, FINE_AFTER_MS);
+    }
+    return true;
+  };
+
   const load = async (quality: "draft" | "fine"): Promise<void> => {
     if (unavailable || disposed) return;
     const mine = (request += 1);
@@ -640,6 +669,9 @@ export function Viewport3D(props: Viewport3DProps): JSX.Element {
     const piece = await queryPiece();
     if (stale()) return;
     if ("kind" in piece) {
+      // No piece: the drawing's free-form objects (surfaces, SubD), when it has any.
+      if (piece.kind === "empty" && (await showFreeform(quality, stale, keepGl))) return;
+      if (stale()) return;
       if (piece.kind === "unavailable") unavailable = true;
       clearMesh();
       keepGl(piece);

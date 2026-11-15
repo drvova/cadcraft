@@ -183,7 +183,7 @@ export const MENU_GROUPS: Readonly<Record<string, readonly (readonly string[])[]
     ["aliasedit", "dsettings", "options"],
   ],
   // Lines and polylines; curves; points and marks; hatches and regions; blocks, tables and text;
-  // jewellery.
+  // jewellery; free-form modelling.
   Draw: [
     ["line", "xline", "ray", "mline", "pline", "3dpoly", "rectang", "polygon"],
     ["arc", "circle", "donut", "ellipse", "spline", "helix", "revcloud"],
@@ -191,6 +191,8 @@ export const MENU_GROUPS: Readonly<Record<string, readonly (readonly string[])[]
     ["hatch", "gradient", "boundary", "region", "wipeout"],
     ["block", "table", "text"],
     ["piece", "flow", "ring", "gem", "pave", "setting"],
+    // Free-form surfaces and SubD.
+    ["loft"],
   ],
   // The general commands; lengths and positions; circles and angles; chains; leaders and
   // tolerances; changes to a placed dimension; the style.

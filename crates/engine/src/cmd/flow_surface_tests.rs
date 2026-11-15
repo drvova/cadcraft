@@ -117,11 +117,24 @@ fn flow_along_a_drawn_circle() {
 }
 
 #[test]
-fn surface_entity_hook_reports_not_available() {
+fn a_surface_object_is_a_flow_target() {
+    let mut s = Session::new();
+    let c = NurbsCurve3::circle(Vec3::ZERO, Vec3::Z, 4.0).unwrap();
+    let srf = NurbsSurface::extrude(&c, Vec3::new(0.0, 0.0, 6.0)).unwrap();
+    let target = s.add_entity(EntityKind::Surface(cadcraft_doc::Surface::new(&srf, vec![]).unwrap())).unwrap().hex();
+    let h = line(&mut s, [0.0, 0.0], [1.0, 1.0]);
+    let r = s.execute("flowalongsrf", &json!({"handles": [h], "target": {"handle": target}})).unwrap();
+    let out = added(&s, &r);
+    let EntityKind::Polyline3d(p) = &out[0] else { panic!("{out:?}") };
+    assert!(p.points.iter().all(|q| (radius(*q) - 4.0).abs() < 1e-3), "{p:?}");
+}
+
+#[test]
+fn a_non_surface_target_is_refused() {
     let mut s = Session::new();
     let h = line(&mut s, [0.0, 0.0], [1.0, 1.0]);
     let e = s.execute("flowalongsrf", &json!({"handles": [h.clone()], "target": {"handle": h}})).unwrap_err();
-    assert!(e.to_string().contains("not available yet"), "{e}");
+    assert!(e.to_string().contains("not a surface"), "{e}");
 }
 
 #[test]

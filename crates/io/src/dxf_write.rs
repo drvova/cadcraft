@@ -1231,7 +1231,9 @@ fn entity(w: &mut W, d: &Drawing, e: &Entity, owner: &str, paper: bool, cx: &Ctx
             w.p(11, t.dir);
         }
         // Entity types CADCraft doesn't model aren't written; the save command reports them.
-        EntityKind::Unknown(_) => {}
+        // Free-form objects have no DXF entity of their own (DXF's SURFACE is ACIS data): they
+        // travel in CADCraft's own XRECORD (`dxf_ext::FREEFORM_KEY`) and other programs don't see them.
+        EntityKind::Unknown(_) | EntityKind::Surface(_) | EntityKind::SubD(_) => {}
     }
 }
 
@@ -1996,6 +1998,9 @@ fn tags_for(d: &Drawing, version: Version, target: Version) -> Vec<Tag> {
     }
     if let Some(chunks) = dxf_ext::plot_style_chunks(&d.plot_style_tables) {
         xrecords.push((dxf_ext::PLOT_STYLES_KEY, w.h(), chunks));
+    }
+    if let Some(chunks) = dxf_ext::freeform_chunks(d) {
+        xrecords.push((dxf_ext::FREEFORM_KEY, w.h(), chunks));
     }
     if let Some(chunks) = dxf_ext::anno_chunks(d) {
         xrecords.push((dxf_ext::ANNOTATION_KEY, w.h(), chunks));

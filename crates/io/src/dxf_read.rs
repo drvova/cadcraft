@@ -2090,6 +2090,16 @@ impl Objects {
                 }
             });
         }
+        // Free-form objects (surfaces, SubD) kept in CADCraft's own record.
+        if let Some(t) = self.xrecord_text(crate::dxf_ext::FREEFORM_KEY) {
+            for mut e in crate::dxf_ext::parse_freeform(&t) {
+                if e.handle.0 == 0 || d.entity(e.handle).is_some() {
+                    e.handle = d.new_handle();
+                }
+                d.handseed = d.handseed.max(e.handle.0.saturating_add(1));
+                d.model.push(e);
+            }
+        }
         // Parametric constraints and parameters.
         if let Some((c, p)) = self.xrecord_text(crate::dxf_ext::CONSTRAINTS_KEY).and_then(|t| crate::dxf_ext::parse_constraints(&t)) {
             d.constraints = c;

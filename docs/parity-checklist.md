@@ -1,10 +1,10 @@
 # Parity checklist
 
-> **Generated:** 2026-11-13 by `cargo xtask parity`. Do not edit by hand.
+> **Generated:** 2026-11-15 by `cargo xtask parity`. Do not edit by hand.
 
 Menu-breadth parity: a reference menu item counts as covered when a CADCraft command is registered under the same menu label. It measures breadth, not depth; see [target-app-parity.md](target-app-parity.md) for the weighted assessment.
 
-**Menu breadth: 300 / 491 items (61%)** · 465 registered commands.
+**Menu breadth: 311 / 491 items (63%)** · 482 registered commands.
 
 | Menu | Items | Covered | % |
 |---|---|---|---|
@@ -14,9 +14,9 @@ Menu-breadth parity: a reference menu item counts as covered when a CADCraft com
 | Insert | 11 | 6 | 55% |
 | Format | 27 | 26 | 96% |
 | Tools | 85 | 66 | 78% |
-| Draw | 87 | 55 | 63% |
+| Draw | 87 | 64 | 74% |
 | Dimension | 28 | 28 | 100% |
-| Modify | 113 | 55 | 49% |
+| Modify | 113 | 57 | 50% |
 | Window | 22 | 3 | 14% |
 | Help | 8 | 0 | 0% |
 
@@ -97,26 +97,17 @@ Menu-breadth parity: a reference menu item counts as covered when a CADCraft com
 - Tools > Express Tools > Super Hatch > Xref...
 - Tools > Express Tools > Super Hatch > Select Existing Object
 - Draw > 3D Modeling > Polysolid
-- Draw > 3D Modeling > Box
 - Draw > 3D Modeling > Wedge
 - Draw > 3D Modeling > Cone
 - Draw > 3D Modeling > Sphere
-- Draw > 3D Modeling > Cylinder
 - Draw > 3D Modeling > Torus
 - Draw > 3D Modeling > Pyramid
-- Draw > 3D Modeling > Extrude
-- Draw > 3D Modeling > Revolve
-- Draw > 3D Modeling > Sweep
-- Draw > 3D Modeling > Loft
 - Draw > 3D Modeling > Section Plane
-- Draw > 3D Modeling > Surfaces > Planar
 - Draw > 3D Modeling > Surfaces > Network
 - Draw > 3D Modeling > Surfaces > Patch
-- Draw > 3D Modeling > Meshes > Primitives > Box
 - Draw > 3D Modeling > Meshes > Primitives > Wedge
 - Draw > 3D Modeling > Meshes > Primitives > Cone
 - Draw > 3D Modeling > Meshes > Primitives > Sphere
-- Draw > 3D Modeling > Meshes > Primitives > Cylinder
 - Draw > 3D Modeling > Meshes > Primitives > Torus
 - Draw > 3D Modeling > Meshes > Primitives > Pyramid
 - Draw > 3D Modeling > Meshes > Smooth Mesh
@@ -164,7 +155,6 @@ Menu-breadth parity: a reference menu item counts as covered when a CADCraft com
 - Modify > Solid Editing > Check
 - Modify > Surface Editing > Untrim
 - Modify > Surface Editing > Sculpt
-- Modify > Surface Editing > Convert to NURBS
 - Modify > Surface Editing > Convert to Mesh
 - Modify > Surface Editing > NURBS Surface Editing > Show CV
 - Modify > Surface Editing > NURBS Surface Editing > Hide CV
@@ -174,7 +164,6 @@ Menu-breadth parity: a reference menu item counts as covered when a CADCraft com
 - Modify > Mesh Editing > Smooth More
 - Modify > Mesh Editing > Smooth Less
 - Modify > Mesh Editing > Refine Mesh
-- Modify > Mesh Editing > Crease
 - Modify > Mesh Editing > Uncrease
 - Modify > Mesh Editing > Split Face
 - Modify > Mesh Editing > Extrude Face
