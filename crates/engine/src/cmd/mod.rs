@@ -15,6 +15,7 @@ mod draworder;
 mod edit;
 mod exchange;
 pub mod file;
+mod flow_surface;
 mod gripcmds;
 mod griphot;
 pub(crate) mod groups;
@@ -207,6 +208,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(props::specs());
         v.extend(inquiry::specs());
         v.extend(jewelry::specs());
+        v.extend(flow_surface::specs());
         v.extend(proposal::specs());
         v.extend(settings::specs());
         v.extend(options::specs());

@@ -87,7 +87,7 @@ versions behave as a jeweller expects. Our implementations are our own.
 | Sweep along two rails | Height can scale with width or stay fixed | Two-rail band: planned |
 | Pipe | Round wire with a start and end radius, a taper blended either evenly or held at the ends; flat or round caps; a hollow wall option | Prongs, beads, cable strands are pipes; tapered prongs (claw) done |
 | Array along a curve / on a surface | Count or spacing; copies oriented by the curve's frame, kept upright, or by the surface normal; even spacing by length rather than by parameter | Pavé on the band places by arc length and orients to the surface normal; auto-fit by gap |
-| Flow along a curve or surface | Wraps flat decoration onto a band, rigid (move only) or deforming, with optional stretch | Engraving and generative patterns are laid out on the developed band and wrapped; a general "flow a drawing onto the band" is planned |
+| Flow along a curve or surface | Wraps flat decoration onto a band, rigid (move only) or deforming, with optional stretch | Engraving and generative patterns are laid out on the developed band and wrapped. FLOWALONGSRF / FLOW flow any drawing (curves, 3DFACE meshes, points) onto a NURBS surface or along a curve: deforming (refined to a tolerance) or rigid, stretch or keep length, flip, offset; a row of points returns stone positions and normals. Left: a surface object to pick (the target is a control net in JSON), a pick prompt |
 | Offset surface / shell | Wall thickness with sharp or round corners; a closed solid from inside and outside | The band's wall and the hollow options are parametric |
 | Twist, bend, cage edit | Deform with a falloff: twist over an axis, bend along a spine, a lattice with local influence | Cable twist done; general deformers planned |
 | Booleans | Need closed solids with outward normals; coincident faces and poles are where they fail | The cast solid avoids general Booleans (implicit CSG, ADR 0002) |
@@ -111,6 +111,7 @@ own tests — never from Rhino's binaries, code, interface or artwork.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-15 | minor | Flow along a curve or surface: FLOWALONGSRF and FLOW |
 | 2026-11-14 | patch | One closed mesh for printing: sharp edges kept crisp |
 | 2026-11-14 | minor | Hoop earrings (`kind: hoop`) and basket heads with an under-gallery (`head: basket`) |
 | 2026-11-14 | patch | Earrings and pendants: a prong head's weight within 10 % of the cast solid; ring-only keys kept while worn |
