@@ -213,12 +213,14 @@ and MCP all reach them, and DESCRIBE reads jewelry out of any drawing.
 | J13 | Pendants and earrings (`PIECE` pendant, stud, drop) landed. Hoops landed 2026-11-14 (`kind: hoop`: round, square, knife or tube wire, a hinged post or click-top, pavé or a channel along the front). Left: huggies with an inside-out pavé (stones inside and out), an oval or shaped hoop, a lever-back or omega closure, the click's seam cut in the solid; chains and links; a bail of its own shape (a drawn profile, a hidden or pinch bail); a lever-back or omega clip; the stud's back is counted but not drawn. (A prong head's weight is now within 10 % of the merged solid, 2026-11-14.) | 6–10 |
 | J14 | A drop's head and its top, and a drop pendant's head and bail, are separate cast bodies joined by a bought-in jump ring; nothing yet models a soldered (closed) jump ring or a cast-in-place link | 2–3 |
 | J15 | Generative patterns beyond the plain band: patterns on a solitaire's or a dome's shank and on a drawn profile, image-driven patterns (a picture's tones as cell size or relief depth), and engraving fitted between a pattern's ribs. Today `PIECE {pattern}` lays Voronoi, honeycomb, wave and Truchet on a plain band, pierced or in relief, and refuses the rest in a sentence | 3–5 |
+| J16 | Flow (FLOWALONGSRF, FLOWALONGCRV) landed 2026-11-15. Left: a surface object as the target (today a JSON control net), an interactive pick prompt, keep-length measured along each point's own iso-curve rather than the middle one on non-developable targets, adaptive (crack-free) mesh refinement instead of one global split | 4–8 |
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
 | 2026-11-15 | minor | Jewelry: graduated eternity and half eternity rows (`graduate`) and a drawing flowed onto the band (`FLOW`, `PIECE {flow}`); J1 narrowed |
+| 2026-11-15 | minor | Jewelry: flow along a surface or curve landed (J16 added for what is left) |
 | 2026-11-14 | patch | Jewelry: J2's cast solid keeps its creases crisp (QEF snap and edge flips); the chamfer note goes |
 | 2026-11-14 | minor | Jewelry: hoop earrings in PIECE (`kind: hoop`) and basket heads with an under-gallery (`head: basket`); J2, J12 and J13 narrowed |
 | 2026-11-14 | patch | Jewelry: the cast solid's vertices found on the true surface along their grid edges (no crossings by construction, a Voronoi band's solid 3.5× faster, no speckle from put-back vertices); J2 notes the staircase at sharp edges in the 3D view |

@@ -1,6 +1,6 @@
 # NURBS surfaces
 
-> **Last updated:** 2026-11-14 · **Change:** new (the surface kernel foundation) · **Target:** Rhino-class free-form modelling for the jewelry layer
+> **Last updated:** 2026-11-15 · **Change:** minor (flow along a surface or curve) · **Target:** Rhino-class free-form modelling for the jewelry layer
 
 Rhino, the jeweller's standard, is a NURBS surface modeller. CADCraft had NURBS **curves**
 (`crates/geom/src/spline.rs`, `nurbs.rs`); this is the foundation for **surfaces**, in
@@ -47,13 +47,37 @@ Performance (release, one core, rational bi-quadratic torus): 3.6 M points/s, 0.
 second-derivative evaluations/s, 32 M points/s on a grid; tessellation 22 ms (0.1 tolerance,
 2 048 triangles), 110 ms (0.01, 16 384), 383 ms (0.001, 110 592); closest point ≈ 0.29 ms.
 
+## Flow along a surface or curve (`crates/geom/src/flow.rs`)
+
+`SurfaceFlow::new(base, target, FlowOptions {stretch, flip, offset, tol})` maps a base point to
+local `(s, t, h)` — lengths along the base and the height off it — and places it at
+`S(u, v) + (h + offset)·N(u, v)`, `u`/`v` found from `s`/`t` by arc length along the target's
+middle iso-curves (a 1024-sample chord table each way). The base is `FlowBase::Rect` (any plane)
+or `FlowBase::Surface` (closest point, then arc length along the base's own middle iso-curves).
+`stretch` scales the base extent to the target's; off, lengths are kept (exact on developable
+targets, along the middle iso-curves on others). `CurveFlow::new(from, to, curve, opts)` maps a
+base line onto a curve with a rotation-minimising frame (double reflection, initial normal by the
+minimal rotation from the base direction to the start tangent). Both implement `Flow`:
+`map_point`/`map_points` (a `FlowPoint` with the target frame: stone positions and normals),
+`map_polyline` (deforming: segments pre-split to 1/16 of the base, then bisected until the mapped
+midpoint is within `tol`, depth ≤ 16), `map_mesh` (one global uniform split k ≤ 64 so shared edges
+stay watertight, ≤ 400 000 triangles), `map_rigid` (each object moved and oriented by its anchor,
+shape kept). Points beyond the target's extent are clamped and flagged (`inside: false`). Caps:
+`MAX_FLOW_POINTS` = 500 000 per polyline. `surface_from_net` builds a clamped uniform surface from
+a control net. Engine: FLOWALONGSRF and FLOWALONGCRV (`crates/engine/src/cmd/flow_surface.rs`); the
+target is a JSON control net until surface entities exist (`target: {handle}` is the hook).
+Tests (`flow_tests.rs`): a planar target is the identity, a cylinder wraps exactly (seam closes,
+every point at the radius, chords within tolerance), kept length within 1e-3 of 3 on a cylinder,
+rigid keeps edge lengths to 1e-12, property sweep (60 random surfaces: every point equals
+`S(u,v) + h·N`, polylines on the surface to 1e-6), hostile input.
+
 ## Next (estimates in Opus 5.5 hours)
 
 1. **Trimmed surfaces** (outer/inner loops in (u, v), point-in-trim, tessellation honouring trims with exact boundary vertices): 8–12 h.
 2. **A surface entity in `crates/doc`** (persisted, drawn, gripped, transformed) and the commands (LOFT, REVSURF, EXTRUDE surface, SWEEP, RULESURF, PLANESRF), MCP params: 12–20 h.
 3. **DXF/3dm surfaces** (DXF SURFACE/ACIS is proprietary-shaped: 3dm NURBS surfaces first via the 3dm reader): 8–16 h.
 4. Tessellation: quadtree refinement with crack-free stitching (fewer triangles), mesh across several surfaces sharing edges: 6–10 h. Knot removal after elevation: 3–4 h. Periodic/unclamped support: 3 h.
-5. **Flow along a surface** (map a drawing through (u, v) onto a free-form surface) and **pavé on a free-form surface** (arc-length spacing in uv, normals from `normal`, closest-point snapping): 10–16 h.
+5. ~~Flow along a surface~~ (done 2026-11-15, above). **Pavé on a free-form surface** (FLOWALONGSRF `points` already returns positions and normals; left: arc-length spacing and auto-fit by gap on a free-form surface, a pick prompt): 6–10 h.
 6. Surface–surface intersection, offset surface, two-rail sweep, network surface: 30–50 h.
 7. **Booleans / B-rep solids**: a major project (60–120 h); the jewelry cast solid keeps using implicit CSG (ADR 0002) meanwhile.
 
@@ -61,4 +85,5 @@ second-derivative evaluations/s, 32 M points/s on a grid; tessellation 22 ms (0.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-15 | minor | Flow along a surface or curve (`flow.rs`; FLOWALONGSRF, FLOWALONGCRV) |
 | 2026-11-14 | new | Surface type, evaluation, refinement, constructors, sweep frames, tessellation, projection, area and volume |
